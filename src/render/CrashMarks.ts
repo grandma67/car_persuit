@@ -58,6 +58,9 @@ export class CrashMarks {
     });
     this.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, MAX_MARKS);
     this.mesh.count = 0;
+    // Create the per-mark colours up front (setColorAt would add them on the first crash, which
+    // switches the shader variant and stalls a frame to compile it).
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_MARKS * 3), 3);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 1;
   }

@@ -235,6 +235,9 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   const beam = new THREE.SpotLight(0xfff1d6, 0, 75, 0.5, 0.45, 1.3);
   beam.position.set(0, 0.1, hz);
   beam.target.position.set(0, -1.2, hz + 25);
+  // Hidden until Vehicle.updateLights turns it on: a spawning car must not flash an extra light
+  // into the scene for a frame, which would make three.js recompile every lit material (a hitch).
+  beam.visible = false;
   root.add(beam, beam.target);
 
   return { root, wheels, taillight, headlight, headGlows, tailGlows, beam, paint, sirenLights };

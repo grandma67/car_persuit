@@ -63,6 +63,11 @@ function rampTruckSpec(): VehicleSpec {
   return { ...RAMP_TRUCK_SPEC, color: 0xe8701a };
 }
 
+/** One spec per civilian body/livery, for compiling their shaders before they first spawn. */
+export function civilianSpecVariants(): VehicleSpec[] {
+  return [...MIX.map((m) => ({ ...m.spec, livery: undefined })), rampTruckSpec()];
+}
+
 export interface Civilian {
   vehicle: Vehicle;
   controller: CivilianController;

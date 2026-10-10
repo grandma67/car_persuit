@@ -3,14 +3,15 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Input, type DriveInput } from './Input';
 import { Rng } from './Rng';
 import { Vehicle } from '../vehicles/Vehicle';
-import { PLAYER_SPEC } from '../vehicles/VehicleSpecs';
+import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
+import { buildCarMesh } from '../vehicles/carMesh';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { generateCity, type CityData } from '../world/CityGenerator';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
 import { Sky } from '../render/Sky';
 import { CopDirector, type Cop } from '../ai/CopDirector';
-import { CivilianTraffic } from '../ai/CivilianTraffic';
+import { CivilianTraffic, civilianSpecVariants } from '../ai/CivilianTraffic';
 import { approachControls } from '../world/TrafficControl';
 import { CrashMarks } from '../render/CrashMarks';
 import { Landmarks } from '../render/Landmarks';
@@ -266,6 +267,20 @@ export class Game {
     this.screens.hide();
     this.showDestination();
     this.hud.toast('GO!', 1.2);
+    this.prewarmShaders();
+  }
+
+  /**
+   * Compile in the background now every shader the chase can need — each cop and civilian
+   * vehicle, plus effects not drawn yet (smoke, fire) — rather than stalling a frame mid-chase
+   * the first time one appears. Uses the live scene's lights, settled by now (the menu has been
+   * rendering).
+   */
+  private prewarmShaders(): void {
+    const staging = new THREE.Scene();
+    for (const spec of [...Object.values(COP_SPECS), ...civilianSpecVariants()]) staging.add(buildCarMesh(spec).root);
+    this.renderer.compileAsync(staging, this.chase.camera, this.scene).catch(() => {});
+    this.renderer.compileAsync(this.scene, this.chase.camera).catch(() => {});
   }
 
   private setPaused(paused: boolean): void {
