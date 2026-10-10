@@ -5,8 +5,14 @@ export interface CarMesh {
   root: THREE.Group;
   /** Per wheel: pivot (positioned + steered) and spinner (rolls about X). Order: FL, FR, RL, RR. */
   wheels: { pivot: THREE.Group; spinner: THREE.Mesh }[];
-  /** Brightened while braking. */
+  /** Brake lights: lit red when braking or not driving, dark while accelerating. */
   taillight: THREE.MeshStandardMaterial;
+  headlight: THREE.MeshStandardMaterial;
+  /** Soft glow sprites around the lamps, so they read at night. */
+  headGlows: THREE.Sprite[];
+  tailGlows: THREE.Sprite[];
+  /** Road-lighting headlight beam (off by day). */
+  beam: THREE.SpotLight;
   /** Body paint, darkened when wrecked. */
   paint: THREE.MeshStandardMaterial;
 }
@@ -23,7 +29,17 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   const tire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9, flatShading: true });
   const rim = new THREE.MeshStandardMaterial({ color: 0x9aa4b2, metalness: 0.8, roughness: 0.3, flatShading: true });
   const headlight = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2cc, emissiveIntensity: 2 });
-  const taillight = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff2030, emissiveIntensity: 1.5 });
+  const taillight = new THREE.MeshStandardMaterial({ color: 0x5a0a10, emissive: 0xff1a28, emissiveIntensity: 0 });
+  const glowTexture = glowSpriteTexture();
+  const glow = (color: number, size: number) => {
+    const s = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: glowTexture, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }),
+    );
+    s.scale.setScalar(size);
+    return s;
+  };
+  const headGlows: THREE.Sprite[] = [];
+  const tailGlows: THREE.Sprite[] = [];
 
   // Wedge body: front top vertices pulled down for a sharp nose.
   const bodyGeo = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
@@ -61,6 +77,13 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     root.add(hl);
     const tl = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.05), taillight);
     tl.position.set(x, hy - 0.08, -hz);
+    const hg = glow(0xfff1d6, 1.6);
+    hg.position.set(x, 0, hz + 0.12);
+    const tg = glow(0xff2a2a, 1.0);
+    tg.position.set(x, hy - 0.08, -hz - 0.1);
+    root.add(hg, tg);
+    headGlows.push(hg);
+    tailGlows.push(tg);
     root.add(tl);
   }
 
@@ -81,5 +104,24 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   root.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = true;
   });
-  return { root, wheels, taillight, paint };
+  // One spotlight between the lamps lights the road ahead at night.
+  const beam = new THREE.SpotLight(0xfff1d6, 0, 75, 0.5, 0.45, 1.3);
+  beam.position.set(0, 0.1, hz);
+  beam.target.position.set(0, -1.2, hz + 25);
+  root.add(beam, beam.target);
+
+  return { root, wheels, taillight, headlight, headGlows, tailGlows, beam, paint };
+}
+
+function glowSpriteTexture(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
 }

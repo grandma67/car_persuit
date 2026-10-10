@@ -120,6 +120,7 @@ export class Game {
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
+    this.player.headlights = { day: 0, afternoon: 0.45, night: 1 }[time.name];
     this.scene.add(this.player.mesh.root);
     this.scene.add(this.skidMarks.mesh, this.smoke.points, this.marker.group, this.sea.mesh);
     this.scene.add(this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points, this.blast);
@@ -307,7 +308,7 @@ export class Game {
     body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m * 3, y: (Math.random() - 0.5) * m, z: (Math.random() - 0.5) * m * 3 }, true);
 
     this.player.mesh.paint.color.multiplyScalar(0.15);
-    this.player.mesh.taillight.emissiveIntensity = 0;
+    this.player.lightsOff = true;
     const at = this.player.mesh.root.position.clone().setY(this.player.mesh.root.position.y + 0.8);
     this.tmpVel.set(0, 0, 0);
     for (let i = 0; i < 90; i++) this.fireball.emit(at, this.tmpVel, 0);

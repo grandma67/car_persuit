@@ -20,6 +20,10 @@ export class Vehicle {
   private steer = 0;
   /** Last input applied, for audio and lights. */
   lastInput: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  /** Headlight strength: 0 by day, 1 at night. Set from the time of day. */
+  headlights = 0;
+  /** All lights out (wrecked). */
+  lightsOff = false;
   /** 0..1 how hard the tyres are sliding (drift, handbrake or locked brakes). */
   skid = 0;
   // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
@@ -230,8 +234,23 @@ export class Vehicle {
       pivot.rotation.y = c.wheelSteering(i) ?? 0;
       spinner.rotation.x = c.wheelRotation(i) ?? 0;
     });
-    const braking = this.lastInput.brake > 0 && this.speed > 1;
-    this.mesh.taillight.emissiveIntensity = braking || this.lastInput.handbrake ? 6 : 1.5;
+    this.updateLights();
+  }
+
+  /** Brake lights on unless accelerating; headlights per time of day; everything off when wrecked. */
+  private updateLights(): void {
+    const m = this.mesh;
+    const input = this.lastInput;
+    const accelerating = input.throttle > 0 && input.brake === 0 && !input.handbrake;
+    const brake = this.lightsOff ? 0 : accelerating ? 0 : 1;
+    m.taillight.emissiveIntensity = brake * 5;
+    for (const g of m.tailGlows) (g.material as THREE.SpriteMaterial).opacity = brake * (0.35 + this.headlights * 0.45);
+
+    const head = this.lightsOff ? 0 : this.headlights;
+    m.headlight.emissiveIntensity = 1.2 + head * 3;
+    m.beam.intensity = head * 450;
+    m.beam.visible = head > 0;
+    for (const g of m.headGlows) (g.material as THREE.SpriteMaterial).opacity = head * 0.9;
   }
 
   dispose(): void {
