@@ -5,6 +5,8 @@ export interface CarMesh {
   root: THREE.Group;
   /** Per wheel: pivot (positioned + steered) and spinner (rolls about X). Order: FL, FR, RL, RR. */
   wheels: { pivot: THREE.Group; spinner: THREE.Mesh }[];
+  /** Brightened while braking. */
+  taillight: THREE.MeshStandardMaterial;
 }
 
 // Low-poly but sharp: wedge nose, faceted canopy, spoiler, emissive lights.
@@ -19,7 +21,7 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   const tire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9, flatShading: true });
   const rim = new THREE.MeshStandardMaterial({ color: 0x9aa4b2, metalness: 0.8, roughness: 0.3, flatShading: true });
   const headlight = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2cc, emissiveIntensity: 2 });
-  const taillight = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff2030, emissiveIntensity: 2 });
+  const taillight = new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff2030, emissiveIntensity: 1.5 });
 
   // Wedge body: front top vertices pulled down for a sharp nose.
   const bodyGeo = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
@@ -77,5 +79,5 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   root.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = true;
   });
-  return { root, wheels };
+  return { root, wheels, taillight };
 }

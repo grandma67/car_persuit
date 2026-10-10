@@ -5,6 +5,7 @@ import type { VehicleSpec } from './VehicleSpecs';
 import { buildCarMesh, type CarMesh } from './carMesh';
 
 const FORWARD = new THREE.Vector3(0, 0, 1);
+const RIGHT = new THREE.Vector3(-1, 0, 0);
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpQuat = new THREE.Quaternion();
 const tmpVec = new THREE.Vector3();
@@ -13,9 +14,17 @@ const tmpVec = new THREE.Vector3();
 // only the DriveInput source differs.
 export class Vehicle {
   readonly body: RAPIER.RigidBody;
+  readonly collider: RAPIER.Collider;
   readonly controller: RAPIER.DynamicRayCastVehicleController;
   readonly mesh: CarMesh;
   private steer = 0;
+  /** Last input applied, for audio and lights. */
+  lastInput: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  /** 0..1 how hard the tyres are sliding (drift, handbrake or locked brakes). */
+  skid = 0;
+  // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
+  private lastVel = new THREE.Vector3();
+  private impact = 0;
   // Previous/current physics transforms, for render interpolation between fixed steps.
   private prevPos = new THREE.Vector3();
   private prevQuat = new THREE.Quaternion();
@@ -42,7 +51,7 @@ export class Vehicle {
     // Explicit mass properties: lowered centre of mass so the car resists rolling.
     const m = spec.mass;
     const [w, h, d] = [hx * 2, hy * 2, hz * 2];
-    world.createCollider(
+    this.collider = world.createCollider(
       RAPIER.ColliderDesc.cuboid(hx, hy, hz)
         .setMassProperties(
           m,
@@ -51,8 +60,7 @@ export class Vehicle {
           { x: 0, y: 0, z: 0, w: 1 },
         )
         .setFriction(0.4)
-        .setRestitution(0.1)
-        .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS),
+        .setRestitution(0.1),
       this.body,
     );
 
@@ -100,6 +108,20 @@ export class Vehicle {
     return out.copy(FORWARD).applyQuaternion(this.currQuat);
   }
 
+  /** Sideways velocity in m/s (positive = sliding right). */
+  get lateralSpeed(): number {
+    const v = this.body.linvel();
+    tmpVec.copy(RIGHT).applyQuaternion(this.currQuat);
+    return v.x * tmpVec.x + v.y * tmpVec.y + v.z * tmpVec.z;
+  }
+
+  /** World-space ground contact point of a wheel, or null if it is in the air. */
+  wheelContact(i: number, out: THREE.Vector3): THREE.Vector3 | null {
+    if (!this.controller.wheelIsInContact(i)) return null;
+    const p = this.controller.wheelContactPoint(i);
+    return p ? out.set(p.x, p.y, p.z) : null;
+  }
+
   /** Apply driver input. Call once per fixed step, before world.step(). */
   drive(input: DriveInput, dt: number): void {
     const s = this.spec;
@@ -135,6 +157,16 @@ export class Vehicle {
     }
 
     c.updateVehicle(dt);
+    this.lastInput = input;
+
+    // Skid intensity: sideways slide, handbrake lock, or hard braking at speed.
+    const absSpeed = Math.abs(speed);
+    let skid = THREE.MathUtils.clamp((Math.abs(this.lateralSpeed) - 2.5) / 6, 0, 1);
+    if (input.handbrake && absSpeed > 5) skid = Math.max(skid, 0.6);
+    // Hard cornering at high speed: grip holds, but the tyres still squeal a little.
+    skid = Math.max(skid, Math.abs(this.steer) * THREE.MathUtils.clamp((absSpeed - 20) / 15, 0, 1) * 0.35);
+    if (brake >= s.brakeForce * 0.5 && absSpeed > 8) skid = Math.max(skid, 0.4);
+    this.skid = c.wheelIsInContact(2) || c.wheelIsInContact(3) ? skid : 0;
 
     // Speed-scaled downforce keeps the car planted in fast corners.
     const rot = this.body.rotation();
@@ -151,6 +183,19 @@ export class Vehicle {
     const r = this.body.rotation();
     this.currPos.set(t.x, t.y, t.z);
     this.currQuat.set(r.x, r.y, r.z, r.w);
+
+    // Normal driving changes velocity < 0.2 m/s per step; anything well above is a hit.
+    const v = this.body.linvel();
+    const dv = Math.hypot(v.x - this.lastVel.x, v.y - this.lastVel.y, v.z - this.lastVel.z);
+    if (dv > 1.5) this.impact = Math.max(this.impact, dv);
+    this.lastVel.set(v.x, v.y, v.z);
+  }
+
+  /** Strongest collision (velocity change, m/s) since the last call; 0 if none. */
+  consumeImpact(): number {
+    const i = this.impact;
+    this.impact = 0;
+    return i;
   }
 
   /** Put the car back on its wheels at its current spot, keeping its heading. */
@@ -163,6 +208,7 @@ export class Vehicle {
     this.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.lastVel.set(0, 0, 0);
     this.snapshot();
     this.prevPos.copy(this.currPos);
     this.prevQuat.copy(this.currQuat);
@@ -180,6 +226,8 @@ export class Vehicle {
       pivot.rotation.y = c.wheelSteering(i) ?? 0;
       spinner.rotation.x = c.wheelRotation(i) ?? 0;
     });
+    const braking = this.lastInput.brake > 0 && this.speed > 1;
+    this.mesh.taillight.emissiveIntensity = braking || this.lastInput.handbrake ? 6 : 1.5;
   }
 
   dispose(): void {
