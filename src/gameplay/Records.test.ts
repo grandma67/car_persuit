@@ -47,6 +47,8 @@ describe('difficulty', () => {
     const [easy, normal, hard] = DIFFICULTIES;
     expect(easy.timeLimit).toBeGreaterThan(normal.timeLimit);
     expect(hard.damageScale).toBeGreaterThan(normal.damageScale);
+    expect(easy.maxHealth).toBeGreaterThan(normal.maxHealth);
+    expect(easy.armor).toBeGreaterThan(normal.armor);
     expect(difficultyById('nope').id).toBe('normal');
     expect(scaledCopCap(2, easy)).toBe(2); // round(1.5)
     expect(scaledCopCap(10, hard)).toBe(13);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DAMAGE } from './balance';
 import { Health } from './Health';
+import { DIFFICULTIES } from './difficulty';
 
 describe('Health', () => {
   it('ignores scrapes', () => {
@@ -27,5 +28,28 @@ describe('Health', () => {
     expect(h.destroyed).toBe(true);
     expect(h.burning).toBe(true);
     expect(h.applyImpact(50)).toBe(0);
+  });
+});
+
+describe('Easy mode car', () => {
+  const [easy, normal] = DIFFICULTIES;
+  const make = (d: typeof easy) => new Health({ ...DAMAGE, maxHealth: d.maxHealth, impactThreshold: d.armor, impactScale: DAMAGE.impactScale * d.damageScale });
+
+  it('shrugs off light rams that would hurt on Normal', () => {
+    expect(make(easy).applyImpact(7)).toBe(0);
+    expect(make(normal).applyImpact(7)).toBeGreaterThan(0);
+  });
+
+  it('survives about four times as many 60 km/h wall hits', () => {
+    const hitsToWreck = (h: Health) => {
+      let n = 0;
+      while (!h.destroyed) {
+        h.applyImpact(17); // ≈ 60 km/h into a wall
+        n++;
+      }
+      return n;
+    };
+    expect(hitsToWreck(make(normal))).toBe(5);
+    expect(hitsToWreck(make(easy))).toBeGreaterThanOrEqual(15);
   });
 });

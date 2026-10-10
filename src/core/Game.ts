@@ -250,7 +250,7 @@ export class Game {
     if (this.state !== 'menu') return;
     this.state = 'playing';
     const d = this.difficulty;
-    this.health = new Health({ ...DAMAGE, impactScale: DAMAGE.impactScale * d.damageScale });
+    this.health = new Health({ ...DAMAGE, maxHealth: d.maxHealth, impactThreshold: d.armor, impactScale: DAMAGE.impactScale * d.damageScale });
     this.wanted.rate = d.heatRate;
     this.touch?.setVisible(true);
     this.audio.unlock();
