@@ -12,7 +12,7 @@ const setup = (seed: number) => {
 };
 
 describe('pickDestinations', () => {
-  it.each([1, 42, 1234, 99999])('seed %i: 5 distinct destinations, 400-800m apart by road', (seed) => {
+  it.each([1, 42, 1234, 99999])('seed %i: 5 distinct destinations, 700-1100m apart by road', (seed) => {
     const { city, start, destinations } = setup(seed);
     expect(destinations).toHaveLength(MISSION.destinations);
     expect(new Set(destinations.map((d) => d.id)).size).toBe(destinations.length);

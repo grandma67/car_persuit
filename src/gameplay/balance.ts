@@ -11,8 +11,8 @@ export interface MissionConfig {
 export const MISSION: MissionConfig = {
   timeLimit: 600,
   destinations: 5,
-  minRouteDistance: 400,
-  maxRouteDistance: 800,
+  minRouteDistance: 700,
+  maxRouteDistance: 1100,
   reachRadius: 9,
 };
 
