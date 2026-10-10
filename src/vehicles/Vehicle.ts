@@ -22,6 +22,8 @@ export class Vehicle {
   lastInput: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   /** Headlight strength: 0 by day, 1 at night. Set from the time of day. */
   headlights = 0;
+  /** Road-lighting spotlight; cops use glowing lamps only. */
+  beamEnabled = true;
   /** All lights out (wrecked). */
   lightsOff = false;
   /** 0..1 how hard the tyres are sliding (drift, handbrake or locked brakes). */
@@ -249,7 +251,7 @@ export class Vehicle {
     const head = this.lightsOff ? 0 : this.headlights;
     m.headlight.emissiveIntensity = 1.2 + head * 3;
     m.beam.intensity = head * 450;
-    m.beam.visible = head > 0;
+    m.beam.visible = head > 0 && this.beamEnabled;
     for (const g of m.headGlows) (g.material as THREE.SpriteMaterial).opacity = head * 0.9;
   }
 

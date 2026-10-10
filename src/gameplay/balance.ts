@@ -37,3 +37,35 @@ export const DAMAGE: DamageConfig = {
   smokeBelow: 0.5,
   fireBelow: 0.2,
 };
+
+export type CopType = 'patrol' | 'interceptor' | 'suv' | 'armored';
+
+export interface StarLevel {
+  /** Effective seconds (elapsed + heat) at which this star level starts. */
+  at: number;
+  maxCops: number;
+  spawnInterval: number; // seconds between spawns while under the cap
+  mix: Partial<Record<CopType, number>>; // spawn weights
+  roadblocks: boolean;
+  /** Cop aggression: how far they spot you and how hard they push to catch up. */
+  chaseRange: number;
+  catchUp: number;
+}
+
+// Index 0 = 1 star … index 4 = 5 stars.
+export const WANTED: StarLevel[] = [
+  { at: 0, maxCops: 2, spawnInterval: 7, mix: { patrol: 1 }, roadblocks: false, chaseRange: 90, catchUp: 1.1 },
+  { at: 90, maxCops: 4, spawnInterval: 5, mix: { patrol: 1 }, roadblocks: false, chaseRange: 100, catchUp: 1.15 },
+  { at: 180, maxCops: 6, spawnInterval: 4, mix: { patrol: 0.6, interceptor: 0.4 }, roadblocks: false, chaseRange: 110, catchUp: 1.2 },
+  { at: 300, maxCops: 8, spawnInterval: 3, mix: { patrol: 0.4, interceptor: 0.3, suv: 0.3 }, roadblocks: true, chaseRange: 120, catchUp: 1.25 },
+  { at: 420, maxCops: 10, spawnInterval: 2.5, mix: { patrol: 0.3, interceptor: 0.3, suv: 0.2, armored: 0.2 }, roadblocks: true, chaseRange: 130, catchUp: 1.3 },
+];
+
+/** Extra "wanted time" (seconds) for trouble you cause. */
+export const HEAT = {
+  copWrecked: 25,
+  propSmashed: 0.6,
+};
+
+/** Seconds between roadblock attempts at 4+ stars. */
+export const ROADBLOCK_INTERVAL = 35;

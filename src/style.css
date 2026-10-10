@@ -463,3 +463,51 @@ kbd {
     animation: none;
   }
 }
+
+.hud-wanted {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.hud-stars {
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: rgb(255 255 255 / 0.22);
+  text-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+.hud-stars span.on {
+  color: #ffd23f;
+  text-shadow:
+    0 0 10px rgb(255 210 63 / 0.6),
+    0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+.hud-stars.flash {
+  animation: stars-flash 0.25s ease-in-out 6;
+}
+
+@keyframes stars-flash {
+  50% {
+    transform: scale(1.25);
+    filter: brightness(1.6);
+  }
+}
+
+.hud-star-progress {
+  width: 120px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.15);
+  overflow: hidden;
+}
+
+.hud-star-progress div {
+  height: 100%;
+  background: #ffd23f;
+}

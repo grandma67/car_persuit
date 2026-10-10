@@ -91,6 +91,13 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 - Recover: stuck >1.5s → reverse + turn.
 - Director: spawn 150–250m away off-screen, despawn >400m behind, mild rubber-banding.
 
+## Wanted & escalation (M5, as built)
+
+- `gameplay/WantedSystem.ts`: stars from elapsed time + heat (cop wrecked +25s, prop smashed +0.6s); thresholds and per-star caps/mix/aggression in `balance.ts` (WANTED).
+- Cop types (`VehicleSpecs.ts`, distinct body meshes): patrol sedan, interceptor (fast, 70 HP), SUV rammer (2300kg, 160 HP), armored truck (5000kg, 400 HP). Heavier cops hurt more via impact Δv.
+- Director: spawns to the star cap at the star's interval with weighted types; 4★+ roadblocks (2 SUVs across the road 140–260m ahead on the GPS route, holding until the player is within 35m).
+- HUD stars + progress bar, toast per level; `?debug` K = +1 star. 10 cops at 60fps (cops have lamp glow, no spotlights).
+
 ## Cop AI (M4, as built)
 
 - `ai/CopController.ts`: navigate (pure pursuit along the A* road route, lookahead clamped at sharp bends, brakes for every bend within braking distance), chase (lead pursuit when two-ray line of sight within 90m and roughly ahead), ram (<18m), recover (reverse with opposite lock until pointing the right way). Rubber-band speed when far.
@@ -111,6 +118,6 @@ Collision contact force above a threshold × opponent mass factor → health los
 | M2 ✅ | City generator + colliders | Seeded city, can't drive through walls |
 | M3 ✅ | Mission system + HUD | Full loop playable without cops |
 | M4 ✅ | One patrol cop AI | Convincing single chase |
-| M5 | Director, stars, all cop types, damage | Complete game |
+| M5 ✅ | Director, stars, all cop types, damage | Complete game |
 | M6 | Polish: audio, particles, minimap, menus, car models, sparse civilian traffic | Showable |
 | M7 | Mobile touch controls, difficulty, leaderboard | — |

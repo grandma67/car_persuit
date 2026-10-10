@@ -43,11 +43,14 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   const headGlows: THREE.Sprite[] = [];
   const tailGlows: THREE.Sprite[] = [];
 
-  // Wedge body: front top vertices pulled down for a sharp nose.
+  const body = spec.body ?? 'sports';
+  // Body: a box with the front top edge pulled down — a sharp wedge for sports cars, a gentle
+  // bonnet slope for sedans/SUVs, flat-fronted for the armored truck.
+  const noseDrop = { sports: 1.15, sedan: 0.7, suv: 0.3, truck: 0 }[body];
   const bodyGeo = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
   const pos = bodyGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    if (pos.getZ(i) > 0 && pos.getY(i) > 0) pos.setY(i, pos.getY(i) - hy * 1.15);
+    if (pos.getZ(i) > 0 && pos.getY(i) > 0) pos.setY(i, pos.getY(i) - hy * noseDrop);
   }
   bodyGeo.computeVertexNormals();
   root.add(new THREE.Mesh(bodyGeo, paint));
@@ -56,33 +59,63 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   skirt.position.y = -hy + 0.06;
   root.add(skirt);
 
-  // Faceted canopy, set slightly back.
-  const cabinGeo = new THREE.CylinderGeometry(0.75, 1.0, 0.5, 4, 1);
-  cabinGeo.rotateY(Math.PI / 4);
-  cabinGeo.scale(1.15, 1, 1.6);
-  const cabin = new THREE.Mesh(cabinGeo, glass);
-  cabin.position.set(0, hy + 0.23, -0.3);
-  root.add(cabin);
+  // Cabin / glasshouse, and where the roof ends up (for the light bar).
+  let roof: number;
+  if (body === 'truck') {
+    // Armored truck: slit windscreen and side vision ports in the slab body, roof hatch.
+    const slit = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.7, hy * 0.35, 0.06), glass);
+    slit.position.set(0, hy * 0.45, hz + 0.01);
+    root.add(slit);
+    for (const side of [-1, 1]) {
+      const port = new THREE.Mesh(new THREE.BoxGeometry(0.06, hy * 0.3, hz * 0.5), glass);
+      port.position.set(side * (hx + 0.01), hy * 0.45, hz * 0.45);
+      root.add(port);
+    }
+    const hatch = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.9), trim);
+    hatch.position.set(0, hy + 0.06, -hz * 0.3);
+    root.add(hatch);
+    roof = hy;
+  } else if (body === 'suv') {
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.86, 0.72, hz * 1.25), glass);
+    cabin.position.set(0, hy + 0.36, -hz * 0.18);
+    root.add(cabin);
+    const roofPanel = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.9, 0.06, hz * 1.27), paint);
+    roofPanel.position.set(0, hy + 0.74, -hz * 0.18);
+    root.add(roofPanel);
+    roof = hy + 0.77;
+  } else {
+    // Faceted canopy, set slightly back; taller and longer on a sedan.
+    const cabinGeo = new THREE.CylinderGeometry(0.75, 1.0, body === 'sedan' ? 0.6 : 0.5, 4, 1);
+    cabinGeo.rotateY(Math.PI / 4);
+    cabinGeo.scale(1.15, 1, body === 'sedan' ? 1.85 : 1.6);
+    const cabin = new THREE.Mesh(cabinGeo, glass);
+    cabin.position.set(0, hy + (body === 'sedan' ? 0.28 : 0.23), body === 'sedan' ? -0.2 : -0.3);
+    root.add(cabin);
+    roof = hy + (body === 'sedan' ? 0.58 : 0.48);
+  }
 
-  const spoiler = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 - 0.1, 0.08, 0.35), paint);
-  spoiler.position.set(0, hy + 0.3, -hz + 0.15);
-  root.add(spoiler);
-  for (const x of [-0.6, 0.6]) {
-    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), trim);
-    strut.position.set(x, hy + 0.15, -hz + 0.2);
-    root.add(strut);
+  if (body === 'sports') {
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 - 0.1, 0.08, 0.35), paint);
+    spoiler.position.set(0, hy + 0.3, -hz + 0.15);
+    root.add(spoiler);
+    for (const x of [-0.6, 0.6]) {
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), trim);
+      strut.position.set(x, hy + 0.15, -hz + 0.2);
+      root.add(strut);
+    }
   }
 
   for (const x of [-0.65, 0.65]) {
+    const lampY = body === 'truck' ? -hy * 0.3 : 0;
     const hl = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.08, 0.05), headlight);
-    hl.position.set(x, 0.0, hz);
+    hl.position.set(x * (hx / 0.95), lampY, hz);
     root.add(hl);
     const tl = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.05), taillight);
-    tl.position.set(x, hy - 0.08, -hz);
+    tl.position.set(x * (hx / 0.95), hy - 0.08, -hz);
     const hg = glow(0xfff1d6, 1.6);
-    hg.position.set(x, 0, hz + 0.12);
+    hg.position.set(x * (hx / 0.95), lampY, hz + 0.12);
     const tg = glow(0xff2a2a, 1.0);
-    tg.position.set(x, hy - 0.08, -hz - 0.1);
+    tg.position.set(x * (hx / 0.95), hy - 0.08, -hz - 0.1);
     root.add(hg, tg);
     headGlows.push(hg);
     tailGlows.push(tg);
@@ -110,13 +143,16 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   if (spec.livery === 'police') {
     // Black side stripes and a roof light bar.
     const black = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.5, flatShading: true });
-    for (const side of [-1, 1]) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.03, hy * 1.1, hz * 1.3), black);
-      stripe.position.set(side * (hx + 0.01), -hy * 0.15, -0.1);
-      root.add(stripe);
+    if (body === 'sedan' || body === 'suv') {
+      for (const side of [-1, 1]) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.03, hy * 1.1, hz * 1.3), black);
+        stripe.position.set(side * (hx + 0.01), -hy * 0.15, -0.1);
+        root.add(stripe);
+      }
     }
+    const barZ = body === 'suv' ? -hz * 0.1 : body === 'truck' ? hz * 0.55 : -0.3;
     const base = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 0.32), black);
-    base.position.set(0, hy + 0.53, -0.3);
+    base.position.set(0, roof + 0.05, barZ);
     root.add(base);
     const red = new THREE.MeshStandardMaterial({ color: 0x5a0000, emissive: 0xff1010, emissiveIntensity: 0 });
     const blue = new THREE.MeshStandardMaterial({ color: 0x00105a, emissive: 0x1040ff, emissiveIntensity: 0 });
@@ -124,8 +160,8 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     const blueGlow = glow(0x2060ff, 2.2);
     for (const [mat, x, g] of [[red, -0.33, redGlow], [blue, 0.33, blueGlow]] as const) {
       const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.16, 0.28), mat);
-      lamp.position.set(x, hy + 0.66, -0.3);
-      g.position.set(x, hy + 0.7, -0.3);
+      lamp.position.set(x, roof + 0.18, barZ);
+      g.position.set(x, roof + 0.22, barZ);
       root.add(lamp, g);
     }
     sirenLights = { red, blue, redGlow, blueGlow };

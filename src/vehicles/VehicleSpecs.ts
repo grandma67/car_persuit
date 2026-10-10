@@ -4,6 +4,8 @@ export interface VehicleSpec {
   name: string;
   color: number;
   livery?: 'police';
+  body?: 'sports' | 'sedan' | 'suv' | 'truck'; // mesh shape, default sports
+  maxHealth?: number; // default 100
   mass: number; // kg
   halfExtents: { x: number; y: number; z: number }; // chassis collider, metres
   wheelRadius: number;
@@ -58,7 +60,74 @@ export const COP_PATROL_SPEC: VehicleSpec = {
   name: 'Patrol',
   color: 0xf2f2f2,
   livery: 'police',
+  body: 'sedan',
   mass: 1350,
   engineForce: 4300,
   maxSpeed: 39, // ~140 km/h
+};
+
+// Interceptor (3★): faster than the player, but light and fragile.
+export const COP_INTERCEPTOR_SPEC: VehicleSpec = {
+  ...PLAYER_SPEC,
+  name: 'Interceptor',
+  color: 0x1a1d24,
+  livery: 'police',
+  body: 'sports',
+  mass: 1250,
+  engineForce: 5200,
+  maxSpeed: 46, // ~165 km/h
+  maxHealth: 70,
+};
+
+// SUV rammer (4★): heavy, hits hard, a bit slower.
+export const COP_SUV_SPEC: VehicleSpec = {
+  ...PLAYER_SPEC,
+  name: 'SUV',
+  color: 0x2b2f36,
+  livery: 'police',
+  body: 'suv',
+  mass: 2300,
+  halfExtents: { x: 1.05, y: 0.45, z: 2.45 },
+  wheelRadius: 0.45,
+  wheelX: 1.0,
+  wheelZ: 1.6,
+  suspensionRestLength: 0.5,
+  engineForce: 7000,
+  brakeForce: 85,
+  handbrakeForce: 55,
+  maxSpeed: 37,
+  maxSteer: 0.5,
+  downforce: 100,
+  maxHealth: 160,
+};
+
+// Armored truck (5★): very heavy and slow, nearly unstoppable.
+export const COP_ARMORED_SPEC: VehicleSpec = {
+  ...PLAYER_SPEC,
+  name: 'Armored',
+  color: 0x23262b,
+  livery: 'police',
+  body: 'truck',
+  mass: 5000,
+  halfExtents: { x: 1.25, y: 0.85, z: 3.1 },
+  wheelRadius: 0.55,
+  wheelX: 1.15,
+  wheelZ: 2.1,
+  suspensionRestLength: 0.55,
+  suspensionStiffness: 35,
+  engineForce: 14000,
+  brakeForce: 180,
+  handbrakeForce: 110,
+  maxSpeed: 33, // ~120 km/h
+  maxSteer: 0.45,
+  frictionSlip: 2.6,
+  downforce: 200,
+  maxHealth: 400,
+};
+
+export const COP_SPECS = {
+  patrol: COP_PATROL_SPEC,
+  interceptor: COP_INTERCEPTOR_SPEC,
+  suv: COP_SUV_SPEC,
+  armored: COP_ARMORED_SPEC,
 };

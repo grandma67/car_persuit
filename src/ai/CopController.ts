@@ -54,6 +54,8 @@ const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false
 
 export class CopController {
   state: CopState = 'navigate';
+  /** Roadblock: sit still until the suspect is close, then join the chase. */
+  holdUntilClose = false;
   private path: THREE.Vector3[] = [];
   private segment = 0; // index of the path segment we're on
   private roadOnlyFor = 0; // after recovering, follow the road rather than aiming straight at the target
@@ -70,7 +72,7 @@ export class CopController {
     readonly vehicle: Vehicle,
     private graph: RoadGraph,
     private canSee: LineOfSight,
-    private tuning: CopTuning = COP_TUNING,
+    public tuning: CopTuning = COP_TUNING,
   ) {}
 
   /** Call once per physics step, before vehicle.drive(). */
@@ -80,6 +82,10 @@ export class CopController {
     const pos = v.position;
     const speed = v.speed;
     const dist = Math.hypot(target.position.x - pos.x, target.position.z - pos.z);
+    if (this.holdUntilClose) {
+      if (dist > 35) return { ...NO_INPUT, brake: Math.abs(speed) > 1 ? 1 : 0 };
+      this.holdUntilClose = false;
+    }
 
     if (this.state === 'recover') {
       this.recoverFor += dt;

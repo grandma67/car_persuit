@@ -23,6 +23,7 @@ import { SkidMarks } from '../render/SkidMarks';
 import { DestinationMarker } from '../render/DestinationMarker';
 import { MissionSystem, pickDestinations, routeAim, type Route } from '../gameplay/MissionSystem';
 import { MISSION } from '../gameplay/balance';
+import { WantedSystem } from '../gameplay/WantedSystem';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
@@ -72,6 +73,7 @@ export class Game {
   private blast = new THREE.PointLight(0xff9a40, 0, 60, 1.5);
   private props: PropSystem;
   private director: CopDirector;
+  private wanted = new WantedSystem();
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
   private sirenLights: THREE.PointLight[] = [];
   private geysers: { position: THREE.Vector3; timeLeft: number; budget: number }[] = [];
@@ -240,6 +242,7 @@ export class Game {
       const target = this.mission.current;
       if (pressed('KeyT') && target && this.state === 'playing') this.player.teleport(target.x, 1.2, target.z, 0);
       if (pressed('KeyY') && this.state === 'playing') this.mission.elapsed = MISSION.timeLimit - 3;
+      if (pressed('KeyK') && this.state === 'playing') this.raiseStars(this.wanted.bump());
     }
   }
 
@@ -289,7 +292,10 @@ export class Game {
 
     this.player.syncMesh(alpha);
     for (const cop of this.director.cops) cop.vehicle.syncMesh(alpha);
-    if (this.state === 'playing') this.director.update(frameDt, this.chaseTarget, this.player.forward());
+    if (this.state === 'playing') {
+      this.raiseStars(this.wanted.update(frameDt));
+      this.director.update(frameDt, this.chaseTarget, this.player.forward(), this.wanted.level, this.route?.path ?? null);
+    }
     this.updateSirens();
     this.props.sync();
     this.props.updateSignals(this.clock.elapsedTime);
@@ -314,6 +320,8 @@ export class Game {
       timeLeft: this.mission.timeLeft,
       distance: this.state === 'playing' ? (this.route?.distance ?? null) : null,
       health: this.health.ratio,
+      stars: this.wanted.stars,
+      starProgress: this.wanted.progress,
     });
     const fwd = this.player.forward();
     const target = this.state === 'playing' ? this.mission.current : null;
@@ -383,9 +391,19 @@ export class Game {
     this.endMission();
   }
 
+  /** Announce a new wanted level. */
+  private raiseStars(stars: number | null): void {
+    if (stars === null) return;
+    const news = ['', '', 'MORE UNITS RESPONDING', 'INTERCEPTORS INBOUND', 'SUVs AND ROADBLOCKS', 'ARMORED UNITS DEPLOYED'][stars];
+    this.hud.toast(`${'★'.repeat(stars)}  ${news}`, 2.5);
+    this.hud.flashStars();
+    this.audio.jingle('reached');
+  }
+
   /** A cop car wrecked: smaller blast, launched, burns until the director clears it. */
   private explodeCop(cop: Cop): void {
     this.director.wreck(cop);
+    if (this.state === 'playing') this.raiseStars(this.wanted.copWrecked());
     const v = cop.vehicle;
     const m = v.spec.mass;
     v.body.applyImpulse({ x: 0, y: m * 5, z: 0 }, true);
@@ -491,6 +509,7 @@ export class Game {
 
   private updatePropEffects(dt: number, breaks: PropBreak[]): void {
     for (const b of breaks) {
+      if (this.state === 'playing') this.raiseStars(this.wanted.propSmashed());
       this.audio.propBreak(b.kind, b.strength);
       if (b.kind === 'lamp' || b.kind === 'signal') {
         for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0); // sparks

@@ -7,6 +7,8 @@ export interface MissionHudState {
   timeLeft: number; // seconds
   distance: number | null; // metres by road, null when no active target
   health: number; // 0..1
+  stars: number; // wanted level 1..5
+  starProgress: number; // 0..1 toward the next star
 }
 
 export function formatTime(seconds: number): string {
@@ -23,6 +25,9 @@ export class Hud {
   private toastEl: HTMLElement;
   private healthFill: HTMLElement;
   private damageEl: HTMLElement;
+  private starEls: HTMLElement[];
+  private starProgressEl: HTMLElement;
+  private starsWrap: HTMLElement;
   private toastTimer = 0;
   private flash = 0;
 
@@ -30,6 +35,10 @@ export class Hud {
     root.innerHTML = `
       <div class="hud-damage"></div>
       <div class="hud-timer">10:00</div>
+      <div class="hud-wanted" aria-label="Wanted level">
+        <div class="hud-stars">${'<span>★</span>'.repeat(5)}</div>
+        <div class="hud-star-progress"><div></div></div>
+      </div>
       <div class="hud-mission">
         <div class="hud-dest"></div>
         <div class="hud-dist"></div>
@@ -57,6 +66,9 @@ export class Hud {
     this.toastEl = root.querySelector('.hud-toast')!;
     this.healthFill = root.querySelector('.hud-health-fill')!;
     this.damageEl = root.querySelector('.hud-damage')!;
+    this.starsWrap = root.querySelector('.hud-stars')!;
+    this.starEls = Array.from(root.querySelectorAll('.hud-stars span'));
+    this.starProgressEl = root.querySelector('.hud-star-progress div')!;
   }
 
   setMuted(muted: boolean): void {
@@ -77,6 +89,9 @@ export class Hud {
     this.healthFill.style.width = `${h * 100}%`;
     this.healthFill.classList.toggle('critical', h > 0 && h <= 0.2);
 
+    this.starEls.forEach((el, i) => el.classList.toggle('on', i < mission.stars));
+    this.starProgressEl.style.width = `${mission.stars >= 5 ? 100 : mission.starProgress * 100}%`;
+
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.damageEl.style.opacity = String(this.flash);
 
@@ -84,6 +99,13 @@ export class Hud {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) this.toastEl.classList.remove('visible');
     }
+  }
+
+  /** Pulse the stars when the wanted level rises. */
+  flashStars(): void {
+    this.starsWrap.classList.remove('flash');
+    void this.starsWrap.offsetWidth; // restart the animation
+    this.starsWrap.classList.add('flash');
   }
 
   /** Red screen-edge flash; strength 0..1. */
