@@ -12,10 +12,10 @@ export class Sea {
   private time = { value: 0 };
 
   /** islandHalf: half the island's width, for shallows and shore foam. */
-  constructor(islandHalf: number) {
+  constructor(islandHalf: number, deepColor: number) {
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEGMENTS, SEGMENTS).rotateX(-Math.PI / 2);
     const material = new THREE.MeshStandardMaterial({
-      color: 0x1f6488, // deep water; shallows are mixed in by the shader
+      color: deepColor, // shallows are mixed in by the shader
       roughness: 0.22,
       metalness: 0.15,
       flatShading: true,

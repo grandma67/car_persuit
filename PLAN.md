@@ -65,6 +65,13 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 - Round heading-up minimap (top right) with road route, destination (pinned to rim when off-map) and player arrow; replaces the 3D GPS arrow.
 - Health (gameplay/Health.ts): crash damage from impact Δv (5 m/s free, 1.8 HP per m/s above); smoke <50%, fire <20%, wrecked at 0 → lose. Health bar under the minimap, red flash on hits.
 
+## World dressing (added after M3)
+
+- Breakable street props (lamps with light pools, hydrants with geysers, benches, picket fences): solid when nudged, knocked loose above a break speed (`world/StreetProps.ts`, `world/PropSystem.ts`).
+- Seed picks a realistic city style (Modern American, Old Brick, Mediterranean, Nordic, Desert Southwest; colours jittered per seed) and a time of day (day / golden hour / night). `?time=` overrides. Sky dome, fog, lights, lamps, windows and sea follow the time of day.
+- Wreck = explosion (fireball, flash, shake, engine cut), then end screen after 2s.
+- Destinations 700–1100m apart by road.
+
 ## Wanted escalation
 
 | Stars | At ~ | Max cops | New threat |

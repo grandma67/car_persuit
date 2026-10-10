@@ -29,11 +29,11 @@ export class Screens {
     this.el.hidden = true;
   }
 
-  menu(seed: number, onStart: () => void): void {
+  menu(seed: number, look: string, onStart: () => void): void {
     this.show(
       `
       <h1>CAR PURSUIT</h1>
-      <p class="screen-lead">Reach all 5 destinations in under 10 minutes.<br>Follow the arrow. Don't get wrecked.</p>
+      <p class="screen-lead">Reach all 5 destinations in under 10 minutes.<br>Follow the route on the map. Don't get wrecked.</p>
       <ul class="screen-keys">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive</li>
         <li><kbd>Space</kbd> handbrake</li>
@@ -41,7 +41,7 @@ export class Screens {
         <li><kbd>P</kbd> pause · <kbd>M</kbd> mute</li>
       </ul>
       <button data-action="start">Start <kbd>Enter</kbd></button>
-      <p class="screen-seed">City #${seed}</p>
+      <p class="screen-seed">City #${seed} · ${look}</p>
     `,
       { start: onStart },
     );

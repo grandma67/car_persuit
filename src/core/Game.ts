@@ -7,6 +7,8 @@ import { PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { generateCity, type CityData } from '../world/CityGenerator';
 import { buildCity } from '../world/CityBuilder';
+import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
+import { Sky } from '../render/Sky';
 import { PropSystem, type PropBreak } from '../world/PropSystem';
 import { Hud, formatTime } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
@@ -42,7 +44,9 @@ export class Game {
   private sun: THREE.DirectionalLight;
   private player: Vehicle;
   readonly city: CityData;
-  private fog = new THREE.Fog(0x1a2233, 100, 480);
+  private fog: THREE.Fog;
+  private time: TimeOfDay;
+  private sky: Sky;
   private overview = false; // ?debug only: top-down map view on C
   private debug = new URLSearchParams(window.location.search).has('debug');
   private hud: Hud;
@@ -86,12 +90,19 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(this.renderer.domElement);
 
-    this.scene.background = new THREE.Color(0x1a2233);
+    // The seed picks a time of day (overridable with ?time=day|afternoon|night) and a city style.
+    const time = (this.time = pickTimeOfDay(seed, new URLSearchParams(window.location.search).get('time')));
+    const theme = pickTheme(seed);
+    this.renderer.toneMappingExposure = time.exposure;
+    this.fog = new THREE.Fog(time.skyHorizon, time.fogNear, time.fogFar);
+    this.scene.background = new THREE.Color(time.skyHorizon);
     this.scene.fog = this.fog;
-    this.scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x202020, 0.9));
+    this.sky = new Sky(time.skyZenith, time.skyHorizon);
+    this.scene.add(this.sky.mesh);
+    this.scene.add(new THREE.HemisphereLight(time.hemiSky, time.hemiGround, time.hemiIntensity));
 
     // Shadow-casting sun follows the player so a small shadow frustum covers the visible area.
-    this.sun = new THREE.DirectionalLight(0xffffff, 2);
+    this.sun = new THREE.DirectionalLight(time.sunColor, time.sunIntensity);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     const s = this.sun.shadow.camera;
@@ -103,9 +114,9 @@ export class Game {
 
     this.world.timestep = FIXED_DT;
     this.city = generateCity(seed);
-    buildCity(this.city, this.scene, this.world);
-    this.sea = new Sea(this.city.islandSize / 2);
-    this.props = new PropSystem(this.city, this.scene, this.world);
+    buildCity(this.city, this.scene, this.world, theme, time.windowGlow);
+    this.sea = new Sea(this.city.islandSize / 2, time.sea);
+    this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow);
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
@@ -121,7 +132,7 @@ export class Game {
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
     this.screens = new Screens(document.body);
-    this.screens.menu(seed, () => this.startMission());
+    this.screens.menu(seed, `${theme.name} · ${time.label}`, () => this.startMission());
 
     const onResize = () => {
       this.chase.resize(window.innerWidth / window.innerHeight);
@@ -184,6 +195,7 @@ export class Game {
       if (pressed('KeyC')) {
         this.overview = !this.overview;
         this.scene.fog = this.overview ? null : this.fog;
+        this.sky.mesh.visible = !this.overview;
       }
       // T: jump to the current destination. Y: leave 3 seconds on the clock.
       const target = this.mission.current;
@@ -222,7 +234,8 @@ export class Game {
     this.player.syncMesh(alpha);
     this.props.sync();
     const carPos = this.player.mesh.root.position;
-    this.sun.position.set(carPos.x + 30, carPos.y + 60, carPos.z + 20);
+    const [sx, sy, sz] = this.time.sunOffset;
+    this.sun.position.set(carPos.x + sx, carPos.y + sy, carPos.z + sz);
     this.sun.target.position.copy(carPos);
 
     if (this.state === 'playing') this.applyDamage(impact);
@@ -253,6 +266,7 @@ export class Game {
       target ? { x: target.x, z: target.z, final: this.mission.index === this.mission.total - 1 } : null,
     );
 
+    this.sky.follow(this.chase.camera);
     this.renderer.render(this.scene, this.overview ? this.overviewCamera() : this.chase.camera);
     this.input.endFrame();
   }

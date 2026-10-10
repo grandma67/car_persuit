@@ -1,32 +1,12 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Rng } from '../core/Rng';
-import type { Building, CityData, District, Rect } from './CityGenerator';
+import type { Building, CityData, Rect } from './CityGenerator';
+import type { CityTheme } from './CityTheme';
 
 const WINDOW_CELLS = 8; // window texture is an 8×8 grid of window cells
 const FLOOR_HEIGHT = 3.5;
 const WINDOW_WIDTH = 4;
-
-const PALETTE: Record<District, number[]> = {
-  downtown: [0x8fa6c4, 0x6f87a8, 0xa9b8cc, 0x7d8fa3, 0x5f7390],
-  midtown: [0xb8a99a, 0x9aa2ad, 0xc4b59e, 0x8f8a85, 0xa39488],
-  residential: [0xd9b38c, 0xc98f6b, 0xe0d3b8, 0xa8b8a0, 0xbfa0a0],
-  industrial: [0x8a8478, 0x7a8088, 0x9c9284, 0x6e6a64],
-};
-
-const COLORS = {
-  asphalt: 0x23272f,
-  quay: 0x5a5f69,
-  seaWall: 0x8a8f99,
-  sidewalk: 0x4a505c,
-  plaza: 0x5c5866,
-  grass: 0x2f5233,
-  marking: 0xd8c27a,
-  edgeLine: 0x9aa0a8,
-  planter: 0x6b6f78,
-  trunk: 0x4a3426,
-  leaves: [0x2f6b3a, 0x3d7a3f, 0x2a5e40, 0x4a7d32],
-};
 
 /** Accumulates flat-shaded quads into one BufferGeometry. */
 class GeometryBuilder {
@@ -118,7 +98,8 @@ function createWindowTextures(rng: Rng): { map: THREE.Texture; emissive: THREE.T
   return { map: toTexture(diffuseCanvas, true), emissive: toTexture(emissiveCanvas, true) };
 }
 
-export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.World): void {
+/** Build meshes and colliders. windowGlow: emissive strength of lit windows (time of day). */
+export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.World, theme: CityTheme, windowGlow: number): void {
   // Visual-only randomness uses its own stream so it can't change the layout.
   const rng = new Rng(city.seed ^ 0x5eed);
   const color = (hex: number) => new THREE.Color(hex);
@@ -127,8 +108,8 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   // --- Island: asphalt top (roads are what's left between blocks), concrete quay sides ---
   const island = city.islandSize;
   const islandDepth = 8;
-  const quay = new THREE.MeshStandardMaterial({ color: COLORS.quay, roughness: 0.9 });
-  const asphalt = new THREE.MeshStandardMaterial({ color: COLORS.asphalt, roughness: 0.95 });
+  const quay = new THREE.MeshStandardMaterial({ color: theme.quay, roughness: 0.9 });
+  const asphalt = new THREE.MeshStandardMaterial({ color: theme.asphalt, roughness: 0.95 });
   // BoxGeometry face order: +x, -x, +y (top), -y, +z, -z.
   const ground = new THREE.Mesh(new THREE.BoxGeometry(island, islandDepth, island), [quay, quay, asphalt, quay, quay, quay]);
   ground.position.y = -islandDepth / 2;
@@ -139,13 +120,13 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   // --- Sidewalks, parks, plazas ---
   const flats = new GeometryBuilder();
   for (const block of city.blocks) {
-    flats.rect(block.rect, 0.03, color(COLORS.sidewalk));
+    flats.rect(block.rect, 0.03, color(theme.sidewalk));
     if (block.park) {
       const m = city.config.sidewalk;
-      flats.rect({ ...block.rect, w: block.rect.w - m * 2, d: block.rect.d - m * 2 }, 0.05, color(COLORS.grass));
+      flats.rect({ ...block.rect, w: block.rect.w - m * 2, d: block.rect.d - m * 2 }, 0.05, color(theme.grass));
     }
   }
-  for (const plaza of city.plazas) flats.rect(plaza, 0.03, color(COLORS.plaza));
+  for (const plaza of city.plazas) flats.rect(plaza, 0.03, color(theme.plaza));
   // Promenade ring between the ring road and the sea.
   const half = city.size / 2;
   const prom = city.config.promenade;
@@ -156,7 +137,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     { x: ring, z: 0, w: prom, d: city.size },
     { x: -ring, z: 0, w: prom, d: city.size },
   ]) {
-    flats.rect(r, 0.03, color(COLORS.sidewalk));
+    flats.rect(r, 0.03, color(theme.sidewalk));
   }
   const flatMesh = new THREE.Mesh(flats.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
   flatMesh.receiveShadow = true;
@@ -168,11 +149,11 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     const alongX = rect.w > rect.d;
     const length = alongX ? rect.w : rect.d;
     for (let s = -length / 2 + 3; s < length / 2 - 2; s += 6) {
-      markings.push(alongX ? { x: rect.x + s + 1.5, z: rect.z, w: 3, d: 0.25, c: COLORS.marking } : { x: rect.x, z: rect.z + s + 1.5, w: 0.25, d: 3, c: COLORS.marking });
+      markings.push(alongX ? { x: rect.x + s + 1.5, z: rect.z, w: 3, d: 0.25, c: theme.centerLine } : { x: rect.x, z: rect.z + s + 1.5, w: 0.25, d: 3, c: theme.centerLine });
     }
     for (const side of [-1, 1]) {
       const off = side * (roadWidth / 2 - 0.7);
-      markings.push(alongX ? { x: rect.x, z: rect.z + off, w: length, d: 0.15, c: COLORS.edgeLine } : { x: rect.x + off, z: rect.z, w: 0.15, d: length, c: COLORS.edgeLine });
+      markings.push(alongX ? { x: rect.x, z: rect.z + off, w: length, d: 0.15, c: theme.edgeLine } : { x: rect.x + off, z: rect.z, w: 0.15, d: length, c: theme.edgeLine });
     }
   }
   const markingGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
@@ -187,7 +168,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   // --- Buildings: merged walls (windowed) + merged roofs, one collider each ---
   const walls = new GeometryBuilder();
   const roofs = new GeometryBuilder();
-  for (const b of city.buildings) addBuilding(b, walls, roofs, rng);
+  for (const b of city.buildings) addBuilding(b, theme.buildings[b.district], walls, roofs, rng);
   const tex = createWindowTextures(rng);
   const wallMesh = new THREE.Mesh(
     walls.build(true),
@@ -196,7 +177,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
       map: tex.map,
       emissiveMap: tex.emissive,
       emissive: 0xffffff,
-      emissiveIntensity: 0.9,
+      emissiveIntensity: windowGlow,
       roughness: 0.75,
       metalness: 0.1,
     }),
@@ -212,7 +193,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
 
   // --- Plaza planters ---
   const planterGeo = new THREE.BoxGeometry(1, 0.9, 1).translate(0, 0.45, 0);
-  const planters = new THREE.InstancedMesh(planterGeo, new THREE.MeshStandardMaterial({ color: COLORS.planter, flatShading: true }), city.props.length);
+  const planters = new THREE.InstancedMesh(planterGeo, new THREE.MeshStandardMaterial({ color: theme.planter, flatShading: true }), city.props.length);
   city.props.forEach((p, i) => {
     planters.setMatrixAt(i, m4.makeScale(p.w, 1, p.d).setPosition(p.x, 0, p.z));
     world.createCollider(RAPIER.ColliderDesc.cuboid(p.w / 2, 0.45, p.d / 2).setTranslation(p.x, 0.45, p.z));
@@ -223,7 +204,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   // --- Trees: faceted low-poly crowns ---
   const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 3, 5).translate(0, 1.5, 0);
   const crownGeo = new THREE.IcosahedronGeometry(1.8, 0).translate(0, 4.2, 0);
-  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: COLORS.trunk, flatShading: true }), city.trees.length);
+  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: theme.trunk, flatShading: true }), city.trees.length);
   const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), city.trees.length);
   const q = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
@@ -233,7 +214,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     m4.compose(new THREE.Vector3(t.x, 0, t.z), q, new THREE.Vector3(s, s, s));
     trunks.setMatrixAt(i, m4);
     crowns.setMatrixAt(i, m4);
-    crowns.setColorAt(i, color(rng.pick(COLORS.leaves)));
+    crowns.setColorAt(i, color(rng.pick(theme.leaves)));
     world.createCollider(RAPIER.ColliderDesc.cylinder(1.5, 0.35 * s).setTranslation(t.x, 1.5, t.z));
   });
   for (const mesh of [trunks, crowns]) {
@@ -253,7 +234,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     { x: edge, z: 0, w: wallT, d: island - wallT * 2 },
     { x: -edge, z: 0, w: wallT, d: island - wallT * 2 },
   ]) {
-    seaWall.box(r, 0, wallH, color(COLORS.seaWall), null, color(COLORS.seaWall));
+    seaWall.box(r, 0, wallH, color(theme.seaWall), null, color(theme.seaWall));
     world.createCollider(RAPIER.ColliderDesc.cuboid(r.w / 2, 10, r.d / 2).setTranslation(r.x, 10, r.z));
   }
   const seaWallMesh = new THREE.Mesh(seaWall.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
@@ -261,8 +242,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   scene.add(seaWallMesh);
 }
 
-function addBuilding(b: Building, walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng): void {
-  const palette = PALETTE[b.district];
+function addBuilding(b: Building, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng): void {
   const wallColor = new THREE.Color(palette[Math.floor(b.variant * palette.length)]);
   const roofColor = wallColor.clone().multiplyScalar(0.55);
   // Per-building window pattern offset, snapped to whole cells so windows line up with floors.

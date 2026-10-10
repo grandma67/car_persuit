@@ -98,7 +98,8 @@ export class PropSystem {
   private v = new THREE.Vector3();
   private one = new THREE.Vector3(1, 1, 1);
 
-  constructor(city: CityData, scene: THREE.Scene, world: RAPIER.World) {
+  /** lampGlow: 0 = lamps off (daytime) … 1 = full night glow. */
+  constructor(city: CityData, scene: THREE.Scene, world: RAPIER.World, lampGlow: number) {
     const models = buildModels();
     const counts: Record<PropKind, number> = { lamp: 0, hydrant: 0, bench: 0, fence: 0 };
     for (const p of city.streetProps) counts[p.kind]++;
@@ -125,7 +126,7 @@ export class PropSystem {
         map: lightPoolTexture(),
         color: 0xffc98a,
         transparent: true,
-        opacity: 0.32,
+        opacity: 0.32 * lampGlow,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       }),
@@ -135,9 +136,10 @@ export class PropSystem {
       mesh.frustumCulled = false;
       scene.add(mesh);
     }
+    this.pools.visible = lampGlow > 0;
 
     const next: Record<PropKind, number> = { lamp: 0, hydrant: 0, bench: 0, fence: 0 };
-    const warm = new THREE.Color(0xffe2b0);
+    const warm = new THREE.Color(0xffe2b0).lerp(new THREE.Color(0xc8c8c8), 1 - lampGlow); // unlit by day
     city.streetProps.forEach((def, i) => {
       const spec = PROP_SPECS[def.kind];
       this.q.setFromAxisAngle(UP, def.yaw);
