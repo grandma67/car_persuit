@@ -59,6 +59,10 @@ export class Game {
   private water = new TireSmoke({
     color: 0xd6ecff, maxAlpha: 0.55, additive: false, growth: 0.9, lift: [7, 11], gravity: 9.8, spread: 1.6, life: [1.2, 1.8],
   });
+  private fireball = new TireSmoke({
+    color: 0xff8a2a, maxAlpha: 0.9, additive: true, growth: 5, lift: [1, 7], spread: 12, life: [0.5, 1.1],
+  });
+  private blast = new THREE.PointLight(0xff9a40, 0, 60, 1.5);
   private props: PropSystem;
   private geysers: { position: THREE.Vector3; timeLeft: number; budget: number }[] = [];
   private engineSmokeBudget = 0;
@@ -107,7 +111,7 @@ export class Game {
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
     this.scene.add(this.player.mesh.root);
     this.scene.add(this.skidMarks.mesh, this.smoke.points, this.marker.group, this.sea.mesh);
-    this.scene.add(this.engineSmoke.points, this.fire.points, this.water.points);
+    this.scene.add(this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points, this.blast);
 
     // Destinations get their own RNG stream so they're stable per seed.
     const startNode = this.city.graph.nearest(spawn.x, spawn.z);
@@ -277,16 +281,31 @@ export class Game {
     if (impact <= 0) return;
     const damage = this.health.applyImpact(impact);
     if (damage > 0) this.hud.flashDamage(damage / 40);
-    if (this.health.destroyed) {
-      // Wrecked: blackened paint, a burst of fire and smoke, then the lose screen.
-      this.player.mesh.paint.color.multiplyScalar(0.2);
-      const at = this.enginePosition();
-      for (let i = 0; i < 40; i++) this.fire.emit(at, this.tmpVel.set(0, 0, 0), 1);
-      for (let i = 0; i < 30; i++) this.engineSmoke.emit(at, this.tmpVel, 1);
-      this.audio.impact(1);
-      this.mission.fail('destroyed');
-      this.endMission();
-    }
+    if (this.health.destroyed) this.explode();
+  }
+
+  /** Wrecked: the car blows up — fireball, flash, smoke, a jolt into the air — then the lose screen. */
+  private explode(): void {
+    const body = this.player.body;
+    const m = this.player.spec.mass;
+    body.applyImpulse({ x: (Math.random() - 0.5) * m * 2, y: m * 7, z: (Math.random() - 0.5) * m * 2 }, true);
+    body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m * 3, y: (Math.random() - 0.5) * m, z: (Math.random() - 0.5) * m * 3 }, true);
+
+    this.player.mesh.paint.color.multiplyScalar(0.15);
+    this.player.mesh.taillight.emissiveIntensity = 0;
+    const at = this.player.mesh.root.position.clone().setY(this.player.mesh.root.position.y + 0.8);
+    this.tmpVel.set(0, 0, 0);
+    for (let i = 0; i < 90; i++) this.fireball.emit(at, this.tmpVel, 0);
+    for (let i = 0; i < 60; i++) this.engineSmoke.emit(at, this.tmpVel, 1);
+    for (let i = 0; i < 30; i++) this.fire.emit(at, this.tmpVel, 1);
+    this.blast.position.copy(at).setY(at.y + 2);
+    this.blast.intensity = 4000;
+    this.chase.shake(1.6);
+
+    this.audio.stopEngine();
+    this.audio.explosion();
+    this.mission.fail('destroyed');
+    this.endMission();
   }
 
   private enginePosition(): THREE.Vector3 {
@@ -294,7 +313,7 @@ export class Game {
   }
 
   private resizeParticles(): void {
-    for (const p of [this.smoke, this.engineSmoke, this.fire, this.water]) p.resize(window.innerHeight, this.chase.camera.fov);
+    for (const p of [this.smoke, this.engineSmoke, this.fire, this.water, this.fireball]) p.resize(window.innerHeight, this.chase.camera.fov);
   }
 
   private showDestination(): void {
@@ -308,7 +327,15 @@ export class Game {
     const won = this.mission.status === 'won';
     this.state = won ? 'won' : 'lost';
     this.marker.hide();
-    this.audio.jingle(won ? 'won' : 'lost');
+    // After an explosion, let the boom land before the jingle.
+    this.audio.jingle(won ? 'won' : 'lost', this.mission.loseReason === 'destroyed' ? 0.9 : 0);
+    const reason = this.mission.loseReason;
+    // Let an explosion play out before the end screen covers it.
+    const showDelay = reason === 'destroyed' ? 2000 : 0;
+    window.setTimeout(() => this.showEndScreen(won), showDelay);
+  }
+
+  private showEndScreen(won: boolean): void {
     const reason = this.mission.loseReason;
     this.screens.end(
       {
@@ -396,6 +423,8 @@ export class Game {
     }
     this.engineSmoke.update(dt);
     this.fire.update(dt);
+    this.fireball.update(dt);
+    this.blast.intensity *= Math.exp(-6 * dt);
 
     // Impact = velocity change in m/s: ~3 is a scrape, 40+ is a full-speed wall hit.
     if (impact > 0) this.audio.impact(THREE.MathUtils.clamp((impact - 1.5) / 20, 0.1, 1));

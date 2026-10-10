@@ -42,7 +42,9 @@ export class CarAudio {
   private screechFilter!: BiquadFilterNode;
   private screechGain!: GainNode;
   private windGain!: GainNode;
+  private jingleBus!: GainNode; // short echo for musical cues
   private rpm = 0.15;
+  private engineOff = false;
   private muted = false;
   private lastImpactTime = 0;
 
@@ -122,6 +124,19 @@ export class CarAudio {
       .connect(this.engineGain)
       .connect(this.master);
 
+    // Musical cues go through a little feedback echo so they ring out.
+    this.jingleBus = ctx.createGain();
+    const delay = ctx.createDelay();
+    delay.delayTime.value = 0.16;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.28;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.35;
+    this.jingleBus.connect(this.master);
+    this.jingleBus.connect(delay);
+    delay.connect(feedback).connect(delay);
+    delay.connect(wet).connect(this.master);
+
     // Tyre screech: band-passed noise.
     this.screechFilter = ctx.createBiquadFilter();
     this.screechFilter.type = 'bandpass';
@@ -183,9 +198,9 @@ export class CarAudio {
     this.firingLfo.frequency.setTargetAtTime(freq / 4, now, 0.03);
     // Opens up under throttle (growl), closes when lifting off (mellow burble).
     this.engineFilter.frequency.setTargetAtTime(260 + s.throttle * 520 + this.rpm * 450, now, 0.06);
-    this.engineGain.gain.setTargetAtTime(0.18 + s.throttle * 0.14, now, 0.06);
+    this.engineGain.gain.setTargetAtTime(this.engineOff ? 0 : 0.18 + s.throttle * 0.14, now, this.engineOff ? 0.02 : 0.06);
 
-    this.screechGain.gain.setTargetAtTime(s.skid * 0.12, now, 0.04);
+    this.screechGain.gain.setTargetAtTime(this.engineOff ? 0 : s.skid * 0.12, now, 0.04);
     this.screechFilter.frequency.setTargetAtTime(950 + s.skid * 250 + Math.random() * 80, now, 0.05);
 
     const speedRatio = Math.min(absSpeed / s.maxSpeed, 1);
@@ -199,25 +214,76 @@ export class CarAudio {
     else void this.ctx.resume();
   }
 
-  /** Short musical cue: destination reached, mission won or lost. */
-  jingle(kind: 'reached' | 'won' | 'lost'): void {
+  /** Cut the engine and tyres (the car is wrecked). */
+  stopEngine(): void {
+    this.engineOff = true;
     if (!this.ctx) return;
-    const notes = { reached: [659, 988], won: [523, 659, 784, 1047], lost: [392, 330, 262] }[kind];
-    const step = kind === 'reached' ? 0.09 : 0.14;
     const now = this.ctx.currentTime;
-    notes.forEach((freq, i) => {
-      const t = now + i * step;
-      const osc = this.ctx!.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
-      const gain = this.ctx!.createGain();
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.25, t + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35 + (i === notes.length - 1 ? 0.4 : 0));
-      osc.connect(gain).connect(this.master);
-      osc.start(t);
-      osc.stop(t + 0.8);
-    });
+    this.engineGain.gain.cancelScheduledValues(now);
+    this.engineGain.gain.setTargetAtTime(0, now, 0.02);
+    this.screechGain.gain.setTargetAtTime(0, now, 0.02);
+  }
+
+  /** Short musical cue: destination reached, mission won or lost. */
+  jingle(kind: 'reached' | 'won' | 'lost', delay = 0): void {
+    if (!this.ctx) return;
+    const start = this.ctx.currentTime + delay;
+    // [frequency, start offset, duration] — won: rising major arpeggio landing on a held octave;
+    // lost: a soft two-step "womp-womp" fall.
+    const cues = {
+      reached: [[659, 0, 0.25], [988, 0.09, 0.4]],
+      won: [[523, 0, 0.2], [659, 0.09, 0.2], [784, 0.18, 0.2], [1047, 0.27, 0.9]],
+      lost: [[392, 0, 0.35], [370, 0.32, 0.35], [311, 0.64, 0.8]],
+    }[kind];
+    const bell = kind !== 'lost';
+    for (const [freq, offset, duration] of cues) {
+      const t = start + offset;
+      // Triangle body plus a quiet sine an octave up gives a soft bell tone.
+      for (const [type, mult, level] of [['triangle', 1, 0.22], ['sine', 2, bell ? 0.08 : 0]] as const) {
+        if (level === 0) continue;
+        const osc = this.ctx.createOscillator();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq * mult, t);
+        if (kind === 'lost') osc.frequency.linearRampToValueAtTime(freq * mult * 0.97, t + duration); // sag
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(level, t + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+        osc.connect(gain).connect(this.jingleBus);
+        osc.start(t);
+        osc.stop(t + duration + 0.05);
+      }
+    }
+  }
+
+  /** Car explosion: deep boom with a falling sub and a crackling tail. */
+  explosion(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+
+    const sub = ctx.createOscillator();
+    sub.frequency.setValueAtTime(70, now);
+    sub.frequency.exponentialRampToValueAtTime(28, now + 1.2);
+    const subGain = ctx.createGain();
+    subGain.gain.setValueAtTime(1.1, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+    sub.connect(subGain).connect(this.master);
+    sub.start(now);
+    sub.stop(now + 1.5);
+
+    const boom = ctx.createBufferSource();
+    boom.buffer = this.noise;
+    const boomFilter = ctx.createBiquadFilter();
+    boomFilter.type = 'lowpass';
+    boomFilter.frequency.setValueAtTime(1800, now);
+    boomFilter.frequency.exponentialRampToValueAtTime(120, now + 1.5);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(1.0, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+    boom.connect(boomFilter).connect(boomGain).connect(this.master);
+    boom.start(now, Math.random() * 0.2);
+    boom.stop(now + 1.9);
   }
 
   /** Knocked-loose street furniture: metal clang (lamps, hydrants) or wood crack (benches, fences). */

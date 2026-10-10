@@ -11,6 +11,7 @@ export class ChaseCamera {
   private desired = new THREE.Vector3();
   private lookAt = new THREE.Vector3();
   private initialised = false;
+  private shakeAmount = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1200);
@@ -39,6 +40,13 @@ export class ChaseCamera {
     } else {
       this.camera.position.lerp(this.desired, 1 - Math.exp(-10 * dt));
     }
+    if (this.shakeAmount > 0.001) {
+      const k = this.shakeAmount;
+      this.camera.position.x += (Math.random() - 0.5) * k;
+      this.camera.position.y += (Math.random() - 0.5) * k;
+      this.camera.position.z += (Math.random() - 0.5) * k;
+      this.shakeAmount *= Math.exp(-4 * dt);
+    }
     this.camera.lookAt(this.lookAt);
 
     const fov = 60 + speedRatio * 14;
@@ -46,6 +54,11 @@ export class ChaseCamera {
       this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, fov, 1 - Math.exp(-4 * dt));
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  /** Kick the camera; decays over about a second. */
+  shake(amount: number): void {
+    this.shakeAmount = Math.max(this.shakeAmount, amount);
   }
 
   resize(aspect: number): void {
