@@ -21,7 +21,8 @@ export class ChaseCamera {
     if (fwd.lengthSq() > 1e-4) {
       fwd.normalize();
       // Heading lags slightly behind the car, which gives a sense of rotation in turns.
-      this.heading.lerp(fwd, 1 - Math.exp(-5 * dt)).normalize();
+      if (!this.initialised) this.heading.copy(fwd);
+      else this.heading.lerp(fwd, 1 - Math.exp(-5 * dt)).normalize();
     }
 
     const distance = 6.5 + speedRatio * 3;

@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Input } from './Input';
-import { Rng } from './Rng';
 import { Vehicle } from '../vehicles/Vehicle';
 import { PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { ChaseCamera } from '../render/ChaseCamera';
-import { buildPlayground } from '../world/Playground';
+import { generateCity, type CityData } from '../world/CityGenerator';
+import { buildCity } from '../world/CityBuilder';
 import { Hud } from '../ui/Hud';
 import { CarAudio } from '../audio/CarAudio';
 import { TireSmoke } from '../render/TireSmoke';
@@ -24,6 +24,10 @@ export class Game {
   private chase: ChaseCamera;
   private sun: THREE.DirectionalLight;
   private player: Vehicle;
+  readonly city: CityData;
+  private fog = new THREE.Fog(0x1a2233, 100, 480);
+  private overview = false; // ?debug only: top-down map view on C
+  private debug = new URLSearchParams(window.location.search).has('debug');
   private hud: Hud;
   private audio = new CarAudio();
   private smoke = new TireSmoke();
@@ -44,7 +48,7 @@ export class Game {
     container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x1a2233);
-    this.scene.fog = new THREE.Fog(0x1a2233, 80, 320);
+    this.scene.fog = this.fog;
     this.scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x202020, 0.9));
 
     // Shadow-casting sun follows the player so a small shadow frustum covers the visible area.
@@ -59,9 +63,11 @@ export class Game {
     this.scene.add(this.sun, this.sun.target);
 
     this.world.timestep = FIXED_DT;
-    buildPlayground(this.scene, this.world, new Rng(seed));
+    this.city = generateCity(seed);
+    buildCity(this.city, this.scene, this.world);
 
-    this.player = new Vehicle(this.world, PLAYER_SPEC, { x: 0, y: 1.2, z: 0 });
+    const { spawn } = this.city;
+    this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
     this.scene.add(this.player.mesh.root);
     this.scene.add(this.skidMarks.mesh, this.smoke.points);
 
@@ -87,6 +93,10 @@ export class Game {
 
     if (this.input.wasPressed('KeyR')) this.player.reset();
     if (this.input.wasPressed('KeyM')) this.hud.setMuted(this.audio.toggleMute());
+    if (this.debug && this.input.wasPressed('KeyC')) {
+      this.overview = !this.overview;
+      this.scene.fog = this.overview ? null : this.fog;
+    }
 
     // Fixed-timestep physics, rendered with interpolation for smoothness on any refresh rate.
     this.accumulator += frameDt;
@@ -115,8 +125,20 @@ export class Game {
     this.smoke.resize(window.innerHeight, this.chase.camera.fov);
     this.hud.update(this.player.speed);
 
-    this.renderer.render(this.scene, this.chase.camera);
+    this.renderer.render(this.scene, this.overview ? this.overviewCamera() : this.chase.camera);
     this.input.endFrame();
+  }
+
+  private overviewCam?: THREE.PerspectiveCamera;
+
+  /** Debug top-down camera over the whole city. */
+  private overviewCamera(): THREE.Camera {
+    if (!this.overviewCam) {
+      this.overviewCam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 10, 3000);
+      this.overviewCam.position.set(0, this.city.size * 1.25, this.city.size * 0.35);
+      this.overviewCam.lookAt(0, 0, 0);
+    }
+    return this.overviewCam;
   }
 
   private updateEffects(dt: number, impact: number): void {

@@ -43,11 +43,14 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 
 ## City generation
 
-- Grid ~12×12 blocks (~60m blocks, ~12m roads, ~900m city).
-- Random block merges (parks/plazas), ~10% road removal with connectivity check, a few wide avenues.
-- Noise-based districts: downtown (tall), residential (low), industrial (warehouses).
+- Grid 12×12 blocks (60m blocks, 12m roads, ~876m city), generated in 1–5ms.
+- ~10% of inner road segments become **plazas**: paved, drivable shortcuts with planters, not in the road graph (cops path by roads, so plazas are escape routes). Outer ring road always kept; network stays connected with **no dead ends**.
+- Districts: downtown towers (centre), midtown, then residential/industrial split by smooth value noise; ~8% parks with trees (drivable).
+- Buildings: merged wall/roof meshes with lit-window textures, one static collider each; invisible boundary walls.
 - Road graph (intersections = nodes) drives AI pathing, spawn points and destination placement.
 - Destinations: road nodes with A* distance ≥ ~400m between consecutive ones.
+- `?seed=N` reproduces a city; `?debug` + C toggles a top-down overview. `npm test` covers generator invariants.
+- Not done: wide avenues (deferred; uniform roads for now).
 
 ## Wanted escalation
 
@@ -77,7 +80,7 @@ Collision contact force above a threshold × opponent mass factor → health los
 |---|---|---|
 | M0 ✅ | Scaffold + deploy pipeline | Scene with Rapier physics live on GitHub Pages |
 | M1 ✅ | Drivable car, chase camera | Driving feels fun |
-| M2 | City generator + colliders | Seeded city, can't drive through walls |
+| M2 ✅ | City generator + colliders | Seeded city, can't drive through walls |
 | M3 | Mission system + HUD | Full loop playable without cops |
 | M4 | One patrol cop AI | Convincing single chase |
 | M5 | Director, stars, all cop types, damage | Complete game |
