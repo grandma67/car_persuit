@@ -59,6 +59,12 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 - States: menu → playing ⇄ paused → won/lost. Retry reloads the same seed; New city picks a random one.
 - Debug (`?debug`): C overview, T teleport to destination, Y leave 3s on the clock, `window.__game` for browser tests.
 
+## Island, minimap, health (added after M3)
+
+- City sits on an island: 10m promenade, concrete quay, low sea wall (+ tall invisible collider); animated flat-shaded sea around it.
+- Round heading-up minimap (top right) with road route, destination (pinned to rim when off-map) and player arrow; replaces the 3D GPS arrow.
+- Health (gameplay/Health.ts): crash damage from impact Δv (5 m/s free, 1.8 HP per m/s above); smoke <50%, fire <20%, wrecked at 0 → lose. Health bar under the minimap, red flash on hits.
+
 ## Wanted escalation
 
 | Stars | At ~ | Max cops | New threat |

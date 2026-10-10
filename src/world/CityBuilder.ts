@@ -16,6 +16,8 @@ const PALETTE: Record<District, number[]> = {
 
 const COLORS = {
   asphalt: 0x23272f,
+  quay: 0x5a5f69,
+  seaWall: 0x8a8f99,
   sidewalk: 0x4a505c,
   plaza: 0x5c5866,
   grass: 0x2f5233,
@@ -122,16 +124,17 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   const color = (hex: number) => new THREE.Color(hex);
   const { roadWidth } = city.config;
 
-  // --- Ground (asphalt everywhere; roads are what's left between blocks) ---
-  const groundSize = city.size + 400;
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(groundSize, groundSize),
-    new THREE.MeshStandardMaterial({ color: COLORS.asphalt, roughness: 0.95 }),
-  );
-  ground.rotation.x = -Math.PI / 2;
+  // --- Island: asphalt top (roads are what's left between blocks), concrete quay sides ---
+  const island = city.islandSize;
+  const islandDepth = 8;
+  const quay = new THREE.MeshStandardMaterial({ color: COLORS.quay, roughness: 0.9 });
+  const asphalt = new THREE.MeshStandardMaterial({ color: COLORS.asphalt, roughness: 0.95 });
+  // BoxGeometry face order: +x, -x, +y (top), -y, +z, -z.
+  const ground = new THREE.Mesh(new THREE.BoxGeometry(island, islandDepth, island), [quay, quay, asphalt, quay, quay, quay]);
+  ground.position.y = -islandDepth / 2;
   ground.receiveShadow = true;
   scene.add(ground);
-  world.createCollider(RAPIER.ColliderDesc.cuboid(groundSize / 2, 0.5, groundSize / 2).setTranslation(0, -0.5, 0).setFriction(1));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(island / 2, islandDepth / 2, island / 2).setTranslation(0, -islandDepth / 2, 0).setFriction(1));
 
   // --- Sidewalks, parks, plazas ---
   const flats = new GeometryBuilder();
@@ -143,6 +146,18 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     }
   }
   for (const plaza of city.plazas) flats.rect(plaza, 0.03, color(COLORS.plaza));
+  // Promenade ring between the ring road and the sea.
+  const half = city.size / 2;
+  const prom = city.config.promenade;
+  const ring = half + prom / 2;
+  for (const r of [
+    { x: 0, z: ring, w: island, d: prom },
+    { x: 0, z: -ring, w: island, d: prom },
+    { x: ring, z: 0, w: prom, d: city.size },
+    { x: -ring, z: 0, w: prom, d: city.size },
+  ]) {
+    flats.rect(r, 0.03, color(COLORS.sidewalk));
+  }
   const flatMesh = new THREE.Mesh(flats.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
   flatMesh.receiveShadow = true;
   scene.add(flatMesh);
@@ -226,11 +241,24 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     scene.add(mesh);
   }
 
-  // --- Invisible boundary walls just outside the ring road ---
-  const half = city.size / 2;
-  for (const [x, z, w, d] of [[0, half + 1, half + 2, 1], [0, -half - 1, half + 2, 1], [half + 1, 0, 1, half + 2], [-half - 1, 0, 1, half + 2]]) {
-    world.createCollider(RAPIER.ColliderDesc.cuboid(w, 10, d).setTranslation(x, 10, z));
+  // --- Sea wall along the island edge: a low visible barrier, plus a tall invisible one so a
+  // car launched off something can't sail into the sea ---
+  const wallT = 0.6;
+  const wallH = 1;
+  const edge = island / 2 - wallT / 2;
+  const seaWall = new GeometryBuilder();
+  for (const r of [
+    { x: 0, z: edge, w: island, d: wallT },
+    { x: 0, z: -edge, w: island, d: wallT },
+    { x: edge, z: 0, w: wallT, d: island - wallT * 2 },
+    { x: -edge, z: 0, w: wallT, d: island - wallT * 2 },
+  ]) {
+    seaWall.box(r, 0, wallH, color(COLORS.seaWall), null, color(COLORS.seaWall));
+    world.createCollider(RAPIER.ColliderDesc.cuboid(r.w / 2, 10, r.d / 2).setTranslation(r.x, 10, r.z));
   }
+  const seaWallMesh = new THREE.Mesh(seaWall.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
+  seaWallMesh.castShadow = seaWallMesh.receiveShadow = true;
+  scene.add(seaWallMesh);
 }
 
 function addBuilding(b: Building, walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng): void {

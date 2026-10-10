@@ -11,10 +11,12 @@ import { Hud, formatTime } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
 import { CarAudio } from '../audio/CarAudio';
 import { TireSmoke } from '../render/TireSmoke';
+import { Sea } from '../render/Sea';
+import { Minimap } from '../ui/Minimap';
+import { Health } from '../gameplay/Health';
 import { SkidMarks } from '../render/SkidMarks';
 import { DestinationMarker } from '../render/DestinationMarker';
-import { GpsArrow } from '../render/GpsArrow';
-import { MissionSystem, pickDestinations, routeAim } from '../gameplay/MissionSystem';
+import { MissionSystem, pickDestinations, routeAim, type Route } from '../gameplay/MissionSystem';
 import { MISSION } from '../gameplay/balance';
 
 const FIXED_DT = 1 / 60;
@@ -22,6 +24,8 @@ const MAX_STEPS_PER_FRAME = 5;
 const REAR_WHEELS = [2, 3];
 const SMOKE_PER_SECOND = 55; // per rear wheel at full skid
 const ROUTE_REFRESH = 0.25; // seconds between GPS route recalculations
+const ENGINE_SMOKE_PER_SECOND = 30;
+const FIRE_PER_SECOND = 40;
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
@@ -44,9 +48,15 @@ export class Game {
   private smoke = new TireSmoke();
   private skidMarks = new SkidMarks();
   private marker = new DestinationMarker(MISSION.reachRadius);
-  private arrow = new GpsArrow();
+  private sea = new Sea();
+  private minimap: Minimap;
+  private health = new Health();
+  private engineSmoke = new TireSmoke({ color: 0x2b2b30, maxAlpha: 0.55, additive: false, growth: 3 });
+  private fire = new TireSmoke({ color: 0xff6a1a, maxAlpha: 0.7, additive: true, growth: 0.6 });
+  private engineSmokeBudget = 0;
+  private fireBudget = 0;
   private mission: MissionSystem;
-  private route: { x: number; z: number; distance: number } | null = null;
+  private route: Route | null = null;
   private routeTimer = 0;
   private state: GameState = 'menu';
   private smokeBudget = 0;
@@ -86,21 +96,23 @@ export class Game {
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
     this.scene.add(this.player.mesh.root);
-    this.scene.add(this.skidMarks.mesh, this.smoke.points, this.marker.group, this.arrow.mesh);
+    this.scene.add(this.skidMarks.mesh, this.smoke.points, this.marker.group, this.sea.mesh);
+    this.scene.add(this.engineSmoke.points, this.fire.points);
 
     // Destinations get their own RNG stream so they're stable per seed.
     const startNode = this.city.graph.nearest(spawn.x, spawn.z);
     this.mission = new MissionSystem(pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id));
 
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
-    this.hud = new Hud(hudRoot);
+    this.minimap = new Minimap(this.city);
+    this.hud = new Hud(hudRoot, this.minimap.canvas);
     this.screens = new Screens(document.body);
     this.screens.menu(seed, () => this.startMission());
 
     const onResize = () => {
       this.chase.resize(window.innerWidth / window.innerHeight);
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.smoke.resize(window.innerHeight, this.chase.camera.fov);
+      this.resizeParticles();
     };
     onResize();
     window.addEventListener('resize', onResize);
@@ -196,19 +208,32 @@ export class Game {
     this.sun.position.set(carPos.x + 30, carPos.y + 60, carPos.z + 20);
     this.sun.target.position.copy(carPos);
 
+    if (this.state === 'playing') this.applyDamage(impact);
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
+    this.sea.update(frameDt);
     this.updateEffects(frameDt, impact);
 
     const speedRatio = Math.min(Math.abs(this.player.speed) / this.player.spec.maxSpeed, 1);
     this.chase.update(frameDt, this.player.mesh.root, speedRatio);
-    this.smoke.resize(window.innerHeight, this.chase.camera.fov);
+    this.resizeParticles();
     this.hud.update(frameDt, this.player.speed, {
       index: this.mission.index,
       total: this.mission.total,
       timeLeft: this.mission.timeLeft,
       distance: this.state === 'playing' ? (this.route?.distance ?? null) : null,
+      health: this.health.ratio,
     });
+    const fwd = this.player.forward();
+    const target = this.state === 'playing' ? this.mission.current : null;
+    this.minimap.render(
+      frameDt,
+      carPos.x,
+      carPos.z,
+      Math.atan2(fwd.x, fwd.z),
+      target ? (this.route?.path ?? null) : null,
+      target ? { x: target.x, z: target.z, final: this.mission.index === this.mission.total - 1 } : null,
+    );
 
     this.renderer.render(this.scene, this.overview ? this.overviewCamera() : this.chase.camera);
     this.input.endFrame();
@@ -232,8 +257,30 @@ export class Game {
       this.route = routeAim(this.city.graph, carPos.x, carPos.z, target.id);
       this.routeTimer = ROUTE_REFRESH;
     }
-    const final = this.mission.index === this.mission.total - 1;
-    this.arrow.update(dt, carPos, this.route!.x, this.route!.z, final ? 0x4dff88 : 0xffb020);
+  }
+
+  private applyDamage(impact: number): void {
+    if (impact <= 0) return;
+    const damage = this.health.applyImpact(impact);
+    if (damage > 0) this.hud.flashDamage(damage / 40);
+    if (this.health.destroyed) {
+      // Wrecked: blackened paint, a burst of fire and smoke, then the lose screen.
+      this.player.mesh.paint.color.multiplyScalar(0.2);
+      const at = this.enginePosition();
+      for (let i = 0; i < 40; i++) this.fire.emit(at, this.tmpVel.set(0, 0, 0), 1);
+      for (let i = 0; i < 30; i++) this.engineSmoke.emit(at, this.tmpVel, 1);
+      this.audio.impact(1);
+      this.mission.fail('destroyed');
+      this.endMission();
+    }
+  }
+
+  private enginePosition(): THREE.Vector3 {
+    return this.player.forward(this.tmpContact).multiplyScalar(1.5).add(this.player.mesh.root.position).setY(this.player.mesh.root.position.y + 0.5);
+  }
+
+  private resizeParticles(): void {
+    for (const p of [this.smoke, this.engineSmoke, this.fire]) p.resize(window.innerHeight, this.chase.camera.fov);
   }
 
   private showDestination(): void {
@@ -247,7 +294,6 @@ export class Game {
     const won = this.mission.status === 'won';
     this.state = won ? 'won' : 'lost';
     this.marker.hide();
-    this.arrow.hide();
     this.audio.jingle(won ? 'won' : 'lost');
     const reason = this.mission.loseReason;
     this.screens.end(
@@ -294,6 +340,26 @@ export class Game {
       if (contact) for (let i = 0; i < puffs; i++) this.smoke.emit(contact, this.tmpVel, skid);
     }
     this.smoke.update(dt);
+
+    // Damage: engine smoke below half health, fire when critical (and while wrecked).
+    const h = this.health;
+    if (h.smoking) {
+      const at = this.enginePosition();
+      this.engineSmokeBudget += ENGINE_SMOKE_PER_SECOND * (1 - h.ratio / 0.5 + 0.3) * dt;
+      while (this.engineSmokeBudget >= 1) {
+        this.engineSmoke.emit(at, this.tmpVel, 0.5);
+        this.engineSmokeBudget--;
+      }
+      if (h.burning) {
+        this.fireBudget += FIRE_PER_SECOND * dt;
+        while (this.fireBudget >= 1) {
+          this.fire.emit(at, this.tmpVel, 0);
+          this.fireBudget--;
+        }
+      }
+    }
+    this.engineSmoke.update(dt);
+    this.fire.update(dt);
 
     // Impact = velocity change in m/s: ~3 is a scrape, 40+ is a full-speed wall hit.
     if (impact > 0) this.audio.impact(THREE.MathUtils.clamp((impact - 1.5) / 20, 0.1, 1));

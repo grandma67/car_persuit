@@ -18,3 +18,22 @@ export const MISSION: MissionConfig = {
 
 /** Seconds left at which the timer turns red. */
 export const TIMER_WARNING = 60;
+
+export interface DamageConfig {
+  maxHealth: number;
+  /** Impacts (velocity change, m/s) at or below this do no damage — scrapes and kerbs. */
+  impactThreshold: number;
+  /** Health lost per m/s of impact above the threshold. */
+  impactScale: number;
+  smokeBelow: number; // health ratio
+  fireBelow: number;
+}
+
+// Rough feel: 60 km/h into a wall ≈ 20% health, 150 km/h ≈ 65%.
+export const DAMAGE: DamageConfig = {
+  maxHealth: 100,
+  impactThreshold: 5,
+  impactScale: 1.8,
+  smokeBelow: 0.5,
+  fireBelow: 0.2,
+};

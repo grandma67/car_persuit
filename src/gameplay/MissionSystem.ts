@@ -79,11 +79,18 @@ export class MissionSystem {
   }
 }
 
+export interface Route {
+  x: number; // point to steer toward
+  z: number;
+  distance: number; // metres by road
+  path: number[]; // remaining node ids, starting at the aim point
+}
+
 /**
  * GPS guidance: the point to steer toward and the remaining road distance to `destId`.
- * Follows the road route, so the arrow points at the next turn rather than through buildings.
+ * Follows the road route, so guidance points at the next turn rather than through buildings.
  */
-export function routeAim(graph: RoadGraph, x: number, z: number, destId: number): { x: number; z: number; distance: number } {
+export function routeAim(graph: RoadGraph, x: number, z: number, destId: number): Route {
   const start = graph.nearest(x, z);
   const path = graph.path(start.id, destId) ?? [destId];
   // If we're already past the nearest node towards the next one, aim at the next one.
@@ -94,6 +101,7 @@ export function routeAim(graph: RoadGraph, x: number, z: number, destId: number)
     if (Math.hypot(b.x - x, b.z - z) < Math.hypot(b.x - a.x, b.z - a.z)) i = 1;
   }
   const aim = graph.nodes[path[i]];
-  const distance = Math.hypot(aim.x - x, aim.z - z) + graph.pathLength(path.slice(i));
-  return { x: aim.x, z: aim.z, distance };
+  const remaining = path.slice(i);
+  const distance = Math.hypot(aim.x - x, aim.z - z) + graph.pathLength(remaining);
+  return { x: aim.x, z: aim.z, distance, path: remaining };
 }

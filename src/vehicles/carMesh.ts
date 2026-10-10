@@ -7,6 +7,8 @@ export interface CarMesh {
   wheels: { pivot: THREE.Group; spinner: THREE.Mesh }[];
   /** Brightened while braking. */
   taillight: THREE.MeshStandardMaterial;
+  /** Body paint, darkened when wrecked. */
+  paint: THREE.MeshStandardMaterial;
 }
 
 // Low-poly but sharp: wedge nose, faceted canopy, spoiler, emissive lights.
@@ -79,5 +81,5 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   root.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = true;
   });
-  return { root, wheels, taillight };
+  return { root, wheels, taillight, paint };
 }

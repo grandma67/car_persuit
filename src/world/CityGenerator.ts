@@ -7,6 +7,7 @@ export interface CityConfig {
   blockSize: number; // metres
   roadWidth: number;
   sidewalk: number; // margin inside each block before lots start
+  promenade: number; // paved strip between the ring road and the sea
   removeRoadFraction: number; // share of inner road segments turned into plazas
   parkChance: number;
 }
@@ -16,6 +17,7 @@ export const DEFAULT_CITY: CityConfig = {
   blockSize: 60,
   roadWidth: 12,
   sidewalk: 3,
+  promenade: 10,
   removeRoadFraction: 0.1,
   parkChance: 0.08,
 };
@@ -52,7 +54,8 @@ export interface RoadSegment {
 export interface CityData {
   config: CityConfig;
   seed: number;
-  size: number; // total width/depth in metres
+  size: number; // width/depth of the road grid in metres
+  islandSize: number; // grid plus promenade; beyond this is sea
   graph: RoadGraph;
   roads: RoadSegment[]; // drivable segments (edges of the graph)
   intersections: Rect[];
@@ -183,7 +186,8 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const len = Math.hypot(dx, dz);
   const spawn = { x: centre.x + (dx / len) * 15, z: centre.z + (dz / len) * 15, yaw: Math.atan2(dx, dz) };
 
-  return { config, seed, size, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees, spawn };
+  const islandSize = size + config.promenade * 2;
+  return { config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees, spawn };
 }
 
 // Lot layout and height ranges per district.

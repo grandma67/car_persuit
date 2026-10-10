@@ -84,6 +84,8 @@ describe('routeAim', () => {
     const aimNode = g.nearest(aim.x, aim.z);
     expect([start.id, ...start.neighbors]).toContain(aimNode.id);
     expect(aim.distance).toBeCloseTo(g.pathLength(g.path(start.id, dest.id)!), 0);
+    expect(aim.path.at(-1)).toBe(dest.id);
+    expect(g.nearest(aim.x, aim.z).id).toBe(aim.path[0]);
   });
 
   it('distance is ~0 at the destination', () => {

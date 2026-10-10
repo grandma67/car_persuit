@@ -27,7 +27,17 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-// Pooled billboard particles for tyre smoke: puffs grow, drift upward and fade.
+export interface SmokeStyle {
+  color: number;
+  maxAlpha: number;
+  additive: boolean; // glow (fire) instead of normal blending
+  growth: number; // metres of extra size over a particle's life
+}
+
+const TYRE_SMOKE: SmokeStyle = { color: 0xd8dde4, maxAlpha: 0.3, additive: false, growth: 2.0 };
+
+// Pooled billboard particles: puffs grow, drift upward and fade. Used for tyre smoke, engine
+// smoke and fire with different styles.
 export class TireSmoke {
   readonly points: THREE.Points;
   private positions = new Float32Array(MAX_PARTICLES * 3);
@@ -39,7 +49,7 @@ export class TireSmoke {
   private next = 0;
   private material: THREE.ShaderMaterial;
 
-  constructor() {
+  constructor(private style: SmokeStyle = TYRE_SMOKE) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1).setUsage(THREE.DynamicDrawUsage));
@@ -47,9 +57,10 @@ export class TireSmoke {
     this.material = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
-      uniforms: { color: { value: new THREE.Color(0xd8dde4) }, pixelScale: { value: 600 } },
+      uniforms: { color: { value: new THREE.Color(style.color) }, pixelScale: { value: 600 } },
       transparent: true,
       depthWrite: false,
+      blending: style.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
     this.points = new THREE.Points(geo, this.material);
     this.points.frustumCulled = false;
@@ -94,8 +105,8 @@ export class TireSmoke {
       this.positions[j] += this.velocities[j] * dt;
       this.positions[j + 1] += this.velocities[j + 1] * dt;
       this.positions[j + 2] += this.velocities[j + 2] * dt;
-      this.sizes[i] = 0.7 + t * 2.0;
-      this.alphas[i] = Math.min(t * 8, 1) * (1 - t) * 0.3;
+      this.sizes[i] = 0.7 + t * this.style.growth;
+      this.alphas[i] = Math.min(t * 8, 1) * (1 - t) * this.style.maxAlpha;
     }
     const geo = this.points.geometry;
     geo.attributes.position.needsUpdate = true;
