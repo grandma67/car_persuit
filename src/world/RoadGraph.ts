@@ -45,6 +45,25 @@ export class RoadGraph {
     return seen;
   }
 
+  /** Road distance from `start` to every node (Dijkstra); Infinity if unreachable. */
+  distancesFrom(start: number): number[] {
+    const dist = this.nodes.map(() => Infinity);
+    dist[start] = 0;
+    const done = new Set<number>();
+    while (done.size < this.nodes.length) {
+      let current = -1;
+      for (let i = 0; i < dist.length; i++) {
+        if (!done.has(i) && dist[i] < Infinity && (current < 0 || dist[i] < dist[current])) current = i;
+      }
+      if (current < 0) break;
+      done.add(current);
+      for (const n of this.nodes[current].neighbors) {
+        dist[n] = Math.min(dist[n], dist[current] + this.distance(current, n));
+      }
+    }
+    return dist;
+  }
+
   /** A* shortest path as a list of node ids, or null if unreachable. */
   path(from: number, to: number): number[] | null {
     const g = new Map<number, number>([[from, 0]]);

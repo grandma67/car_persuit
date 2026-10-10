@@ -1,20 +1,30 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { Input } from './Input';
+import { Input, type DriveInput } from './Input';
+import { Rng } from './Rng';
 import { Vehicle } from '../vehicles/Vehicle';
 import { PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { generateCity, type CityData } from '../world/CityGenerator';
 import { buildCity } from '../world/CityBuilder';
-import { Hud } from '../ui/Hud';
+import { Hud, formatTime } from '../ui/Hud';
+import { Screens } from '../ui/Screens';
 import { CarAudio } from '../audio/CarAudio';
 import { TireSmoke } from '../render/TireSmoke';
 import { SkidMarks } from '../render/SkidMarks';
+import { DestinationMarker } from '../render/DestinationMarker';
+import { GpsArrow } from '../render/GpsArrow';
+import { MissionSystem, pickDestinations, routeAim } from '../gameplay/MissionSystem';
+import { MISSION } from '../gameplay/balance';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
 const REAR_WHEELS = [2, 3];
 const SMOKE_PER_SECOND = 55; // per rear wheel at full skid
+const ROUTE_REFRESH = 0.25; // seconds between GPS route recalculations
+const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+
+type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
@@ -29,9 +39,16 @@ export class Game {
   private overview = false; // ?debug only: top-down map view on C
   private debug = new URLSearchParams(window.location.search).has('debug');
   private hud: Hud;
+  private screens: Screens;
   private audio = new CarAudio();
   private smoke = new TireSmoke();
   private skidMarks = new SkidMarks();
+  private marker = new DestinationMarker(MISSION.reachRadius);
+  private arrow = new GpsArrow();
+  private mission: MissionSystem;
+  private route: { x: number; z: number; distance: number } | null = null;
+  private routeTimer = 0;
+  private state: GameState = 'menu';
   private smokeBudget = 0;
   private tmpContact = new THREE.Vector3();
   private tmpVel = new THREE.Vector3();
@@ -69,10 +86,16 @@ export class Game {
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
     this.scene.add(this.player.mesh.root);
-    this.scene.add(this.skidMarks.mesh, this.smoke.points);
+    this.scene.add(this.skidMarks.mesh, this.smoke.points, this.marker.group, this.arrow.mesh);
+
+    // Destinations get their own RNG stream so they're stable per seed.
+    const startNode = this.city.graph.nearest(spawn.x, spawn.z);
+    this.mission = new MissionSystem(pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id));
 
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
     this.hud = new Hud(hudRoot);
+    this.screens = new Screens(document.body);
+    this.screens.menu(seed, () => this.startMission());
 
     const onResize = () => {
       this.chase.resize(window.innerWidth / window.innerHeight);
@@ -81,6 +104,8 @@ export class Game {
     };
     onResize();
     window.addEventListener('resize', onResize);
+
+    if (this.debug) (window as unknown as { __game: Game }).__game = this; // for browser tests
   }
 
   start(): void {
@@ -88,22 +113,75 @@ export class Game {
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
+  private startMission(): void {
+    if (this.state !== 'menu') return;
+    this.state = 'playing';
+    this.screens.hide();
+    this.showDestination();
+    this.hud.toast('GO!', 1.2);
+  }
+
+  private setPaused(paused: boolean): void {
+    if (paused && this.state === 'playing') {
+      this.state = 'paused';
+      this.screens.pause(() => this.setPaused(false));
+    } else if (!paused && this.state === 'paused') {
+      this.state = 'playing';
+      this.screens.hide();
+      this.clock.getDelta(); // don't count the paused time as one huge frame
+    } else {
+      return;
+    }
+    this.audio.setPaused(paused);
+  }
+
+  /** Reload with a seed: simplest way to guarantee a completely fresh world. */
+  private restart(seed: number): void {
+    const url = new URL(window.location.href);
+    url.searchParams.set('seed', String(seed));
+    window.location.href = url.toString();
+  }
+
+  private handleKeys(): void {
+    const pressed = (...codes: string[]) => codes.some((c) => this.input.wasPressed(c));
+    if (pressed('KeyR') && this.state === 'playing') this.player.reset();
+    if (pressed('KeyM')) this.hud.setMuted(this.audio.toggleMute());
+    if (pressed('KeyP', 'Escape')) this.setPaused(this.state === 'playing');
+    if (pressed('Enter', 'NumpadEnter')) {
+      if (this.state === 'menu') this.startMission();
+      else if (this.state === 'won' || this.state === 'lost') this.restart(this.city.seed);
+    }
+    if (pressed('KeyN') && (this.state === 'won' || this.state === 'lost')) {
+      this.restart(Math.floor(Math.random() * 1_000_000));
+    }
+    if (this.debug) {
+      if (pressed('KeyC')) {
+        this.overview = !this.overview;
+        this.scene.fog = this.overview ? null : this.fog;
+      }
+      // T: jump to the current destination. Y: leave 3 seconds on the clock.
+      const target = this.mission.current;
+      if (pressed('KeyT') && target && this.state === 'playing') this.player.teleport(target.x, 1.2, target.z, 0);
+      if (pressed('KeyY') && this.state === 'playing') this.mission.elapsed = MISSION.timeLimit - 3;
+    }
+  }
+
   private frame(): void {
     const frameDt = Math.min(this.clock.getDelta(), 0.1);
-
-    if (this.input.wasPressed('KeyR')) this.player.reset();
-    if (this.input.wasPressed('KeyM')) this.hud.setMuted(this.audio.toggleMute());
-    if (this.debug && this.input.wasPressed('KeyC')) {
-      this.overview = !this.overview;
-      this.scene.fog = this.overview ? null : this.fog;
+    this.handleKeys();
+    if (this.state === 'paused') {
+      this.input.endFrame();
+      return;
     }
 
     // Fixed-timestep physics, rendered with interpolation for smoothness on any refresh rate.
+    // The world runs in every state so the car settles and coasts; only 'playing' takes input.
+    const driveInput = this.state === 'playing' ? this.input.drive() : NO_INPUT;
     this.accumulator += frameDt;
     let steps = 0;
     let impact = 0;
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
-      this.player.drive(this.input.drive(), FIXED_DT);
+      this.player.drive(driveInput, FIXED_DT);
       this.world.step();
       this.player.snapshot();
       impact = Math.max(impact, this.player.consumeImpact());
@@ -118,15 +196,72 @@ export class Game {
     this.sun.position.set(carPos.x + 30, carPos.y + 60, carPos.z + 20);
     this.sun.target.position.copy(carPos);
 
+    if (this.state === 'playing') this.updateMission(frameDt, carPos);
+    this.marker.update(frameDt);
     this.updateEffects(frameDt, impact);
 
     const speedRatio = Math.min(Math.abs(this.player.speed) / this.player.spec.maxSpeed, 1);
     this.chase.update(frameDt, this.player.mesh.root, speedRatio);
     this.smoke.resize(window.innerHeight, this.chase.camera.fov);
-    this.hud.update(this.player.speed);
+    this.hud.update(frameDt, this.player.speed, {
+      index: this.mission.index,
+      total: this.mission.total,
+      timeLeft: this.mission.timeLeft,
+      distance: this.state === 'playing' ? (this.route?.distance ?? null) : null,
+    });
 
     this.renderer.render(this.scene, this.overview ? this.overviewCamera() : this.chase.camera);
     this.input.endFrame();
+  }
+
+  private updateMission(dt: number, carPos: THREE.Vector3): void {
+    const event = this.mission.update(dt, carPos.x, carPos.z);
+    if (event === 'reached') {
+      this.audio.jingle('reached');
+      const left = this.mission.total - this.mission.index;
+      this.hud.toast(left === 1 ? 'FINAL DESTINATION!' : `DESTINATION REACHED · ${left} LEFT`);
+      this.showDestination();
+    } else if (event === 'won' || event === 'lost') {
+      this.endMission();
+      return;
+    }
+
+    const target = this.mission.current!;
+    this.routeTimer -= dt;
+    if (this.routeTimer <= 0) {
+      this.route = routeAim(this.city.graph, carPos.x, carPos.z, target.id);
+      this.routeTimer = ROUTE_REFRESH;
+    }
+    const final = this.mission.index === this.mission.total - 1;
+    this.arrow.update(dt, carPos, this.route!.x, this.route!.z, final ? 0x4dff88 : 0xffb020);
+  }
+
+  private showDestination(): void {
+    const target = this.mission.current;
+    if (!target) return;
+    this.marker.show(target.x, target.z, this.mission.index === this.mission.total - 1);
+    this.routeTimer = 0; // recompute the route on the next update
+  }
+
+  private endMission(): void {
+    const won = this.mission.status === 'won';
+    this.state = won ? 'won' : 'lost';
+    this.marker.hide();
+    this.arrow.hide();
+    this.audio.jingle(won ? 'won' : 'lost');
+    const reason = this.mission.loseReason;
+    this.screens.end(
+      {
+        won,
+        title: won ? 'YOU MADE IT!' : reason === 'destroyed' ? 'WRECKED' : "TIME'S UP",
+        detail: won
+          ? `All ${this.mission.total} destinations in ${formatTime(this.mission.elapsed)}.`
+          : `Reached ${this.mission.index} of ${this.mission.total} destinations.`,
+        seed: this.city.seed,
+      },
+      () => this.restart(this.city.seed),
+      () => this.restart(Math.floor(Math.random() * 1_000_000)),
+    );
   }
 
   private overviewCam?: THREE.PerspectiveCamera;

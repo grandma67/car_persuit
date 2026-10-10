@@ -6,6 +6,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 // crashes don't shake the view; pulls back and widens FOV with speed.
 export class ChaseCamera {
   readonly camera: THREE.PerspectiveCamera;
+  private yaw = 0;
   private heading = new THREE.Vector3(0, 0, 1);
   private desired = new THREE.Vector3();
   private lookAt = new THREE.Vector3();
@@ -19,10 +20,12 @@ export class ChaseCamera {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(target.quaternion);
     fwd.y = 0;
     if (fwd.lengthSq() > 1e-4) {
-      fwd.normalize();
       // Heading lags slightly behind the car, which gives a sense of rotation in turns.
-      if (!this.initialised) this.heading.copy(fwd);
-      else this.heading.lerp(fwd, 1 - Math.exp(-5 * dt)).normalize();
+      // Smoothed as an angle (shortest way round) so even an instant 180° turn can't stall it.
+      const target = Math.atan2(fwd.x, fwd.z);
+      if (!this.initialised) this.yaw = target;
+      else this.yaw += Math.atan2(Math.sin(target - this.yaw), Math.cos(target - this.yaw)) * (1 - Math.exp(-5 * dt));
+      this.heading.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     }
 
     const distance = 6.5 + speedRatio * 3;

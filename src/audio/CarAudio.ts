@@ -192,6 +192,34 @@ export class CarAudio {
     this.windGain.gain.setTargetAtTime(speedRatio * speedRatio * 0.18, now, 0.1);
   }
 
+  /** Silence everything while the game is paused. */
+  setPaused(paused: boolean): void {
+    if (!this.ctx) return;
+    if (paused) void this.ctx.suspend();
+    else void this.ctx.resume();
+  }
+
+  /** Short musical cue: destination reached, mission won or lost. */
+  jingle(kind: 'reached' | 'won' | 'lost'): void {
+    if (!this.ctx) return;
+    const notes = { reached: [659, 988], won: [523, 659, 784, 1047], lost: [392, 330, 262] }[kind];
+    const step = kind === 'reached' ? 0.09 : 0.14;
+    const now = this.ctx.currentTime;
+    notes.forEach((freq, i) => {
+      const t = now + i * step;
+      const osc = this.ctx!.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      const gain = this.ctx!.createGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.25, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35 + (i === notes.length - 1 ? 0.4 : 0));
+      osc.connect(gain).connect(this.master);
+      osc.start(t);
+      osc.stop(t + 0.8);
+    });
+  }
+
   /** One-shot crash: a low thump plus a burst of crunch noise. strength is 0..1. */
   impact(strength: number): void {
     if (!this.ctx || strength <= 0) return;

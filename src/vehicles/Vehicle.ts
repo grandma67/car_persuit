@@ -201,10 +201,14 @@ export class Vehicle {
   /** Put the car back on its wheels at its current spot, keeping its heading. */
   reset(): void {
     const fwd = this.forward(tmpVec);
-    const yaw = Math.atan2(fwd.x, fwd.z);
-    const q = tmpQuat.setFromAxisAngle(UP, yaw);
     const t = this.body.translation();
-    this.body.setTranslation({ x: t.x, y: Math.max(t.y, 0) + 1.5, z: t.z }, true);
+    this.teleport(t.x, Math.max(t.y, 0) + 1.5, t.z, Math.atan2(fwd.x, fwd.z));
+  }
+
+  /** Place the car upright at a position and heading, at rest. */
+  teleport(x: number, y: number, z: number, yaw: number): void {
+    const q = tmpQuat.setFromAxisAngle(UP, yaw);
+    this.body.setTranslation({ x, y, z }, true);
     this.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);

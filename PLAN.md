@@ -52,6 +52,13 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 - `?seed=N` reproduces a city; `?debug` + C toggles a top-down overview. `npm test` covers generator invariants.
 - Not done: wide avenues (deferred; uniform roads for now).
 
+## Mission (M3)
+
+- 5 sequential destinations, 400–800m by road apart (Dijkstra), own RNG stream so they're fixed per seed.
+- Light beam + pulsing ring marks the target (green for the final one); GPS chevron above the car follows the road route.
+- States: menu → playing ⇄ paused → won/lost. Retry reloads the same seed; New city picks a random one.
+- Debug (`?debug`): C overview, T teleport to destination, Y leave 3s on the clock, `window.__game` for browser tests.
+
 ## Wanted escalation
 
 | Stars | At ~ | Max cops | New threat |
@@ -81,7 +88,7 @@ Collision contact force above a threshold × opponent mass factor → health los
 | M0 ✅ | Scaffold + deploy pipeline | Scene with Rapier physics live on GitHub Pages |
 | M1 ✅ | Drivable car, chase camera | Driving feels fun |
 | M2 ✅ | City generator + colliders | Seeded city, can't drive through walls |
-| M3 | Mission system + HUD | Full loop playable without cops |
+| M3 ✅ | Mission system + HUD | Full loop playable without cops |
 | M4 | One patrol cop AI | Convincing single chase |
 | M5 | Director, stars, all cop types, damage | Complete game |
 | M6 | Polish: audio, particles, minimap, menus, car models, sparse civilian traffic | Showable |
