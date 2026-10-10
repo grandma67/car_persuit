@@ -31,7 +31,7 @@ import { WantedSystem } from '../gameplay/WantedSystem';
 import { DIFFICULTIES, difficultyById, scaledCopCap, type Difficulty } from '../gameplay/difficulty';
 import { Records } from '../gameplay/Records';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
-import { DAMAGE } from '../gameplay/balance';
+import { COP_RAM, DAMAGE } from '../gameplay/balance';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
@@ -90,6 +90,9 @@ export class Game {
   private traffic: CivilianTraffic;
   private crashMarks = new CrashMarks();
   private walls: Set<number>; // collider handles of buildings, sea wall, landmarks
+  // Cop ramming: who is touching the player now, and each cop's closing speed last step.
+  private copTouching = new WeakSet<Cop>();
+  private copClosing = new WeakMap<Cop, number>();
   private landmarks: Landmarks;
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
   private sirenLights: THREE.PointLight[] = [];
@@ -331,6 +334,7 @@ export class Game {
     this.accumulator += frameDt;
     let steps = 0;
     let impact = 0;
+    let ramDamage = 0;
     const breaks: PropBreak[] = [];
     const lv = this.player.body.linvel();
     this.chaseTarget.position.copy(this.player.position);
@@ -363,6 +367,7 @@ export class Game {
       for (const cop of this.director.cops) {
         cop.vehicle.snapshot();
         breaks.push(...this.props.checkVehicle(cop.vehicle, FIXED_DT));
+        if (copsChase && cop.wreckedFor === null) ramDamage += this.copContactDamage(cop, FIXED_DT);
         const hit = cop.vehicle.consumeImpact();
         if (hit > 0) this.markWall(cop.vehicle, hit);
         if (hit > 0 && cop.wreckedFor === null) {
@@ -399,7 +404,7 @@ export class Game {
     this.sun.position.set(carPos.x + sx, carPos.y + sy, carPos.z + sz);
     this.sun.target.position.copy(carPos);
 
-    if (this.state === 'playing') this.applyDamage(impact);
+    if (this.state === 'playing') this.applyDamage(impact, ramDamage);
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
     this.sea.update(frameDt);
@@ -458,11 +463,34 @@ export class Game {
     }
   }
 
-  private applyDamage(impact: number): void {
-    if (impact <= 0) return;
-    const damage = this.health.applyImpact(impact);
+  private applyDamage(impact: number, ramDamage: number): void {
+    if (impact <= 0 && ramDamage <= 0) return;
+    const damage = this.health.applyImpact(impact) + this.health.applyDamage(ramDamage);
     if (damage > 0) this.hud.flashDamage(damage / 40);
     if (this.health.destroyed) this.explode();
+  }
+
+  /**
+   * Damage from a cop touching the player this step: a bang when contact starts (by the closing
+   * speed just before it) plus a steady grind while it lasts. Ignores armor — see COP_RAM.
+   */
+  private copContactDamage(cop: Cop, dt: number): number {
+    let touching = false;
+    this.world.contactPair(this.player.collider, cop.vehicle.collider, (m) => {
+      for (let i = 0; i < m.numContacts(); i++) if (m.contactDist(i) < 0.05) touching = true;
+    });
+    const a = cop.vehicle.body.linvel();
+    const b = this.player.body.linvel();
+    const closing = this.copClosing.get(cop) ?? 0;
+    this.copClosing.set(cop, Math.hypot(a.x - b.x, a.z - b.z));
+    const wasTouching = this.copTouching.has(cop);
+    if (!touching) {
+      this.copTouching.delete(cop);
+      return 0;
+    }
+    this.copTouching.add(cop);
+    const damage = COP_RAM.grindPerSec * dt + (wasTouching ? 0 : COP_RAM.bangPerMs * closing);
+    return damage * (cop.vehicle.spec.mass / COP_RAM.referenceMass) * this.difficulty.damageScale;
   }
 
   /** Wrecked: the car blows up — fireball, flash, smoke, a jolt into the air — then the lose screen. */

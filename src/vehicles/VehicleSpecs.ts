@@ -59,6 +59,7 @@ export const PLAYER_SPEC: VehicleSpec = {
 export const COP_PATROL_SPEC: VehicleSpec = {
   ...PLAYER_SPEC,
   name: 'Patrol',
+  reverseForce: 3000, // cops back off hard between rams
   color: 0xf2f2f2,
   livery: 'police',
   body: 'sedan',
@@ -71,6 +72,7 @@ export const COP_PATROL_SPEC: VehicleSpec = {
 export const COP_INTERCEPTOR_SPEC: VehicleSpec = {
   ...PLAYER_SPEC,
   name: 'Interceptor',
+  reverseForce: 3000,
   color: 0x1a1d24,
   livery: 'police',
   body: 'sports',
@@ -84,6 +86,7 @@ export const COP_INTERCEPTOR_SPEC: VehicleSpec = {
 export const COP_SUV_SPEC: VehicleSpec = {
   ...PLAYER_SPEC,
   name: 'SUV',
+  reverseForce: 5000,
   color: 0x2b2f36,
   livery: 'police',
   body: 'suv',
@@ -106,6 +109,7 @@ export const COP_SUV_SPEC: VehicleSpec = {
 export const COP_ARMORED_SPEC: VehicleSpec = {
   ...PLAYER_SPEC,
   name: 'Armored',
+  reverseForce: 10000,
   color: 0x23262b,
   livery: 'police',
   body: 'truck',

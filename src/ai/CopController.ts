@@ -4,13 +4,14 @@
 //   chase    — line of sight: drive at where the suspect will be (lead pursuit)
 //   ram      — close: floor it at the suspect
 //   recover  — stuck: reverse out with opposite lock, then carry on
+//   backoff  — rammed into the suspect and pinned against them: reverse a few metres, ram again
 import * as THREE from 'three';
 import type { DriveInput } from '../core/Input';
 import type { RoadGraph } from '../world/RoadGraph';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit } from './pursuit';
 
-export type CopState = 'navigate' | 'chase' | 'ram' | 'recover';
+export type CopState = 'navigate' | 'chase' | 'ram' | 'recover' | 'backoff';
 
 export interface ChaseTarget {
   position: THREE.Vector3;
@@ -32,6 +33,11 @@ export interface CopTuning {
   stuckTime: number; // seconds near-stationary while trying to drive before recovering
   recoverTime: number; // max seconds reversing; stops earlier once pointing the right way
   recoverMin: number;
+  /** Pinned against the suspect (this close, under 2 m/s closing speed) for pinTime → back off for backoffTime, then ram again. */
+  pinRange: number;
+  pinTime: number;
+  backoffTime: number;
+  runUpTime: number; // after backing off, seconds of charging before we can count as pinned again
   /** Extra speed allowance when far behind (rubber-banding), as a multiplier at 300m+. */
   catchUp: number;
 }
@@ -48,6 +54,10 @@ export const COP_TUNING: CopTuning = {
   stuckTime: 1.2,
   recoverTime: 2.5,
   recoverMin: 0.8,
+  pinRange: 8,
+  pinTime: 0.3,
+  backoffTime: 1.0,
+  runUpTime: 1.0,
   catchUp: 1.15,
 };
 
@@ -66,6 +76,9 @@ export class CopController {
   private stuckFor = 0;
   private recoverFor = 0;
   private recoverSteer = 1;
+  private pinnedFor = 0;
+  private backoffFor = 0;
+  private runUpFor = 0; // after backing off: charging back in, not pinned yet
   private aim = new THREE.Vector3();
   private tmp = new THREE.Vector3();
 
@@ -103,6 +116,15 @@ export class CopController {
       this.roadOnlyFor = 1.5;
     }
     this.roadOnlyFor = Math.max(0, this.roadOnlyFor - dt);
+
+    // Backing off for another run at the suspect: straight back, then straight back into ram.
+    if (this.state === 'backoff') {
+      this.backoffFor -= dt;
+      if (this.backoffFor > 0) return { throttle: 0, brake: 1, steer: 0, handbrake: false };
+      this.state = 'ram';
+      this.runUpFor = t.runUpTime;
+    }
+    this.runUpFor = Math.max(0, this.runUpFor - dt);
 
     this.sightTimer -= dt;
     if (this.sightTimer <= 0) {
@@ -142,6 +164,20 @@ export class CopController {
     else if (speed > desiredSpeed + 3 && speed > 2) input.brake = 1;
     // Power-slide round tight turns at speed, like a pursuit driver would.
     input.handbrake = Math.abs(angle) > 1.1 && speed > 16;
+
+    // Pinned (close and no longer closing in: stopped against the suspect, or shoving them
+    // along): don't just push — back off and hit them again.
+    const lv = v.body.linvel();
+    const closing = Math.hypot(lv.x - target.velocity.x, lv.z - target.velocity.z);
+    if (this.state === 'ram' && this.runUpFor === 0 && dist < t.pinRange && closing < 2) this.pinnedFor += dt;
+    else this.pinnedFor = 0;
+    if (this.pinnedFor > t.pinTime) {
+      this.state = 'backoff';
+      this.backoffFor = t.backoffTime;
+      this.pinnedFor = 0;
+      this.stuckFor = 0;
+      return { throttle: 0, brake: 1, steer: 0, handbrake: false };
+    }
 
     // Stuck: trying to drive but not moving.
     if (input.throttle > 0 && Math.abs(speed) < 1.5) this.stuckFor += dt;

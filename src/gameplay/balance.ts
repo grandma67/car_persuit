@@ -38,6 +38,19 @@ export const DAMAGE: DamageConfig = {
   fireBelow: 0.2,
 };
 
+/**
+ * Cop contact damage to the player, on top of normal crash damage and ignoring armor, so a cop
+ * that keeps ramming always wears the car down. Scaled by the cop's mass (per 1350 kg patrol car)
+ * and the difficulty's damage multiplier.
+ */
+export const COP_RAM = {
+  /** Health per m/s of closing speed when a cop slams into the player. */
+  bangPerMs: 1.5,
+  /** Health per second while a cop is touching (pushing, pinning) the player. */
+  grindPerSec: 4,
+  referenceMass: 1350,
+};
+
 export type CopType = 'patrol' | 'interceptor' | 'suv' | 'armored';
 
 export interface StarLevel {

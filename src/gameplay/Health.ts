@@ -24,6 +24,14 @@ export class Health {
     return this.ratio < this.cfg.fireBelow;
   }
 
+  /** Take a fixed amount of damage (no threshold). Returns the damage dealt. */
+  applyDamage(amount: number): number {
+    if (this.destroyed || amount <= 0) return 0;
+    const damage = Math.min(this.value, amount);
+    this.value -= damage;
+    return damage;
+  }
+
   /** Apply a collision (velocity change in m/s). Returns the damage dealt. */
   applyImpact(impact: number): number {
     if (this.destroyed) return 0;
