@@ -98,8 +98,12 @@ function createWindowTextures(rng: Rng): { map: THREE.Texture; emissive: THREE.T
   return { map: toTexture(diffuseCanvas, true), emissive: toTexture(emissiveCanvas, true) };
 }
 
-/** Build meshes and colliders. windowGlow: emissive strength of lit windows (time of day). */
-export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.World, theme: CityTheme, windowGlow: number): void {
+/**
+ * Build meshes and colliders. windowGlow: emissive strength of lit windows (time of day).
+ * Returns the handles of wall colliders (buildings, sea wall) — the surfaces that take crash marks.
+ */
+export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.World, theme: CityTheme, windowGlow: number): Set<number> {
+  const wallColliders = new Set<number>();
   // Visual-only randomness uses its own stream so it can't change the layout.
   const rng = new Rng(city.seed ^ 0x5eed);
   const color = (hex: number) => new THREE.Color(hex);
@@ -190,7 +194,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     scene.add(mesh);
   }
   for (const b of city.buildings) {
-    world.createCollider(RAPIER.ColliderDesc.cuboid(b.w / 2, b.h / 2, b.d / 2).setTranslation(b.x, b.h / 2, b.z));
+    wallColliders.add(world.createCollider(RAPIER.ColliderDesc.cuboid(b.w / 2, b.h / 2, b.d / 2).setTranslation(b.x, b.h / 2, b.z)).handle);
   }
 
   // --- Plaza planters ---
@@ -237,11 +241,12 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     { x: -edge, z: 0, w: wallT, d: island - wallT * 2 },
   ]) {
     seaWall.box(r, 0, wallH, color(theme.seaWall), null, color(theme.seaWall));
-    world.createCollider(RAPIER.ColliderDesc.cuboid(r.w / 2, 10, r.d / 2).setTranslation(r.x, 10, r.z));
+    wallColliders.add(world.createCollider(RAPIER.ColliderDesc.cuboid(r.w / 2, 10, r.d / 2).setTranslation(r.x, 10, r.z)).handle);
   }
   const seaWallMesh = new THREE.Mesh(seaWall.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
   seaWallMesh.castShadow = seaWallMesh.receiveShadow = true;
   scene.add(seaWallMesh);
+  return wallColliders;
 }
 
 function addBuilding(b: Building, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng): void {

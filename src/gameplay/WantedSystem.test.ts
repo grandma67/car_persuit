@@ -35,11 +35,22 @@ describe('WantedSystem', () => {
     for (let i = 1; i < WANTED.length; i++) {
       expect(WANTED[i].at).toBeGreaterThan(WANTED[i - 1].at);
       expect(WANTED[i].maxCops).toBeGreaterThan(WANTED[i - 1].maxCops);
-      expect(WANTED[i].spawnInterval).toBeLessThanOrEqual(WANTED[i - 1].spawnInterval);
+  expect(WANTED[i].spawnInterval).toBeLessThanOrEqual(WANTED[i - 1].spawnInterval);
+      expect(WANTED[i].chaseRange).toBeGreaterThanOrEqual(WANTED[i - 1].chaseRange);
     }
     expect(WANTED[4].mix.armored).toBeGreaterThan(0);
     expect(WANTED[0].roadblocks).toBe(false);
     expect(WANTED[3].roadblocks).toBe(true);
+  });
+
+  it('each checkpoint makes stars come faster', () => {
+    const a = new WantedSystem();
+    const b = new WantedSystem();
+    b.checkpoint();
+    b.checkpoint();
+    a.update(60);
+    b.update(60);
+    expect(b.stars).toBeGreaterThan(a.stars); // 60s × 1.69 ≈ 101s ≥ 90s
   });
 
   it('bump jumps exactly one star', () => {

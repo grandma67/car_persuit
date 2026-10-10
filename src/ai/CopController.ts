@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import type { DriveInput } from '../core/Input';
 import type { RoadGraph } from '../world/RoadGraph';
 import type { Vehicle } from '../vehicles/Vehicle';
+import { cornerSpeedLimit, purePursuit } from './pursuit';
 
 export type CopState = 'navigate' | 'chase' | 'ram' | 'recover';
 
@@ -176,73 +177,9 @@ export class CopController {
       this.repathTimer = t.repathInterval;
       this.replan(target);
     }
-    const path = this.path;
-
-    // Closest point on the next couple of segments (never search backwards).
-    let best = Infinity;
-    let bestSeg = this.segment;
-    let bestT = 0;
-    for (let i = this.segment; i < Math.min(path.length - 1, this.segment + 3); i++) {
-      const a = path[i];
-      const b = path[i + 1];
-      const abx = b.x - a.x;
-      const abz = b.z - a.z;
-      const len2 = abx * abx + abz * abz || 1;
-      const u = THREE.MathUtils.clamp(((pos.x - a.x) * abx + (pos.z - a.z) * abz) / len2, 0, 1);
-      const d = Math.hypot(a.x + abx * u - pos.x, a.z + abz * u - pos.z);
-      if (d < best) {
-        best = d;
-        bestSeg = i;
-        bestT = u;
-      }
-    }
-    this.segment = bestSeg;
-
-    // Walk the lookahead distance along the route from there.
-    let remaining = t.lookahead + t.lookaheadPerSpeed * Math.abs(this.vehicle.speed);
-    let i = bestSeg;
-    let u = bestT;
-    for (;;) {
-      const a = path[i];
-      const b = path[i + 1];
-      const segLen = Math.hypot(b.x - a.x, b.z - a.z);
-      const left = segLen * (1 - u);
-      if (remaining <= left || i + 2 >= path.length) {
-        const f = Math.min(1, u + remaining / (segLen || 1));
-        this.aim.set(a.x + (b.x - a.x) * f, 0, a.z + (b.z - a.z) * f);
-        break;
-      }
-      remaining -= left;
-      i++;
-      u = 0;
-      // Don't let the aim wrap far round a sharp bend, or we'd cut the corner into a building.
-      const p0 = path[i - 1];
-      const p1 = path[i];
-      const p2 = path[i + 1];
-      const turn = Math.abs(
-        Math.atan2((p1.x - p0.x) * (p2.z - p1.z) - (p1.z - p0.z) * (p2.x - p1.x), (p1.x - p0.x) * (p2.x - p1.x) + (p1.z - p0.z) * (p2.z - p1.z)),
-      );
-      if (turn > 0.5) remaining = Math.min(remaining, 4);
-    }
-
-    // Slow for every sharp turn within braking distance so we can make it.
     const speed = Math.abs(this.vehicle.speed);
-    const horizon = (speed * speed) / (2 * t.brakeDecel) + 30;
-    let allowed = Infinity;
-    let along = Math.hypot(path[bestSeg + 1].x - pos.x, path[bestSeg + 1].z - pos.z);
-    for (let k = bestSeg + 1; k + 1 < path.length && along < horizon; k++) {
-      const a = path[k - 1];
-      const corner = path[k];
-      const after = path[k + 1];
-      const inX = corner.x - a.x;
-      const inZ = corner.z - a.z;
-      const outX = after.x - corner.x;
-      const outZ = after.z - corner.z;
-      const turn = Math.abs(Math.atan2(inX * outZ - inZ * outX, inX * outX + inZ * outZ));
-      if (turn > 0.5) allowed = Math.min(allowed, Math.sqrt(t.cornerSpeed ** 2 + 2 * t.brakeDecel * Math.max(0, along - 8)));
-      along += Math.hypot(outX, outZ);
-    }
-    return allowed;
+    this.segment = purePursuit(this.path, this.segment, pos, t.lookahead + t.lookaheadPerSpeed * speed, this.aim).segment;
+    return cornerSpeedLimit(this.path, this.segment, pos, speed, t.cornerSpeed, t.brakeDecel);
   }
 
   /** Route: our position → road nodes → the suspect. */

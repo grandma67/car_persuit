@@ -75,3 +75,21 @@ describe('generateTrafficControl', () => {
     expect(city.roadMarks.filter((m) => m.kind === 'stopline').length).toBeGreaterThan(100);
   });
 });
+
+import { approachControls } from './TrafficControl';
+
+describe('approachControls', () => {
+  it.each([1, 42])('seed %i: every stop sign and signal maps to a real road approach', (seed) => {
+    const city = generateCity(seed);
+    const controls = approachControls(city.graph, city.streetProps);
+    const expected = city.streetProps.filter((p) => p.kind === 'signal' || p.variant === 'stop').length;
+    expect(controls.size).toBe(expected);
+    for (const [key, c] of controls) {
+      const [from, to] = key.split('>').map(Number);
+      expect(city.graph.nodes[from].neighbors).toContain(to);
+      const a = city.graph.nodes[from];
+      const b = city.graph.nodes[to];
+      expect(c.axis).toBe(Math.abs(b.x - a.x) > Math.abs(b.z - a.z) ? 'x' : 'z');
+    }
+  });
+});

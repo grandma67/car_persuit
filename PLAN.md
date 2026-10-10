@@ -98,6 +98,13 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 - Director: spawns to the star cap at the star's interval with weighted types; 4★+ roadblocks (2 SUVs across the road 140–260m ahead on the GPS route, holding until the player is within 35m).
 - HUD stars + progress bar, toast per level; `?debug` K = +1 star. 10 cops at 60fps (cops have lamp glow, no spotlights).
 
+## Polish (M6, as built)
+
+- Civilian traffic (`ai/CivilianTraffic.ts`, `ai/CivilianController.ts`): ~10 cars recycled around the player, right-hand lane, realistic turns, obey lights and stop signs (headless sim: 0 red-light runs, 0 crashes, 0% off-road), forward sensor keeps gaps; hitting one adds heat.
+- Pursuit tuning: 60% of cop spawns on the player's GPS route 120–260m ahead (cut-off), leash 260m, sharper aggression per star, each checkpoint ×1.3 wanted-clock rate.
+- Crash marks on building/sea walls at the impact point, tinted with the car's paint.
+- Splash screen with loading stages, menu music, engine silent until Start, car lights (brake/headlights).
+
 ## Cop AI (M4, as built)
 
 - `ai/CopController.ts`: navigate (pure pursuit along the A* road route, lookahead clamped at sharp bends, brakes for every bend within braking distance), chase (lead pursuit when two-ray line of sight within 90m and roughly ahead), ram (<18m), recover (reverse with opposite lock until pointing the right way). Rubber-band speed when far.
@@ -119,5 +126,5 @@ Collision contact force above a threshold × opponent mass factor → health los
 | M3 ✅ | Mission system + HUD | Full loop playable without cops |
 | M4 ✅ | One patrol cop AI | Convincing single chase |
 | M5 ✅ | Director, stars, all cop types, damage | Complete game |
-| M6 | Polish: audio, particles, minimap, menus, car models, sparse civilian traffic | Showable |
+| M6 ✅ | Polish: audio, particles, minimap, menus, car models, sparse civilian traffic | Showable |
 | M7 | Mobile touch controls, difficulty, leaderboard | — |

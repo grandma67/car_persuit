@@ -10,6 +10,9 @@ import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
 import { Sky } from '../render/Sky';
 import { CopDirector, type Cop } from '../ai/CopDirector';
+import { CivilianTraffic } from '../ai/CivilianTraffic';
+import { approachControls } from '../world/TrafficControl';
+import { CrashMarks } from '../render/CrashMarks';
 import type { ChaseTarget, LineOfSight } from '../ai/CopController';
 import { PropSystem, type PropBreak } from '../world/PropSystem';
 import { Hud, formatTime } from '../ui/Hud';
@@ -74,6 +77,9 @@ export class Game {
   private props: PropSystem;
   private director: CopDirector;
   private wanted = new WantedSystem();
+  private traffic: CivilianTraffic;
+  private crashMarks = new CrashMarks();
+  private walls: Set<number>; // collider handles of buildings + sea wall
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
   private sirenLights: THREE.PointLight[] = [];
   private geysers: { position: THREE.Vector3; timeLeft: number; budget: number }[] = [];
@@ -122,7 +128,7 @@ export class Game {
 
     this.world.timestep = FIXED_DT;
     this.city = generateCity(seed);
-    buildCity(this.city, this.scene, this.world, theme, time.windowGlow);
+    this.walls = buildCity(this.city, this.scene, this.world, theme, time.windowGlow);
     this.sea = new Sea(this.city.islandSize / 2, time.sea);
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow);
 
@@ -153,6 +159,15 @@ export class Game {
       return true;
     };
     this.director = new CopDirector(this.world, this.scene, this.city.graph, canSee, new Rng(seed ^ 0xc095), this.player.headlights);
+    this.traffic = new CivilianTraffic(
+      this.world,
+      this.scene,
+      this.city.graph,
+      approachControls(this.city.graph, this.city.streetProps),
+      new Rng(seed ^ 0x7a4f1c),
+      this.player.headlights,
+    );
+    this.scene.add(this.crashMarks.mesh);
     for (let i = 0; i < SIREN_LIGHTS; i++) {
       const light = new THREE.PointLight(0xff2020, 0, 45, 1.6);
       this.sirenLights.push(light);
@@ -267,18 +282,32 @@ export class Game {
     const copsChase = this.state === 'playing';
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.player.drive(driveInput, FIXED_DT);
+      const now = this.clock.elapsedTime;
+      for (const car of this.traffic.cars) car.vehicle.drive(car.controller.update(FIXED_DT, now), FIXED_DT);
       for (const cop of this.director.cops) {
         const active = copsChase && cop.wreckedFor === null;
         cop.vehicle.drive(active ? cop.controller.update(FIXED_DT, this.chaseTarget) : NO_INPUT, FIXED_DT);
       }
       this.world.step();
       this.player.snapshot();
-      impact = Math.max(impact, this.player.consumeImpact());
+      const playerHit = this.player.consumeImpact();
+      if (playerHit > 0) this.markWall(this.player, playerHit);
+      impact = Math.max(impact, playerHit);
+      for (const car of this.traffic.cars) {
+        car.vehicle.snapshot();
+        const hit = car.vehicle.consumeImpact();
+        if (hit > 3) {
+          car.controller.hit();
+          // Hitting a civilian draws attention.
+          if (this.state === 'playing' && car.vehicle.position.distanceTo(this.player.position) < 8) this.raiseStars(this.wanted.civilianHit());
+        }
+      }
       breaks.push(...this.props.checkVehicle(this.player, FIXED_DT));
       for (const cop of this.director.cops) {
         cop.vehicle.snapshot();
         breaks.push(...this.props.checkVehicle(cop.vehicle, FIXED_DT));
         const hit = cop.vehicle.consumeImpact();
+        if (hit > 0) this.markWall(cop.vehicle, hit);
         if (hit > 0 && cop.wreckedFor === null) {
           cop.health.applyImpact(hit);
           if (cop.health.destroyed) this.explodeCop(cop);
@@ -292,6 +321,8 @@ export class Game {
 
     this.player.syncMesh(alpha);
     for (const cop of this.director.cops) cop.vehicle.syncMesh(alpha);
+    for (const car of this.traffic.cars) car.vehicle.syncMesh(alpha);
+    this.traffic.update(this.player.position);
     if (this.state === 'playing') {
       this.raiseStars(this.wanted.update(frameDt));
       this.director.update(frameDt, this.chaseTarget, this.player.forward(), this.wanted.level, this.route?.path ?? null);
@@ -344,6 +375,7 @@ export class Game {
     const event = this.mission.update(dt, carPos.x, carPos.z);
     if (event === 'reached') {
       this.audio.jingle('reached');
+      this.wanted.checkpoint(); // every delivery turns up the heat a little faster
       const left = this.mission.total - this.mission.index;
       this.hud.toast(left === 1 ? 'FINAL DESTINATION!' : `DESTINATION REACHED · ${left} LEFT`);
       this.showDestination();
@@ -389,6 +421,29 @@ export class Game {
     this.audio.explosion();
     this.mission.fail('destroyed');
     this.endMission();
+  }
+
+  /** A hard hit into something solid: scuff the wall where the car struck it. */
+  private markWall(vehicle: Vehicle, impact: number): void {
+    if (impact < 6) return;
+    const v = vehicle.impactVelocity;
+    const speed = Math.hypot(v.x, v.z);
+    if (speed < 3) return;
+    const p = vehicle.position;
+    const ray = new RAPIER.Ray({ x: p.x, y: p.y, z: p.z }, { x: v.x / speed, y: 0, z: v.z / speed });
+    const hit = this.world.castRayAndGetNormal(
+      ray,
+      vehicle.spec.halfExtents.z + 2.5,
+      true,
+      RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC,
+      undefined,
+      vehicle.collider,
+      vehicle.body,
+      (collider) => this.walls.has(collider.handle), // walls only, not lamps/trees/planters
+    );
+    if (!hit) return;
+    const point = new THREE.Vector3(p.x + (v.x / speed) * hit.timeOfImpact, p.y, p.z + (v.z / speed) * hit.timeOfImpact);
+    this.crashMarks.add(point, new THREE.Vector3(hit.normal.x, hit.normal.y, hit.normal.z), Math.min(1, (impact - 6) / 25), vehicle.mesh.paint.color);
   }
 
   /** Announce a new wanted level. */

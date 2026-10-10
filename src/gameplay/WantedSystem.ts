@@ -1,10 +1,12 @@
 // Wanted level: stars rise with time spent on the run plus "heat" from trouble you cause.
 // Pure logic — unit-tested.
-import { HEAT, WANTED, type StarLevel } from './balance';
+import { CHECKPOINT_HEAT_RATE, HEAT, WANTED, type StarLevel } from './balance';
 
 export class WantedSystem {
   private elapsed = 0;
   private heat = 0;
+  /** Wanted time passes this many times faster than real time. */
+  rate = 1;
 
   constructor(private levels: StarLevel[] = WANTED) {}
 
@@ -33,7 +35,7 @@ export class WantedSystem {
   /** Advance time; returns the new star count if it went up, else null. */
   update(dt: number): number | null {
     const before = this.stars;
-    this.elapsed += dt;
+    this.elapsed += dt * this.rate;
     return this.stars > before ? this.stars : null;
   }
 
@@ -42,6 +44,15 @@ export class WantedSystem {
     const before = this.stars;
     this.heat += seconds;
     return this.stars > before ? this.stars : null;
+  }
+
+  /** A destination was reached: the heat builds faster from now on. */
+  checkpoint(): void {
+    this.rate *= CHECKPOINT_HEAT_RATE;
+  }
+
+  civilianHit(): number | null {
+    return this.addHeat(HEAT.civilianHit);
   }
 
   copWrecked(): number | null {

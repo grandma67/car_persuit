@@ -169,3 +169,35 @@ export function generateTrafficControl(
   }
   return { props, marks };
 }
+
+export interface ApproachControl {
+  kind: 'signal' | 'stop';
+  axis: 'x' | 'z';
+  phase: number;
+}
+
+/**
+ * Which control governs each junction approach, keyed `${fromNode}>${junctionNode}`. Derived from
+ * the placed signs/signals (they face the traffic they control), so drivers obey what's there.
+ */
+export function approachControls(graph: RoadGraph, props: StreetProp[]): Map<string, ApproachControl> {
+  const map = new Map<string, ApproachControl>();
+  for (const p of props) {
+    const isSignal = p.kind === 'signal';
+    if (!isSignal && !(p.kind === 'sign' && p.variant === 'stop')) continue;
+    // Drivers travel opposite to the face direction.
+    const dx = -Math.sin(p.yaw);
+    const dz = -Math.cos(p.yaw);
+    const node = graph.nearest(p.x, p.z);
+    // The approach road comes in from the neighbour behind the travel direction.
+    const from = node.neighbors
+      .map((id) => graph.nodes[id])
+      .find((n) => {
+        const len = Math.hypot(node.x - n.x, node.z - n.z);
+        return ((node.x - n.x) * dx + (node.z - n.z) * dz) / len > 0.99;
+      });
+    if (!from) continue;
+    map.set(`${from.id}>${node.id}`, { kind: isSignal ? 'signal' : 'stop', axis: Math.abs(dx) > 0.5 ? 'x' : 'z', phase: p.phase ?? 0 });
+  }
+  return map;
+}

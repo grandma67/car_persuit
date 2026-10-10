@@ -54,18 +54,22 @@ export interface StarLevel {
 
 // Index 0 = 1 star … index 4 = 5 stars.
 export const WANTED: StarLevel[] = [
-  { at: 0, maxCops: 2, spawnInterval: 7, mix: { patrol: 1 }, roadblocks: false, chaseRange: 90, catchUp: 1.1 },
-  { at: 90, maxCops: 4, spawnInterval: 5, mix: { patrol: 1 }, roadblocks: false, chaseRange: 100, catchUp: 1.15 },
-  { at: 180, maxCops: 6, spawnInterval: 4, mix: { patrol: 0.6, interceptor: 0.4 }, roadblocks: false, chaseRange: 110, catchUp: 1.2 },
-  { at: 300, maxCops: 8, spawnInterval: 3, mix: { patrol: 0.4, interceptor: 0.3, suv: 0.3 }, roadblocks: true, chaseRange: 120, catchUp: 1.25 },
-  { at: 420, maxCops: 10, spawnInterval: 2.5, mix: { patrol: 0.3, interceptor: 0.3, suv: 0.2, armored: 0.2 }, roadblocks: true, chaseRange: 130, catchUp: 1.3 },
+  { at: 0, maxCops: 2, spawnInterval: 6, mix: { patrol: 1 }, roadblocks: false, chaseRange: 110, catchUp: 1.2 },
+  { at: 90, maxCops: 4, spawnInterval: 4.5, mix: { patrol: 1 }, roadblocks: false, chaseRange: 120, catchUp: 1.25 },
+  { at: 180, maxCops: 6, spawnInterval: 3.5, mix: { patrol: 0.6, interceptor: 0.4 }, roadblocks: false, chaseRange: 135, catchUp: 1.3 },
+  { at: 300, maxCops: 8, spawnInterval: 3, mix: { patrol: 0.4, interceptor: 0.3, suv: 0.3 }, roadblocks: true, chaseRange: 150, catchUp: 1.35 },
+  { at: 420, maxCops: 10, spawnInterval: 2.5, mix: { patrol: 0.3, interceptor: 0.3, suv: 0.2, armored: 0.2 }, roadblocks: true, chaseRange: 160, catchUp: 1.4 },
 ];
 
 /** Extra "wanted time" (seconds) for trouble you cause. */
 export const HEAT = {
   copWrecked: 25,
   propSmashed: 0.6,
+  civilianHit: 2,
 };
+
+/** Each destination reached makes the wanted level climb this much faster. */
+export const CHECKPOINT_HEAT_RATE = 1.3;
 
 /** Seconds between roadblock attempts at 4+ stars. */
 export const ROADBLOCK_INTERVAL = 35;

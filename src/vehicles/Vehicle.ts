@@ -31,6 +31,8 @@ export class Vehicle {
   // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
   private lastVel = new THREE.Vector3();
   private impact = 0;
+  /** Velocity just before the strongest recent impact (direction of travel into the obstacle). */
+  readonly impactVelocity = new THREE.Vector3();
   // Previous/current physics transforms, for render interpolation between fixed steps.
   private prevPos = new THREE.Vector3();
   private prevQuat = new THREE.Quaternion();
@@ -193,7 +195,10 @@ export class Vehicle {
     // Normal driving changes velocity < 0.2 m/s per step; anything well above is a hit.
     const v = this.body.linvel();
     const dv = Math.hypot(v.x - this.lastVel.x, v.y - this.lastVel.y, v.z - this.lastVel.z);
-    if (dv > 1.5) this.impact = Math.max(this.impact, dv);
+    if (dv > 1.5 && dv > this.impact) {
+      this.impact = dv;
+      this.impactVelocity.copy(this.lastVel);
+    }
     this.lastVel.set(v.x, v.y, v.z);
   }
 

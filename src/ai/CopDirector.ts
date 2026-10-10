@@ -14,18 +14,20 @@ export interface DirectorTuning {
   firstSpawnDelay: number; // seconds after the mission starts
   spawnMin: number; // metres by road from the player
   spawnMax: number;
-  leashDistance: number; // straight-line metres; beyond this a cop is moved closer
+  leashDistance: number; // straight-line metres; beyond this a cop is moved back into play
+  aheadChance: number; // share of spawns placed on the player's route ahead (to cut them off)
   wreckClearTime: number; // seconds a wrecked cop burns before being removed
   roadblockAhead: [number, number]; // metres along the player's route
 }
 
 export const DIRECTOR_TUNING: DirectorTuning = {
-  firstSpawnDelay: 4,
-  spawnMin: 150,
-  spawnMax: 300,
-  leashDistance: 450,
+  firstSpawnDelay: 3,
+  spawnMin: 120,
+  spawnMax: 260,
+  leashDistance: 260,
   wreckClearTime: 5,
   roadblockAhead: [140, 260],
+  aheadChance: 0.6,
 };
 
 export interface Cop {
@@ -88,7 +90,7 @@ export class CopDirector {
       cop.flippedFor = up < 0.3 ? cop.flippedFor + dt : 0;
       const far = Math.hypot(p.x - player.position.x, p.z - player.position.z) > this.tuning.leashDistance;
       if (far || cop.flippedFor > 3) {
-        this.place(cop.vehicle, player, playerForward);
+        this.place(cop.vehicle, player, playerForward, route, true);
         cop.controller.holdUntilClose = false;
       }
     }
@@ -101,7 +103,7 @@ export class CopDirector {
     if (this.activeCops.length < level.maxCops) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
-        this.spawn(pickCopType(level.mix, this.rng.next()), player, playerForward);
+        this.place(this.create(pickCopType(level.mix, this.rng.next())).vehicle, player, playerForward, route, this.rng.next() < this.tuning.aheadChance);
         this.spawnTimer = level.spawnInterval;
       }
     }
@@ -135,8 +137,24 @@ export class CopDirector {
     return cop;
   }
 
-  private spawn(type: CopType, player: ChaseTarget, playerForward: THREE.Vector3): void {
-    this.place(this.create(type).vehicle, player, playerForward);
+  /** A free road point 120–260m along the player's route, facing back toward them. */
+  private onRoute(player: ChaseTarget, route: number[]): { x: number; z: number; yaw: number } | null {
+    const g = this.graph;
+    let along = 0;
+    let prev: { x: number; z: number } = player.position;
+    const spots: { x: number; z: number; yaw: number }[] = [];
+    for (let i = 0; i < route.length; i++) {
+      const node = g.nodes[route[i]];
+      along += Math.hypot(node.x - prev.x, node.z - prev.z);
+      if (along > this.tuning.spawnMax) break;
+      if (along >= this.tuning.spawnMin && i > 0) {
+        const back = g.nodes[route[i - 1]];
+        const occupied = this.activeCops.some((c) => Math.hypot(c.vehicle.position.x - node.x, c.vehicle.position.z - node.z) < 12);
+        if (!occupied) spots.push({ x: node.x, z: node.z, yaw: Math.atan2(back.x - node.x, back.z - node.z) });
+      }
+      prev = node;
+    }
+    return spots.length ? this.rng.pick(spots) : null;
   }
 
   /**
@@ -171,10 +189,20 @@ export class CopDirector {
     return false;
   }
 
-  /** Put a cop on a road 150–300m from the player by road, preferably behind them, facing them. */
-  private place(vehicle: Vehicle, player: ChaseTarget, playerForward: THREE.Vector3): void {
+  /**
+   * Put a cop on a road 120–260m from the player by road, facing them. `ahead`: between the player
+   * and their destination (on their GPS route) to cut them off; otherwise behind them.
+   */
+  private place(vehicle: Vehicle, player: ChaseTarget, playerForward: THREE.Vector3, route: number[] | null, ahead: boolean): void {
     const g = this.graph;
     const from = g.nearest(player.position.x, player.position.z);
+    if (ahead && route) {
+      const spot = this.onRoute(player, route);
+      if (spot) {
+        vehicle.teleport(spot.x, 1.2, spot.z, spot.yaw);
+        return;
+      }
+    }
     const dist = g.distancesFrom(from.id);
     const inRange = g.nodes.filter((n) => dist[n.id] >= this.tuning.spawnMin && dist[n.id] <= this.tuning.spawnMax);
     const behind = inRange.filter(
@@ -186,8 +214,8 @@ export class CopDirector {
     const pool = [free(behind), free(inRange), behind, inRange, g.nodes].find((l) => l.length)!;
     const node = this.rng.pick(pool);
     // Face along the first road toward the player.
-    const route = g.path(node.id, from.id);
-    const next = route && route.length > 1 ? g.nodes[route[1]] : from;
+    const toPlayer = g.path(node.id, from.id);
+    const next = toPlayer && toPlayer.length > 1 ? g.nodes[toPlayer[1]] : from;
     const yaw = Math.atan2(next.x - node.x, next.z - node.z);
     vehicle.teleport(node.x, 1.2, node.z, yaw);
   }
