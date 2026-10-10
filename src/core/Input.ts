@@ -1,4 +1,4 @@
-// Keyboard state. Touch controls (M7) will feed the same DriveInput.
+// Keyboard state, merged with on-screen touch controls into one DriveInput.
 
 export interface DriveInput {
   throttle: number; // 0..1
@@ -7,8 +7,18 @@ export interface DriveInput {
   handbrake: boolean;
 }
 
+/** Held state of the on-screen touch buttons. */
+export interface TouchDrive {
+  left: boolean;
+  right: boolean;
+  gas: boolean;
+  brake: boolean;
+  handbrake: boolean;
+}
+
 export class Input {
   private down = new Set<string>();
+  touch: TouchDrive | null = null;
   private pressed = new Set<string>();
 
   constructor() {
@@ -26,13 +36,14 @@ export class Input {
   }
 
   drive(): DriveInput {
-    const left = this.any('KeyA', 'ArrowLeft');
-    const right = this.any('KeyD', 'ArrowRight');
+    const t = this.touch;
+    const left = this.any('KeyA', 'ArrowLeft') || !!t?.left;
+    const right = this.any('KeyD', 'ArrowRight') || !!t?.right;
     return {
-      throttle: this.any('KeyW', 'ArrowUp') ? 1 : 0,
-      brake: this.any('KeyS', 'ArrowDown') ? 1 : 0,
+      throttle: this.any('KeyW', 'ArrowUp') || t?.gas ? 1 : 0,
+      brake: this.any('KeyS', 'ArrowDown') || t?.brake ? 1 : 0,
       steer: (right ? 1 : 0) - (left ? 1 : 0),
-      handbrake: this.any('Space'),
+      handbrake: this.any('Space') || !!t?.handbrake,
     };
   }
 

@@ -5,6 +5,17 @@ export interface EndScreenInfo {
   title: string;
   detail: string;
   seed: number;
+  /** Win only: leaderboard lines and whether this run set a new best. */
+  newBest?: boolean;
+  board?: { time: string; label: string; current: boolean }[];
+}
+
+export interface MenuInfo {
+  seed: number;
+  look: string; // style · time of day
+  difficulties: { id: string; label: string }[];
+  difficulty: string;
+  best: string | null; // best time on this city at this difficulty
 }
 
 export class Screens {
@@ -34,7 +45,12 @@ export class Screens {
     this.el.hidden = true;
   }
 
-  menu(seed: number, look: string, onStart: () => void): void {
+  menu(info: MenuInfo, onStart: () => void, onDifficulty: (id: string) => void): void {
+    const choices = info.difficulties
+      .map((d) => `<button data-action="diff-${d.id}" class="choice${d.id === info.difficulty ? ' selected' : ''}">${d.label}</button>`)
+      .join('');
+    const actions: Record<string, () => void> = { start: onStart };
+    for (const d of info.difficulties) actions[`diff-${d.id}`] = () => onDifficulty(d.id);
     this.show(
       `
       <h1>CAR PURSUIT</h1>
@@ -45,10 +61,11 @@ export class Screens {
         <li><kbd>R</kbd> reset car</li>
         <li><kbd>P</kbd> pause · <kbd>M</kbd> mute</li>
       </ul>
+      <div class="screen-choices" role="group" aria-label="Difficulty">${choices}</div>
       <button data-action="start">Start <kbd>Enter</kbd></button>
-      <p class="screen-seed">City #${seed} · ${look}</p>
+      <p class="screen-seed">City #${info.seed} · ${info.look}${info.best ? ` · Best ${info.best}` : ''}</p>
     `,
-      { start: onStart },
+      actions,
     );
   }
 
@@ -60,7 +77,15 @@ export class Screens {
     this.show(
       `
       <h2 class="${info.won ? 'won' : 'lost'}">${info.title}</h2>
+      ${info.newBest ? '<p class="screen-record">NEW RECORD!</p>' : ''}
       <p class="screen-lead">${info.detail}</p>
+      ${
+        info.board?.length
+          ? `<ol class="screen-board">${info.board
+              .map((r) => `<li class="${r.current ? 'current' : ''}"><span>${r.time}</span><span>${r.label}</span></li>`)
+              .join('')}</ol>`
+          : ''
+      }
       <div class="screen-buttons">
         <button data-action="retry">Retry city <kbd>Enter</kbd></button>
         <button data-action="new" class="secondary">New city <kbd>N</kbd></button>

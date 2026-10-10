@@ -27,6 +27,10 @@ import { DestinationMarker } from '../render/DestinationMarker';
 import { MissionSystem, pickDestinations, routeAim, type Route } from '../gameplay/MissionSystem';
 import { MISSION } from '../gameplay/balance';
 import { WantedSystem } from '../gameplay/WantedSystem';
+import { DIFFICULTIES, difficultyById, scaledCopCap, type Difficulty } from '../gameplay/difficulty';
+import { Records } from '../gameplay/Records';
+import { TouchControls, isTouchDevice } from '../ui/TouchControls';
+import { DAMAGE } from '../gameplay/balance';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
@@ -65,6 +69,11 @@ export class Game {
   private sea: Sea;
   private minimap: Minimap;
   private health = new Health();
+  private difficulty: Difficulty = difficultyById(storageGet('cp-difficulty'));
+  private records = new Records(safeStorage());
+  private touch: TouchControls | null = null;
+  private destinations: ReturnType<typeof pickDestinations>;
+  private look = '';
   private engineSmoke = new TireSmoke({ color: 0x2b2b30, maxAlpha: 0.55, additive: false, growth: 3 });
   private fire = new TireSmoke({ color: 0xff6a1a, maxAlpha: 0.7, additive: true, growth: 0.6 });
   private water = new TireSmoke({
@@ -97,7 +106,9 @@ export class Game {
 
   constructor(container: HTMLElement, hudRoot: HTMLElement, seed: number) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const mobile = isTouchDevice();
+    // Phones: cap resolution a little lower to keep the frame rate up.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -118,7 +129,7 @@ export class Game {
     // Shadow-casting sun follows the player so a small shadow frustum covers the visible area.
     this.sun = new THREE.DirectionalLight(time.sunColor, time.sunIntensity);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.setScalar(mobile ? 1024 : 2048);
     const s = this.sun.shadow.camera;
     s.left = s.bottom = -50;
     s.right = s.top = 50;
@@ -141,7 +152,8 @@ export class Game {
 
     // Destinations get their own RNG stream so they're stable per seed.
     const startNode = this.city.graph.nearest(spawn.x, spawn.z);
-    this.mission = new MissionSystem(pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id));
+    this.destinations = pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id);
+    this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
 
     // Cops: line of sight is two rays a car-width apart against static geometry (buildings etc.).
     const canSee: LineOfSight = (from, to) => {
@@ -178,7 +190,16 @@ export class Game {
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
     this.screens = new Screens(document.body, (kind) => this.audio.uiBlip(kind));
-    this.screens.menu(seed, `${theme.name} · ${time.label}`, () => this.startMission());
+    this.look = `${theme.name} · ${time.label}`;
+    this.showMenu();
+    if (mobile) {
+      this.touch = new TouchControls(document.body, {
+        pause: () => this.setPaused(this.state === 'playing'),
+        reset: () => this.state === 'playing' && this.player.reset(),
+      });
+      this.input.touch = this.touch.state;
+      document.body.classList.add('is-touch');
+    }
 
     const onResize = () => {
       this.chase.resize(window.innerWidth / window.innerHeight);
@@ -202,9 +223,36 @@ export class Game {
     if (this.state === 'menu') this.audio.menuMusic(true);
   }
 
+  private showMenu(): void {
+    const best = this.records.best(this.city.seed, this.difficulty.id);
+    this.screens.menu(
+      {
+        seed: this.city.seed,
+        look: this.look,
+        difficulties: DIFFICULTIES,
+        difficulty: this.difficulty.id,
+        best: best ? formatTime(best.seconds) : null,
+      },
+      () => this.startMission(),
+      (id) => this.setDifficulty(id),
+    );
+  }
+
+  private setDifficulty(id: string): void {
+    this.difficulty = difficultyById(id);
+    storageSet('cp-difficulty', this.difficulty.id);
+    // Rebuild the (not yet started) mission so the timer shows this difficulty's limit.
+    this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
+    this.showMenu();
+  }
+
   private startMission(): void {
     if (this.state !== 'menu') return;
     this.state = 'playing';
+    const d = this.difficulty;
+    this.health = new Health({ ...DAMAGE, impactScale: DAMAGE.impactScale * d.damageScale });
+    this.wanted.rate = d.heatRate;
+    this.touch?.setVisible(true);
     this.audio.unlock();
     this.audio.menuMusic(false);
     this.audio.startEngine();
@@ -243,6 +291,11 @@ export class Game {
     if (pressed('Enter', 'NumpadEnter')) {
       if (this.state === 'menu') this.startMission();
       else if (this.state === 'won' || this.state === 'lost') this.restart(this.city.seed);
+    }
+    if (this.state === 'menu' && pressed('ArrowLeft', 'ArrowRight')) {
+      const i = DIFFICULTIES.indexOf(this.difficulty);
+      const next = DIFFICULTIES[(i + (pressed('ArrowRight') ? 1 : DIFFICULTIES.length - 1)) % DIFFICULTIES.length];
+      this.setDifficulty(next.id);
     }
     if (pressed('KeyN') && (this.state === 'won' || this.state === 'lost')) {
       this.restart(Math.floor(Math.random() * 1_000_000));
@@ -325,7 +378,14 @@ export class Game {
     this.traffic.update(this.player.position);
     if (this.state === 'playing') {
       this.raiseStars(this.wanted.update(frameDt));
-      this.director.update(frameDt, this.chaseTarget, this.player.forward(), this.wanted.level, this.route?.path ?? null);
+      const level = this.wanted.level;
+      this.director.update(
+        frameDt,
+        this.chaseTarget,
+        this.player.forward(),
+        { ...level, maxCops: scaledCopCap(level.maxCops, this.difficulty) },
+        this.route?.path ?? null,
+      );
     }
     this.updateSirens();
     this.props.sync();
@@ -536,6 +596,18 @@ export class Game {
 
   private showEndScreen(won: boolean): void {
     const reason = this.mission.loseReason;
+    this.touch?.setVisible(false);
+    let newBest = false;
+    let board: { time: string; label: string; current: boolean }[] | undefined;
+    if (won) {
+      const run = { seed: this.city.seed, difficulty: this.difficulty.id, seconds: this.mission.elapsed, date: new Date().toISOString().slice(0, 10) };
+      newBest = this.records.add(run).newBest;
+      board = this.records.top(5).map((r) => ({
+        time: formatTime(r.seconds),
+        label: `City #${r.seed} · ${difficultyById(r.difficulty).label}`,
+        current: r === run,
+      }));
+    }
     this.screens.end(
       {
         won,
@@ -544,6 +616,8 @@ export class Game {
           ? `All ${this.mission.total} destinations in ${formatTime(this.mission.elapsed)}.`
           : `Reached ${this.mission.index} of ${this.mission.total} destinations.`,
         seed: this.city.seed,
+        newBest,
+        board,
       },
       () => this.restart(this.city.seed),
       () => this.restart(Math.floor(Math.random() * 1_000_000)),
@@ -629,5 +703,30 @@ export class Game {
     // Impact = velocity change in m/s: ~3 is a scrape, 40+ is a full-speed wall hit.
     if (impact > 0) this.audio.impact(THREE.MathUtils.clamp((impact - 1.5) / 20, 0.1, 1));
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid, maxSpeed: p.spec.maxSpeed });
+  }
+}
+
+/** localStorage, or null where it's unavailable (private mode, sandboxed previews). */
+function safeStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function storageGet(key: string): string | null {
+  try {
+    return safeStorage()?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(key: string, value: string): void {
+  try {
+    safeStorage()?.setItem(key, value);
+  } catch {
+    // Not persisted; fine.
   }
 }

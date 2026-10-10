@@ -98,6 +98,12 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 - Director: spawns to the star cap at the star's interval with weighted types; 4★+ roadblocks (2 SUVs across the road 140–260m ahead on the GPS route, holding until the player is within 35m).
 - HUD stars + progress bar, toast per level; `?debug` K = +1 star. 10 cops at 60fps (cops have lamp glow, no spotlights).
 
+## Mobile, difficulty, records (M7, as built)
+
+- Touch controls on coarse-pointer devices (steer, gas/brake, handbrake, pause, reset), compact HUD, lower pixel ratio / shadow map on phones.
+- Difficulty Easy/Normal/Hard (`gameplay/difficulty.ts`): time limit, damage, wanted rate, cop cap; remembered in localStorage.
+- Local leaderboard (`gameplay/Records.ts`): best per city+difficulty, top-10, NEW RECORD banner (no server on GitHub Pages).
+
 ## Polish (M6, as built)
 
 - Civilian traffic (`ai/CivilianTraffic.ts`, `ai/CivilianController.ts`): ~10 cars recycled around the player, right-hand lane, realistic turns, obey lights and stop signs (headless sim: 0 red-light runs, 0 crashes, 0% off-road), forward sensor keeps gaps; hitting one adds heat.
@@ -127,4 +133,4 @@ Collision contact force above a threshold × opponent mass factor → health los
 | M4 ✅ | One patrol cop AI | Convincing single chase |
 | M5 ✅ | Director, stars, all cop types, damage | Complete game |
 | M6 ✅ | Polish: audio, particles, minimap, menus, car models, sparse civilian traffic | Showable |
-| M7 | Mobile touch controls, difficulty, leaderboard | — |
+| M7 ✅ | Mobile touch controls, difficulty, leaderboard | — |

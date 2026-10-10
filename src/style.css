@@ -511,3 +511,251 @@ kbd {
   height: 100%;
   background: #ffd23f;
 }
+
+.screen-choices {
+  display: inline-flex;
+  margin: 4px 0 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.25);
+}
+
+.screen .screen-choices button.choice {
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 0;
+  background: transparent;
+  font-size: 14px;
+}
+
+.screen .screen-choices button.choice.selected {
+  background: rgb(255 255 255 / 0.18);
+}
+
+.screen-record {
+  margin: 0 0 4px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: #ffd23f;
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+.screen-board {
+  margin: 8px auto 4px;
+  padding: 0;
+  max-width: 320px;
+  list-style: none;
+  counter-reset: rank;
+  font-size: 14px;
+  text-align: left;
+}
+
+.screen-board li {
+  display: grid;
+  grid-template-columns: 24px 56px 1fr;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  counter-increment: rank;
+  opacity: 0.8;
+}
+
+.screen-board li::before {
+  content: counter(rank) '.';
+  opacity: 0.6;
+}
+
+.screen-board li.current {
+  background: rgb(255 210 63 / 0.18);
+  opacity: 1;
+}
+
+/* ---------- Touch controls ---------- */
+
+.touch {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.touch[hidden] {
+  display: none;
+}
+
+.touch button {
+  pointer-events: auto;
+  touch-action: none;
+  border: 2px solid rgb(255 255 255 / 0.35);
+  border-radius: 50%;
+  background: rgb(10 12 18 / 0.45);
+  color: #fff;
+  font: 800 22px system-ui, sans-serif;
+  backdrop-filter: blur(4px);
+}
+
+.touch button.active {
+  background: rgb(255 255 255 / 0.35);
+}
+
+.touch-steer {
+  position: absolute;
+  left: 16px;
+  bottom: 24px;
+  display: flex;
+  gap: 14px;
+}
+
+.touch-steer button {
+  width: 84px;
+  height: 84px;
+}
+
+.touch-pedals {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  display: grid;
+  gap: 10px;
+  align-items: end;
+}
+
+/* Handbrake stacked above the brake; the tall gas pedal beside them. */
+.touch-pedals .touch-small {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+}
+
+.touch-pedals .touch-brake {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.touch-pedals .touch-gas {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.touch-pedals .touch-gas {
+  width: 96px;
+  height: 120px;
+  border-radius: 18px;
+  font-size: 16px;
+  background: rgb(40 160 80 / 0.5);
+}
+
+.touch-pedals .touch-brake {
+  width: 84px;
+  height: 84px;
+  border-radius: 18px;
+  font-size: 14px;
+  background: rgb(200 50 40 / 0.5);
+}
+
+.touch-pedals .touch-small {
+  width: 56px;
+  height: 56px;
+  font-size: 14px;
+}
+
+.touch-top {
+  position: absolute;
+  top: 210px;
+  right: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.touch-top button {
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+}
+
+/* On touch devices: hide the keyboard help, move the speedo above the pedals. */
+.is-touch .hud-help {
+  display: none;
+}
+
+.is-touch .hud-speed {
+  bottom: 160px;
+  font-size: 34px;
+}
+
+@media (max-width: 600px) {
+  .hud-timer {
+    top: 10px;
+    font-size: 26px;
+  }
+
+  .hud-wanted {
+    top: 42px;
+  }
+
+  .hud-stars {
+    font-size: 16px;
+    letter-spacing: 1px;
+  }
+
+  .hud-star-progress {
+    width: 84px;
+  }
+
+  .hud-mission {
+    top: 12px;
+    left: 12px;
+  }
+
+  .hud-dest {
+    font-size: 10px;
+  }
+
+  .hud-dist {
+    font-size: 18px;
+  }
+
+  .hud-toast {
+    font-size: 20px;
+  }
+
+  .touch-top {
+    top: 168px;
+  }
+
+  .touch-steer {
+    left: 12px;
+    gap: 10px;
+  }
+
+  .touch-steer button {
+    width: 68px;
+    height: 68px;
+  }
+
+  .touch-pedals {
+    right: 12px;
+  }
+
+  .touch-pedals .touch-gas {
+    width: 78px;
+    height: 116px;
+  }
+
+  .touch-pedals .touch-brake {
+    width: 64px;
+    height: 56px;
+  }
+
+  .touch-pedals .touch-small {
+    width: 48px;
+    height: 48px;
+  }
+
+  .is-touch .hud-speed {
+    bottom: 166px;
+    font-size: 28px;
+  }
+}
