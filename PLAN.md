@@ -75,8 +75,8 @@ Collision contact force above a threshold × opponent mass factor → health los
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | Scaffold + deploy pipeline | Scene with Rapier physics live on GitHub Pages |
-| M1 | Drivable car, chase camera | Driving feels fun |
+| M0 ✅ | Scaffold + deploy pipeline | Scene with Rapier physics live on GitHub Pages |
+| M1 ✅ | Drivable car, chase camera | Driving feels fun |
 | M2 | City generator + colliders | Seeded city, can't drive through walls |
 | M3 | Mission system + HUD | Full loop playable without cops |
 | M4 | One patrol cop AI | Convincing single chase |

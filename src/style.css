@@ -13,10 +13,31 @@ body {
 
 #hud {
   position: fixed;
-  top: 12px;
-  left: 16px;
+  inset: 0;
   color: #e6edf3;
-  font-weight: 600;
-  letter-spacing: 0.05em;
   pointer-events: none;
+}
+
+.hud-speed {
+  position: absolute;
+  right: 24px;
+  bottom: 20px;
+  font-size: 48px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 0.6);
+}
+
+.hud-speed small {
+  font-size: 16px;
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+.hud-help {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  font-size: 13px;
+  opacity: 0.7;
 }
