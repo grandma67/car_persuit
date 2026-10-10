@@ -192,7 +192,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
 
   const islandSize = size + config.promenade * 2;
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
-  const traffic = generateTrafficControl(graph, config, size, new Rng(seed ^ 0x7aff1c));
+  const traffic = generateTrafficControl(graph, blocksOut, config, size, new Rng(seed ^ 0x7aff1c));
   const streetProps = [...generateStreetProps(blocksOut, plazas, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props];
   return {
     config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees,

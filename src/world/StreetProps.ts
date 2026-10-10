@@ -4,6 +4,7 @@ import type { Rng } from '../core/Rng';
 import type { Block, CityConfig, Rect } from './CityGenerator';
 
 export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal';
+export type SignVariant = 'stop' | 'speed30' | 'speed50' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian';
 
 export interface StreetProp {
   kind: PropKind;
@@ -11,7 +12,7 @@ export interface StreetProp {
   z: number;
   /** Heading: local +Z (lamp arm, bench front, sign face) points along (sin yaw, cos yaw). Fences run along local X. */
   yaw: number;
-  variant?: 'stop' | 'speed'; // signs
+  variant?: SignVariant; // signs
   axis?: 'x' | 'z'; // signals: travel axis of the traffic they face
   phase?: number; // signals: junction cycle offset, seconds
 }

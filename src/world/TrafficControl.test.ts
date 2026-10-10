@@ -21,12 +21,46 @@ describe('signalState', () => {
 });
 
 describe('generateTrafficControl', () => {
+  // A sign's face (local +Z) points along (sin yaw, cos yaw); drivers it addresses travel the other way.
+  const facing = (p: { yaw: number }) => ({ fx: Math.sin(p.yaw), fz: Math.cos(p.yaw) });
+
+  it.each([1, 42, 1234])('seed %i: junction signs and signals face their traffic, on the driver\'s right', (seed) => {
+    const city = generateCity(seed);
+    const controls = city.streetProps.filter((p) => p.kind === 'signal' || p.variant === 'stop');
+    for (const p of controls) {
+      const { fx, fz } = facing(p);
+      const [dx, dz] = [-fx, -fz]; // drivers' travel direction
+      const node = city.graph.nearest(p.x, p.z);
+      const toNode = { x: node.x - p.x, z: node.z - p.z };
+      const ahead = toNode.x * dx + toNode.z * dz; // + means the junction is still ahead of the post
+      // Stop signs stand before the junction; signals stand beyond it (far side).
+      if (p.kind === 'signal') expect(ahead).toBeLessThan(0);
+      else expect(ahead).toBeGreaterThan(0);
+      // On the driver's right: right of travel is (-dz, dx).
+      const right = -(toNode.x * -dz + toNode.z * dx);
+      expect(right).toBeGreaterThan(city.config.roadWidth / 2);
+      // Travel is along a road axis, toward/through this junction.
+      expect(Math.abs(dx) > 0.99 || Math.abs(dz) > 0.99).toBe(true);
+    }
+  });
+
+  it.each([1, 42])('seed %i: signal heads hang over the lane they face', (seed) => {
+    const city = generateCity(seed);
+    for (const p of city.streetProps.filter((q) => q.kind === 'signal')) {
+      // Head is 3.7m along local -X from the pole: world offset = -3.7 * (cos yaw, -sin yaw).
+      const hx = p.x - 3.7 * Math.cos(p.yaw);
+      const hz = p.z + 3.7 * Math.sin(p.yaw);
+      const onRoad = city.roads.some((r) => Math.abs(hx - r.rect.x) < r.rect.w / 2 && Math.abs(hz - r.rect.z) < r.rect.d / 2);
+      expect(onRoad).toBe(true);
+    }
+  });
+
   it.each([1, 42, 1234])('seed %i: signals downtown, stop signs elsewhere, speed signs', (seed) => {
     const city = generateCity(seed);
     const kinds = (k: string, v?: string) => city.streetProps.filter((p) => p.kind === k && (v === undefined || p.variant === v)).length;
     expect(kinds('signal')).toBeGreaterThan(40);
     expect(kinds('sign', 'stop')).toBeGreaterThan(100);
-    expect(kinds('sign', 'speed')).toBeGreaterThan(30);
+    for (const v of ['speed30', 'speed50', 'noParking', 'noSmoking', 'children', 'pedestrian']) expect(kinds('sign', v)).toBeGreaterThan(5);
     // Signals sit on busy central junctions more than anywhere else.
     const signals = city.streetProps.filter((p) => p.kind === 'signal');
     const central = signals.filter((p) => Math.hypot(p.x, p.z) < city.size * 0.35).length;

@@ -3,7 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
-import { PROP_SPECS, footprintsOverlap, propFootprint, type Footprint, type PropKind, type StreetProp } from './StreetProps';
+import { PROP_SPECS, footprintsOverlap, propFootprint, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
 import { signalState, type SignalLight } from './TrafficControl';
 
 const GRID_CELL = 10; // metres, spatial hash for vehicle-vs-prop checks
@@ -19,8 +19,33 @@ const SIGNAL_LIGHTS: [SignalLight, number, number, number][] = [
 ];
 const UP = new THREE.Vector3(0, 1, 0);
 
-type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign-stop' | 'sign-speed' | 'signal';
-const modelKey = (p: StreetProp): ModelKey => (p.kind === 'sign' ? `sign-${p.variant ?? 'stop'}` : p.kind);
+type SignShape = 'octagon' | 'round' | 'triangle' | 'square';
+const SIGN_SHAPE: Record<SignVariant, SignShape> = {
+  stop: 'octagon',
+  speed30: 'round',
+  speed50: 'round',
+  noParking: 'round',
+  noSmoking: 'round',
+  children: 'triangle',
+  pedestrian: 'square',
+};
+const SIGN_VARIANTS = Object.keys(SIGN_SHAPE) as SignVariant[];
+/** Plate geometry per shape. Circle-based so UVs map the square texture straight on. */
+const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
+  switch (shape) {
+    case 'octagon':
+      return new THREE.CircleGeometry(0.5 + grow, 8, Math.PI / 8);
+    case 'round':
+      return new THREE.CircleGeometry(0.48 + grow, 32);
+    case 'triangle':
+      return new THREE.CircleGeometry(0.62 + grow, 3, Math.PI / 2); // point up
+    case 'square':
+      return new THREE.CircleGeometry(0.6 + grow, 4, Math.PI / 4);
+  }
+};
+
+type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | `sign-${SignShape}` | 'signal';
+const modelKey = (p: StreetProp): ModelKey => (p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind);
 
 export interface PropBreak {
   kind: PropKind;
@@ -92,11 +117,11 @@ function buildModels(): Record<ModelKey, THREE.BufferGeometry> {
     ...[-0.95, -0.48, 0, 0.48, 0.95].map((x) => part(box(0.12, 0.88, 0.03), white, x, 0.44, 0.03)),
   ]);
   // Sign post with a plain metal back plate; the printed face is a separate textured attachment.
-  const signBackPlate = (segments: number) =>
-    part(new THREE.CircleGeometry(0.44, segments, Math.PI / segments).rotateY(Math.PI), signBack, 0, SIGN_FACE_Y, 0.05);
-  const signPostGeo = () => part(cyl(0.045, SIGN_FACE_Y + 0.2), signPost, 0, (SIGN_FACE_Y + 0.2) / 2);
-  const signStop = mergeGeometries([signPostGeo(), signBackPlate(8)]);
-  const signSpeed = mergeGeometries([signPostGeo(), signBackPlate(24)]);
+  const sign = (shape: SignShape) =>
+    mergeGeometries([
+      part(cyl(0.045, SIGN_FACE_Y + 0.2), signPost, 0, (SIGN_FACE_Y + 0.2) / 2),
+      part(plateGeometry(shape, 0.02).rotateY(Math.PI), signBack, 0, SIGN_FACE_Y, 0.05),
+    ]);
   // Signal: pole, arm over the lane, housing hanging at the arm's end.
   const signal = mergeGeometries([
     part(cyl(0.2, 0.3), iron, 0, 0.15),
@@ -105,13 +130,16 @@ function buildModels(): Record<ModelKey, THREE.BufferGeometry> {
     part(box(0.42, 1.15, 0.3), 0x1d2024, SIGNAL_HEAD_X, 4.85),
     part(box(0.52, 1.25, 0.04), 0x111316, SIGNAL_HEAD_X, 4.85, -0.16), // backboard
   ]);
-  return { lamp, hydrant, bench, fence, 'sign-stop': signStop, 'sign-speed': signSpeed, signal };
+  return {
+    lamp, hydrant, bench, fence, signal,
+    'sign-octagon': sign('octagon'), 'sign-round': sign('round'), 'sign-triangle': sign('triangle'), 'sign-square': sign('square'),
+  };
 }
 
-function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void): THREE.Texture {
+function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
   const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  draw(c.getContext('2d')!, 128);
+  c.width = c.height = size;
+  draw(c.getContext('2d')!, size);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
@@ -129,46 +157,155 @@ function lightPoolTexture(): THREE.Texture {
   });
 }
 
-function signFaceTextures(): Record<'stop' | 'speed', THREE.Texture> {
-  const octagon = (g: CanvasRenderingContext2D, cx: number, r: number) => {
+// --- Sign artwork, drawn on a 256px canvas matching the plate shapes above. ---
+
+const RED = '#c8102e';
+const BLUE = '#1f4fa8';
+
+function regular(g: CanvasRenderingContext2D, c: number, r: number, sides: number, start: number): void {
+  g.beginPath();
+  for (let i = 0; i < sides; i++) {
+    const a = start + (i * Math.PI * 2) / sides;
+    g.lineTo(c + Math.cos(a) * r, c - Math.sin(a) * r); // canvas y is down; centre (c, c)
+  }
+  g.closePath();
+}
+
+function text(g: CanvasRenderingContext2D, str: string, x: number, y: number, px: number, color: string): void {
+  g.fillStyle = color;
+  g.font = `bold ${px}px Arial, Helvetica, sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(str, x, y);
+}
+
+/** White disc with a red ring: base of speed and prohibition signs. */
+function ringSign(g: CanvasRenderingContext2D, s: number, fill = '#ffffff'): void {
+  const c = s / 2;
+  g.fillStyle = RED;
+  g.beginPath();
+  g.arc(c, c, c, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = fill;
+  g.beginPath();
+  g.arc(c, c, c * 0.78, 0, Math.PI * 2);
+  g.fill();
+}
+
+/** Red diagonal bar across a ring sign (top-left to bottom-right). */
+function prohibit(g: CanvasRenderingContext2D, s: number): void {
+  const c = s / 2;
+  const r = c * 0.78;
+  g.strokeStyle = RED;
+  g.lineWidth = s * 0.1;
+  g.beginPath();
+  g.moveTo(c - r * 0.72, c - r * 0.72);
+  g.lineTo(c + r * 0.72, c + r * 0.72);
+  g.stroke();
+}
+
+/** Simple running figure: head + thick limbs, scaled around (x, y) = hips. */
+function runner(g: CanvasRenderingContext2D, x: number, y: number, k: number): void {
+  g.fillStyle = g.strokeStyle = '#111111';
+  g.lineWidth = 9 * k;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  g.beginPath();
+  g.arc(x + 6 * k, y - 46 * k, 9 * k, 0, Math.PI * 2);
+  g.fill();
+  const line = (...pts: number[]) => {
     g.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = Math.PI / 8 + (i * Math.PI) / 4;
-      g.lineTo(cx + Math.cos(a) * r, cx + Math.sin(a) * r);
+    g.moveTo(x + pts[0] * k, y + pts[1] * k);
+    for (let i = 2; i < pts.length; i += 2) g.lineTo(x + pts[i] * k, y + pts[i + 1] * k);
+    g.stroke();
+  };
+  line(4, -32, 0, 0); // torso
+  line(3, -26, 18, -16, 26, -24); // front arm
+  line(3, -26, -12, -14, -20, -4); // back arm
+  line(0, 0, 14, 14, 10, 30); // front leg
+  line(0, 0, -12, 12, -24, 18); // back leg
+}
+
+function signTexture(variant: SignVariant): THREE.Texture {
+  return canvasTexture((g, s) => {
+    const c = s / 2;
+    switch (variant) {
+      case 'stop':
+        g.fillStyle = '#ffffff';
+        regular(g, c, c, 8, Math.PI / 8);
+        g.fill();
+        g.fillStyle = RED;
+        regular(g, c, c * 0.9, 8, Math.PI / 8);
+        g.fill();
+        text(g, 'STOP', c, c + 4, s * 0.27, '#ffffff');
+        break;
+      case 'speed30':
+      case 'speed50':
+        ringSign(g, s);
+        text(g, variant === 'speed30' ? '30' : '50', c, c + 6, s * 0.42, '#111111');
+        break;
+      case 'noParking':
+        ringSign(g, s, BLUE);
+        text(g, 'P', c, c + 6, s * 0.46, '#ffffff');
+        prohibit(g, s);
+        break;
+      case 'noSmoking': {
+        ringSign(g, s);
+        // Cigarette: filter, paper, glowing tip, with a curl of smoke.
+        const y = c + s * 0.06;
+        const h = s * 0.09;
+        g.fillStyle = '#c98a3a';
+        g.fillRect(c - s * 0.28, y, s * 0.12, h);
+        g.fillStyle = '#ffffff';
+        g.strokeStyle = '#111111';
+        g.lineWidth = 3;
+        g.fillRect(c - s * 0.16, y, s * 0.38, h);
+        g.strokeRect(c - s * 0.28, y, s * 0.5, h);
+        g.fillStyle = '#ff6a1a';
+        g.fillRect(c + s * 0.22, y, s * 0.05, h);
+        g.strokeStyle = '#777777';
+        g.lineWidth = 5;
+        g.beginPath();
+        g.moveTo(c + s * 0.24, y - 6);
+        g.bezierCurveTo(c + s * 0.14, y - s * 0.12, c + s * 0.3, y - s * 0.16, c + s * 0.2, y - s * 0.26);
+        g.stroke();
+        prohibit(g, s);
+        break;
+      }
+      case 'children': {
+        // Warning triangle matching the plate (point up): red border, white inside, two kids.
+        const R = c;
+        g.fillStyle = RED;
+        regular(g, c, R, 3, Math.PI / 2);
+        g.fill();
+        g.fillStyle = '#ffffff';
+        regular(g, c, R * 0.72, 3, Math.PI / 2);
+        g.fill();
+        runner(g, c - s * 0.09, c + s * 0.16, 1.15);
+        runner(g, c + s * 0.11, c + s * 0.2, 0.85);
+        break;
+      }
+      case 'pedestrian': {
+        // Blue square (matching the plate), white triangle, walker on a zebra.
+        const h = c * Math.SQRT1_2;
+        g.fillStyle = '#ffffff';
+        g.fillRect(c - h, c - h, h * 2, h * 2);
+        g.fillStyle = BLUE;
+        g.fillRect(c - h + 5, c - h + 5, h * 2 - 10, h * 2 - 10);
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.moveTo(c, c - h * 0.82);
+        g.lineTo(c + h * 0.85, c + h * 0.7);
+        g.lineTo(c - h * 0.85, c + h * 0.7);
+        g.closePath();
+        g.fill();
+        g.fillStyle = '#111111';
+        for (let i = 0; i < 4; i++) g.fillRect(c - h * 0.55 + i * h * 0.3, c + h * 0.5, h * 0.17, h * 0.12);
+        runner(g, c - 4, c + h * 0.32, 0.72);
+        break;
+      }
     }
-    g.closePath();
-  };
-  return {
-    stop: canvasTexture((g, s) => {
-      g.fillStyle = '#ffffff';
-      octagon(g, s / 2, s / 2);
-      g.fill();
-      g.fillStyle = '#c8102e';
-      octagon(g, s / 2, s / 2 - 6);
-      g.fill();
-      g.fillStyle = '#ffffff';
-      g.font = 'bold 34px Arial, sans-serif';
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillText('STOP', s / 2, s / 2 + 2);
-    }),
-    speed: canvasTexture((g, s) => {
-      g.fillStyle = '#ffffff';
-      g.beginPath();
-      g.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2);
-      g.fill();
-      g.strokeStyle = '#c8102e';
-      g.lineWidth = 13;
-      g.beginPath();
-      g.arc(s / 2, s / 2, s / 2 - 8, 0, Math.PI * 2);
-      g.stroke();
-      g.fillStyle = '#111111';
-      g.font = 'bold 54px Arial, sans-serif';
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillText('50', s / 2, s / 2 + 3);
-    }),
-  };
+  });
 }
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
@@ -231,20 +368,20 @@ export class PropSystem {
     );
     this.pools.visible = lampGlow > 0;
 
-    // Sign faces, one textured mesh per sign type.
-    const faces = signFaceTextures();
-    const faceMesh = {
-      stop: addAttachmentMesh(
-        new THREE.CircleGeometry(0.44, 8, Math.PI / 8),
-        new THREE.MeshStandardMaterial({ map: faces.stop, roughness: 0.5 }),
-        counts['sign-stop'],
-      ),
-      speed: addAttachmentMesh(
-        new THREE.CircleGeometry(0.44, 24),
-        new THREE.MeshStandardMaterial({ map: faces.speed, roughness: 0.5 }),
-        counts['sign-speed'],
-      ),
-    };
+    // Sign faces: one textured mesh per sign type.
+    const faceCounts = {} as Record<SignVariant, number>;
+    for (const v of SIGN_VARIANTS) faceCounts[v] = 0;
+    for (const p of city.streetProps) if (p.kind === 'sign') faceCounts[p.variant ?? 'stop']++;
+    const faceMesh = {} as Record<SignVariant, THREE.InstancedMesh>;
+    for (const v of SIGN_VARIANTS) {
+      // A touch of self-illumination reads like retroreflective sheeting at night.
+      const art = signTexture(v);
+      faceMesh[v] = addAttachmentMesh(
+        plateGeometry(SIGN_SHAPE[v]),
+        new THREE.MeshStandardMaterial({ map: art, roughness: 0.45, emissive: 0xffffff, emissiveMap: art, emissiveIntensity: 0.12 }),
+        faceCounts[v],
+      );
+    }
 
     // Signal lenses (unlit so lit ones glow), three per signal head.
     this.lenses = addAttachmentMesh(
@@ -255,7 +392,8 @@ export class PropSystem {
 
     const next = {} as Record<ModelKey, number>;
     for (const key of Object.keys(models) as ModelKey[]) next[key] = 0;
-    const nextFace = { stop: 0, speed: 0 };
+    const nextFace = {} as Record<SignVariant, number>;
+    for (const v of SIGN_VARIANTS) nextFace[v] = 0;
     let nextLens = 0;
     const warm = new THREE.Color(0xffe2b0).lerp(new THREE.Color(0xc8c8c8), 1 - lampGlow); // unlit by day
 

@@ -1,10 +1,15 @@
-// Junction control: traffic lights at busy crossroads, stop signs elsewhere, speed-limit signs
-// along streets, plus zebra crossings and stop lines painted on controlled approaches.
-// Traffic drives on the right. Pure data — PropSystem/CityBuilder render it.
+// Junction control and street signage. Traffic drives on the right.
+// - Traffic lights at busy crossroads, far-side: across the junction on the driver's right, head
+//   hanging over the driver's lane, facing them (visible while waiting at the stop line).
+// - Stop signs elsewhere, near-side on the driver's right before the junction.
+// - Zebra crossings + stop lines on every controlled approach; some mid-block zebra crossings.
+// - Street signs where they make sense: speed limits, no parking, children, pedestrian crossing,
+//   no smoking at park entrances.
+// Pure data — PropSystem/CityBuilder render it.
 import type { Rng } from '../core/Rng';
-import type { CityConfig, Rect } from './CityGenerator';
+import type { Block, CityConfig, Rect } from './CityGenerator';
 import type { RoadGraph } from './RoadGraph';
-import type { StreetProp } from './StreetProps';
+import type { SignVariant, StreetProp } from './StreetProps';
 
 export interface RoadMark extends Rect {
   kind: 'crosswalk' | 'stopline';
@@ -28,19 +33,58 @@ export function signalState(axis: 'x' | 'z', t: number): SignalLight {
   return c < 11 ? 'red' : c < 19 ? 'green' : c < 21 ? 'yellow' : 'red';
 }
 
-const CORNER_BACK = 2.5; // sign/signal distance back from the junction edge
+const CORNER_BACK = 2.5; // post distance from the junction edge
 const KERB_INSET = 0.7; // into the sidewalk
 const CROSSWALK_FROM = 0.5; // zebra band, measured back from the junction edge
 const CROSSWALK_DEPTH = 3;
 const STOPLINE_BACK = 4.4;
 
-export function generateTrafficControl(graph: RoadGraph, config: CityConfig, size: number, rng: Rng): TrafficControl {
+/** Unit travel direction d and the driver's right-hand side r for travel from a to b. */
+function travel(a: { x: number; z: number }, b: { x: number; z: number }) {
+  const len = Math.hypot(b.x - a.x, b.z - a.z);
+  const dx = (b.x - a.x) / len;
+  const dz = (b.z - a.z) / len;
+  return { dx, dz, rx: -dz, rz: dx, alongX: Math.abs(dx) > 0.5 };
+}
+
+/** Yaw that turns a sign's face (local +Z) toward traffic travelling along (dx, dz). */
+const facingTraffic = (dx: number, dz: number) => Math.atan2(-dx, -dz);
+
+export function generateTrafficControl(
+  graph: RoadGraph,
+  blocks: Block[],
+  config: CityConfig,
+  size: number,
+  rng: Rng,
+): TrafficControl {
   const rw = config.roadWidth;
+  const half = config.blockSize / 2;
   const ring = size / 2 - rw / 2; // coordinate of the outer ring road
   const onRing = (x: number, z: number) => Math.abs(Math.abs(x) - ring) < 0.5 || Math.abs(Math.abs(z) - ring) < 0.5;
+  const blockAt = (x: number, z: number) =>
+    blocks.find((b) => Math.abs(b.rect.x - x) <= half && Math.abs(b.rect.z - z) <= half);
   const props: StreetProp[] = [];
   const marks: RoadMark[] = [];
 
+  const zebra = (cx: number, cz: number, t: ReturnType<typeof travel>) => {
+    for (let lat = -rw / 2 + 1; lat <= rw / 2 - 1 + 1e-6; lat += 1.1) {
+      const x = cx + t.rx * lat;
+      const z = cz + t.rz * lat;
+      marks.push(t.alongX ? { kind: 'crosswalk', x, z, w: CROSSWALK_DEPTH, d: 0.55 } : { kind: 'crosswalk', x, z, w: 0.55, d: CROSSWALK_DEPTH });
+    }
+  };
+  /** Sign on the driver's right, `back` metres before point (px, pz), facing them. */
+  const signBefore = (px: number, pz: number, t: ReturnType<typeof travel>, back: number, variant: SignVariant) => {
+    props.push({
+      kind: 'sign',
+      variant,
+      x: px - t.dx * back + t.rx * (rw / 2 + KERB_INSET),
+      z: pz - t.dz * back + t.rz * (rw / 2 + KERB_INSET),
+      yaw: facingTraffic(t.dx, t.dz),
+    });
+  };
+
+  // --- Junctions ---
   for (const node of graph.nodes) {
     const degree = node.neighbors.length;
     if (degree < 3) continue; // straight-through or corner: nothing to control
@@ -52,62 +96,74 @@ export function generateTrafficControl(graph: RoadGraph, config: CityConfig, siz
       const from = graph.nodes[nId];
       // A side road meeting the ring road stops; the ring road itself has priority.
       if (!signals && onRing(node.x, node.z) && onRing(from.x, from.z)) continue;
+      const t = travel(from, node);
+      const before = (m: number) => ({ x: node.x - t.dx * (rw / 2 + m), z: node.z - t.dz * (rw / 2 + m) });
 
-      // Approach direction d (toward the junction) and the driver's right-hand side.
-      const len = Math.hypot(node.x - from.x, node.z - from.z);
-      const dx = (node.x - from.x) / len;
-      const dz = (node.z - from.z) / len;
-      const rx = -dz;
-      const rz = dx;
-      const back = (m: number) => ({ x: node.x - dx * (rw / 2 + m), z: node.z - dz * (rw / 2 + m) });
-      const alongX = Math.abs(dx) > 0.5;
-
-      // Post on the right-hand corner, facing oncoming traffic.
-      const post = back(CORNER_BACK);
-      props.push({
-        kind: signals ? 'signal' : 'sign',
-        variant: signals ? undefined : 'stop',
-        axis: signals ? (alongX ? 'x' : 'z') : undefined,
-        phase: signals ? phase : undefined,
-        x: post.x + rx * (rw / 2 + KERB_INSET),
-        z: post.z + rz * (rw / 2 + KERB_INSET),
-        yaw: Math.atan2(-dx, -dz),
-      });
-
-      // Zebra stripes across the whole road, parallel to the traffic.
-      const band = back(CROSSWALK_FROM + CROSSWALK_DEPTH / 2);
-      for (let lat = -rw / 2 + 1; lat <= rw / 2 - 1 + 1e-6; lat += 1.1) {
-        const x = band.x + rx * lat;
-        const z = band.z + rz * lat;
-        marks.push(alongX ? { kind: 'crosswalk', x, z, w: CROSSWALK_DEPTH, d: 0.55 } : { kind: 'crosswalk', x, z, w: 0.55, d: CROSSWALK_DEPTH });
+      if (signals) {
+        // Far side, driver's right, facing back at the approaching driver.
+        const far = { x: node.x + t.dx * (rw / 2 + CORNER_BACK), z: node.z + t.dz * (rw / 2 + CORNER_BACK) };
+        props.push({
+          kind: 'signal',
+          axis: t.alongX ? 'x' : 'z',
+          phase,
+          x: far.x + t.rx * (rw / 2 + KERB_INSET),
+          z: far.z + t.rz * (rw / 2 + KERB_INSET),
+          yaw: facingTraffic(t.dx, t.dz),
+        });
+      } else {
+        signBefore(node.x, node.z, t, rw / 2 + CORNER_BACK, 'stop');
       }
 
-      // Stop line across the incoming (right-hand) lane only.
-      const line = back(STOPLINE_BACK);
-      const x = line.x + rx * (rw / 4);
-      const z = line.z + rz * (rw / 4);
+      const band = before(CROSSWALK_FROM + CROSSWALK_DEPTH / 2);
+      zebra(band.x, band.z, t);
+      const line = before(STOPLINE_BACK);
+      const x = line.x + t.rx * (rw / 4);
+      const z = line.z + t.rz * (rw / 4);
       const span = rw / 2 - 0.5;
-      marks.push(alongX ? { kind: 'stopline', x, z, w: 0.45, d: span } : { kind: 'stopline', x, z, w: span, d: 0.45 });
+      marks.push(t.alongX ? { kind: 'stopline', x, z, w: 0.45, d: span } : { kind: 'stopline', x, z, w: span, d: 0.45 });
     }
   }
 
-  // Occasional speed-limit signs mid-street, on the right, facing traffic.
+  // --- Streets: one pass per segment, signs for each direction of travel ---
   for (const node of graph.nodes) {
     for (const nId of node.neighbors) {
-      if (nId < node.id || rng.next() > 0.25) continue; // each street once, ~1 in 4
+      if (nId < node.id) continue; // each street once
       const other = graph.nodes[nId];
-      const dir = rng.next() < 0.5 ? 1 : -1; // which way the sign faces
-      const [a, b] = dir > 0 ? [node, other] : [other, node];
-      const len = Math.hypot(b.x - a.x, b.z - a.z);
-      const dx = (b.x - a.x) / len;
-      const dz = (b.z - a.z) / len;
-      const mid = { x: (a.x + b.x) / 2 - dx * 9, z: (a.z + b.z) / 2 - dz * 9 };
+      const mid = { x: (node.x + other.x) / 2, z: (node.z + other.z) / 2 };
+      const busy = Math.hypot(mid.x, mid.z) < size * 0.32;
+
+      // Mid-block zebra crossing on some busy streets, announced in both directions.
+      if (busy && !onRing(mid.x, mid.z) && rng.next() < 0.3) {
+        zebra(mid.x, mid.z, travel(node, other));
+        for (const [a, b] of [[node, other], [other, node]]) signBefore(mid.x, mid.z, travel(a, b), 6, 'pedestrian');
+        continue;
+      }
+
+      for (const [a, b] of [[node, other], [other, node]]) {
+        const t = travel(a, b);
+        // The block on this direction's right decides what the street is like.
+        const side = blockAt(mid.x + t.rx * (rw / 2 + 10), mid.z + t.rz * (rw / 2 + 10));
+        const homes = side?.district === 'residential' || side?.park === true;
+        const roll = rng.next();
+        if (homes && roll < 0.3) signBefore(mid.x, mid.z, t, 12, 'children');
+        else if (roll < 0.45) signBefore(mid.x, mid.z, t, 9, side?.district === 'residential' ? 'speed30' : 'speed50');
+        else if (!homes && side && roll < 0.7) signBefore(mid.x, mid.z, t, -13, 'noParking');
+      }
+    }
+  }
+
+  // --- No smoking at park entrances (the gap in the fence mid-side), facing out to visitors ---
+  for (const b of blocks) {
+    if (!b.park) continue;
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (rng.next() > 0.5) continue;
+      const inset = 3.8; // just inside the fence line
       props.push({
         kind: 'sign',
-        variant: 'speed',
-        x: mid.x - dz * (rw / 2 + KERB_INSET),
-        z: mid.z + dx * (rw / 2 + KERB_INSET),
-        yaw: Math.atan2(-dx, -dz),
+        variant: 'noSmoking',
+        x: b.rect.x + nx * (half - inset) + -nz * 3.9,
+        z: b.rect.z + nz * (half - inset) + nx * 3.9,
+        yaw: Math.atan2(nx, nz),
       });
     }
   }

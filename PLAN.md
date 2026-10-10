@@ -71,7 +71,7 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 - Seed picks a realistic city style (Modern American, Old Brick, Mediterranean, Nordic, Desert Southwest; colours jittered per seed) and a time of day (day / golden hour / night). `?time=` overrides. Sky dome, fog, lights, lamps, windows and sea follow the time of day.
 - Wreck = explosion (fireball, flash, shake, engine cut), then end screen after 2s.
 - Destinations 700–1100m apart by road.
-- Traffic control (`world/TrafficControl.ts`): cycling traffic lights at busy 4-way junctions, all-way stop signs elsewhere (side roads stop at the ring road), occasional speed-limit signs; zebra crossings and right-lane stop lines. Signs and signals are breakable props.
+- Traffic control (`world/TrafficControl.ts`, right-hand traffic): far-side traffic lights at busy 4-way junctions (head over the driver's lane), near-side stop signs elsewhere (side roads stop at the ring road); zebra crossings and right-lane stop lines; mid-block crossings with pedestrian signs; speed 30/50, no parking, children, no smoking (park entrances). Facing/placement unit-tested. Signs and signals are breakable.
 
 ## Wanted escalation
 
