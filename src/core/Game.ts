@@ -354,8 +354,9 @@ export class Game {
         const hit = car.vehicle.consumeImpact();
         if (hit > 3) {
           car.controller.hit();
-          // Hitting a civilian draws attention.
-          if (this.state === 'playing' && car.vehicle.position.distanceTo(this.player.position) < 8) this.raiseStars(this.wanted.civilianHit());
+          // Hitting a civilian draws attention — but driving up the ramp truck's deck isn't a crash.
+          const onRamp = car.vehicle.spec.body === 'ramptruck' && this.player.position.y > car.vehicle.position.y - 0.5;
+          if (this.state === 'playing' && !onRamp && car.vehicle.position.distanceTo(this.player.position) < 8) this.raiseStars(this.wanted.civilianHit());
         }
       }
       breaks.push(...this.props.checkVehicle(this.player, FIXED_DT));
@@ -428,6 +429,7 @@ export class Game {
       target ? (this.route?.path ?? null) : null,
       target ? { x: target.x, z: target.z, final: this.mission.index === this.mission.total - 1 } : null,
       this.director.activeCops.map((c) => c.vehicle.position),
+      this.traffic.rampTruck?.vehicle.position ?? null,
     );
 
     this.sky.follow(this.chase.camera);

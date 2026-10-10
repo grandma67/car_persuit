@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { DriveInput } from '../core/Input';
-import type { VehicleSpec } from './VehicleSpecs';
+import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 import { buildCarMesh, type CarMesh } from './carMesh';
 
 const FORWARD = new THREE.Vector3(0, 0, 1);
@@ -71,16 +71,18 @@ export class Vehicle {
         .setRestitution(0.1),
       this.body,
     );
+    if (spec.body === 'ramptruck') this.addRampColliders();
 
     this.controller = world.createVehicleController(this.body);
     this.controller.indexUpAxis = 1;
     this.controller.setIndexForwardAxis = 2;
     // Wheel order: FL, FR, RL, RR (+X is the car's left side when facing +Z).
+    const wy = spec.wheelY ?? 0;
     const wheelPositions = [
-      { x: spec.wheelX, y: 0, z: spec.wheelZ },
-      { x: -spec.wheelX, y: 0, z: spec.wheelZ },
-      { x: spec.wheelX, y: 0, z: -spec.wheelZ },
-      { x: -spec.wheelX, y: 0, z: -spec.wheelZ },
+      { x: spec.wheelX, y: wy, z: spec.wheelZ },
+      { x: -spec.wheelX, y: wy, z: spec.wheelZ },
+      { x: spec.wheelX, y: wy, z: -spec.wheelZ },
+      { x: -spec.wheelX, y: wy, z: -spec.wheelZ },
     ];
     wheelPositions.forEach((p, i) => {
       this.controller.addWheel(p, { x: 0, y: -1, z: 0 }, { x: -1, y: 0, z: 0 }, spec.suspensionRestLength, spec.wheelRadius);
@@ -97,6 +99,21 @@ export class Vehicle {
     this.snapshot();
     this.prevPos.copy(this.currPos);
     this.prevQuat.copy(this.currQuat);
+  }
+
+  /** Deck wedge and cab: massless extra colliders on the same body (the chassis carries the mass). */
+  private addRampColliders(): void {
+    const deck = RAPIER.ColliderDesc.convexHull(rampHullPoints(this.spec));
+    if (deck) this.world.createCollider(deck.setDensity(0).setFriction(1.2).setRestitution(0), this.body);
+    const { z0, z1, top } = RAMP.cab;
+    const bottom = -this.spec.halfExtents.y;
+    this.world.createCollider(
+      RAPIER.ColliderDesc.cuboid(RAMP.halfWidth, (top - bottom) / 2, (z1 - z0) / 2)
+        .setTranslation(0, (top + bottom) / 2, (z0 + z1) / 2)
+        .setDensity(0)
+        .setFriction(0.4),
+      this.body,
+    );
   }
 
   /** Signed forward speed in m/s. */

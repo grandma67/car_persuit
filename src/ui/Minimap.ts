@@ -17,6 +17,7 @@ const COLORS = {
   route: '#ffb020',
   routeFinal: '#4dff88',
   player: '#ffffff',
+  ramp: '#f2c12e',
 };
 
 export interface MinimapTarget {
@@ -89,6 +90,7 @@ export class Minimap {
     route: number[] | null,
     target: MinimapTarget | null,
     cops: { x: number; z: number }[] = [],
+    ramp: { x: number; z: number } | null = null,
   ): void {
     this.time += dt;
     const g = this.ctx;
@@ -172,6 +174,27 @@ export class Minimap {
       g.arc(r + sx, r + sy, 5, 0, Math.PI * 2);
       g.fill();
       g.stroke();
+    }
+
+    // Ramp truck: a yellow triangle, only while it's on the visible map.
+    if (ramp) {
+      const [cx, cy] = this.toMap(ramp.x, ramp.z);
+      const dx = (cx - mx) * (zoom / BASE_SCALE);
+      const dy = (cy - my) * (zoom / BASE_SCALE);
+      const sx = dx * Math.cos(yaw) - dy * Math.sin(yaw);
+      const sy = dx * Math.sin(yaw) + dy * Math.cos(yaw);
+      if (Math.hypot(sx, sy) < r - 8) {
+        g.fillStyle = COLORS.ramp;
+        g.strokeStyle = '#000';
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.moveTo(r + sx, r + sy - 7);
+        g.lineTo(r + sx + 6, r + sy + 5);
+        g.lineTo(r + sx - 6, r + sy + 5);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
     }
 
     // Player arrow, always centred and pointing up.

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { VehicleSpec } from './VehicleSpecs';
+import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
+import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 
 export interface CarMesh {
   root: THREE.Group;
@@ -45,15 +46,25 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
 
   const body = spec.body ?? 'sports';
   // Body: a box with the front top edge pulled down — a sharp wedge for sports cars, a gentle
-  // bonnet slope for sedans/SUVs, flat-fronted for the armored truck.
-  const noseDrop = { sports: 1.15, sedan: 0.7, suv: 0.3, truck: 0 }[body];
-  const bodyGeo = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
-  const pos = bodyGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    if (pos.getZ(i) > 0 && pos.getY(i) > 0) pos.setY(i, pos.getY(i) - hy * noseDrop);
+  // bonnet slope for sedans/SUVs, flat-fronted for trucks and buses.
+  const noseDrop = { sports: 1.15, sedan: 0.7, suv: 0.3, truck: 0, van: 0.35, pickup: 0.3, bus: 0, boxtruck: 0, ramptruck: 0 }[body];
+  const tall = body === 'bus' || body === 'boxtruck';
+  // The box truck is drawn as a cab plus a cargo box instead (below).
+  if (body !== 'boxtruck') {
+    const bodyGeo = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
+    const pos = bodyGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getZ(i) > 0 && pos.getY(i) > 0) pos.setY(i, pos.getY(i) - hy * noseDrop);
+    }
+    bodyGeo.computeVertexNormals();
+    root.add(new THREE.Mesh(bodyGeo, body === 'ramptruck' ? trim : paint));
   }
-  bodyGeo.computeVertexNormals();
-  root.add(new THREE.Mesh(bodyGeo, paint));
+  const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    root.add(m);
+    return m;
+  };
 
   const skirt = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 + 0.04, 0.12, hz * 2 - 0.3), trim);
   skirt.position.y = -hy + 0.06;
@@ -75,6 +86,56 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     hatch.position.set(0, hy + 0.06, -hz * 0.3);
     root.add(hatch);
     roof = hy;
+  } else if (body === 'bus') {
+    // City bus: a long window band down both sides, big windscreen, white roof.
+    for (const side of [-1, 1]) box(0.04, hy * 0.6, hz * 1.7, glass, side * (hx + 0.01), hy * 0.35, -hz * 0.05);
+    box(hx * 1.8, hy * 0.75, 0.04, glass, 0, hy * 0.3, hz + 0.01);
+    box(hx * 1.8, 0.4, 0.04, glass, 0, hy * 0.75, -hz - 0.01);
+    box(hx * 1.95, 0.08, hz * 1.95, new THREE.MeshStandardMaterial({ color: 0xe8e8e4, roughness: 0.6, flatShading: true }), 0, hy + 0.04, 0);
+    // Door on the kerb (right, -X) side.
+    box(0.05, hy * 1.5, 1.1, trim, -hx - 0.02, -hy * 0.2, hz * 0.72);
+    roof = hy + 0.08;
+  } else if (body === 'boxtruck') {
+    // Short cab with a windscreen, tall white cargo box behind it.
+    const cabLen = 1.9;
+    const cabTop = hy * 0.35;
+    box(hx * 2, cabTop + hy, cabLen, paint, 0, (cabTop - hy) / 2, hz - cabLen / 2);
+    box(hx * 1.7, (cabTop + hy) * 0.35, 0.04, glass, 0, cabTop - (cabTop + hy) * 0.22, hz + 0.01);
+    for (const side of [-1, 1]) box(0.04, (cabTop + hy) * 0.3, cabLen * 0.5, glass, side * (hx + 0.01), cabTop - (cabTop + hy) * 0.22, hz - cabLen * 0.4);
+    const cargo = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.7, flatShading: true });
+    box(hx * 2.04, hy * 2, hz * 2 - cabLen - 0.15, cargo, 0, 0, -cabLen / 2 - 0.075);
+    roof = hy;
+  } else if (body === 'van') {
+    // Tall glasshouse almost the length of the van.
+    box(hx * 1.9, hy * 0.55, 0.04, glass, 0, hy * 0.5, hz - 0.15);
+    for (const side of [-1, 1]) box(0.04, hy * 0.45, hz * 1.2, glass, side * (hx + 0.01), hy * 0.5, hz * 0.05);
+    roof = hy;
+  } else if (body === 'pickup') {
+    // Cab up front, open bed with low walls behind.
+    box(hx * 1.86, 0.7, hz * 0.62, glass, 0, hy + 0.35, hz * 0.12);
+    box(hx * 1.9, 0.06, hz * 0.64, paint, 0, hy + 0.72, hz * 0.12);
+    for (const side of [-1, 1]) box(0.08, 0.3, hz * 0.8, paint, side * (hx - 0.04), hy + 0.15, -hz * 0.58);
+    box(hx * 2, 0.3, 0.08, paint, 0, hy + 0.15, -hz + 0.04);
+    roof = hy + 0.75;
+  } else if (body === 'ramptruck') {
+    // Cab in the paint colour; the tilted deck in dark steel with yellow/black chevrons on top.
+    const { z0, z1, top } = RAMP.cab;
+    box(RAMP.halfWidth * 2, top - hy, z1 - z0, paint, 0, (top + hy) / 2, (z0 + z1) / 2);
+    box(RAMP.halfWidth * 1.7, (top - hy) * 0.4, 0.04, glass, 0, top - (top - hy) * 0.3, z1 + 0.01);
+    for (const side of [-1, 1]) box(0.04, (top - hy) * 0.35, (z1 - z0) * 0.5, glass, side * (RAMP.halfWidth + 0.01), top - (top - hy) * 0.3, z1 - (z1 - z0) * 0.3);
+    const steel = new THREE.MeshStandardMaterial({ color: 0x3a3e45, metalness: 0.7, roughness: 0.45, flatShading: true });
+    root.add(new THREE.Mesh(new ConvexGeometry(pointsOf(rampHullPoints(spec))), steel));
+    const run = RAMP.top.z - RAMP.tail.z;
+    const rise = RAMP.top.y - RAMP.tail.y;
+    // Flat, facing up, texture-top toward the front; then tilted to the deck slope.
+    const deckGeo = new THREE.PlaneGeometry(RAMP.halfWidth * 2, Math.hypot(run, rise)).rotateX(-Math.PI / 2).rotateY(Math.PI);
+    const chevrons = sharedChevronTexture();
+    const deck = new THREE.Mesh(deckGeo, new THREE.MeshStandardMaterial({ map: chevrons, color: chevrons ? 0xffffff : 0xf2c12e, roughness: 0.7 }));
+    deck.rotation.x = -Math.atan2(rise, run);
+    deck.position.set(0, (RAMP.tail.y + RAMP.top.y) / 2 + 0.02, (RAMP.tail.z + RAMP.top.z) / 2);
+    deck.receiveShadow = true;
+    root.add(deck);
+    roof = top;
   } else if (body === 'suv') {
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.86, 0.72, hz * 1.25), glass);
     cabin.position.set(0, hy + 0.36, -hz * 0.18);
@@ -106,16 +167,19 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   }
 
   for (const x of [-0.65, 0.65]) {
-    const lampY = body === 'truck' ? -hy * 0.3 : 0;
+    const lampY = body === 'truck' ? -hy * 0.3 : tall ? -hy * 0.6 : body === 'van' ? -hy * 0.2 : 0;
+    // Tail lamps low on tall bodies; the ramp truck's sit at the deck's tail lip.
+    const tailY = body === 'ramptruck' ? RAMP.tail.y + 0.1 : tall ? -hy * 0.45 : hy - 0.08;
+    const tailZ = body === 'ramptruck' ? RAMP.tail.z : -hz;
     const hl = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.08, 0.05), headlight);
     hl.position.set(x * (hx / 0.95), lampY, hz);
     root.add(hl);
     const tl = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.05), taillight);
-    tl.position.set(x * (hx / 0.95), hy - 0.08, -hz);
+    tl.position.set(x * (hx / 0.95), tailY, tailZ);
     const hg = glow(0xfff1d6, 1.6);
     hg.position.set(x * (hx / 0.95), lampY, hz + 0.12);
     const tg = glow(0xff2a2a, 1.0);
-    tg.position.set(x * (hx / 0.95), hy - 0.08, -hz - 0.1);
+    tg.position.set(x * (hx / 0.95), tailY, tailZ - 0.1);
     root.add(hg, tg);
     headGlows.push(hg);
     tailGlows.push(tg);
@@ -181,6 +245,46 @@ let glowCache: THREE.Texture | null | undefined;
 function sharedGlowTexture(): THREE.Texture | null {
   if (glowCache === undefined) glowCache = typeof document === 'undefined' ? null : glowSpriteTexture();
   return glowCache;
+}
+
+function pointsOf(xyz: Float32Array): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
+  for (let i = 0; i < xyz.length; i += 3) out.push(new THREE.Vector3(xyz[i], xyz[i + 1], xyz[i + 2]));
+  return out;
+}
+
+let chevronCache: THREE.Texture | null | undefined;
+/** Yellow/black chevrons pointing up the ramp deck; none in headless tests. */
+function sharedChevronTexture(): THREE.Texture | null {
+  if (chevronCache === undefined) chevronCache = typeof document === 'undefined' ? null : chevronTexture();
+  return chevronCache;
+}
+
+function chevronTexture(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#1a1a1a';
+  g.fillRect(0, 0, 64, 256);
+  g.fillStyle = '#f2c12e';
+  // Canvas top is the deck's far (launch) end, so the chevrons point up the canvas.
+  for (let y = -32; y < 256; y += 64) {
+    g.beginPath();
+    g.moveTo(0, y + 40);
+    g.lineTo(32, y + 8);
+    g.lineTo(64, y + 40);
+    g.lineTo(64, y + 64);
+    g.lineTo(32, y + 32);
+    g.lineTo(0, y + 64);
+    g.closePath();
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1, 3);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 function glowSpriteTexture(): THREE.Texture {

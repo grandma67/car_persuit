@@ -44,7 +44,8 @@ export class CivilianController {
     to: number,
   ) {
     this.route = [from, to];
-    this.cruise = rng.range(10, 13.5);
+    // Buses and trucks cruise a little slower than cars.
+    this.cruise = Math.min(rng.range(10, 13.5), vehicle.spec.maxSpeed - 3);
     this.extend();
     this.rebuild();
   }

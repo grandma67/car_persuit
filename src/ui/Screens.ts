@@ -54,7 +54,7 @@ export class Screens {
     this.show(
       `
       <h1>CAR PURSUIT</h1>
-      <p class="screen-lead">Reach all 5 destinations in under 10 minutes.<br>Follow the route on the map. Don't get wrecked.</p>
+      <p class="screen-lead">Reach all destinations before the timer buzz!<br>Follow the route on the map. Don't get wrecked.</p>
       <ul class="screen-keys">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive</li>
         <li><kbd>Space</kbd> handbrake</li>

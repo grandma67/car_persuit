@@ -6,30 +6,61 @@ import type { Rng } from '../core/Rng';
 import type { RoadGraph } from '../world/RoadGraph';
 import type { ApproachControl } from '../world/TrafficControl';
 import { Vehicle } from '../vehicles/Vehicle';
-import { PLAYER_SPEC, COP_SUV_SPEC, type VehicleSpec } from '../vehicles/VehicleSpecs';
+import {
+  PLAYER_SPEC,
+  COP_SUV_SPEC,
+  VAN_SPEC,
+  PICKUP_SPEC,
+  BUS_SPEC,
+  BOX_TRUCK_SPEC,
+  RAMP_TRUCK_SPEC,
+  type VehicleSpec,
+} from '../vehicles/VehicleSpecs';
 import { CivilianController, type ForwardSensor } from './CivilianController';
 
 export const TRAFFIC = {
-  count: 10,
+  count: 16,
   spawnMin: 90, // metres by road from the player
   spawnMax: 260,
   despawnDistance: 330, // straight-line
   stuckLimit: 6, // seconds
+  spacing: 18, // metres between spawn points and existing traffic
+  rampChance: 0.05, // per spawn, while no ramp truck is around
 };
 
 // Everyday car colours.
 const COLORS = [0xc9ccd1, 0xf0f0ee, 0x1c1e22, 0x24345a, 0x6e1a1f, 0x5b6068, 0xb8a98c, 0x2f4a3a, 0x8a8f96, 0x3a5f8a];
+const BUS_COLORS = [0xd8a21c, 0xc0392b, 0x2a6fb0, 0x2e8b57];
+const TRUCK_COLORS = [0xf0f0ee, 0x24345a, 0x6e1a1f, 0x2f4a3a];
+
+// Weighted mix of civilian vehicles: mostly cars, a fair few vans/pickups, the odd bus and truck.
+const MIX: { weight: number; spec: VehicleSpec; colors: number[] }[] = [
+  { weight: 34, spec: { ...PLAYER_SPEC, body: 'sedan' }, colors: COLORS },
+  { weight: 16, spec: { ...COP_SUV_SPEC, livery: undefined, maxHealth: undefined, engineForce: 5000 }, colors: COLORS },
+  { weight: 10, spec: { ...PLAYER_SPEC, body: 'sports' }, colors: COLORS },
+  { weight: 12, spec: VAN_SPEC, colors: COLORS },
+  { weight: 10, spec: PICKUP_SPEC, colors: COLORS },
+  { weight: 8, spec: BUS_SPEC, colors: BUS_COLORS },
+  { weight: 10, spec: BOX_TRUCK_SPEC, colors: TRUCK_COLORS },
+];
+const MIX_TOTAL = MIX.reduce((s, m) => s + m.weight, 0);
 
 function civilianSpec(rng: Rng): VehicleSpec {
-  const roll = rng.next();
-  const color = rng.pick(COLORS);
-  const base: VehicleSpec =
-    roll < 0.6
-      ? { ...PLAYER_SPEC, body: 'sedan' }
-      : roll < 0.85
-        ? { ...COP_SUV_SPEC, livery: undefined, maxHealth: undefined, engineForce: 5000 }
-        : { ...PLAYER_SPEC, body: 'sports' };
-  return { ...base, name: 'Civilian', color, livery: undefined, engineForce: Math.min(base.engineForce, 3200 * (base.mass / 1200)), maxSpeed: 20 };
+  let roll = rng.next() * MIX_TOTAL;
+  const pick = MIX.find((m) => (roll -= m.weight) < 0) ?? MIX[0];
+  const base = pick.spec;
+  return {
+    ...base,
+    name: 'Civilian',
+    color: rng.pick(pick.colors),
+    livery: undefined,
+    engineForce: Math.min(base.engineForce, 3200 * (base.mass / 1200)),
+    maxSpeed: Math.min(base.maxSpeed, 20),
+  };
+}
+
+function rampTruckSpec(): VehicleSpec {
+  return { ...RAMP_TRUCK_SPEC, color: 0xe8701a };
 }
 
 export interface Civilian {
@@ -61,6 +92,11 @@ export class CivilianTraffic {
     };
   }
 
+  /** The rare ramp truck, if one is on the road (shown on the minimap). */
+  get rampTruck(): Civilian | undefined {
+    return this.cars.find((c) => c.vehicle.spec.body === 'ramptruck');
+  }
+
   /** Fill to the target count around the player, recycle far/stuck cars. Once per frame. */
   update(playerPos: THREE.Vector3): void {
     for (const car of [...this.cars]) {
@@ -90,8 +126,12 @@ export class CivilianTraffic {
     const dz = (to.z - node.z) / len;
     const x = node.x + dx * 12 - dz * 3;
     const z = node.z + dz * 12 + dx * 3;
-    if (this.cars.some((c) => Math.hypot(c.vehicle.position.x - x, c.vehicle.position.z - z) < 10)) return;
-    const vehicle = new Vehicle(this.world, civilianSpec(this.rng), { x, y: 1.2, z }, Math.atan2(dx, dz));
+    if (this.cars.some((c) => Math.hypot(c.vehicle.position.x - x, c.vehicle.position.z - z) < TRAFFIC.spacing)) return;
+    const ramp = !this.rampTruck && this.rng.next() < TRAFFIC.rampChance;
+    const spec = ramp ? rampTruckSpec() : civilianSpec(this.rng);
+    // Drop tall bodies in from a little higher so their wheels land rather than spawn in the road.
+    const y = 1.2 - (spec.wheelY ?? 0);
+    const vehicle = new Vehicle(this.world, spec, { x, y, z }, Math.atan2(dx, dz));
     vehicle.headlights = this.headlights;
     vehicle.beamEnabled = false;
     this.scene.add(vehicle.mesh.root);
