@@ -91,6 +91,13 @@ Generation and gameplay logic are pure data/logic (no Three.js) so they can be u
 - Recover: stuck >1.5s → reverse + turn.
 - Director: spawn 150–250m away off-screen, despawn >400m behind, mild rubber-banding.
 
+## Cop AI (M4, as built)
+
+- `ai/CopController.ts`: navigate (pure pursuit along the A* road route, lookahead clamped at sharp bends, brakes for every bend within braking distance), chase (lead pursuit when two-ray line of sight within 90m and roughly ahead), ram (<18m), recover (reverse with opposite lock until pointing the right way). Rubber-band speed when far.
+- `ai/CopDirector.ts`: spawns 150–300m by road away, preferring behind the player; leash back if >450m or flipped; wrecked cops burn 5s then are removed; respawn delay 8s.
+- Cops share Vehicle physics, Health/impact damage, prop smashing. Light bar + 2 shared flashing PointLights on the nearest cops; siren wail/yelp by distance; minimap dots.
+- Headless sim (scratchpad): 15/15 stationary catches in ~10–15s with no recoveries; sustained close pursuit of a moving target.
+
 ## Damage
 
 Collision contact force above a threshold × opponent mass factor → health loss. Smoke at 50%, fire at 20%, explosion at 0. Cops have health too.
@@ -103,7 +110,7 @@ Collision contact force above a threshold × opponent mass factor → health los
 | M1 ✅ | Drivable car, chase camera | Driving feels fun |
 | M2 ✅ | City generator + colliders | Seeded city, can't drive through walls |
 | M3 ✅ | Mission system + HUD | Full loop playable without cops |
-| M4 | One patrol cop AI | Convincing single chase |
+| M4 ✅ | One patrol cop AI | Convincing single chase |
 | M5 | Director, stars, all cop types, damage | Complete game |
 | M6 | Polish: audio, particles, minimap, menus, car models, sparse civilian traffic | Showable |
 | M7 | Mobile touch controls, difficulty, leaderboard | — |

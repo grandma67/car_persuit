@@ -13,6 +13,8 @@ export interface CarMesh {
   tailGlows: THREE.Sprite[];
   /** Road-lighting headlight beam (off by day). */
   beam: THREE.SpotLight;
+  /** Police light bar halves (red, blue), flashed by the cop code. */
+  sirenLights?: { red: THREE.MeshStandardMaterial; blue: THREE.MeshStandardMaterial; redGlow: THREE.Sprite; blueGlow: THREE.Sprite };
   /** Body paint, darkened when wrecked. */
   paint: THREE.MeshStandardMaterial;
 }
@@ -30,7 +32,7 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   const rim = new THREE.MeshStandardMaterial({ color: 0x9aa4b2, metalness: 0.8, roughness: 0.3, flatShading: true });
   const headlight = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2cc, emissiveIntensity: 2 });
   const taillight = new THREE.MeshStandardMaterial({ color: 0x5a0a10, emissive: 0xff1a28, emissiveIntensity: 0 });
-  const glowTexture = glowSpriteTexture();
+  const glowTexture = sharedGlowTexture();
   const glow = (color: number, size: number) => {
     const s = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: glowTexture, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }),
@@ -104,13 +106,45 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   root.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = true;
   });
+  let sirenLights: CarMesh['sirenLights'];
+  if (spec.livery === 'police') {
+    // Black side stripes and a roof light bar.
+    const black = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.5, flatShading: true });
+    for (const side of [-1, 1]) {
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.03, hy * 1.1, hz * 1.3), black);
+      stripe.position.set(side * (hx + 0.01), -hy * 0.15, -0.1);
+      root.add(stripe);
+    }
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 0.32), black);
+    base.position.set(0, hy + 0.53, -0.3);
+    root.add(base);
+    const red = new THREE.MeshStandardMaterial({ color: 0x5a0000, emissive: 0xff1010, emissiveIntensity: 0 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x00105a, emissive: 0x1040ff, emissiveIntensity: 0 });
+    const redGlow = glow(0xff2020, 2.2);
+    const blueGlow = glow(0x2060ff, 2.2);
+    for (const [mat, x, g] of [[red, -0.33, redGlow], [blue, 0.33, blueGlow]] as const) {
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.16, 0.28), mat);
+      lamp.position.set(x, hy + 0.66, -0.3);
+      g.position.set(x, hy + 0.7, -0.3);
+      root.add(lamp, g);
+    }
+    sirenLights = { red, blue, redGlow, blueGlow };
+  }
+
   // One spotlight between the lamps lights the road ahead at night.
   const beam = new THREE.SpotLight(0xfff1d6, 0, 75, 0.5, 0.45, 1.3);
   beam.position.set(0, 0.1, hz);
   beam.target.position.set(0, -1.2, hz + 25);
   root.add(beam, beam.target);
 
-  return { root, wheels, taillight, headlight, headGlows, tailGlows, beam, paint };
+  return { root, wheels, taillight, headlight, headGlows, tailGlows, beam, paint, sirenLights };
+}
+
+let glowCache: THREE.Texture | null | undefined;
+/** One glow texture shared by every car; none in headless tests (no DOM). */
+function sharedGlowTexture(): THREE.Texture | null {
+  if (glowCache === undefined) glowCache = typeof document === 'undefined' ? null : glowSpriteTexture();
+  return glowCache;
 }
 
 function glowSpriteTexture(): THREE.Texture {

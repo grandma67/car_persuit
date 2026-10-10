@@ -3,6 +3,7 @@
 export interface VehicleSpec {
   name: string;
   color: number;
+  livery?: 'police';
   mass: number; // kg
   halfExtents: { x: number; y: number; z: number }; // chassis collider, metres
   wheelRadius: number;
@@ -48,4 +49,16 @@ export const PLAYER_SPEC: VehicleSpec = {
   sideFriction: 1.4,
   driftSideFriction: 0.45,
   downforce: 60,
+};
+
+// Patrol car: as quick off the line as the player but a little slower flat out, so a clean
+// driver can pull away on a straight.
+export const COP_PATROL_SPEC: VehicleSpec = {
+  ...PLAYER_SPEC,
+  name: 'Patrol',
+  color: 0xf2f2f2,
+  livery: 'police',
+  mass: 1350,
+  engineForce: 4300,
+  maxSpeed: 39, // ~140 km/h
 };

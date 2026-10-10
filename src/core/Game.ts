@@ -9,6 +9,8 @@ import { generateCity, type CityData } from '../world/CityGenerator';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
 import { Sky } from '../render/Sky';
+import { CopDirector, type Cop } from '../ai/CopDirector';
+import type { ChaseTarget, LineOfSight } from '../ai/CopController';
 import { PropSystem, type PropBreak } from '../world/PropSystem';
 import { Hud, formatTime } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
@@ -31,6 +33,7 @@ const ENGINE_SMOKE_PER_SECOND = 30;
 const FIRE_PER_SECOND = 40;
 const GEYSER_SECONDS = 6;
 const GEYSER_PER_SECOND = 70;
+const SIREN_LIGHTS = 2; // shared flashing lights, given to the nearest cops (fixed count avoids shader recompiles)
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
@@ -68,6 +71,9 @@ export class Game {
   });
   private blast = new THREE.PointLight(0xff9a40, 0, 60, 1.5);
   private props: PropSystem;
+  private director: CopDirector;
+  private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
+  private sirenLights: THREE.PointLight[] = [];
   private geysers: { position: THREE.Vector3; timeLeft: number; budget: number }[] = [];
   private engineSmokeBudget = 0;
   private fireBudget = 0;
@@ -128,6 +134,28 @@ export class Game {
     // Destinations get their own RNG stream so they're stable per seed.
     const startNode = this.city.graph.nearest(spawn.x, spawn.z);
     this.mission = new MissionSystem(pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id));
+
+    // Cops: line of sight is two rays a car-width apart against static geometry (buildings etc.).
+    const canSee: LineOfSight = (from, to) => {
+      const dx = to.x - from.x;
+      const dz = to.z - from.z;
+      const len = Math.hypot(dx, dz);
+      if (len < 1) return true;
+      for (const off of [-0.9, 0.9]) {
+        const ox = (-dz / len) * off;
+        const oz = (dx / len) * off;
+        const ray = new RAPIER.Ray({ x: from.x + ox, y: 1.2, z: from.z + oz }, { x: dx / len, y: 0, z: dz / len });
+        const hit = this.world.castRay(ray, len, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC);
+        if (hit && hit.timeOfImpact < len - 2) return false;
+      }
+      return true;
+    };
+    this.director = new CopDirector(this.world, this.scene, this.city.graph, canSee, new Rng(seed ^ 0xc095), this.player.headlights);
+    for (let i = 0; i < SIREN_LIGHTS; i++) {
+      const light = new THREE.PointLight(0xff2020, 0, 45, 1.6);
+      this.sirenLights.push(light);
+      this.scene.add(light);
+    }
 
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
     this.minimap = new Minimap(this.city);
@@ -220,12 +248,29 @@ export class Game {
     let steps = 0;
     let impact = 0;
     const breaks: PropBreak[] = [];
+    const lv = this.player.body.linvel();
+    this.chaseTarget.position.copy(this.player.position);
+    this.chaseTarget.velocity.set(lv.x, 0, lv.z);
+    const copsChase = this.state === 'playing';
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.player.drive(driveInput, FIXED_DT);
+      for (const cop of this.director.cops) {
+        const active = copsChase && cop.wreckedFor === null;
+        cop.vehicle.drive(active ? cop.controller.update(FIXED_DT, this.chaseTarget) : NO_INPUT, FIXED_DT);
+      }
       this.world.step();
       this.player.snapshot();
       impact = Math.max(impact, this.player.consumeImpact());
       breaks.push(...this.props.checkVehicle(this.player, FIXED_DT));
+      for (const cop of this.director.cops) {
+        cop.vehicle.snapshot();
+        breaks.push(...this.props.checkVehicle(cop.vehicle, FIXED_DT));
+        const hit = cop.vehicle.consumeImpact();
+        if (hit > 0 && cop.wreckedFor === null) {
+          cop.health.applyImpact(hit);
+          if (cop.health.destroyed) this.explodeCop(cop);
+        }
+      }
       this.accumulator -= FIXED_DT;
       steps++;
     }
@@ -233,6 +278,9 @@ export class Game {
     const alpha = this.accumulator / FIXED_DT;
 
     this.player.syncMesh(alpha);
+    for (const cop of this.director.cops) cop.vehicle.syncMesh(alpha);
+    if (this.state === 'playing') this.director.update(frameDt, this.chaseTarget, this.player.forward());
+    this.updateSirens();
     this.props.sync();
     this.props.updateSignals(this.clock.elapsedTime);
     const carPos = this.player.mesh.root.position;
@@ -266,6 +314,7 @@ export class Game {
       Math.atan2(fwd.x, fwd.z),
       target ? (this.route?.path ?? null) : null,
       target ? { x: target.x, z: target.z, final: this.mission.index === this.mission.total - 1 } : null,
+      this.director.activeCops.map((c) => c.vehicle.position),
     );
 
     this.sky.follow(this.chase.camera);
@@ -322,6 +371,57 @@ export class Game {
     this.audio.explosion();
     this.mission.fail('destroyed');
     this.endMission();
+  }
+
+  /** A cop car wrecked: smaller blast, launched, burns until the director clears it. */
+  private explodeCop(cop: Cop): void {
+    this.director.wreck(cop);
+    const v = cop.vehicle;
+    const m = v.spec.mass;
+    v.body.applyImpulse({ x: 0, y: m * 5, z: 0 }, true);
+    v.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m * 3, y: 0, z: (Math.random() - 0.5) * m * 3 }, true);
+    v.mesh.paint.color.multiplyScalar(0.15);
+    const at = v.position.clone().setY(v.position.y + 0.8);
+    this.tmpVel.set(0, 0, 0);
+    for (let i = 0; i < 60; i++) this.fireball.emit(at, this.tmpVel, 0);
+    for (let i = 0; i < 40; i++) this.engineSmoke.emit(at, this.tmpVel, 1);
+    this.blast.position.copy(at).setY(at.y + 2);
+    this.blast.intensity = 3000;
+    const dist = at.distanceTo(this.player.position);
+    this.chase.shake(Math.max(0, 1 - dist / 60));
+    this.audio.explosion(Math.max(0.15, 1 - dist / 200));
+    this.hud.toast('COP WRECKED!', 1.5);
+  }
+
+  /** Flash light bars, park the shared siren lights on the nearest cops, and set the siren sound. */
+  private updateSirens(): void {
+    const t = this.clock.elapsedTime;
+    const redOn = Math.sin(t * Math.PI * 6) > 0; // alternating ~3 Hz
+    const night = this.player.headlights;
+    const playerPos = this.player.position;
+    const active = this.director.activeCops
+      .map((c) => ({ c, d: c.vehicle.position.distanceTo(playerPos) }))
+      .sort((a, b) => a.d - b.d);
+    for (const cop of this.director.cops) {
+      const lights = cop.vehicle.mesh.sirenLights;
+      if (!lights) continue;
+      const on = cop.wreckedFor === null && this.state !== 'won';
+      lights.red.emissiveIntensity = on && redOn ? 6 : 0.2;
+      lights.blue.emissiveIntensity = on && !redOn ? 6 : 0.2;
+      (lights.redGlow.material as THREE.SpriteMaterial).opacity = on && redOn ? 0.5 + night * 0.5 : 0;
+      (lights.blueGlow.material as THREE.SpriteMaterial).opacity = on && !redOn ? 0.5 + night * 0.5 : 0;
+    }
+    this.sirenLights.forEach((light, i) => {
+      const nearest = active[i];
+      if (!nearest || this.state === 'won') {
+        light.intensity = 0;
+        return;
+      }
+      light.position.copy(nearest.c.vehicle.mesh.root.position).setY(nearest.c.vehicle.mesh.root.position.y + 1.8);
+      light.color.setHex((i % 2 === 0) === redOn ? 0xff2020 : 0x2050ff);
+      light.intensity = 40 + night * 160;
+    });
+    this.audio.setSiren(active.length && this.state === 'playing' ? active[0].d : null);
   }
 
   private enginePosition(): THREE.Vector3 {

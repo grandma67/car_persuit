@@ -42,6 +42,10 @@ export class CarAudio {
   private screechFilter!: BiquadFilterNode;
   private screechGain!: GainNode;
   private windGain!: GainNode;
+  private sirenOsc!: OscillatorNode;
+  private sirenLfo!: OscillatorNode;
+  private sirenFilter!: BiquadFilterNode;
+  private sirenGain!: GainNode;
   private jingleBus!: GainNode; // short echo for musical cues
   private rpm = 0.15;
   private engineOff = false;
@@ -154,6 +158,36 @@ export class CarAudio {
     this.windGain = ctx.createGain();
     this.windGain.gain.value = 0;
     this.loopNoise().connect(windFilter).connect(this.windGain).connect(this.master);
+
+    // Police siren: a triangle wave whose pitch an LFO sweeps up and down (the classic wail).
+    // Distance muffles it through a lowpass.
+    this.sirenOsc = ctx.createOscillator();
+    this.sirenOsc.type = 'triangle';
+    this.sirenOsc.frequency.value = 950;
+    this.sirenLfo = ctx.createOscillator();
+    this.sirenLfo.frequency.value = 0.32;
+    const sweep = ctx.createGain();
+    sweep.gain.value = 380;
+    this.sirenLfo.connect(sweep).connect(this.sirenOsc.frequency);
+    this.sirenFilter = ctx.createBiquadFilter();
+    this.sirenFilter.type = 'lowpass';
+    this.sirenFilter.frequency.value = 3000;
+    this.sirenGain = ctx.createGain();
+    this.sirenGain.gain.value = 0;
+    this.sirenOsc.connect(this.sirenFilter).connect(this.sirenGain).connect(this.master);
+    this.sirenOsc.start();
+    this.sirenLfo.start();
+  }
+
+  /** Siren from the nearest cop: distance in metres, or null for no cops. */
+  setSiren(distance: number | null): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const near = distance === null ? 0 : clamp(1 - distance / 250, 0, 1);
+    this.sirenGain.gain.setTargetAtTime(near * near * 0.13, now, 0.15);
+    this.sirenFilter.frequency.setTargetAtTime(700 + near * 3500, now, 0.15);
+    // Close in, it switches to the faster "yelp".
+    this.sirenLfo.frequency.setTargetAtTime(distance !== null && distance < 40 ? 3.2 : 0.32, now, 0.3);
   }
 
   private loopNoise(): AudioBufferSourceNode {
@@ -256,9 +290,9 @@ export class CarAudio {
     }
   }
 
-  /** Car explosion: deep boom with a falling sub and a crackling tail. */
-  explosion(): void {
-    if (!this.ctx) return;
+  /** Car explosion: deep boom with a falling sub and a crackling tail. volume 0..1 (distance). */
+  explosion(volume = 1): void {
+    if (!this.ctx || volume <= 0) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
 
@@ -266,7 +300,7 @@ export class CarAudio {
     sub.frequency.setValueAtTime(70, now);
     sub.frequency.exponentialRampToValueAtTime(28, now + 1.2);
     const subGain = ctx.createGain();
-    subGain.gain.setValueAtTime(1.1, now);
+    subGain.gain.setValueAtTime(1.1 * volume, now);
     subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
     sub.connect(subGain).connect(this.master);
     sub.start(now);
@@ -279,7 +313,7 @@ export class CarAudio {
     boomFilter.frequency.setValueAtTime(1800, now);
     boomFilter.frequency.exponentialRampToValueAtTime(120, now + 1.5);
     const boomGain = ctx.createGain();
-    boomGain.gain.setValueAtTime(1.0, now);
+    boomGain.gain.setValueAtTime(1.0 * volume, now);
     boomGain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
     boom.connect(boomFilter).connect(boomGain).connect(this.master);
     boom.start(now, Math.random() * 0.2);
@@ -371,4 +405,8 @@ export class CarAudio {
     crunch.start(now, Math.random() * 1.5);
     crunch.stop(now + 0.5 + strength * 0.3);
   }
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
 }

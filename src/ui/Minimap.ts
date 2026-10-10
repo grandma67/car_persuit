@@ -72,7 +72,15 @@ export class Minimap {
   }
 
   /** yaw: player heading, atan2(forward.x, forward.z). route: node ids to draw. */
-  render(dt: number, px: number, pz: number, yaw: number, route: number[] | null, target: MinimapTarget | null): void {
+  render(
+    dt: number,
+    px: number,
+    pz: number,
+    yaw: number,
+    route: number[] | null,
+    target: MinimapTarget | null,
+    cops: { x: number; z: number }[] = [],
+  ): void {
     this.time += dt;
     const g = this.ctx;
     const r = SIZE_CSS / 2;
@@ -129,6 +137,30 @@ export class Minimap {
       g.lineWidth = 2;
       g.beginPath();
       g.arc(r + sx, r + sy, 6 * pulse, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+    }
+
+    // Cops: flashing red/blue dots, pinned to the rim when off the map.
+    const flash = Math.sin(this.time * Math.PI * 6) > 0;
+    for (const c of cops) {
+      const [cx, cy] = this.toMap(c.x, c.z);
+      const dx = (cx - mx) * (zoom / BASE_SCALE);
+      const dy = (cy - my) * (zoom / BASE_SCALE);
+      const cos = Math.cos(yaw);
+      const sin = Math.sin(yaw);
+      let sx = dx * cos - dy * sin;
+      let sy = dx * sin + dy * cos;
+      const d = Math.hypot(sx, sy);
+      if (d > r - 8) {
+        sx *= (r - 8) / d;
+        sy *= (r - 8) / d;
+      }
+      g.fillStyle = flash ? '#ff3030' : '#3a6bff';
+      g.strokeStyle = '#000';
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(r + sx, r + sy, 5, 0, Math.PI * 2);
       g.fill();
       g.stroke();
     }
