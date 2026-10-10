@@ -1,0 +1,22 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0e14;
+  font-family: system-ui, sans-serif;
+}
+
+#app canvas {
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 16px;
+  color: #e6edf3;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
