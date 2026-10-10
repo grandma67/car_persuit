@@ -10,7 +10,7 @@ export interface EndScreenInfo {
 export class Screens {
   private el: HTMLElement;
 
-  constructor(parent: HTMLElement) {
+  constructor(parent: HTMLElement, private uiSound: (kind: 'hover' | 'click') => void = () => {}) {
     this.el = document.createElement('div');
     this.el.className = 'screen';
     this.el.hidden = true;
@@ -21,7 +21,12 @@ export class Screens {
     this.el.innerHTML = `<div class="screen-card">${html}</div>`;
     this.el.hidden = false;
     for (const [action, fn] of Object.entries(actions)) {
-      this.el.querySelector(`[data-action="${action}"]`)?.addEventListener('click', fn);
+      const button = this.el.querySelector(`[data-action="${action}"]`);
+      button?.addEventListener('mouseenter', () => this.uiSound('hover'));
+      button?.addEventListener('click', () => {
+        this.uiSound('click');
+        fn();
+      });
     }
   }
 

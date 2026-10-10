@@ -8,6 +8,33 @@
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
+    <!-- Splash: plain HTML/CSS so it shows instantly while the game bundle downloads. -->
+    <div id="splash">
+      <div class="splash-siren splash-siren-red"></div>
+      <div class="splash-siren splash-siren-blue"></div>
+      <div class="splash-inner">
+        <h1 class="splash-title">CAR <span>PURSUIT</span></h1>
+        <div class="splash-road">
+          <div class="splash-dashes"></div>
+          <svg class="splash-car" viewBox="0 0 120 40" aria-hidden="true">
+            <g class="splash-speedlines">
+              <rect x="0" y="12" width="26" height="2" rx="1" />
+              <rect x="6" y="20" width="18" height="2" rx="1" />
+              <rect x="2" y="28" width="22" height="2" rx="1" />
+            </g>
+            <path d="M30 30 L34 20 L58 15 L80 8 L102 14 L116 22 L116 30 Z" fill="#ff3b1f" />
+            <path d="M58 15 L80 8 L92 12 L66 17 Z" fill="#111822" />
+            <rect x="31" y="15" width="10" height="3" fill="#ff3b1f" />
+            <rect x="112" y="22" width="5" height="3" fill="#fff2cc" />
+            <circle cx="46" cy="31" r="6" fill="#151515" /><circle cx="46" cy="31" r="3" fill="#9aa4b2" />
+            <circle cx="100" cy="31" r="6" fill="#151515" /><circle cx="100" cy="31" r="3" fill="#9aa4b2" />
+          </svg>
+        </div>
+        <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+        <p class="splash-status">Loading game…</p>
+        <p class="splash-continue" hidden>Press any key to continue</p>
+      </div>
+    </div>
     <div id="app"></div>
     <div id="hud"></div>
     <script type="module" src="./src/main.ts"></script>

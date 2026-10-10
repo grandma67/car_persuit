@@ -160,7 +160,7 @@ export class Game {
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
-    this.screens = new Screens(document.body);
+    this.screens = new Screens(document.body, (kind) => this.audio.uiBlip(kind));
     this.screens.menu(seed, `${theme.name} · ${time.label}`, () => this.startMission());
 
     const onResize = () => {
@@ -179,9 +179,19 @@ export class Game {
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
+  /** The splash screen was dismissed with a key/click: audio may start; play the menu loop. */
+  audioUnlocked(): void {
+    this.audio.unlock();
+    if (this.state === 'menu') this.audio.menuMusic(true);
+  }
+
   private startMission(): void {
     if (this.state !== 'menu') return;
     this.state = 'playing';
+    this.audio.unlock();
+    this.audio.menuMusic(false);
+    this.audio.startEngine();
+    this.audio.uiBlip('click');
     this.screens.hide();
     this.showDestination();
     this.hud.toast('GO!', 1.2);

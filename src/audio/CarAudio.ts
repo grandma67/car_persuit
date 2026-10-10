@@ -1,5 +1,6 @@
 // Procedural car audio with Web Audio — no sound files. Browsers only allow audio after a user
 // gesture, so the context is created on the first key/pointer press.
+import { MenuMusic } from './MenuMusic';
 
 // Upper speed (m/s) of each gear; rpm sweeps within the band, dropping on each upshift.
 const GEAR_TOP_SPEEDS = [9, 17, 25, 33, 39, 46];
@@ -48,7 +49,10 @@ export class CarAudio {
   private sirenGain!: GainNode;
   private jingleBus!: GainNode; // short echo for musical cues
   private rpm = 0.15;
-  private engineOff = false;
+  private engineOff = false; // wrecked
+  private engineRunning = false; // silent on the menu until the mission starts
+  private music: MenuMusic | null = null;
+  private wantMusic = false;
   private muted = false;
   private lastImpactTime = 0;
 
@@ -60,6 +64,11 @@ export class CarAudio {
     };
     window.addEventListener('keydown', unlock);
     window.addEventListener('pointerdown', unlock);
+  }
+
+  /** Create the audio context now (call from a user gesture). */
+  unlock(): void {
+    this.init();
   }
 
   private init(): void {
@@ -177,6 +186,37 @@ export class CarAudio {
     this.sirenOsc.connect(this.sirenFilter).connect(this.sirenGain).connect(this.master);
     this.sirenOsc.start();
     this.sirenLfo.start();
+
+    this.music = new MenuMusic(ctx, this.master);
+    if (this.wantMusic) this.music.start();
+  }
+
+  /** Menu music on/off (starts once audio is unlocked if requested earlier). */
+  menuMusic(on: boolean): void {
+    this.wantMusic = on;
+    if (on) this.music?.start();
+    else this.music?.stop();
+  }
+
+  /** Start the engine sound (mission start). */
+  startEngine(): void {
+    this.engineRunning = true;
+  }
+
+  /** Short UI blip for menu buttons. */
+  uiBlip(kind: 'hover' | 'click'): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(kind === 'hover' ? 880 : 660, now);
+    if (kind === 'click') osc.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(kind === 'hover' ? 0.05 : 0.12, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + (kind === 'hover' ? 0.06 : 0.14));
+    osc.connect(g).connect(this.master);
+    osc.start(now);
+    osc.stop(now + 0.2);
   }
 
   /** Siren from the nearest cop: distance in metres, or null for no cops. */
@@ -232,9 +272,10 @@ export class CarAudio {
     this.firingLfo.frequency.setTargetAtTime(freq / 4, now, 0.03);
     // Opens up under throttle (growl), closes when lifting off (mellow burble).
     this.engineFilter.frequency.setTargetAtTime(260 + s.throttle * 520 + this.rpm * 450, now, 0.06);
-    this.engineGain.gain.setTargetAtTime(this.engineOff ? 0 : 0.18 + s.throttle * 0.14, now, this.engineOff ? 0.02 : 0.06);
+    const silent = this.engineOff || !this.engineRunning;
+    this.engineGain.gain.setTargetAtTime(silent ? 0 : 0.18 + s.throttle * 0.14, now, this.engineOff ? 0.02 : 0.25);
 
-    this.screechGain.gain.setTargetAtTime(this.engineOff ? 0 : s.skid * 0.12, now, 0.04);
+    this.screechGain.gain.setTargetAtTime(silent ? 0 : s.skid * 0.12, now, 0.04);
     this.screechFilter.frequency.setTargetAtTime(950 + s.skid * 250 + Math.random() * 80, now, 0.05);
 
     const speedRatio = Math.min(absSpeed / s.maxSpeed, 1);
