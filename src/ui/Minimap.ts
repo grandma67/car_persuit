@@ -8,7 +8,7 @@ const BASE_SCALE = 1; // pixels per metre in the pre-drawn city
 const SEA_MARGIN = 300; // metres of sea drawn around the island
 
 const COLORS = {
-  sea: '#123a52',
+  sea: '#1a5f78',
   land: '#1b1f27',
   promenade: '#3a404b',
   road: '#6a7282',

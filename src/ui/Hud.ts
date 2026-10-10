@@ -36,7 +36,12 @@ export class Hud {
       </div>
       <div class="hud-topright">
         <div class="hud-minimap-slot"></div>
-        <div class="hud-health"><div class="hud-health-fill"></div></div>
+        <div class="hud-health-row">
+          <svg class="hud-health-icon" viewBox="0 0 24 24" aria-label="Health">
+            <path d="M12 21s-7.5-4.6-10-9.3C.3 8.4 2.1 4.5 5.8 4.1c2.3-.3 4.2.9 6.2 3.2 2-2.3 3.9-3.5 6.2-3.2 3.7.4 5.5 4.3 3.8 7.6C19.5 16.4 12 21 12 21z"/>
+          </svg>
+          <div class="hud-health"><div class="hud-health-fill"></div></div>
+        </div>
         <div class="hud-muted" hidden>🔇 Muted</div>
       </div>
       <div class="hud-toast"></div>
@@ -67,10 +72,9 @@ export class Hud {
     this.destEl.classList.toggle('final', n === mission.total);
     this.distEl.textContent = mission.distance === null ? '' : `${Math.round(mission.distance)} m`;
 
-    // Health: green → amber → red, flashing when critical.
+    // Health bar pulses when critical.
     const h = Math.max(0, Math.min(1, mission.health));
     this.healthFill.style.width = `${h * 100}%`;
-    this.healthFill.style.background = h > 0.5 ? '#4dd96b' : h > 0.2 ? '#ffb020' : '#ff3b30';
     this.healthFill.classList.toggle('critical', h > 0 && h <= 0.2);
 
     this.flash = Math.max(0, this.flash - dt * 2.5);

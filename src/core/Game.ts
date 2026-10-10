@@ -48,7 +48,7 @@ export class Game {
   private smoke = new TireSmoke();
   private skidMarks = new SkidMarks();
   private marker = new DestinationMarker(MISSION.reachRadius);
-  private sea = new Sea();
+  private sea: Sea;
   private minimap: Minimap;
   private health = new Health();
   private engineSmoke = new TireSmoke({ color: 0x2b2b30, maxAlpha: 0.55, additive: false, growth: 3 });
@@ -92,6 +92,7 @@ export class Game {
     this.world.timestep = FIXED_DT;
     this.city = generateCity(seed);
     buildCity(this.city, this.scene, this.world);
+    this.sea = new Sea(this.city.islandSize / 2);
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);

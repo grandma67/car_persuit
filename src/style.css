@@ -61,8 +61,23 @@ body {
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.5);
 }
 
-.hud-health {
+.hud-health-row {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-health-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: #ff3b30;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.6));
+}
+
+.hud-health {
+  flex: 1;
   height: 10px;
   border-radius: 5px;
   background: rgb(0 0 0 / 0.55);
@@ -72,9 +87,8 @@ body {
 
 .hud-health-fill {
   height: 100%;
-  transition:
-    width 0.25s ease-out,
-    background 0.25s;
+  background: linear-gradient(#ff5a4f, #e0261c);
+  transition: width 0.25s ease-out;
 }
 
 .hud-health-fill.critical {
