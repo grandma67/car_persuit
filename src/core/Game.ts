@@ -7,6 +7,7 @@ import { PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { generateCity, type CityData } from '../world/CityGenerator';
 import { buildCity } from '../world/CityBuilder';
+import { PropSystem, type PropBreak } from '../world/PropSystem';
 import { Hud, formatTime } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
 import { CarAudio } from '../audio/CarAudio';
@@ -26,6 +27,8 @@ const SMOKE_PER_SECOND = 55; // per rear wheel at full skid
 const ROUTE_REFRESH = 0.25; // seconds between GPS route recalculations
 const ENGINE_SMOKE_PER_SECOND = 30;
 const FIRE_PER_SECOND = 40;
+const GEYSER_SECONDS = 6;
+const GEYSER_PER_SECOND = 70;
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
@@ -53,6 +56,11 @@ export class Game {
   private health = new Health();
   private engineSmoke = new TireSmoke({ color: 0x2b2b30, maxAlpha: 0.55, additive: false, growth: 3 });
   private fire = new TireSmoke({ color: 0xff6a1a, maxAlpha: 0.7, additive: true, growth: 0.6 });
+  private water = new TireSmoke({
+    color: 0xd6ecff, maxAlpha: 0.55, additive: false, growth: 0.9, lift: [7, 11], gravity: 9.8, spread: 1.6, life: [1.2, 1.8],
+  });
+  private props: PropSystem;
+  private geysers: { position: THREE.Vector3; timeLeft: number; budget: number }[] = [];
   private engineSmokeBudget = 0;
   private fireBudget = 0;
   private mission: MissionSystem;
@@ -93,12 +101,13 @@ export class Game {
     this.city = generateCity(seed);
     buildCity(this.city, this.scene, this.world);
     this.sea = new Sea(this.city.islandSize / 2);
+    this.props = new PropSystem(this.city, this.scene, this.world);
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
     this.scene.add(this.player.mesh.root);
     this.scene.add(this.skidMarks.mesh, this.smoke.points, this.marker.group, this.sea.mesh);
-    this.scene.add(this.engineSmoke.points, this.fire.points);
+    this.scene.add(this.engineSmoke.points, this.fire.points, this.water.points);
 
     // Destinations get their own RNG stream so they're stable per seed.
     const startNode = this.city.graph.nearest(spawn.x, spawn.z);
@@ -193,11 +202,13 @@ export class Game {
     this.accumulator += frameDt;
     let steps = 0;
     let impact = 0;
+    const breaks: PropBreak[] = [];
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.player.drive(driveInput, FIXED_DT);
       this.world.step();
       this.player.snapshot();
       impact = Math.max(impact, this.player.consumeImpact());
+      breaks.push(...this.props.checkVehicle(this.player, FIXED_DT));
       this.accumulator -= FIXED_DT;
       steps++;
     }
@@ -205,6 +216,7 @@ export class Game {
     const alpha = this.accumulator / FIXED_DT;
 
     this.player.syncMesh(alpha);
+    this.props.sync();
     const carPos = this.player.mesh.root.position;
     this.sun.position.set(carPos.x + 30, carPos.y + 60, carPos.z + 20);
     this.sun.target.position.copy(carPos);
@@ -214,6 +226,7 @@ export class Game {
     this.marker.update(frameDt);
     this.sea.update(frameDt);
     this.updateEffects(frameDt, impact);
+    this.updatePropEffects(frameDt, breaks);
 
     const speedRatio = Math.min(Math.abs(this.player.speed) / this.player.spec.maxSpeed, 1);
     this.chase.update(frameDt, this.player.mesh.root, speedRatio);
@@ -281,7 +294,7 @@ export class Game {
   }
 
   private resizeParticles(): void {
-    for (const p of [this.smoke, this.engineSmoke, this.fire]) p.resize(window.innerHeight, this.chase.camera.fov);
+    for (const p of [this.smoke, this.engineSmoke, this.fire, this.water]) p.resize(window.innerHeight, this.chase.camera.fov);
   }
 
   private showDestination(): void {
@@ -321,6 +334,28 @@ export class Game {
       this.overviewCam.lookAt(0, 0, 0);
     }
     return this.overviewCam;
+  }
+
+  private updatePropEffects(dt: number, breaks: PropBreak[]): void {
+    for (const b of breaks) {
+      this.audio.propBreak(b.kind, b.strength);
+      if (b.kind === 'lamp') {
+        for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0); // sparks
+      } else if (b.kind === 'hydrant') {
+        this.geysers.push({ position: b.position.clone().setY(0.3), timeLeft: GEYSER_SECONDS, budget: 0 });
+      }
+    }
+    // Broken hydrants spout water, tapering off.
+    for (const g of this.geysers) {
+      g.timeLeft -= dt;
+      g.budget += GEYSER_PER_SECOND * Math.min(1, g.timeLeft / 2) * dt;
+      while (g.budget >= 1) {
+        this.water.emit(g.position, this.tmpVel.set(0, 0, 0), 0);
+        g.budget--;
+      }
+    }
+    this.geysers = this.geysers.filter((g) => g.timeLeft > 0);
+    this.water.update(dt);
   }
 
   private updateEffects(dt: number, impact: number): void {

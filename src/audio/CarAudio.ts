@@ -220,6 +220,60 @@ export class CarAudio {
     });
   }
 
+  /** Knocked-loose street furniture: metal clang (lamps, hydrants) or wood crack (benches, fences). */
+  propBreak(kind: 'lamp' | 'hydrant' | 'bench' | 'fence', strength: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const gain = 0.15 + strength * 0.3;
+    const metal = kind === 'lamp' || kind === 'hydrant';
+
+    if (metal) {
+      // Inharmonic partials ring like struck metal.
+      const base = kind === 'lamp' ? 380 : 520;
+      for (const ratio of [1, 2.76, 5.4]) {
+        const osc = ctx.createOscillator();
+        osc.frequency.value = base * ratio * (0.95 + Math.random() * 0.1);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(gain / ratio, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.7 / Math.sqrt(ratio));
+        osc.connect(g).connect(this.master);
+        osc.start(now);
+        osc.stop(now + 0.8);
+      }
+    }
+
+    // Crack/crunch burst for everything.
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = metal ? 2500 : 1100;
+    filter.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain * 1.4, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + (metal ? 0.12 : 0.18));
+    noise.connect(filter).connect(g).connect(this.master);
+    noise.start(now, Math.random() * 1.5);
+    noise.stop(now + 0.25);
+
+    if (kind === 'hydrant') {
+      // Water gushing, fading over a few seconds.
+      const water = ctx.createBufferSource();
+      water.buffer = this.noise;
+      water.loop = true;
+      const wf = ctx.createBiquadFilter();
+      wf.type = 'highpass';
+      wf.frequency.value = 1800;
+      const wg = ctx.createGain();
+      wg.gain.setValueAtTime(0.12, now);
+      wg.gain.exponentialRampToValueAtTime(0.001, now + 6);
+      water.connect(wf).connect(wg).connect(this.master);
+      water.start(now);
+      water.stop(now + 6);
+    }
+  }
+
   /** One-shot crash: a low thump plus a burst of crunch noise. strength is 0..1. */
   impact(strength: number): void {
     if (!this.ctx || strength <= 0) return;

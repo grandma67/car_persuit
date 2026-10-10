@@ -1,6 +1,7 @@
 // Seed → city layout as plain data. CityBuilder turns it into meshes and colliders.
 import { Rng } from '../core/Rng';
 import { RoadGraph, type RoadNode } from './RoadGraph';
+import { generateStreetProps, type StreetProp } from './StreetProps';
 
 export interface CityConfig {
   blocks: number; // blocks per side
@@ -64,6 +65,7 @@ export interface CityData {
   buildings: Building[];
   props: Rect[]; // small solid obstacles (planters) on plazas
   trees: { x: number; z: number }[];
+  streetProps: StreetProp[]; // breakable lamps, hydrants, benches, fences
   spawn: { x: number; z: number; yaw: number };
 }
 
@@ -187,7 +189,9 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const spawn = { x: centre.x + (dx / len) * 15, z: centre.z + (dz / len) * 15, yaw: Math.atan2(dx, dz) };
 
   const islandSize = size + config.promenade * 2;
-  return { config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees, spawn };
+  // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
+  const streetProps = generateStreetProps(blocksOut, plazas, config, size, new Rng(seed ^ 0x57ee7));
+  return { config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees, streetProps, spawn };
 }
 
 // Lot layout and height ranges per district.

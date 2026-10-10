@@ -32,6 +32,10 @@ export interface SmokeStyle {
   maxAlpha: number;
   additive: boolean; // glow (fire) instead of normal blending
   growth: number; // metres of extra size over a particle's life
+  lift?: [number, number]; // initial upward speed range, m/s
+  gravity?: number; // m/s², for water that falls back down
+  spread?: number; // sideways speed range, m/s
+  life?: [number, number]; // lifetime range, seconds
 }
 
 const TYRE_SMOKE: SmokeStyle = { color: 0xd8dde4, maxAlpha: 0.3, additive: false, growth: 2.0 };
@@ -75,17 +79,20 @@ export class TireSmoke {
     const i = this.next;
     this.next = (this.next + 1) % MAX_PARTICLES;
     this.positions.set([at.x + (Math.random() - 0.5) * 0.3, at.y + 0.15, at.z + (Math.random() - 0.5) * 0.3], i * 3);
-    // Smoke is left behind: a fraction of the car's velocity plus random spread and lift.
+    // Left behind: a fraction of the source's velocity plus random spread and lift.
+    const [liftMin, liftMax] = this.style.lift ?? [0.6, 1.4];
+    const spread = this.style.spread ?? 1.5;
     this.velocities.set(
       [
-        carVelocity.x * 0.15 + (Math.random() - 0.5) * 1.5,
-        0.6 + Math.random() * 0.8,
-        carVelocity.z * 0.15 + (Math.random() - 0.5) * 1.5,
+        carVelocity.x * 0.15 + (Math.random() - 0.5) * spread,
+        liftMin + Math.random() * (liftMax - liftMin),
+        carVelocity.z * 0.15 + (Math.random() - 0.5) * spread,
       ],
       i * 3,
     );
     this.ages[i] = 0;
-    this.lifetimes[i] = 0.9 + Math.random() * 0.6 + intensity * 0.6;
+    const [lifeMin, lifeMax] = this.style.life ?? [0.9, 1.5];
+    this.lifetimes[i] = lifeMin + Math.random() * (lifeMax - lifeMin) + intensity * 0.6;
     this.sizes[i] = 0;
     this.alphas[i] = 0;
   }
@@ -102,6 +109,7 @@ export class TireSmoke {
       const j = i * 3;
       this.velocities[j] *= drag;
       this.velocities[j + 2] *= drag;
+      this.velocities[j + 1] -= (this.style.gravity ?? 0) * dt;
       this.positions[j] += this.velocities[j] * dt;
       this.positions[j + 1] += this.velocities[j + 1] * dt;
       this.positions[j + 2] += this.velocities[j + 2] * dt;
