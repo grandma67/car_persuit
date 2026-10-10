@@ -287,16 +287,16 @@ export class CarAudio {
   }
 
   /** Knocked-loose street furniture: metal clang (lamps, hydrants) or wood crack (benches, fences). */
-  propBreak(kind: 'lamp' | 'hydrant' | 'bench' | 'fence', strength: number): void {
+  propBreak(kind: 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal', strength: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const gain = 0.15 + strength * 0.3;
-    const metal = kind === 'lamp' || kind === 'hydrant';
+    const metal = kind !== 'bench' && kind !== 'fence';
 
     if (metal) {
       // Inharmonic partials ring like struck metal.
-      const base = kind === 'lamp' ? 380 : 520;
+      const base = kind === 'lamp' || kind === 'signal' ? 380 : kind === 'sign' ? 700 : 520;
       for (const ratio of [1, 2.76, 5.4]) {
         const osc = ctx.createOscillator();
         osc.frequency.value = base * ratio * (0.95 + Math.random() * 0.1);

@@ -233,6 +233,7 @@ export class Game {
 
     this.player.syncMesh(alpha);
     this.props.sync();
+    this.props.updateSignals(this.clock.elapsedTime);
     const carPos = this.player.mesh.root.position;
     const [sx, sy, sz] = this.time.sunOffset;
     this.sun.position.set(carPos.x + sx, carPos.y + sy, carPos.z + sz);
@@ -380,7 +381,7 @@ export class Game {
   private updatePropEffects(dt: number, breaks: PropBreak[]): void {
     for (const b of breaks) {
       this.audio.propBreak(b.kind, b.strength);
-      if (b.kind === 'lamp') {
+      if (b.kind === 'lamp' || b.kind === 'signal') {
         for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0); // sparks
       } else if (b.kind === 'hydrant') {
         this.geysers.push({ position: b.position.clone().setY(0.3), timeLeft: GEYSER_SECONDS, budget: 0 });

@@ -3,14 +3,17 @@
 import type { Rng } from '../core/Rng';
 import type { Block, CityConfig, Rect } from './CityGenerator';
 
-export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence';
+export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal';
 
 export interface StreetProp {
   kind: PropKind;
   x: number;
   z: number;
-  /** Heading: local +Z (lamp arm, bench front) points along (sin yaw, cos yaw). Fences run along local X. */
+  /** Heading: local +Z (lamp arm, bench front, sign face) points along (sin yaw, cos yaw). Fences run along local X. */
   yaw: number;
+  variant?: 'stop' | 'speed'; // signs
+  axis?: 'x' | 'z'; // signals: travel axis of the traffic they face
+  phase?: number; // signals: junction cycle offset, seconds
 }
 
 export interface PropSpec {
@@ -29,6 +32,8 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   hydrant: { hx: 0.22, hz: 0.22, height: 0.8, mass: 80, breakSpeed: 3, slowdown: 0.1 },
   bench: { hx: 0.9, hz: 0.3, height: 0.9, mass: 40, breakSpeed: 2.5, slowdown: 0.05 },
   fence: { hx: 1.45, hz: 0.06, height: 1.0, mass: 15, breakSpeed: 2, slowdown: 0.03 },
+  sign: { hx: 0.08, hz: 0.08, height: 2.6, mass: 20, breakSpeed: 2.5, slowdown: 0.02 },
+  signal: { hx: 0.15, hz: 0.15, height: 5.6, mass: 150, breakSpeed: 4, slowdown: 0.09 },
 };
 
 /** Oriented rectangle on the ground plane. */

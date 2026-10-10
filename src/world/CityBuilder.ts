@@ -148,7 +148,8 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   for (const { rect } of city.roads) {
     const alongX = rect.w > rect.d;
     const length = alongX ? rect.w : rect.d;
-    for (let s = -length / 2 + 3; s < length / 2 - 2; s += 6) {
+    // Dashes stop short of the junction ends, leaving room for stop lines and zebra crossings.
+    for (let s = -length / 2 + 7; s < length / 2 - 6.5; s += 6) {
       markings.push(alongX ? { x: rect.x + s + 1.5, z: rect.z, w: 3, d: 0.25, c: theme.centerLine } : { x: rect.x, z: rect.z + s + 1.5, w: 0.25, d: 3, c: theme.centerLine });
     }
     for (const side of [-1, 1]) {
@@ -156,6 +157,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
       markings.push(alongX ? { x: rect.x, z: rect.z + off, w: length, d: 0.15, c: theme.edgeLine } : { x: rect.x + off, z: rect.z, w: 0.15, d: length, c: theme.edgeLine });
     }
   }
+  for (const mark of city.roadMarks) markings.push({ ...mark, c: 0xf2f2ee });
   const markingGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
   const markingMesh = new THREE.InstancedMesh(markingGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), markings.length);
   const m4 = new THREE.Matrix4();

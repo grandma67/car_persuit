@@ -2,6 +2,7 @@
 import { Rng } from '../core/Rng';
 import { RoadGraph, type RoadNode } from './RoadGraph';
 import { generateStreetProps, type StreetProp } from './StreetProps';
+import { generateTrafficControl, type RoadMark } from './TrafficControl';
 
 export interface CityConfig {
   blocks: number; // blocks per side
@@ -65,7 +66,8 @@ export interface CityData {
   buildings: Building[];
   props: Rect[]; // small solid obstacles (planters) on plazas
   trees: { x: number; z: number }[];
-  streetProps: StreetProp[]; // breakable lamps, hydrants, benches, fences
+  streetProps: StreetProp[]; // breakable lamps, hydrants, benches, fences, signs, signals
+  roadMarks: RoadMark[]; // zebra crossings and stop lines
   spawn: { x: number; z: number; yaw: number };
 }
 
@@ -190,8 +192,12 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
 
   const islandSize = size + config.promenade * 2;
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
-  const streetProps = generateStreetProps(blocksOut, plazas, config, size, new Rng(seed ^ 0x57ee7));
-  return { config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees, streetProps, spawn };
+  const traffic = generateTrafficControl(graph, config, size, new Rng(seed ^ 0x7aff1c));
+  const streetProps = [...generateStreetProps(blocksOut, plazas, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props];
+  return {
+    config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees,
+    streetProps, roadMarks: traffic.marks, spawn,
+  };
 }
 
 // Lot layout and height ranges per district.
