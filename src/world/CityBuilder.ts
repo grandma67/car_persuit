@@ -125,6 +125,10 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   const flats = new GeometryBuilder();
   for (const block of city.blocks) {
     flats.rect(block.rect, 0.03, color(theme.sidewalk));
+    if (block.square) {
+      const m = city.config.sidewalk;
+      flats.rect({ ...block.rect, w: block.rect.w - m * 2, d: block.rect.d - m * 2 }, 0.045, color(theme.plaza));
+    }
     if (block.park) {
       const m = city.config.sidewalk;
       flats.rect({ ...block.rect, w: block.rect.w - m * 2, d: block.rect.d - m * 2 }, 0.05, color(theme.grass));

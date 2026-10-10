@@ -66,6 +66,15 @@ export class Minimap {
     rect(0, 0, this.city.size, this.city.size, COLORS.land);
     for (const b of this.city.blocks) if (b.park) rect(b.rect.x, b.rect.z, b.rect.w, b.rect.d, COLORS.park);
     for (const p of this.city.plazas) rect(p.x, p.z, p.w, p.d, COLORS.plaza);
+    for (const b of this.city.blocks) if (b.square) rect(b.rect.x, b.rect.z, b.rect.w - 6, b.rect.d - 6, COLORS.plaza);
+    // Landmarks: fountains as blue discs, monuments as light stone dots.
+    for (const l of this.city.landmarks) {
+      const [cx, cy] = this.toMap(l.x, l.z);
+      g.fillStyle = l.kind === 'fountain' ? '#4aa3d8' : '#d8d2c4';
+      g.beginPath();
+      g.arc(cx, cy, (l.kind === 'fountain' ? l.radius : l.radius + 1.5) * BASE_SCALE, 0, Math.PI * 2);
+      g.fill();
+    }
     for (const r of this.city.roads) rect(r.rect.x, r.rect.z, r.rect.w, r.rect.d, COLORS.road);
     for (const i of this.city.intersections) rect(i.x, i.z, i.w, i.d, COLORS.road);
     return c;

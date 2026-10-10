@@ -2,6 +2,7 @@
 // these into meshes and physics bodies.
 import type { Rng } from '../core/Rng';
 import type { Block, CityConfig, Rect } from './CityGenerator';
+import type { Landmark } from './Landmarks';
 
 export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal';
 export type SignVariant = 'stop' | 'speed30' | 'speed50' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian';
@@ -106,6 +107,7 @@ const SIDES: Side[] = [
 export function generateStreetProps(
   blocks: Block[],
   plazas: Rect[],
+  landmarks: Landmark[],
   config: CityConfig,
   size: number,
   rng: Rng,
@@ -144,17 +146,27 @@ export function generateStreetProps(
       }
     }
 
-    // A few park benches inside the grass, clear of the fence.
+    // A few park benches inside the grass, clear of the fence and of any centrepiece.
     if (block.park) {
       const inner = half - FENCE_INSET - 5;
       for (let k = rng.int(2, 3); k > 0; k--) {
-        props.push({
-          kind: 'bench',
-          x: block.rect.x + rng.range(-inner, inner),
-          z: block.rect.z + rng.range(-inner, inner),
-          yaw: rng.range(0, Math.PI * 2),
-        });
+        const x = block.rect.x + rng.range(-inner, inner);
+        const z = block.rect.z + rng.range(-inner, inner);
+        if (landmarks.some((l) => Math.hypot(l.x - x, l.z - z) < l.radius + 3)) continue;
+        props.push({ kind: 'bench', x, z, yaw: rng.range(0, Math.PI * 2) });
       }
+    }
+  }
+
+  // Town squares: a ring of benches facing the centrepiece.
+  for (const l of landmarks) {
+    if (!blocks.some((b) => b.square && b.rect.x === l.x && b.rect.z === l.z)) continue;
+    const r = l.radius + 4.5;
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+      const x = l.x + Math.cos(a) * r;
+      const z = l.z + Math.sin(a) * r;
+      props.push({ kind: 'bench', x, z, yaw: Math.atan2(l.x - x, l.z - z) });
     }
   }
 

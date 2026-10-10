@@ -3,6 +3,7 @@ import { Rng } from '../core/Rng';
 import { RoadGraph, type RoadNode } from './RoadGraph';
 import { generateStreetProps, type StreetProp } from './StreetProps';
 import { generateTrafficControl, type RoadMark } from './TrafficControl';
+import { planLandmarks, type Landmark } from './Landmarks';
 
 export interface CityConfig {
   blocks: number; // blocks per side
@@ -45,6 +46,7 @@ export interface Block {
   rect: Rect;
   district: District;
   park: boolean;
+  square?: boolean; // town square: paved, no buildings, centrepiece landmark
 }
 
 export interface RoadSegment {
@@ -66,6 +68,7 @@ export interface CityData {
   buildings: Building[];
   props: Rect[]; // small solid obstacles (planters) on plazas
   trees: { x: number; z: number }[];
+  landmarks: Landmark[]; // fountains, statues, obelisks, sculptures (solid)
   streetProps: StreetProp[]; // breakable lamps, hydrants, benches, fences, signs, signals
   roadMarks: RoadMark[]; // zebra crossings and stop lines
   spawn: { x: number; z: number; yaw: number };
@@ -154,8 +157,8 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   }
 
   // --- Buildings and trees ---
-  const buildings: Building[] = [];
-  const trees: { x: number; z: number }[] = [];
+  let buildings: Building[] = [];
+  let trees: { x: number; z: number }[] = [];
   for (const block of blocksOut) {
     if (block.park) {
       scatterTrees(block.rect, config.sidewalk + 2, rng.int(10, 18), rng, trees);
@@ -163,6 +166,11 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
     }
     fillBlock(block, config.sidewalk, rng, buildings, trees);
   }
+
+  // --- Town squares and park centrepieces (own RNG stream) ---
+  const planned = planLandmarks(blocksOut, buildings, trees, config, new Rng(seed ^ 0x1a4d));
+  ({ buildings, trees } = planned);
+  const landmarks = planned.landmarks;
 
   // --- Plazas: paved shortcuts with planters to weave between ---
   const plazas: Rect[] = [];
@@ -193,10 +201,10 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const islandSize = size + config.promenade * 2;
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
   const traffic = generateTrafficControl(graph, blocksOut, config, size, new Rng(seed ^ 0x7aff1c));
-  const streetProps = [...generateStreetProps(blocksOut, plazas, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props];
+  const streetProps = [...generateStreetProps(blocksOut, plazas, landmarks, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props];
   return {
     config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees,
-    streetProps, roadMarks: traffic.marks, spawn,
+    landmarks, streetProps, roadMarks: traffic.marks, spawn,
   };
 }
 

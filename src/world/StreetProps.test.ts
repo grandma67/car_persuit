@@ -58,9 +58,26 @@ describe('generateStreetProps', () => {
     expect(city.streetProps.filter((p) => Math.abs(p.x) > half || Math.abs(p.z) > half)).toEqual([]);
   });
 
-  it('does not change the existing city layout', () => {
-    // Buildings for seed 42 were generated before street props existed; the layout must be stable.
-    const city = generateCity(42);
-    expect(city.buildings.length).toBe(758);
+  it.each(SEEDS)('seed %i: town squares are building-free with a centrepiece; landmarks are clear of everything', (seed) => {
+    const city = generateCity(seed);
+    const squares = city.blocks.filter((b) => b.square);
+    expect(squares.length).toBeGreaterThanOrEqual(2);
+    for (const s of squares) {
+      expect(city.buildings.some((b) => Math.abs(b.x - s.rect.x) < 30 && Math.abs(b.z - s.rect.z) < 30)).toBe(false);
+      expect(city.landmarks.some((l) => l.x === s.rect.x && l.z === s.rect.z)).toBe(true);
+    }
+    const kinds = new Set(city.landmarks.map((l) => l.kind));
+    expect(kinds.size).toBeGreaterThanOrEqual(2);
+    for (const l of city.landmarks) {
+      const fp = { x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 };
+      const blockers: Footprint[] = [
+        ...city.roads.map((r) => rectFootprint(r.rect)),
+        ...city.intersections.map(rectFootprint),
+        ...city.buildings.map(rectFootprint),
+        ...city.trees.map((t) => ({ x: t.x, z: t.z, hx: 0.5, hz: 0.5, yaw: 0 })),
+        ...city.streetProps.map((p) => propFootprint(p)),
+      ];
+      expect(blockers.filter((b) => footprintsOverlap(fp, b))).toEqual([]);
+    }
   });
 });

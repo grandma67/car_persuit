@@ -13,6 +13,7 @@ import { CopDirector, type Cop } from '../ai/CopDirector';
 import { CivilianTraffic } from '../ai/CivilianTraffic';
 import { approachControls } from '../world/TrafficControl';
 import { CrashMarks } from '../render/CrashMarks';
+import { Landmarks } from '../render/Landmarks';
 import type { ChaseTarget, LineOfSight } from '../ai/CopController';
 import { PropSystem, type PropBreak } from '../world/PropSystem';
 import { Hud, formatTime } from '../ui/Hud';
@@ -88,7 +89,8 @@ export class Game {
   private wanted = new WantedSystem();
   private traffic: CivilianTraffic;
   private crashMarks = new CrashMarks();
-  private walls: Set<number>; // collider handles of buildings + sea wall
+  private walls: Set<number>; // collider handles of buildings, sea wall, landmarks
+  private landmarks: Landmarks;
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
   private sirenLights: THREE.PointLight[] = [];
   private geysers: { position: THREE.Vector3; timeLeft: number; budget: number }[] = [];
@@ -140,6 +142,7 @@ export class Game {
     this.world.timestep = FIXED_DT;
     this.city = generateCity(seed);
     this.walls = buildCity(this.city, this.scene, this.world, theme, time.windowGlow);
+    this.landmarks = new Landmarks(this.city.landmarks, this.scene, this.world, time.lampGlow, this.walls);
     this.sea = new Sea(this.city.islandSize / 2, time.sea);
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow);
 
@@ -399,6 +402,7 @@ export class Game {
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
     this.sea.update(frameDt);
+    this.landmarks.update(frameDt, this.chase.camera, window.innerHeight, this.chase.camera.fov);
     this.updateEffects(frameDt, impact);
     this.updatePropEffects(frameDt, breaks);
 
