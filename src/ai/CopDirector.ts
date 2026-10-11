@@ -18,6 +18,9 @@ export interface DirectorTuning {
   aheadChance: number; // share of spawns placed on the player's route ahead (to cut them off)
   wreckClearTime: number; // seconds a wrecked cop burns before being removed
   roadblockAhead: [number, number]; // metres along the player's route
+  checkpointClear: number; // metres around the current destination where no cop spawns
+  cornerSetback: number; // metres down a side street from the junction a hidden cop starts
+  startSpeed: number; // m/s a spawned cop is already doing
 }
 
 export const DIRECTOR_TUNING: DirectorTuning = {
@@ -28,7 +31,16 @@ export const DIRECTOR_TUNING: DirectorTuning = {
   wreckClearTime: 5,
   roadblockAhead: [140, 260],
   aheadChance: 0.6,
+  checkpointClear: 60,
+  cornerSetback: 20,
+  startSpeed: 10,
 };
+
+const LANE_OFFSET = 3; // right-hand lane, as civilians drive
+const SPAWN_TRIES = 16; // candidate junctions tried before giving up on a hidden spot
+
+type Point = { x: number; z: number };
+type Spot = { x: number; z: number; yaw: number; speed: number };
 
 export interface Cop {
   type: CopType;
@@ -55,6 +67,7 @@ export class CopDirector {
   readonly cops: Cop[] = [];
   private spawnTimer: number;
   private roadblockTimer = 10;
+  private checkpoint: Point | null = null;
 
   constructor(
     private world: RAPIER.World,
@@ -76,7 +89,15 @@ export class CopDirector {
    * Housekeeping once per frame: spawning to the star level's cap, roadblocks, leash, clearing
    * wrecks. `route` is the player's GPS route (node ids) for roadblock placement.
    */
-  update(dt: number, player: ChaseTarget, playerForward: THREE.Vector3, level: StarLevel, route: number[] | null): void {
+  update(
+    dt: number,
+    player: ChaseTarget,
+    playerForward: THREE.Vector3,
+    level: StarLevel,
+    route: number[] | null,
+    checkpoint: Point | null,
+  ): void {
+    this.checkpoint = checkpoint;
     for (const cop of this.cops) {
       if (cop.wreckedFor !== null) {
         cop.wreckedFor += dt;
@@ -137,26 +158,6 @@ export class CopDirector {
     return cop;
   }
 
-  /** A free road point 120–260m along the player's route, facing back toward them. */
-  private onRoute(player: ChaseTarget, route: number[]): { x: number; z: number; yaw: number } | null {
-    const g = this.graph;
-    let along = 0;
-    let prev: { x: number; z: number } = player.position;
-    const spots: { x: number; z: number; yaw: number }[] = [];
-    for (let i = 0; i < route.length; i++) {
-      const node = g.nodes[route[i]];
-      along += Math.hypot(node.x - prev.x, node.z - prev.z);
-      if (along > this.tuning.spawnMax) break;
-      if (along >= this.tuning.spawnMin && i > 0) {
-        const back = g.nodes[route[i - 1]];
-        const occupied = this.activeCops.some((c) => Math.hypot(c.vehicle.position.x - node.x, c.vehicle.position.z - node.z) < 12);
-        if (!occupied) spots.push({ x: node.x, z: node.z, yaw: Math.atan2(back.x - node.x, back.z - node.z) });
-      }
-      prev = node;
-    }
-    return spots.length ? this.rng.pick(spots) : null;
-  }
-
   /**
    * Two SUVs parked across a road on the player's route, 140–260m ahead. They wait until the
    * player is close before joining the chase. Returns false if no suitable spot.
@@ -171,6 +172,7 @@ export class CopDirector {
       prev = node;
       if (along < this.tuning.roadblockAhead[0]) continue;
       if (along > this.tuning.roadblockAhead[1]) return false;
+      if (this.nearCheckpoint(node)) continue;
       // Block the road leaving this node toward the next one, a little past the junction.
       const next = g.nodes[route[i + 1]];
       const len = Math.hypot(next.x - node.x, next.z - node.z);
@@ -189,34 +191,106 @@ export class CopDirector {
     return false;
   }
 
+  private nearCheckpoint(p: Point): boolean {
+    const c = this.checkpoint;
+    return c !== null && Math.hypot(p.x - c.x, p.z - c.z) < this.tuning.checkpointClear;
+  }
+
+  private occupied(p: Point): boolean {
+    return this.activeCops.some((c) => Math.hypot(c.vehicle.position.x - p.x, c.vehicle.position.z - p.z) < 12);
+  }
+
+  /** Route junctions 120–260m ahead of the player, each with the next junction back toward them. */
+  private routeCandidates(player: ChaseTarget, route: number[]): { node: number; toward: number }[] {
+    const g = this.graph;
+    let along = 0;
+    let prev: Point = player.position;
+    const out: { node: number; toward: number }[] = [];
+    for (let i = 0; i < route.length; i++) {
+      const node = g.nodes[route[i]];
+      along += Math.hypot(node.x - prev.x, node.z - prev.z);
+      if (along > this.tuning.spawnMax) break;
+      if (along >= this.tuning.spawnMin && i > 0) out.push({ node: node.id, toward: route[i - 1] });
+      prev = node;
+    }
+    return out;
+  }
+
   /**
-   * Put a cop on a road 120–260m from the player by road, facing them. `ahead`: between the player
-   * and their destination (on their GPS route) to cut them off; otherwise behind them.
+   * Hidden spawn at a junction: a little way down a side street (not the road leading to the
+   * player), in its right-hand lane, rolling toward the corner — out of the player's line of
+   * sight, never near the destination. Null if every side street is visible, taken or too close.
+   */
+  private aroundCorner(nodeId: number, towardId: number, player: ChaseTarget): Spot | null {
+    const g = this.graph;
+    const node = g.nodes[nodeId];
+    if (this.nearCheckpoint(node)) return null;
+    const sides = node.neighbors.filter((id) => id !== towardId);
+    for (const sideId of this.shuffle(sides)) {
+      const side = g.nodes[sideId];
+      const len = Math.hypot(side.x - node.x, side.z - node.z);
+      const back = this.tuning.cornerSetback;
+      if (len < back * 2) continue; // short street: would start inside the next junction
+      // Drive from the side street toward the junction.
+      const fx = (node.x - side.x) / len;
+      const fz = (node.z - side.z) / len;
+      const spot = {
+        x: node.x - fx * back + -fz * LANE_OFFSET,
+        z: node.z - fz * back + fx * LANE_OFFSET,
+        yaw: Math.atan2(fx, fz),
+        speed: this.tuning.startSpeed,
+      };
+      if (this.nearCheckpoint(spot) || this.occupied(spot)) continue;
+      if (this.canSee(player.position, new THREE.Vector3(spot.x, 0, spot.z))) continue;
+      return spot;
+    }
+    return null;
+  }
+
+  private shuffle<T>(list: T[]): T[] {
+    const out = [...list];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = this.rng.int(0, i);
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+
+  /**
+   * Put a cop 120–260m from the player by road, hidden around a corner and already moving.
+   * `ahead`: on the player's GPS route toward their destination, to cut them off; otherwise
+   * preferably behind them. Falls back to a junction (still away from the destination) if no
+   * hidden spot exists.
    */
   private place(vehicle: Vehicle, player: ChaseTarget, playerForward: THREE.Vector3, route: number[] | null, ahead: boolean): void {
     const g = this.graph;
     const from = g.nearest(player.position.x, player.position.z);
-    if (ahead && route) {
-      const spot = this.onRoute(player, route);
-      if (spot) {
-        vehicle.teleport(spot.x, 1.2, spot.z, spot.yaw);
-        return;
-      }
-    }
+    const towardPlayer = (id: number) => {
+      const path = g.path(id, from.id);
+      return path && path.length > 1 ? path[1] : from.id;
+    };
     const dist = g.distancesFrom(from.id);
     const inRange = g.nodes.filter((n) => dist[n.id] >= this.tuning.spawnMin && dist[n.id] <= this.tuning.spawnMax);
     const behind = inRange.filter(
       (n) => (n.x - player.position.x) * playerForward.x + (n.z - player.position.z) * playerForward.z < 0,
     );
-    // Don't stack spawns on top of each other.
-    const free = (list: typeof inRange) =>
-      list.filter((n) => this.activeCops.every((c) => Math.hypot(c.vehicle.position.x - n.x, c.vehicle.position.z - n.z) > 12));
-    const pool = [free(behind), free(inRange), behind, inRange, g.nodes].find((l) => l.length)!;
+    const elsewhere = [...this.shuffle(behind), ...this.shuffle(inRange.filter((n) => !behind.includes(n)))];
+    const candidates = [
+      ...(ahead && route ? this.shuffle(this.routeCandidates(player, route)) : []),
+      ...elsewhere.slice(0, SPAWN_TRIES).map((n) => ({ node: n.id, toward: -1 })),
+    ];
+    for (const c of candidates) {
+      const spot = this.aroundCorner(c.node, c.toward >= 0 ? c.toward : towardPlayer(c.node), player);
+      if (spot) {
+        vehicle.teleport(spot.x, 1.2, spot.z, spot.yaw, spot.speed);
+        return;
+      }
+    }
+    // Nowhere hidden: a free junction in range, away from the destination, facing the player.
+    const ok = (n: (typeof g.nodes)[number]) => !this.occupied(n) && !this.nearCheckpoint(n);
+    const pool = [behind.filter(ok), inRange.filter(ok), inRange, g.nodes.filter((n) => n.neighbors.length)].find((l) => l.length)!;
     const node = this.rng.pick(pool);
-    // Face along the first road toward the player.
-    const toPlayer = g.path(node.id, from.id);
-    const next = toPlayer && toPlayer.length > 1 ? g.nodes[toPlayer[1]] : from;
-    const yaw = Math.atan2(next.x - node.x, next.z - node.z);
-    vehicle.teleport(node.x, 1.2, node.z, yaw);
+    const next = g.nodes[towardPlayer(node.id)];
+    vehicle.teleport(node.x, 1.2, node.z, Math.atan2(next.x - node.x, next.z - node.z));
   }
 }

@@ -233,14 +233,15 @@ export class Vehicle {
     this.teleport(t.x, Math.max(t.y, 0) + 1.5, t.z, Math.atan2(fwd.x, fwd.z));
   }
 
-  /** Place the car upright at a position and heading, at rest. */
-  teleport(x: number, y: number, z: number, yaw: number): void {
+  /** Place the car upright at a position and heading, at rest or already rolling forward at `speed` m/s. */
+  teleport(x: number, y: number, z: number, yaw: number, speed = 0): void {
     const q = tmpQuat.setFromAxisAngle(UP, yaw);
     this.body.setTranslation({ x, y, z }, true);
     this.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-    this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    const v = { x: Math.sin(yaw) * speed, y: 0, z: Math.cos(yaw) * speed };
+    this.body.setLinvel(v, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    this.lastVel.set(0, 0, 0);
+    this.lastVel.set(v.x, v.y, v.z);
     this.snapshot();
     this.prevPos.copy(this.currPos);
     this.prevQuat.copy(this.currQuat);

@@ -438,6 +438,7 @@ export class Game {
         this.player.forward(),
         { ...level, maxCops: scaledCopCap(level.maxCops, this.difficulty) },
         this.route?.path ?? null,
+        this.mission.current,
       );
     }
     this.updateSirens();
