@@ -16,7 +16,7 @@ export interface Roadworks {
 
 const CONE_LINE = 2.6; // metres past the junction edge
 const CONE_SPACING = 2.2;
-export const MAX_SITES = 3;
+export const MAX_SITES = 20;
 
 /**
  * Maybe close some inner junctions: each of MAX_SITES slots rolls `chance`. `avoid`: node ids that

@@ -25,7 +25,7 @@ export const DEFAULT_CITY: CityConfig = {
   promenade: 10,
   removeRoadFraction: 0.1,
   parkChance: 0.08,
-  roadworksChance: 0.25,
+  roadworksChance: 0.5,
 };
 
 export type District = 'downtown' | 'midtown' | 'residential' | 'industrial';
