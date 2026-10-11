@@ -64,8 +64,40 @@ export class RoadGraph {
     return dist;
   }
 
-  /** A* shortest path as a list of node ids, or null if unreachable. */
-  path(from: number, to: number): number[] | null {
+  /**
+   * The road segment closest to (x, z): its end nodes, how far along a→b we are (0..1) and how
+   * far off its centre line.
+   */
+  nearestEdge(x: number, z: number): { a: RoadNode; b: RoadNode; u: number; off: number } {
+    let best = { a: this.nodes[0], b: this.nodes[0], u: 0, off: Infinity };
+    for (const a of this.nodes) {
+      for (const id of a.neighbors) {
+        if (id < a.id) continue; // each road once
+        const b = this.nodes[id];
+        const abx = b.x - a.x;
+        const abz = b.z - a.z;
+        const len2 = abx * abx + abz * abz || 1;
+        const u = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / len2));
+        const off = Math.hypot(a.x + abx * u - x, a.z + abz * u - z);
+        if (off < best.off) best = { a, b, u, off };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * A* shortest path as a list of node ids, or null if unreachable. `noUTurnFrom`: the node we
+   * arrived at `from` from — the path may not head straight back to it (unless that's the only way).
+   */
+  path(from: number, to: number, noUTurnFrom?: number): number[] | null {
+    if (noUTurnFrom !== undefined && from !== to) {
+      const banned = this.pathAvoiding(from, to, noUTurnFrom);
+      if (banned) return banned;
+    }
+    return this.pathAvoiding(from, to);
+  }
+
+  private pathAvoiding(from: number, to: number, notFirst?: number): number[] | null {
     const g = new Map<number, number>([[from, 0]]);
     const f = new Map<number, number>([[from, this.distance(from, to)]]);
     const cameFrom = new Map<number, number>();
@@ -90,6 +122,7 @@ export class RoadGraph {
       }
       open.delete(current);
       for (const n of this.nodes[current].neighbors) {
+        if (current === from && n === notFirst) continue;
         const tentative = g.get(current)! + this.distance(current, n);
         if (tentative < (g.get(n) ?? Infinity)) {
           cameFrom.set(n, current);

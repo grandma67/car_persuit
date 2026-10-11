@@ -38,6 +38,7 @@ const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
 const REAR_WHEELS = [2, 3];
 const SMOKE_PER_SECOND = 55; // per rear wheel at full skid
+const SIGHT_HEIGHT = 0.6; // cop line-of-sight rays: under planter tops (0.9m), over the road
 const ROUTE_REFRESH = 0.25; // seconds between GPS route recalculations
 const ENGINE_SMOKE_PER_SECOND = 30;
 const FIRE_PER_SECOND = 40;
@@ -162,7 +163,8 @@ export class Game {
     this.destinations = pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id);
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
 
-    // Cops: line of sight is two rays a car-width apart against static geometry (buildings etc.).
+    // Cops: line of sight is two rays a car-width apart against static geometry (buildings etc.),
+    // low enough that plaza planters block it too — a cop can't drive straight through those.
     const canSee: LineOfSight = (from, to) => {
       const dx = to.x - from.x;
       const dz = to.z - from.z;
@@ -171,7 +173,7 @@ export class Game {
       for (const off of [-0.9, 0.9]) {
         const ox = (-dz / len) * off;
         const oz = (dx / len) * off;
-        const ray = new RAPIER.Ray({ x: from.x + ox, y: 1.2, z: from.z + oz }, { x: dx / len, y: 0, z: dz / len });
+        const ray = new RAPIER.Ray({ x: from.x + ox, y: SIGHT_HEIGHT, z: from.z + oz }, { x: dx / len, y: 0, z: dz / len });
         const hit = this.world.castRay(ray, len, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC);
         if (hit && hit.timeOfImpact < len - 2) return false;
       }
