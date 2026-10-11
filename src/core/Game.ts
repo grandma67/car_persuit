@@ -95,6 +95,7 @@ export class Game {
   // Cop ramming: who is touching the player now, and each cop's closing speed last step.
   private copTouching = new WeakSet<Cop>();
   private copClosing = new WeakMap<Cop, number>();
+  private ramSound = 0; // a cop started ramming the player this frame: crash strength 0..1
   private landmarks: Landmarks;
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
   private sirenLights: THREE.PointLight[] = [];
@@ -352,6 +353,7 @@ export class Game {
     let steps = 0;
     let impact = 0;
     let ramDamage = 0;
+    let crashSound = 0; // loudest car-on-car/wall crash heard this frame, 0..1 (strength × distance)
     const breaks: PropBreak[] = [];
     const lv = this.player.body.linvel();
     this.chaseTarget.position.copy(this.player.position);
@@ -373,6 +375,7 @@ export class Game {
       for (const car of this.traffic.cars) {
         car.vehicle.snapshot();
         const hit = car.vehicle.consumeImpact();
+        if (hit > 3) crashSound = Math.max(crashSound, this.crashLoudness(car.vehicle, hit));
         if (hit > 3) {
           car.controller.hit();
           // Hitting a civilian draws attention — but driving up the ramp truck's deck isn't a crash.
@@ -387,6 +390,7 @@ export class Game {
         if (copsChase && cop.wreckedFor === null) ramDamage += this.copContactDamage(cop, FIXED_DT);
         const hit = cop.vehicle.consumeImpact();
         if (hit > 0) this.markWall(cop.vehicle, hit);
+        if (hit > 0) crashSound = Math.max(crashSound, this.crashLoudness(cop.vehicle, hit));
         if (hit > 0 && cop.wreckedFor === null) {
           cop.health.applyImpact(hit);
           if (cop.health.destroyed) this.explodeCop(cop);
@@ -426,7 +430,7 @@ export class Game {
     this.marker.update(frameDt);
     this.sea.update(frameDt);
     this.landmarks.update(frameDt, this.chase.camera, window.innerHeight, this.chase.camera.fov);
-    this.updateEffects(frameDt, impact);
+    this.updateEffects(frameDt, impact, crashSound);
     this.updatePropEffects(frameDt, breaks);
 
     const speedRatio = Math.min(Math.abs(this.player.speed) / this.player.spec.maxSpeed, 1);
@@ -507,6 +511,8 @@ export class Game {
       return 0;
     }
     this.copTouching.add(cop);
+    // A ram can shove the player without a sharp velocity jump, so it gets its own bang.
+    if (!wasTouching) this.ramSound = Math.max(this.ramSound, impactStrength(closing));
     const damage = COP_RAM.grindPerSec * dt + (wasTouching ? 0 : COP_RAM.bangPerMs * closing);
     return damage * (cop.vehicle.spec.mass / COP_RAM.referenceMass) * this.difficulty.damageScale;
   }
@@ -711,7 +717,13 @@ export class Game {
     this.water.update(dt);
   }
 
-  private updateEffects(dt: number, impact: number): void {
+  /** How loud another car's crash sounds at the player: impact strength fading with distance. */
+  private crashLoudness(vehicle: Vehicle, hit: number): number {
+    const near = THREE.MathUtils.clamp(1 - vehicle.position.distanceTo(this.player.position) / 150, 0, 1);
+    return impactStrength(hit) * near * near;
+  }
+
+  private updateEffects(dt: number, impact: number, crashSound: number): void {
     const p = this.player;
     const skid = p.skid;
 
@@ -752,8 +764,9 @@ export class Game {
     this.fireball.update(dt);
     this.blast.intensity *= Math.exp(-6 * dt);
 
-    // Impact = velocity change in m/s: ~3 is a scrape, 40+ is a full-speed wall hit.
-    if (impact > 0) this.audio.impact(THREE.MathUtils.clamp((impact - 1.5) / 20, 0.1, 1));
+    const playerCrash = Math.max(impact > 0 ? impactStrength(impact) : 0, this.ramSound);
+    this.ramSound = 0;
+    this.audio.impact(Math.max(playerCrash, crashSound));
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid, maxSpeed: p.spec.maxSpeed });
   }
 }
@@ -781,4 +794,9 @@ function storageSet(key: string, value: string): void {
   } catch {
     // Not persisted; fine.
   }
+}
+
+/** Impact = velocity change (or closing speed) in m/s: ~3 is a scrape, 40+ is a full-speed hit. */
+function impactStrength(speed: number): number {
+  return THREE.MathUtils.clamp((speed - 1.5) / 20, 0.1, 1);
 }

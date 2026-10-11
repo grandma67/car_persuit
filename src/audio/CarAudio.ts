@@ -55,6 +55,7 @@ export class CarAudio {
   private wantMusic = false;
   private muted = false;
   private lastImpactTime = 0;
+  private lastImpactStrength = 0;
 
   constructor() {
     const unlock = () => {
@@ -415,13 +416,18 @@ export class CarAudio {
     }
   }
 
-  /** One-shot crash: a low thump plus a burst of crunch noise. strength is 0..1. */
+  /**
+   * One-shot crash: a low thump plus a burst of crunch noise. strength is 0..1 — from the collision
+   * speed (and distance, for other cars' crashes); quieter hits are also duller and shorter.
+   */
   impact(strength: number): void {
-    if (!this.ctx || strength <= 0) return;
+    if (!this.ctx || strength <= 0.01) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
-    if (now - this.lastImpactTime < 0.12) return;
+    // Rate-limit, but don't let a small knock swallow a much bigger crash right after it.
+    if (now - this.lastImpactTime < 0.12 && strength < this.lastImpactStrength * 1.5) return;
     this.lastImpactTime = now;
+    this.lastImpactStrength = strength;
 
     const thump = ctx.createOscillator();
     thump.type = 'sine';
