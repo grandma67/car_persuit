@@ -38,7 +38,7 @@ import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { COP_RAM, DAMAGE } from '../gameplay/balance';
 
 const FIXED_DT = 1 / 60;
-const MAX_STEPS_PER_FRAME = 5;
+const MAX_STEPS_PER_FRAME = 3; // more only snowballs on a slow phone: each catch-up step makes the frame slower still
 const REAR_WHEELS = [2, 3];
 const SMOKE_PER_SECOND = 55; // per rear wheel at full skid
 const SIGHT_HEIGHT = 0.6; // cop line-of-sight rays: under planter tops (0.9m), over the road
@@ -48,6 +48,7 @@ const FIRE_PER_SECOND = 40;
 const GEYSER_SECONDS = 6;
 const GEYSER_PER_SECOND = 70;
 const SIREN_LIGHTS = 2; // shared flashing lights, given to the nearest cops (fixed count avoids shader recompiles)
+const CIVILIAN_PROP_RANGE = 90; // metres: civilians nearer the player than this collide with props
 const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
@@ -177,7 +178,7 @@ export class Game {
     this.player.setGrip(playerGrip(climate, weather));
     this.smoke.setColor(climate.spray);
     if (weather !== 'clear') {
-      this.precipitation = new Precipitation(weather);
+      this.precipitation = new Precipitation(weather, mobile ? 0.5 : 1);
       this.scene.add(this.precipitation.object);
     }
     this.scene.add(this.player.mesh.root);
@@ -378,6 +379,7 @@ export class Game {
     // Fixed-timestep physics, rendered with interpolation for smoothness on any refresh rate.
     // The world runs in every state so the car settles and coasts; only 'playing' takes input.
     const driveInput = this.state === 'playing' ? this.input.drive() : NO_INPUT;
+    this.props.updateActive(frameDt, this.propToucherPositions());
     this.accumulator += frameDt;
     let steps = 0;
     let impact = 0;
@@ -493,6 +495,17 @@ export class Game {
     this.sky.follow(this.chase.camera);
     this.renderer.render(this.scene, this.overview ? this.overviewCamera() : this.chase.camera);
     this.input.endFrame();
+  }
+
+  /** Vehicles whose surroundings need solid props: the player, cops, and civilians in view of the player. */
+  private propToucherPositions(): THREE.Vector3[] {
+    const p = this.player.position;
+    const out = [p];
+    for (const cop of this.director.cops) out.push(cop.vehicle.position);
+    for (const car of this.traffic.cars) {
+      if (car.vehicle.position.distanceToSquared(p) < CIVILIAN_PROP_RANGE ** 2) out.push(car.vehicle.position);
+    }
+    return out;
   }
 
   private updateMission(dt: number, carPos: THREE.Vector3): void {

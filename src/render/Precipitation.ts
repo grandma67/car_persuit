@@ -16,8 +16,9 @@ export class Precipitation {
   private phases: Float32Array;
   private time = 0;
 
-  constructor(private kind: 'rain' | 'snow') {
-    const count = kind === 'rain' ? RAIN_COUNT : SNOW_COUNT;
+  /** density: share of the full particle count (lower on phones). */
+  constructor(private kind: 'rain' | 'snow', density = 1) {
+    const count = Math.round((kind === 'rain' ? RAIN_COUNT : SNOW_COUNT) * density);
     this.positions = new Float32Array(count * 3);
     this.phases = new Float32Array(count);
     for (let i = 0; i < count; i++) {

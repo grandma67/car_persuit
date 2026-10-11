@@ -19,6 +19,11 @@ const SIGNAL_LIGHTS: [SignalLight, number, number, number][] = [
   ['green', 4.5, 0x2aff6a, 0x0a3a1a],
 ];
 const UP = new THREE.Vector3(0, 1, 0);
+// Thousands of props as permanent physics bodies cost more per step than all the cars together,
+// so an intact prop only exists in physics while a vehicle is near it.
+const ACTIVE_RADIUS = 22; // metres: give props within this of a vehicle a body…
+const INACTIVE_RADIUS = 30; // …and take it away once every vehicle is this far
+const ACTIVE_REFRESH = 0.15; // seconds between refreshes (a 70 m/s car covers ~10 m)
 
 type SignShape = 'octagon' | 'round' | 'triangle' | 'square';
 const SIGN_SHAPE: Record<SignVariant, SignShape> = {
@@ -75,7 +80,7 @@ interface Attachment {
 
 interface PropState {
   def: StreetProp;
-  body: RAPIER.RigidBody;
+  body: RAPIER.RigidBody | null; // null while no vehicle is near (intact props only)
   broken: boolean;
   key: ModelKey;
   instance: number; // index within its model's instanced mesh
@@ -379,6 +384,9 @@ export class PropSystem {
   private lenses: THREE.InstancedMesh;
   private signals: number[] = []; // prop indices of traffic signals
   private moving = new Set<number>(); // broken props whose body is still awake
+  private active = new Set<number>(); // intact props that currently have a physics body
+  private activeTimer = 0;
+  private world: RAPIER.World;
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private v = new THREE.Vector3();
@@ -457,20 +465,12 @@ export class PropSystem {
     let nextLens = 0;
     const warm = new THREE.Color(0xffe2b0).lerp(new THREE.Color(0xc8c8c8), 1 - lampGlow); // unlit by day
 
+    this.world = world;
     defs.forEach((def, i) => {
       const spec = propSpec(def);
       this.q.setFromAxisAngle(UP, def.yaw);
-      const body = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed()
-          .setTranslation(def.x, 0, def.z)
-          .setRotation({ x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w }),
-      );
-      world.createCollider(
-        RAPIER.ColliderDesc.cuboid(spec.hx, spec.height / 2, spec.hz).setTranslation(0, spec.height / 2, 0).setMass(spec.mass).setFriction(0.6),
-        body,
-      );
       const key = modelKey(def);
-      const state: PropState = { def, body, broken: false, key, instance: next[key]++, attachments: [] };
+      const state: PropState = { def, body: null, broken: false, key, instance: next[key]++, attachments: [] };
       this.props.push(state);
       const world4 = new THREE.Matrix4().compose(this.v.set(def.x, 0, def.z), this.q, this.scale(def));
       this.meshes[key].setMatrixAt(state.instance, world4);
@@ -512,6 +512,60 @@ export class PropSystem {
 
   private scale(def: StreetProp): THREE.Vector3 {
     return def.scale ? new THREE.Vector3().setScalar(def.scale) : this.one;
+  }
+
+  /** Give a prop its (fixed) physics body. */
+  private activate(i: number): RAPIER.RigidBody {
+    const p = this.props[i];
+    if (p.body) return p.body;
+    const spec = propSpec(p.def);
+    this.q.setFromAxisAngle(UP, p.def.yaw);
+    p.body = this.world.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed()
+        .setTranslation(p.def.x, 0, p.def.z)
+        .setRotation({ x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w }),
+    );
+    this.world.createCollider(
+      RAPIER.ColliderDesc.cuboid(spec.hx, spec.height / 2, spec.hz).setTranslation(0, spec.height / 2, 0).setMass(spec.mass).setFriction(0.6),
+      p.body,
+    );
+    this.active.add(i);
+    return p.body;
+  }
+
+  /** Visit each prop index in the grid cells within `radius` of a point. */
+  private near(x: number, z: number, radius: number, visit: (i: number) => void): void {
+    for (let cx = Math.floor((x - radius) / GRID_CELL); cx <= Math.floor((x + radius) / GRID_CELL); cx++) {
+      for (let cz = Math.floor((z - radius) / GRID_CELL); cz <= Math.floor((z + radius) / GRID_CELL); cz++) {
+        for (const i of this.grid.get(`${cx},${cz}`) ?? []) visit(i);
+      }
+    }
+  }
+
+  /**
+   * Keep physics bodies only on intact props near a vehicle. Call once per frame with the
+   * positions of the vehicles that can touch props (refreshes a few times a second).
+   */
+  updateActive(dt: number, vehicles: THREE.Vector3[]): void {
+    this.activeTimer -= dt;
+    if (this.activeTimer > 0) return;
+    this.activeTimer = ACTIVE_REFRESH;
+    const keep = new Set<number>();
+    for (const v of vehicles) {
+      this.near(v.x, v.z, INACTIVE_RADIUS, (i) => {
+        const p = this.props[i];
+        const d = Math.hypot(p.def.x - v.x, p.def.z - v.z);
+        if (d < INACTIVE_RADIUS) keep.add(i);
+        if (d < ACTIVE_RADIUS && !p.broken) this.activate(i);
+      });
+    }
+    for (const i of this.active) {
+      const p = this.props[i];
+      if (keep.has(i) || p.broken || !p.body) continue;
+      this.world.removeRigidBody(p.body);
+      p.body = null;
+      this.active.delete(i);
+    }
   }
 
   get brokenCount(): number {
@@ -574,17 +628,19 @@ export class PropSystem {
     const p = this.props[i];
     const spec = propSpec(p.def);
     p.broken = true;
-    p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+    const body = this.activate(i);
+    this.active.delete(i); // broken debris keeps its body for good
+    body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
 
     // Thrown ahead of the car, slightly up, tumbling over the axis across the car's path.
     const lv = vehicle.body.linvel();
     const dx = lv.x / speed;
     const dz = lv.z / speed;
     const lift = 1.5 + Math.random() * 2;
-    p.body.setLinvel({ x: lv.x * 1.05 + (Math.random() - 0.5) * 2, y: lift, z: lv.z * 1.05 + (Math.random() - 0.5) * 2 }, true);
+    body.setLinvel({ x: lv.x * 1.05 + (Math.random() - 0.5) * 2, y: lift, z: lv.z * 1.05 + (Math.random() - 0.5) * 2 }, true);
     const tall = p.def.kind === 'lamp' || p.def.kind === 'signal' || p.def.kind === 'tree' || p.def.kind === 'umbrella';
     const spin = (tall ? 3 : 6) * Math.min(1, speed / 15);
-    p.body.setAngvel({ x: dz * spin, y: (Math.random() - 0.5) * 4, z: -dx * spin }, true);
+    body.setAngvel({ x: dz * spin, y: (Math.random() - 0.5) * 4, z: -dx * spin }, true);
 
     const keep = 1 - spec.slowdown;
     vehicle.body.setLinvel({ x: lv.x * keep, y: lv.y, z: lv.z * keep }, true);
@@ -601,7 +657,7 @@ export class PropSystem {
     }
     this.moving.add(i);
 
-    const t = p.body.translation();
+    const t = body.translation();
     const y = tall ? 2 : 0.5;
     return { kind: p.def.kind, tree: p.def.tree, position: new THREE.Vector3(t.x, y, t.z), strength: Math.min(1, speed / 30) };
   }
@@ -611,6 +667,7 @@ export class PropSystem {
     const touched = new Set<THREE.InstancedMesh>();
     for (const i of this.moving) {
       const p = this.props[i];
+      if (!p.body) continue;
       const t = p.body.translation();
       const r = p.body.rotation();
       this.q.set(r.x, r.y, r.z, r.w);
