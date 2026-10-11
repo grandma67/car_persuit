@@ -9,6 +9,7 @@ const RIGHT = new THREE.Vector3(-1, 0, 0);
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpQuat = new THREE.Quaternion();
 const tmpVec = new THREE.Vector3();
+const BRAKE_LIGHT_HOLD = 0.4; // seconds
 
 // A Rapier raycast vehicle plus its mesh. The same class drives the player and (later) cops;
 // only the DriveInput source differs.
@@ -27,6 +28,7 @@ export class Vehicle {
    * hold their lane instead of drifting into each other. 0 = pure physics (player, cops).
    */
   tractionAssist = 0;
+  private brakeLightTimer = 0; // seconds the brake lights stay lit after the last brake input
   /** Road-lighting spotlight; cops use glowing lamps only. */
   beamEnabled = true;
   /** All lights out (wrecked). */
@@ -188,6 +190,9 @@ export class Vehicle {
 
     c.updateVehicle(dt);
     this.lastInput = input;
+    // Brake lights follow real braking (not coasting), held briefly so feathering doesn't flicker.
+    const braking = (input.brake > 0 && speed > 0.5) || input.handbrake;
+    this.brakeLightTimer = braking ? BRAKE_LIGHT_HOLD : Math.max(0, this.brakeLightTimer - dt);
 
     // Skid intensity: sideways slide, handbrake lock, or hard braking at speed.
     const absSpeed = Math.abs(speed);
@@ -293,12 +298,13 @@ export class Vehicle {
     for (let i = 0; i < 4; i++) this.controller.setWheelFrictionSlip(i, this.spec.frictionSlip * scale);
   }
 
-  /** Brake lights on unless accelerating; headlights per time of day; everything off when wrecked. */
+  /**
+   * Brake lights while braking, a dim tail-light glow with the headlights on; headlights per time
+   * of day; everything off when wrecked.
+   */
   private updateLights(): void {
     const m = this.mesh;
-    const input = this.lastInput;
-    const accelerating = input.throttle > 0 && input.brake === 0 && !input.handbrake;
-    const brake = this.lightsOff ? 0 : accelerating ? 0 : 1;
+    const brake = this.lightsOff ? 0 : this.brakeLightTimer > 0 ? 1 : this.headlights * 0.3;
     m.taillight.emissiveIntensity = brake * 5;
     for (const g of m.tailGlows) (g.material as THREE.SpriteMaterial).opacity = brake * (0.35 + this.headlights * 0.45);
 
