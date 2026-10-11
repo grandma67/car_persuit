@@ -74,3 +74,15 @@ describe('pickCopType', () => {
     expect(pickCopType({ patrol: 1 }, 0.999)).toBe('patrol');
   });
 });
+
+describe('ramming cops', () => {
+  it('fills the wanted bar every time, more for harder hits', () => {
+    const w = new WantedSystem();
+    const start = w.progress;
+    w.copWhacked(5);
+    const soft = w.progress;
+    expect(soft).toBeGreaterThan(start);
+    w.copWhacked(25);
+    expect(w.progress - soft).toBeGreaterThan(soft - start);
+  });
+});

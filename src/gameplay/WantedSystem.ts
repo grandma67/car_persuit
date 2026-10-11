@@ -59,6 +59,11 @@ export class WantedSystem {
     return this.addHeat(HEAT.copWrecked);
   }
 
+  /** The player rammed a cop at `speed` m/s: harder hits draw more heat. */
+  copWhacked(speed: number): number | null {
+    return this.addHeat(Math.min(HEAT.copWhackedMax, HEAT.copWhacked + HEAT.copWhackedPerMs * speed));
+  }
+
   propSmashed(): number | null {
     return this.addHeat(HEAT.propSmashed);
   }

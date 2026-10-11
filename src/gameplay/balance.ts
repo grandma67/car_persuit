@@ -77,6 +77,9 @@ export const WANTED: StarLevel[] = [
 /** Extra "wanted time" (seconds) for trouble you cause. */
 export const HEAT = {
   copWrecked: 25,
+  copWhacked: 6, // each time the player rams a cop, plus copWhackedPerMs × ramming speed
+  copWhackedPerMs: 0.4,
+  copWhackedMax: 20,
   propSmashed: 0.6,
   civilianHit: 2,
 };

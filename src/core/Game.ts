@@ -48,6 +48,7 @@ const FIRE_PER_SECOND = 40;
 const GEYSER_SECONDS = 6;
 const GEYSER_PER_SECOND = 70;
 const SIREN_LIGHTS = 2; // shared flashing lights, given to the nearest cops (fixed count avoids shader recompiles)
+const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
@@ -543,7 +544,16 @@ export class Game {
     }
     this.copTouching.add(cop);
     // A ram can shove the player without a sharp velocity jump, so it gets its own bang.
-    if (!wasTouching) this.ramSound = Math.max(this.ramSound, impactStrength(closing));
+    if (!wasTouching) {
+      this.ramSound = Math.max(this.ramSound, impactStrength(closing));
+      // The player drove into the cop (not just got rammed): assaulting an officer raises the heat.
+      const p = this.player.position;
+      const c = cop.vehicle.position;
+      const len = Math.hypot(c.x - p.x, c.z - p.z) || 1;
+      const v = this.chaseTarget.velocity; // player's velocity before this frame's steps
+      const whack = (v.x * (c.x - p.x) + v.z * (c.z - p.z)) / len;
+      if (whack > WHACK_SPEED && this.state === 'playing') this.raiseStars(this.wanted.copWhacked(whack));
+    }
     const damage = COP_RAM.grindPerSec * dt + (wasTouching ? 0 : COP_RAM.bangPerMs * closing);
     return damage * (cop.vehicle.spec.mass / COP_RAM.referenceMass) * this.difficulty.damageScale;
   }
