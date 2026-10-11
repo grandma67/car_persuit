@@ -9,7 +9,7 @@ import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, type CityData } from '../world/CityGenerator';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
-import { applyClimate, CLIMATE_NAMES, CLIMATES, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
+import { applyClimate, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
 import { Sky } from '../render/Sky';
 import { Precipitation } from '../render/Precipitation';
 import { CopDirector, type Cop } from '../ai/CopDirector';
@@ -64,7 +64,6 @@ export class Game {
   private fog: THREE.Fog;
   private time: TimeOfDay;
   private precipitation: Precipitation | null = null;
-  private cityChoice: string; // menu "City" choice: 'random' or a climate name (?city=…)
   private sky: Sky;
   private overview = false; // ?debug only: top-down map view on C
   private debug = new URLSearchParams(window.location.search).has('debug');
@@ -129,12 +128,12 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(this.renderer.domElement);
 
-    // The seed picks a climate (?city=temperate|snow|beach|desert), a weather (?weather=clear|rain|snow),
+    // The seed picks a climate, a weather, a time of day and a building style that suits the climate.
+    // Overrides for testing, only with ?debug: ?city=temperate|snow|beach|desert, ?weather=clear|rain|snow.
     // a time of day (?time=day|afternoon|night) and a building style that suits the climate.
     const params = new URLSearchParams(window.location.search);
-    const climate = pickClimate(seed, params.get('city'));
-    this.cityChoice = params.get('city') && params.get('city')! in CLIMATES ? climate.name : 'random';
-    const weather = pickWeather(seed, climate, params.get('weather'));
+    const climate = pickClimate(seed, this.debug ? params.get('city') : null);
+    const weather = pickWeather(seed, climate, this.debug ? params.get('weather') : null);
     const time = (this.time = applyClimate(pickTimeOfDay(seed, params.get('time')), climate, weather));
     const theme = pickTheme(seed, climate);
     this.renderer.toneMappingExposure = time.exposure;
@@ -263,13 +262,10 @@ export class Game {
         look: this.look,
         difficulties: DIFFICULTIES,
         difficulty: this.difficulty.id,
-        cities: [{ id: 'random', label: 'Random' }, ...CLIMATE_NAMES.map((c) => ({ id: c, label: CLIMATES[c].label }))],
-        city: this.cityChoice,
         best: best ? formatTime(best.seconds) : null,
       },
       () => this.startMission(),
       (id) => this.setDifficulty(id),
-      (id) => this.setCity(id),
     );
   }
 
@@ -279,17 +275,6 @@ export class Game {
     // Rebuild the (not yet started) mission so the timer shows this difficulty's limit.
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
     this.showMenu();
-  }
-
-  /** A different climate means a different world: reload this seed with ?city= set (or cleared). */
-  private setCity(id: string): void {
-    if (id === this.cityChoice) return;
-    const url = new URL(window.location.href);
-    if (id === 'random') url.searchParams.delete('city');
-    else url.searchParams.set('city', id);
-    url.searchParams.delete('weather');
-    url.searchParams.set('seed', String(this.city.seed));
-    window.location.href = url.toString();
   }
 
   private startMission(): void {

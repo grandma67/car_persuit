@@ -5,8 +5,8 @@ island city before the clock runs out, while an escalating police force (GTA-sty
 tries to wreck you.
 
 **Play:** `npm install && npm run dev`, then open the printed URL. Every city comes from a seed —
-add `?seed=1234` to replay one, `?time=day|afternoon|night` to force the time of day,
-`?city=temperate|snow|beach|desert` for the climate (also on the menu) and `?weather=clear|rain|snow`.
+add `?seed=1234` to replay one, `?time=day|afternoon|night` to force the time of day. The seed
+also decides the climate and weather.
 
 ## Controls
 
@@ -40,7 +40,7 @@ npm test        # unit tests (Vitest): generator, mission, wanted, traffic rules
 npm run build   # type-check + production build into dist/
 ```
 
-`?debug` enables: C overview camera, T teleport to destination, Y 3 s left, K +1 star.
+`?debug` enables `?city=temperate|snow|beach|desert` and `?weather=clear|rain|snow` overrides, and: C overview camera, T teleport to destination, Y 3 s left, K +1 star.
 
 Deployment: pushing to `main` runs `.github/workflows/deploy.yml`, which builds and publishes to
 GitHub Pages (set *Settings → Pages → Source* to “GitHub Actions”). See `PLAN.md` for the design.
