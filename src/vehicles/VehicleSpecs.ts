@@ -205,15 +205,15 @@ export const BOX_TRUCK_SPEC: VehicleSpec = {
 
 // The rare ramp truck: a long low-loader whose deck tilts up from just above the road behind
 // it to above the cab. Catch it from behind, drive up the deck and launch over the cab. The
-// wheels sit outside the deck so the deck is a full car wide.
+// wheels sit outside the deck, which is about two cars wide so it's easy to line up with.
 export const RAMP_TRUCK_SPEC: VehicleSpec = {
   ...BUS_SPEC,
   name: 'Ramp truck',
   body: 'ramptruck',
   ...heavy(9000),
-  halfExtents: { x: 1.3, y: 0.45, z: 4.6 },
+  halfExtents: { x: 2.0, y: 0.45, z: 4.6 },
   wheelRadius: 0.55,
-  wheelX: 1.45,
+  wheelX: 2.15,
   wheelZ: 3.0,
   wheelY: 0,
   suspensionRestLength: 0.55,
@@ -223,7 +223,7 @@ export const RAMP_TRUCK_SPEC: VehicleSpec = {
 
 /** Ramp truck deck and cab in chassis-local space (+Z forward), shared by physics and mesh. */
 export const RAMP = {
-  halfWidth: 1.25,
+  halfWidth: 2.0,
   tail: { z: -8.2, y: -0.86 }, // lip just above the road behind the truck
   lip: 0.06, // deck thickness at the tail
   top: { z: 2.0, y: 2.4 }, // launch edge, above the cab roof

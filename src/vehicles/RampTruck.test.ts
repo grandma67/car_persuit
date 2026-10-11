@@ -39,10 +39,11 @@ describe('civilian heavies', () => {
 describe('ramp truck', () => {
   beforeAll(() => RAPIER.init());
 
-  it('launches a car that catches it from behind over the cab', () => {
+  // Dead centre, and off to one side (a car's width off-centre still lands on the deck).
+  it.each([0, 1.0])('launches a car that catches it from behind over the cab (offset %s m)', (offset) => {
     const world = flatWorld();
     const truck = new Vehicle(world, RAMP_TRUCK_SPEC, { x: 0, y: 1.2, z: 0 });
-    const car = new Vehicle(world, PLAYER_SPEC, { x: 0, y: 1, z: -30 });
+    const car = new Vehicle(world, PLAYER_SPEC, { x: offset, y: 1, z: -30 });
     const cruise = { ...IDLE, throttle: 0.5 };
     step(world, [[truck, IDLE], [car, IDLE]], 1);
 
