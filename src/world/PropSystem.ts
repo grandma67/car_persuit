@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { part } from '../render/geometry';
 import type { Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
 import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
@@ -91,24 +92,14 @@ interface PropState {
 
 // --- Low-poly prop models. Local space: origin on the ground, +Z is the front. ---
 
-function part(geo: THREE.BufferGeometry, color: number, x = 0, y = 0, z = 0): THREE.BufferGeometry {
-  geo.translate(x, y, z);
-  const c = new THREE.Color(color);
-  const colors = new Float32Array(geo.attributes.position.count * 3);
-  for (let i = 0; i < colors.length; i += 3) colors.set([c.r, c.g, c.b], i);
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  return geo;
-}
-
-/** Low-poly trees. Non-indexed so cones, cylinders and icosahedra merge together. */
+/** Low-poly trees. */
 function treeModels(look: Greenery): Record<`tree-${TreeKind}`, THREE.BufferGeometry> {
-  const ni = (geo: THREE.BufferGeometry) => (geo.index ? geo.toNonIndexed() : geo);
-  const cyl = (top: number, bottom: number, h: number, seg: number) => ni(new THREE.CylinderGeometry(top, bottom, h, seg));
-  const cone = (r: number, h: number) => ni(new THREE.ConeGeometry(r, h, 7));
+  const cyl = (top: number, bottom: number, h: number, seg: number) => new THREE.CylinderGeometry(top, bottom, h, seg);
+  const cone = (r: number, h: number) => new THREE.ConeGeometry(r, h, 7);
   const SNOW = 0xeef2f6;
   const pineGreen = look.snowy ? 0x3a5e48 : 0x2a4f36;
   const fronds = Array.from({ length: 7 }, (_, k) =>
-    part(ni(new THREE.BoxGeometry(0.7, 0.06, 3.2)).translate(0, 0, 1.6).rotateX(0.45).rotateY((k / 7) * Math.PI * 2), 0x4f8a3a, 0, 6.4),
+    part(new THREE.BoxGeometry(0.7, 0.06, 3.2).translate(0, 0, 1.6).rotateX(0.45).rotateY((k / 7) * Math.PI * 2), 0x4f8a3a, 0, 6.4),
   );
   const cactus = 0x4f7a3a;
   return {

@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { part } from '../render/geometry';
 import type { Roadworks } from './Roadworks';
 
 const MIXER_LATERAL = 3.2; // metres from the junction centre, sideways
@@ -11,17 +12,6 @@ const TRACTOR_ANGLE = 0.35; // parked a little askew
 const DRUM_SPEED = 1.2; // rad/s
 const BEACON_ON = 0xffa21a;
 const BEACON_OFF = 0x3a2508;
-
-function part(geo: THREE.BufferGeometry, color: number, x = 0, y = 0, z = 0): THREE.BufferGeometry {
-  geo = geo.index ? geo.toNonIndexed() : geo;
-  geo.translate(x, y, z);
-  const c = new THREE.Color(color);
-  const colors = new Float32Array(geo.attributes.position.count * 3);
-  for (let i = 0; i < colors.length; i += 3) colors.set([c.r, c.g, c.b], i);
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.deleteAttribute('uv');
-  return geo;
-}
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 /** Wheel: axle along X. */

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { part } from './geometry';
 import { RAMP, type Landmark } from '../world/Landmarks';
 import { TireSmoke } from './TireSmoke';
 
@@ -15,17 +16,6 @@ const WING = 0xb08a52; // polished bronze
 const RAMP_SEGMENTS = 16;
 const SPRAY_PER_SECOND = 40;
 const SPRAY_RANGE = 160; // only spray fountains near the camera
-
-/** Vertex-coloured part for merging (one material for all stone/bronze parts). */
-function part(geo: THREE.BufferGeometry, color: number, x = 0, y = 0, z = 0): THREE.BufferGeometry {
-  geo.translate(x, y, z);
-  const c = new THREE.Color(color);
-  const colors = new Float32Array(geo.attributes.position.count * 3);
-  for (let i = 0; i < colors.length; i += 3) colors.set([c.r, c.g, c.b], i);
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.deleteAttribute('uv');
-  return geo;
-}
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 const cyl = (rt: number, rb: number, h: number, seg = 12) => new THREE.CylinderGeometry(rt, rb, h, seg);
