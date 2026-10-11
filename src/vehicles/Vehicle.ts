@@ -22,6 +22,11 @@ export class Vehicle {
   lastInput: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   /** Headlight strength: 0 by day, 1 at night. Set from the time of day. */
   headlights = 0;
+  /**
+   * Traction assist for AI civilians, per second: bleeds off sideways sliding and spin so they
+   * hold their lane instead of drifting into each other. 0 = pure physics (player, cops).
+   */
+  tractionAssist = 0;
   /** Road-lighting spotlight; cops use glowing lamps only. */
   beamEnabled = true;
   /** All lights out (wrecked). */
@@ -193,11 +198,32 @@ export class Vehicle {
     if (brake >= s.brakeForce * 0.5 && absSpeed > 8) skid = Math.max(skid, 0.4);
     this.skid = c.wheelIsInContact(2) || c.wheelIsInContact(3) ? skid : 0;
 
+    if (this.tractionAssist > 0 && (c.wheelIsInContact(0) || c.wheelIsInContact(2))) this.assistTraction(dt);
+
     // Speed-scaled downforce keeps the car planted in fast corners.
     const rot = this.body.rotation();
     tmpVec.copy(UP).applyQuaternion(tmpQuat.set(rot.x, rot.y, rot.z, rot.w));
     const f = -s.downforce * Math.abs(speed) * dt;
     this.body.applyImpulse({ x: tmpVec.x * f, y: tmpVec.y * f, z: tmpVec.z * f }, true);
+  }
+
+  /** Remove part of the sideways velocity, and of any yaw spin the steering isn't asking for. */
+  private assistTraction(dt: number): void {
+    const k = Math.min(1, this.tractionAssist * dt);
+    const v = this.body.linvel();
+    const f = this.forward(tmpVec);
+    const lateral = v.x * f.z - v.z * f.x; // velocity along the car's right/left axis
+    this.body.setLinvel({ x: v.x - f.z * lateral * k, y: v.y, z: v.z + f.x * lateral * k }, true);
+    // Yaw rate a car rolling at this speed and steering angle would have (bicycle model).
+    const s = this.spec;
+    const speed = v.x * f.x + v.z * f.z;
+    const steerAngle = -this.steer * THREE.MathUtils.lerp(s.maxSteer, s.minSteer, Math.min(1, Math.abs(speed) / s.maxSpeed));
+    const wanted = (speed * Math.tan(steerAngle)) / Math.max(1, s.wheelZ * 2);
+    // Only rein in spin beyond that (the model over-predicts, so never add turning).
+    const w = this.body.angvel();
+    const limit = Math.abs(wanted) + 0.15;
+    const target = Math.sign(w.y) === Math.sign(wanted) || wanted === 0 ? THREE.MathUtils.clamp(w.y, -limit, limit) : 0;
+    this.body.setAngvel({ x: w.x, y: w.y + (target - w.y) * k, z: w.z }, true);
   }
 
   /** Call after world.step() to record the new physics transform. */

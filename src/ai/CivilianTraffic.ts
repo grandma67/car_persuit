@@ -28,6 +28,10 @@ export const TRAFFIC = {
   rampChance: 0.05, // per spawn, while no ramp truck is around
 };
 
+// Traction assist (per second) for civilians: they hold their lane on any surface instead of
+// sliding wide, and shake off the spin from a knock instead of spinning out into a jam.
+const CIVILIAN_TRACTION = 6;
+
 // Everyday car colours.
 const COLORS = [0xc9ccd1, 0xf0f0ee, 0x1c1e22, 0x24345a, 0x6e1a1f, 0x5b6068, 0xb8a98c, 0x2f4a3a, 0x8a8f96, 0x3a5f8a];
 const BUS_COLORS = [0xd8a21c, 0xc0392b, 0x2a6fb0, 0x2e8b57];
@@ -139,6 +143,7 @@ export class CivilianTraffic {
     // Drop tall bodies in from a little higher so their wheels land rather than spawn in the road.
     const y = 1.2 - (spec.wheelY ?? 0);
     const vehicle = new Vehicle(this.world, spec, { x, y, z }, Math.atan2(dx, dz));
+    vehicle.tractionAssist = CIVILIAN_TRACTION;
     vehicle.headlights = this.headlights;
     vehicle.beamEnabled = false;
     this.scene.add(vehicle.mesh.root);
