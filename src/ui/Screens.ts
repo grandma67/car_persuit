@@ -59,7 +59,7 @@ export class Screens {
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive</li>
         <li><kbd>Space</kbd> handbrake</li>
         <li><kbd>R</kbd> reset car</li>
-        <li><kbd>P</kbd> pause · <kbd>M</kbd> mute</li>
+        <li><kbd>P</kbd> pause · <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen</li>
       </ul>
       <div class="screen-choices" role="group" aria-label="Difficulty">${choices}</div>
       <button data-action="start">Start <kbd>Enter</kbd></button>
@@ -69,8 +69,15 @@ export class Screens {
     );
   }
 
-  pause(onResume: () => void): void {
-    this.show(`<h2>PAUSED</h2><button data-action="resume">Resume <kbd>P</kbd></button>`, { resume: onResume });
+  pause(onResume: () => void, onRetry: () => void): void {
+    this.show(
+      `<h2>PAUSED</h2>
+      <div class="screen-buttons">
+        <button data-action="resume">Resume <kbd>P</kbd></button>
+        <button data-action="retry" class="secondary">Retry <kbd>Enter</kbd></button>
+      </div>`,
+      { resume: onResume, retry: onRetry },
+    );
   }
 
   end(info: EndScreenInfo, onRetry: () => void, onNewCity: () => void): void {

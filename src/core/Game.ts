@@ -290,7 +290,7 @@ export class Game {
   private setPaused(paused: boolean): void {
     if (paused && this.state === 'playing') {
       this.state = 'paused';
-      this.screens.pause(() => this.setPaused(false));
+      this.screens.pause(() => this.setPaused(false), () => this.restart(this.city.seed));
     } else if (!paused && this.state === 'paused') {
       this.state = 'playing';
       this.screens.hide();
@@ -312,10 +312,11 @@ export class Game {
     const pressed = (...codes: string[]) => codes.some((c) => this.input.wasPressed(c));
     if (pressed('KeyR') && this.state === 'playing') this.player.reset();
     if (pressed('KeyM')) this.hud.setMuted(this.audio.toggleMute());
+    if (pressed('KeyF')) toggleFullscreen();
     if (pressed('KeyP', 'Escape')) this.setPaused(this.state === 'playing');
     if (pressed('Enter', 'NumpadEnter')) {
       if (this.state === 'menu') this.startMission();
-      else if (this.state === 'won' || this.state === 'lost') this.restart(this.city.seed);
+      else if (this.state === 'won' || this.state === 'lost' || this.state === 'paused') this.restart(this.city.seed);
     }
     if (this.state === 'menu' && pressed('ArrowLeft', 'ArrowRight')) {
       const i = DIFFICULTIES.indexOf(this.difficulty);
@@ -770,6 +771,12 @@ export class Game {
     this.audio.impact(Math.max(playerCrash, crashSound));
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid, maxSpeed: p.spec.maxSpeed });
   }
+}
+
+/** F: enter/leave fullscreen (still within the key press's user activation, so browsers allow it). */
+function toggleFullscreen(): void {
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  else void document.documentElement.requestFullscreen?.().catch(() => {});
 }
 
 /** localStorage, or null where it's unavailable (private mode, sandboxed previews). */

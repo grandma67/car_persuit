@@ -16,6 +16,7 @@ add `?seed=1234` to replay one, `?time=day|afternoon|night` to force the time of
 | Handbrake (drift) | Space | HB |
 | Reset car | R | ⟲ |
 | Pause / mute | P or Esc / M | II |
+| Fullscreen | F | — |
 | Difficulty (menu) | ← → | tap |
 
 ## Features
