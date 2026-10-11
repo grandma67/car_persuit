@@ -40,7 +40,8 @@ describe('generateStreetProps', () => {
       ...city.props.map(rectFootprint),
       ...city.trees.map((t) => ({ x: t.x, z: t.z, hx: 0.5, hz: 0.5, yaw: 0 })),
     ];
-    const bad = city.streetProps.filter((p) => blockers.some((b) => footprintsOverlap(propFootprint(p), b)));
+    // Roadworks cones stand on the road on purpose.
+    const bad = city.streetProps.filter((p) => p.kind !== 'cone' && blockers.some((b) => footprintsOverlap(propFootprint(p), b)));
     expect(bad).toEqual([]);
   });
 

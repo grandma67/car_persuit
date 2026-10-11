@@ -17,17 +17,24 @@ export class RoadGraph {
     return Math.hypot(na.x - nb.x, na.z - nb.z);
   }
 
+  /** Nearest junction, preferring open ones (a junction closed for roadworks has no roads). */
   nearest(x: number, z: number): RoadNode {
     let best = this.nodes[0];
     let bestD = Infinity;
+    let bestOpen: RoadNode | null = null;
+    let bestOpenD = Infinity;
     for (const n of this.nodes) {
       const d = (n.x - x) ** 2 + (n.z - z) ** 2;
       if (d < bestD) {
         bestD = d;
         best = n;
       }
+      if (n.neighbors.length && d < bestOpenD) {
+        bestOpenD = d;
+        bestOpen = n;
+      }
     }
-    return best;
+    return bestOpen ?? best;
   }
 
   /** Node ids reachable from `start` (breadth-first). */

@@ -1,6 +1,7 @@
 // Procedural car audio with Web Audio — no sound files. Browsers only allow audio after a user
 // gesture, so the context is created on the first key/pointer press.
 import { MenuMusic, WIN_SONG } from './MenuMusic';
+import type { PropKind } from '../world/StreetProps';
 
 // Upper speed (m/s) of each gear; rpm sweeps within the band, dropping on each upshift.
 const GEAR_TOP_SPEEDS = [9, 17, 25, 33, 39, 46];
@@ -358,12 +359,12 @@ export class CarAudio {
   }
 
   /** Knocked-loose street furniture: metal clang (lamps, hydrants) or wood crack (benches, fences). */
-  propBreak(kind: 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal', strength: number): void {
+  propBreak(kind: PropKind, strength: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const gain = 0.15 + strength * 0.3;
-    const metal = kind !== 'bench' && kind !== 'fence';
+    const metal = kind !== 'bench' && kind !== 'fence' && kind !== 'cone';
 
     if (metal) {
       // Inharmonic partials ring like struck metal.

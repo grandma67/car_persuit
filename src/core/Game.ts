@@ -6,7 +6,7 @@ import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { buildCarMesh } from '../vehicles/carMesh';
 import { ChaseCamera } from '../render/ChaseCamera';
-import { generateCity, type CityData } from '../world/CityGenerator';
+import { DEFAULT_CITY, generateCity, type CityData } from '../world/CityGenerator';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
 import { Sky } from '../render/Sky';
@@ -17,6 +17,7 @@ import { CrashMarks } from '../render/CrashMarks';
 import { Landmarks } from '../render/Landmarks';
 import type { ChaseTarget, LineOfSight } from '../ai/CopController';
 import { PropSystem, type PropBreak } from '../world/PropSystem';
+import { RoadworksSite } from '../world/RoadworksSite';
 import { Hud, formatTime } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
 import { CarAudio } from '../audio/CarAudio';
@@ -87,6 +88,7 @@ export class Game {
   });
   private blast = new THREE.PointLight(0xff9a40, 0, 60, 1.5);
   private props: PropSystem;
+  private roadworks: RoadworksSite | null = null;
   private director: CopDirector;
   private wanted = new WantedSystem();
   private traffic: CivilianTraffic;
@@ -146,11 +148,14 @@ export class Game {
     this.scene.add(this.sun, this.sun.target);
 
     this.world.timestep = FIXED_DT;
-    this.city = generateCity(seed);
+    // ?roadworks forces the (rare) closed junction, for testing.
+    const forceWorks = new URLSearchParams(window.location.search).has('roadworks');
+    this.city = generateCity(seed, forceWorks ? { ...DEFAULT_CITY, roadworksChance: 1 } : DEFAULT_CITY);
     this.walls = buildCity(this.city, this.scene, this.world, theme, time.windowGlow);
     this.landmarks = new Landmarks(this.city.landmarks, this.scene, this.world, time.lampGlow, this.walls);
     this.sea = new Sea(this.city.islandSize / 2, time.sea);
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow);
+    if (this.city.roadworks) this.roadworks = new RoadworksSite(this.city.roadworks, this.scene, this.world, this.walls);
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
@@ -422,6 +427,7 @@ export class Game {
     this.updateSirens();
     this.props.sync();
     this.props.updateSignals(this.clock.elapsedTime);
+    this.roadworks?.update(frameDt, this.clock.elapsedTime);
     const carPos = this.player.mesh.root.position;
     const [sx, sy, sz] = this.time.sunOffset;
     this.sun.position.set(carPos.x + sx, carPos.y + sy, carPos.z + sz);

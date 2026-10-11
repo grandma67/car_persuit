@@ -4,7 +4,7 @@ import type { Rng } from '../core/Rng';
 import type { Block, CityConfig, Rect } from './CityGenerator';
 import type { Landmark } from './Landmarks';
 
-export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal';
+export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone';
 export type SignVariant = 'stop' | 'speed30' | 'speed50' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian';
 
 export interface StreetProp {
@@ -36,6 +36,7 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   fence: { hx: 1.45, hz: 0.06, height: 1.0, mass: 15, breakSpeed: 2, slowdown: 0.03 },
   sign: { hx: 0.08, hz: 0.08, height: 2.6, mass: 20, breakSpeed: 2.5, slowdown: 0.02 },
   signal: { hx: 0.15, hz: 0.15, height: 5.6, mass: 150, breakSpeed: 4, slowdown: 0.09 },
+  cone: { hx: 0.25, hz: 0.25, height: 0.75, mass: 4, breakSpeed: 1, slowdown: 0.01 },
 };
 
 /** Oriented rectangle on the ground plane. */

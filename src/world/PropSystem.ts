@@ -44,7 +44,7 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   }
 };
 
-type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | `sign-${SignShape}` | 'signal';
+type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | `sign-${SignShape}` | 'signal' | 'cone';
 const modelKey = (p: StreetProp): ModelKey => (p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind);
 
 export interface PropBreak {
@@ -130,8 +130,14 @@ function buildModels(): Record<ModelKey, THREE.BufferGeometry> {
     part(box(0.42, 1.15, 0.3), 0x1d2024, SIGNAL_HEAD_X, 4.85),
     part(box(0.52, 1.25, 0.04), 0x111316, SIGNAL_HEAD_X, 4.85, -0.16), // backboard
   ]);
+  // Traffic cone: black base, orange body, reflective white band.
+  const cone = mergeGeometries([
+    part(box(0.5, 0.05, 0.5), 0x1a1a1a, 0, 0.025),
+    part(new THREE.CylinderGeometry(0.035, 0.2, 0.7, 10), 0xff5a10, 0, 0.4),
+    part(new THREE.CylinderGeometry(0.1, 0.13, 0.14, 10), 0xf4f4f0, 0, 0.42),
+  ]);
   return {
-    lamp, hydrant, bench, fence, signal,
+    lamp, hydrant, bench, fence, signal, cone,
     'sign-octagon': sign('octagon'), 'sign-round': sign('round'), 'sign-triangle': sign('triangle'), 'sign-square': sign('square'),
   };
 }
