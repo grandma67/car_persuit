@@ -5,6 +5,11 @@ body {
   overflow: hidden;
   background: #0b0e14;
   font-family: system-ui, sans-serif;
+  /* It's a game: no text selection, long-press menus or tap flashes (Samsung Internet, iOS). */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app canvas {

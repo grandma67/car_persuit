@@ -2,6 +2,10 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Game } from './core/Game';
 import { seedFromUrl } from './core/Rng';
 
+// Backstop for the CSS: some Android browsers still start a selection or open a menu on long-press.
+document.addEventListener('selectstart', (e) => e.preventDefault());
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
 const splash = document.getElementById('splash')!;
 const bar = splash.querySelector<HTMLElement>('.splash-bar-fill')!;
 const status = splash.querySelector<HTMLElement>('.splash-status')!;
