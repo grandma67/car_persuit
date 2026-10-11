@@ -310,8 +310,10 @@ export class Vehicle {
 
     const head = this.lightsOff ? 0 : this.headlights;
     m.headlight.emissiveIntensity = 1.2 + head * 3;
-    m.beam.intensity = head * 450;
-    m.beam.visible = head > 0 && this.beamEnabled;
+    for (const beam of m.beams) {
+      beam.intensity = head * 300; // two overlapping beams, a bit brighter overall than the old single one
+      beam.visible = head > 0 && this.beamEnabled;
+    }
     for (const g of m.headGlows) (g.material as THREE.SpriteMaterial).opacity = head * 0.9;
   }
 

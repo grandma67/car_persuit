@@ -12,8 +12,8 @@ export interface CarMesh {
   /** Soft glow sprites around the lamps, so they read at night. */
   headGlows: THREE.Sprite[];
   tailGlows: THREE.Sprite[];
-  /** Road-lighting headlight beam (off by day). */
-  beam: THREE.SpotLight;
+  /** Road-lighting headlight beams, one per lamp (off by day). */
+  beams: THREE.SpotLight[];
   /** Police light bar halves (red, blue), flashed by the cop code. */
   sirenLights?: { red: THREE.MeshStandardMaterial; blue: THREE.MeshStandardMaterial; redGlow: THREE.Sprite; blueGlow: THREE.Sprite };
   /** Body paint, darkened when wrecked. */
@@ -231,16 +231,21 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     sirenLights = { red, blue, redGlow, blueGlow };
   }
 
-  // One spotlight between the lamps lights the road ahead at night.
-  const beam = new THREE.SpotLight(0xfff1d6, 0, 75, 0.5, 0.45, 1.3);
-  beam.position.set(0, 0.1, hz);
-  beam.target.position.set(0, -1.2, hz + 25);
-  // Hidden until Vehicle.updateLights turns it on: a spawning car must not flash an extra light
-  // into the scene for a frame, which would make three.js recompile every lit material (a hitch).
-  beam.visible = false;
-  root.add(beam, beam.target);
+  // A spotlight from each lamp, toed out a little: two pools of light on the road that overlap
+  // in the middle, like real headlights.
+  const beams = [-1, 1].map((side) => {
+    const x = side * 0.65 * (hx / 0.95);
+    const beam = new THREE.SpotLight(0xfff1d6, 0, 75, 0.42, 0.5, 1.3);
+    beam.position.set(x, 0.1, hz);
+    beam.target.position.set(x + side * 1.6, -1.2, hz + 25);
+    // Hidden until Vehicle.updateLights turns it on: a spawning car must not flash an extra light
+    // into the scene for a frame, which would make three.js recompile every lit material (a hitch).
+    beam.visible = false;
+    root.add(beam, beam.target);
+    return beam;
+  });
 
-  return { root, wheels, taillight, headlight, headGlows, tailGlows, beam, paint, sirenLights };
+  return { root, wheels, taillight, headlight, headGlows, tailGlows, beams, paint, sirenLights };
 }
 
 let glowCache: THREE.Texture | null | undefined;
