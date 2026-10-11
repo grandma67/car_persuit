@@ -262,6 +262,7 @@ export class Game {
     const d = this.difficulty;
     this.health = new Health({ ...DAMAGE, maxHealth: d.maxHealth, impactThreshold: d.armor, impactScale: DAMAGE.impactScale * d.damageScale });
     this.wanted.rate = d.heatRate;
+    this.traffic.count = d.traffic;
     this.touch?.setVisible(true);
     this.audio.unlock();
     this.audio.menuMusic(false);

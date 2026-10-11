@@ -19,7 +19,7 @@ import {
 import { CivilianController, type ForwardSensor } from './CivilianController';
 
 export const TRAFFIC = {
-  count: 16,
+  count: 16, // default (menu); each difficulty sets its own
   spawnMin: 90, // metres by road from the player
   spawnMax: 260,
   despawnDistance: 330, // straight-line
@@ -75,6 +75,8 @@ export interface Civilian {
 
 export class CivilianTraffic {
   readonly cars: Civilian[] = [];
+  /** Target number of cars on the road (set per difficulty). */
+  count = TRAFFIC.count;
   private sense: ForwardSensor;
 
   constructor(
@@ -114,7 +116,7 @@ export class CivilianTraffic {
       }
     }
     // Spawn at most one car per frame to spread the cost.
-    if (this.cars.length < TRAFFIC.count) this.spawn(playerPos);
+    if (this.cars.length < this.count) this.spawn(playerPos);
   }
 
   private spawn(playerPos: THREE.Vector3): void {
