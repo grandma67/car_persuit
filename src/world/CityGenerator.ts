@@ -14,7 +14,7 @@ export interface CityConfig {
   promenade: number; // paved strip between the ring road and the sea
   removeRoadFraction: number; // share of inner road segments turned into plazas
   parkChance: number;
-  roadworksChance: number; // chance this city has a junction closed for repairs
+  roadworksChance: number; // chance per site slot (up to 3) of a junction closed for repairs
 }
 
 export const DEFAULT_CITY: CityConfig = {
@@ -74,7 +74,7 @@ export interface CityData {
   landmarks: Landmark[]; // fountains, statues, obelisks, sculptures (solid)
   streetProps: StreetProp[]; // breakable lamps, hydrants, benches, fences, signs, signals
   roadMarks: RoadMark[]; // zebra crossings and stop lines
-  roadworks: Roadworks | null; // the rare closed junction
+  roadworks: Roadworks[]; // the rare closed junctions (usually none)
   spawn: { x: number; z: number; yaw: number };
 }
 
@@ -203,15 +203,15 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const spawn = { x: centre.x + (dx / len) * 15, z: centre.z + (dz / len) * 15, yaw: Math.atan2(dx, dz) };
 
   const islandSize = size + config.promenade * 2;
-  // Roadworks close a junction away from the spawn, before signs and signals go up.
+  // Roadworks close junctions away from the spawn, before signs and signals go up.
   const keepOpen = new Set([centre.id, ...centre.neighbors, ...centre.neighbors.flatMap((id) => nodes[id].neighbors)]);
   const works = planRoadworks(graph, roadWidth, size, keepOpen, config.roadworksChance, new Rng(seed ^ 0x0c0e5));
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
   const traffic = generateTrafficControl(graph, blocksOut, config, size, new Rng(seed ^ 0x7aff1c));
-  const streetProps = [...generateStreetProps(blocksOut, plazas, landmarks, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props, ...(works?.cones ?? [])];
+  const streetProps = [...generateStreetProps(blocksOut, plazas, landmarks, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props, ...works.cones];
   return {
     config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees,
-    landmarks, streetProps, roadMarks: traffic.marks, roadworks: works?.site ?? null, spawn,
+    landmarks, streetProps, roadMarks: traffic.marks, roadworks: works.sites, spawn,
   };
 }
 

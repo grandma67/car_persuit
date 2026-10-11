@@ -92,7 +92,7 @@ export class Game {
   });
   private blast = new THREE.PointLight(0xff9a40, 0, 60, 1.5);
   private props: PropSystem;
-  private roadworks: RoadworksSite | null = null;
+  private roadworks: RoadworksSite[];
   private director: CopDirector;
   private wanted = new WantedSystem();
   private traffic: CivilianTraffic;
@@ -157,14 +157,14 @@ export class Game {
     this.scene.add(this.sun, this.sun.target);
 
     this.world.timestep = FIXED_DT;
-    // ?roadworks forces the (rare) closed junction, for testing.
+    // ?roadworks forces every (rare) roadworks slot, for testing.
     const forceWorks = new URLSearchParams(window.location.search).has('roadworks');
     this.city = generateCity(seed, forceWorks ? { ...DEFAULT_CITY, roadworksChance: 1 } : DEFAULT_CITY);
     this.walls = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain' });
     this.landmarks = new Landmarks(this.city.landmarks, this.scene, this.world, time.lampGlow, this.walls);
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow);
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow);
-    if (this.city.roadworks) this.roadworks = new RoadworksSite(this.city.roadworks, this.scene, this.world, this.walls);
+    this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.scene, this.world, this.walls));
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
@@ -458,7 +458,7 @@ export class Game {
     this.updateSirens();
     this.props.sync();
     this.props.updateSignals(this.clock.elapsedTime);
-    this.roadworks?.update(frameDt, this.clock.elapsedTime);
+    for (const works of this.roadworks) works.update(frameDt, this.clock.elapsedTime);
     const carPos = this.player.mesh.root.position;
     const [sx, sy, sz] = this.time.sunOffset;
     this.sun.position.set(carPos.x + sx, carPos.y + sy, carPos.z + sz);
