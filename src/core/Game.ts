@@ -290,7 +290,7 @@ export class Game {
   private setPaused(paused: boolean): void {
     if (paused && this.state === 'playing') {
       this.state = 'paused';
-      this.screens.pause(() => this.setPaused(false), () => this.restart(this.city.seed));
+      this.screens.pause(this.city.seed, () => this.setPaused(false), () => this.restart(this.city.seed));
     } else if (!paused && this.state === 'paused') {
       this.state = 'playing';
       this.screens.hide();

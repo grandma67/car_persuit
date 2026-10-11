@@ -45,11 +45,39 @@ export class Screens {
     this.el.hidden = true;
   }
 
+  /** Share a link to this city: the native share sheet where there is one, else copy to the clipboard. */
+  private async share(seed: number): Promise<void> {
+    const url = new URL(window.location.href);
+    url.searchParams.set('seed', String(seed));
+    const link = url.toString();
+    const button = this.el.querySelector<HTMLButtonElement>('[data-action="share"]');
+    const flash = (text: string) => {
+      if (!button) return;
+      const original = button.innerHTML;
+      button.textContent = text;
+      setTimeout(() => (button.innerHTML = original), 1600);
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Car Pursuit', text: `Can you beat city #${seed} in Car Pursuit?`, url: link });
+      } catch {
+        // Cancelled by the user: nothing to do.
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      flash('Link copied!');
+    } catch {
+      window.prompt('Copy this link:', link);
+    }
+  }
+
   menu(info: MenuInfo, onStart: () => void, onDifficulty: (id: string) => void): void {
     const choices = info.difficulties
       .map((d) => `<button data-action="diff-${d.id}" class="choice${d.id === info.difficulty ? ' selected' : ''}">${d.label}</button>`)
       .join('');
-    const actions: Record<string, () => void> = { start: onStart };
+    const actions: Record<string, () => void> = { start: onStart, share: () => void this.share(info.seed) };
     for (const d of info.difficulties) actions[`diff-${d.id}`] = () => onDifficulty(d.id);
     this.show(
       `
@@ -62,21 +90,25 @@ export class Screens {
         <li><kbd>P</kbd> pause · <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen</li>
       </ul>
       <div class="screen-choices" role="group" aria-label="Difficulty">${choices}</div>
-      <button data-action="start">Start <kbd>Enter</kbd></button>
+      <div class="screen-buttons">
+        <button data-action="start">Start <kbd>Enter</kbd></button>
+        <button data-action="share" class="secondary">Share this game</button>
+      </div>
       <p class="screen-seed">City #${info.seed} · ${info.look}${info.best ? ` · Best ${info.best}` : ''}</p>
     `,
       actions,
     );
   }
 
-  pause(onResume: () => void, onRetry: () => void): void {
+  pause(seed: number, onResume: () => void, onRetry: () => void): void {
     this.show(
       `<h2>PAUSED</h2>
       <div class="screen-buttons">
         <button data-action="resume">Resume <kbd>P</kbd></button>
         <button data-action="retry" class="secondary">Retry <kbd>Enter</kbd></button>
+        <button data-action="share" class="secondary">Share this game</button>
       </div>`,
-      { resume: onResume, retry: onRetry },
+      { resume: onResume, retry: onRetry, share: () => void this.share(seed) },
     );
   }
 
