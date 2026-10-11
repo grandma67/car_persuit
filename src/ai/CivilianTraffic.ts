@@ -19,10 +19,10 @@ import {
 import { CivilianController, type ForwardSensor } from './CivilianController';
 
 export const TRAFFIC = {
-  count: 16, // default (menu); each difficulty sets its own
-  spawnMin: 90, // metres by road from the player
-  spawnMax: 260,
-  despawnDistance: 330, // straight-line
+  count: 20, // default (menu); each difficulty sets its own
+  spawnMin: 170, // metres by road from the player — far enough to drive into view, not pop in
+  spawnMax: 340,
+  despawnDistance: 420, // straight-line
   stuckLimit: 6, // seconds
   spacing: 18, // metres between spawn points and existing traffic
   rampChance: 0.05, // per spawn, while no ramp truck is around

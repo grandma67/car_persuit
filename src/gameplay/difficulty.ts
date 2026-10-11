@@ -18,9 +18,9 @@ export interface Difficulty {
 export const DIFFICULTIES: Difficulty[] = [
   // Easy: a tougher car — 60% more health than Normal, armor that shrugs off scrapes and light
   // rams, half damage. Each destination reached patches the car up, less so on harder settings.
-  { id: 'easy', label: 'Easy', timeLimit: 720, maxHealth: 240, checkpointRepair: 0.25, damageScale: 0.5, armor: 8, heatRate: 0.8, copCap: 0.75, traffic: 16 },
-  { id: 'normal', label: 'Normal', timeLimit: 600, maxHealth: 150, checkpointRepair: 0.15, damageScale: 1, armor: 5, heatRate: 1, copCap: 1, traffic: 24 },
-  { id: 'hard', label: 'Hard', timeLimit: 480, maxHealth: 150, checkpointRepair: 0.08, damageScale: 1.3, armor: 5, heatRate: 1.25, copCap: 1.25, traffic: 34 },
+  { id: 'easy', label: 'Easy', timeLimit: 720, maxHealth: 240, checkpointRepair: 0.25, damageScale: 0.5, armor: 8, heatRate: 0.8, copCap: 0.75, traffic: 20 },
+  { id: 'normal', label: 'Normal', timeLimit: 600, maxHealth: 150, checkpointRepair: 0.15, damageScale: 1, armor: 5, heatRate: 1, copCap: 1, traffic: 30 },
+  { id: 'hard', label: 'Hard', timeLimit: 480, maxHealth: 150, checkpointRepair: 0.08, damageScale: 1.3, armor: 5, heatRate: 1.25, copCap: 1.25, traffic: 42 },
 ];
 
 export function difficultyById(id: string | null | undefined): Difficulty {
