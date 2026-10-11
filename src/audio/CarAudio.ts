@@ -1,6 +1,7 @@
 // Procedural car audio with Web Audio — no sound files. Browsers only allow audio after a user
 // gesture, so the context is created on the first key/pointer press.
 import { MenuMusic, WIN_SONG } from './MenuMusic';
+import type { TreeKind } from '../world/Climate';
 import type { PropKind } from '../world/StreetProps';
 
 // Upper speed (m/s) of each gear; rpm sweeps within the band, dropping on each upshift.
@@ -358,13 +359,80 @@ export class CarAudio {
     boom.stop(now + 1.9);
   }
 
-  /** Knocked-loose street furniture: metal clang (lamps, hydrants) or wood crack (benches, fences). */
-  propBreak(kind: PropKind, strength: number): void {
+  /** Filtered noise burst starting `at` seconds from now: the building block of cracks and rustles. */
+  private burst(at: number, duration: number, type: BiquadFilterType, freq: number, q: number, gain: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + at;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = freq;
+    filter.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    src.connect(filter).connect(g).connect(this.master);
+    src.start(t, Math.random() * 1.5);
+    src.stop(t + duration + 0.02);
+  }
+
+  /**
+   * Wood breaking: a sharp snap, a hollow knock from the timber, then a run of splinter crackles.
+   * `size`: 0.3 (umbrella pole, fence) … 1 (tree trunk) — bigger is deeper, longer and splintier.
+   */
+  private woodBreak(size: number, gain: number): void {
+    const ctx = this.ctx!;
+    const now = ctx.currentTime;
+    this.burst(0, 0.03 + size * 0.02, 'highpass', 1600, 0.7, gain * 1.6); // the snap
+    this.burst(0, 0.12 + size * 0.2, 'bandpass', 520 - size * 220, 5, gain * 1.3); // woody knock
+    // Splinters: tiny bright cracks, denser and longer for a trunk.
+    const splinters = 4 + Math.round(size * 8);
+    for (let i = 0; i < splinters; i++) {
+      const at = 0.02 + Math.random() * (0.12 + size * 0.35);
+      this.burst(at, 0.012 + Math.random() * 0.025, 'bandpass', 1800 + Math.random() * 2800, 2.5, gain * (0.35 + Math.random() * 0.6));
+    }
+    // A trunk giving way groans first: a low, falling, buzzy creak.
+    if (size > 0.6) {
+      const creak = ctx.createOscillator();
+      creak.type = 'sawtooth';
+      creak.frequency.setValueAtTime(95, now);
+      creak.frequency.exponentialRampToValueAtTime(48, now + 0.35);
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 420;
+      const cg = ctx.createGain();
+      cg.gain.setValueAtTime(gain * 0.5, now);
+      cg.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      creak.connect(lp).connect(cg).connect(this.master);
+      creak.start(now);
+      creak.stop(now + 0.42);
+    }
+  }
+
+  /** Knocked-loose street furniture: metal clang (lamps, hydrants), wood breaking (benches, fences, trees, umbrellas). */
+  propBreak(kind: PropKind, strength: number, tree?: TreeKind): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const gain = 0.15 + strength * 0.3;
-    const metal = kind !== 'bench' && kind !== 'fence' && kind !== 'cone';
+
+    if (kind === 'tree' && tree === 'cactus') {
+      // Not wood: a wet, fibrous crunch and a dull thump.
+      this.burst(0, 0.18, 'lowpass', 700, 1, gain * 1.6);
+      this.burst(0.01, 0.1, 'bandpass', 1400, 1.5, gain * 0.8);
+      this.impact(Math.min(0.5, strength));
+      return;
+    }
+    if (kind === 'tree' || kind === 'umbrella' || kind === 'bench' || kind === 'fence') {
+      const size = kind === 'tree' ? (tree === 'palm' ? 0.8 : 1) : kind === 'bench' ? 0.55 : 0.35;
+      this.woodBreak(size, gain);
+      // Leaves or canvas thrashing as it goes over.
+      if (kind === 'tree') this.burst(0.05, 0.9, 'highpass', 3200, 0.5, gain * 0.5);
+      if (kind === 'umbrella') this.burst(0.03, 0.35, 'bandpass', 900, 0.8, gain * 0.6);
+      return;
+    }
+    const metal = kind !== 'cone';
 
     if (metal) {
       // Inharmonic partials ring like struck metal.

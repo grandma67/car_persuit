@@ -2,14 +2,14 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Rng } from '../core/Rng';
 import type { Building, CityData, Rect } from './CityGenerator';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CityTheme } from './CityTheme';
 import type { Climate, TreeKind } from './Climate';
+import type { StreetProp } from './StreetProps';
 
 const WINDOW_CELLS = 8; // window texture is an 8×8 grid of window cells
 const FLOOR_HEIGHT = 3.5;
 const WINDOW_WIDTH = 4;
-const SNOW = 0xeef2f6;
+export const SNOW = 0xeef2f6;
 
 /** Accumulates flat-shaded quads into one BufferGeometry. */
 class GeometryBuilder {
@@ -110,9 +110,14 @@ export interface CityLook {
 
 /**
  * Build meshes and colliders. Returns the handles of wall colliders (buildings, sea wall) — the
- * surfaces that take crash marks.
+ * surfaces that take crash marks — and the breakable greenery and beach umbrellas, for PropSystem.
  */
-export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.World, look: CityLook): Set<number> {
+export function buildCity(
+  city: CityData,
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  look: CityLook,
+): { walls: Set<number>; props: StreetProp[] } {
   const { theme, climate, windowGlow, wet } = look;
   const wallColliders = new Set<number>();
   // Visual-only randomness uses its own stream so it can't change the layout.
@@ -214,9 +219,6 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
     wallColliders.add(world.createCollider(RAPIER.ColliderDesc.cuboid(b.w / 2, b.h / 2, b.d / 2).setTranslation(b.x, b.h / 2, b.z)).handle);
   }
 
-  const q = new THREE.Quaternion();
-  const up = new THREE.Vector3(0, 1, 0);
-
   // --- Plaza planters ---
   const planterGeo = new THREE.BoxGeometry(1, 0.9, 1).translate(0, 0.45, 0);
   const planters = new THREE.InstancedMesh(planterGeo, new THREE.MeshStandardMaterial({ color: theme.planter, flatShading: true }), city.props.length);
@@ -227,30 +229,17 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   planters.castShadow = planters.receiveShadow = true;
   scene.add(planters);
 
-  // --- Trees: the climate's kinds (round, snowy pine, palm, cactus), one instanced mesh per part ---
-  const kinds = city.trees.map(() => pickTree(climate, rng));
-  for (const kind of new Set(kinds)) {
-    const trees = city.trees.filter((_, i) => kinds[i] === kind);
-    const kit = treeKit(kind, theme, climate.snowRoofs);
-    const meshes = kit.parts.map((part) => {
-      const mesh = new THREE.InstancedMesh(part.geo, new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), trees.length);
-      mesh.castShadow = true;
-      scene.add(mesh);
-      return mesh;
-    });
-    trees.forEach((t, i) => {
-      const s = rng.range(0.8, 1.3);
-      q.setFromAxisAngle(up, rng.range(0, Math.PI * 2));
-      m4.compose(new THREE.Vector3(t.x, 0, t.z), q, new THREE.Vector3(s, s, s));
-      meshes.forEach((mesh, k) => {
-        mesh.setMatrixAt(i, m4);
-        mesh.setColorAt(i, color(rng.pick(kit.parts[k].colors)));
-      });
-      world.createCollider(RAPIER.ColliderDesc.cylinder(1.5, kit.radius * s).setTranslation(t.x, 1.5, t.z));
-    });
-  }
-
-  if (climate.beachProps) addBeach(city, scene, world, rng);
+  // --- Trees (the climate's kinds) and beach umbrellas: breakable, so PropSystem builds them ---
+  const props: StreetProp[] = city.trees.map((t) => ({
+    kind: 'tree',
+    tree: pickTree(climate, rng),
+    x: t.x,
+    z: t.z,
+    yaw: rng.range(0, Math.PI * 2),
+    scale: rng.range(0.8, 1.3),
+    color: new THREE.Color().setScalar(rng.range(0.85, 1.1)).getHex(), // a little tonal variety
+  }));
+  if (climate.beachProps) props.push(...addBeach(city, scene, rng));
 
   // --- Sea wall along the island edge: a low visible barrier, plus a tall invisible one so a
   // car launched off something can't sail into the sea ---
@@ -270,7 +259,7 @@ export function buildCity(city: CityData, scene: THREE.Scene, world: RAPIER.Worl
   const seaWallMesh = new THREE.Mesh(seaWall.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
   seaWallMesh.castShadow = seaWallMesh.receiveShadow = true;
   scene.add(seaWallMesh);
-  return wallColliders;
+  return { walls: wallColliders, props };
 }
 
 function addBuilding(b: Building, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng, snowy: boolean): void {
@@ -306,62 +295,8 @@ function pickTree(climate: Climate, rng: Rng): TreeKind {
   return climate.trees[climate.trees.length - 1].kind;
 }
 
-interface TreeKit {
-  parts: { geo: THREE.BufferGeometry; colors: number[] }[];
-  radius: number; // trunk collider radius at scale 1
-}
-
-function treeKit(kind: TreeKind, theme: CityTheme, snowy: boolean): TreeKit {
-  switch (kind) {
-    case 'pine': {
-      const crown = mergeGeometries([
-        new THREE.ConeGeometry(2.2, 3.6, 7).translate(0, 3.3, 0),
-        new THREE.ConeGeometry(1.6, 2.8, 7).translate(0, 5.1, 0),
-      ]);
-      const parts = [
-        { geo: new THREE.CylinderGeometry(0.2, 0.3, 2, 5).translate(0, 1, 0), colors: [theme.trunk] },
-        { geo: crown, colors: snowy ? [0x3a5e48, 0x46694f, 0x34573f] : [0x2a4f36, 0x2f5a3a, 0x26472f] },
-      ];
-      // Snow cap: a slightly larger cone over the top tier's tip.
-      if (snowy) parts.push({ geo: new THREE.ConeGeometry(1.08, 1.85, 7).translate(0, 5.65, 0), colors: [SNOW] });
-      return { parts, radius: 0.3 };
-    }
-    case 'palm': {
-      const fronds = Array.from({ length: 7 }, (_, k) =>
-        new THREE.BoxGeometry(0.7, 0.06, 3.2).translate(0, 0, 1.6).rotateX(0.45).rotateY((k / 7) * Math.PI * 2).translate(0, 6.4, 0),
-      );
-      return {
-        parts: [
-          { geo: new THREE.CylinderGeometry(0.16, 0.26, 6.5, 6).translate(0, 3.25, 0), colors: [0x8a6a48, 0x7a5c3e, 0x947456] },
-          { geo: mergeGeometries(fronds), colors: [0x3f7d34, 0x4f8a3a, 0x5c9440] },
-        ],
-        radius: 0.26,
-      };
-    }
-    case 'cactus': {
-      const limb = (r: number, h: number) => new THREE.CylinderGeometry(r, r, h, 7);
-      const geo = mergeGeometries([
-        new THREE.CylinderGeometry(0.38, 0.42, 3.4, 7).translate(0, 1.7, 0),
-        limb(0.22, 0.9).rotateZ(Math.PI / 2).translate(0.75, 1.5, 0),
-        limb(0.22, 1.3).translate(1.15, 2.05, 0),
-        limb(0.2, 0.7).rotateZ(Math.PI / 2).translate(-0.65, 2.2, 0),
-        limb(0.2, 1.0).translate(-0.95, 2.6, 0),
-      ]);
-      return { parts: [{ geo, colors: [0x4f7a3a, 0x5a8442, 0x466e34] }], radius: 0.42 };
-    }
-    default:
-      return {
-        parts: [
-          { geo: new THREE.CylinderGeometry(0.25, 0.35, 3, 5).translate(0, 1.5, 0), colors: [theme.trunk] },
-          { geo: new THREE.IcosahedronGeometry(1.8, 0).translate(0, 4.2, 0), colors: theme.leaves },
-        ],
-        radius: 0.35,
-      };
-  }
-}
-
-/** Beach umbrellas and towels along the promenade, in the gaps between its lamps and benches. */
-function addBeach(city: CityData, scene: THREE.Scene, world: RAPIER.World, rng: Rng): void {
+/** Beach umbrellas (breakable props, returned) and towels along the promenade, between its lamps and benches. */
+function addBeach(city: CityData, scene: THREE.Scene, rng: Rng): StreetProp[] {
   const half = city.size / 2;
   const spots: { x: number; z: number }[] = [];
   const sides = [
@@ -379,16 +314,6 @@ function addBeach(city: CityData, scene: THREE.Scene, world: RAPIER.World, rng: 
       spots.push({ x: side.nx * out + side.tx * along, z: side.nz * out + side.tz * along });
     }
   }
-  const poles = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(0.05, 0.05, 2.6, 5).translate(0, 1.3, 0),
-    new THREE.MeshStandardMaterial({ color: 0xe8e4dc }),
-    spots.length,
-  );
-  const canopies = new THREE.InstancedMesh(
-    new THREE.ConeGeometry(1.7, 0.7, 8).translate(0, 2.55, 0),
-    new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.8, side: THREE.DoubleSide }),
-    spots.length,
-  );
   const towels = new THREE.InstancedMesh(
     new THREE.BoxGeometry(0.9, 0.02, 1.9).translate(0, 0.045, 0),
     new THREE.MeshStandardMaterial({ roughness: 1 }),
@@ -399,17 +324,14 @@ function addBeach(city: CityData, scene: THREE.Scene, world: RAPIER.World, rng: 
   const q = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
   const one = new THREE.Vector3(1, 1, 1);
-  spots.forEach((p, i) => {
-    q.setFromAxisAngle(up, rng.range(0, Math.PI * 2));
-    poles.setMatrixAt(i, m4.makeTranslation(p.x, 0, p.z));
-    canopies.setMatrixAt(i, m4.compose(new THREE.Vector3(p.x, 0, p.z), q, one));
-    canopies.setColorAt(i, new THREE.Color(rng.pick(palette)));
+  const umbrellas: StreetProp[] = spots.map((p, i) => {
+    const umbrella: StreetProp = { kind: 'umbrella', x: p.x, z: p.z, yaw: rng.range(0, Math.PI * 2), color: rng.pick(palette) };
     q.setFromAxisAngle(up, rng.range(-0.4, 0.4) + (Math.abs(p.x) > Math.abs(p.z) ? 0 : Math.PI / 2));
     towels.setMatrixAt(i, m4.compose(new THREE.Vector3(p.x + rng.range(-1.6, 1.6), 0, p.z + rng.range(-1.6, 1.6)), q, one));
     towels.setColorAt(i, new THREE.Color(rng.pick(palette)));
-    world.createCollider(RAPIER.ColliderDesc.cylinder(1.3, 0.12).setTranslation(p.x, 1.3, p.z));
+    return umbrella;
   });
-  canopies.castShadow = poles.castShadow = true;
   towels.receiveShadow = true;
-  scene.add(poles, canopies, towels);
+  scene.add(towels);
+  return umbrellas;
 }

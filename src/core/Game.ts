@@ -159,10 +159,15 @@ export class Game {
     // ?roadworks forces every (rare) roadworks slot, for testing.
     const forceWorks = new URLSearchParams(window.location.search).has('roadworks');
     this.city = generateCity(seed, forceWorks ? { ...DEFAULT_CITY, roadworksChance: 1 } : DEFAULT_CITY);
-    this.walls = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain' });
+    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain' });
+    this.walls = built.walls;
     this.landmarks = new Landmarks(this.city.landmarks, this.scene, this.world, time.lampGlow, this.walls);
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow);
-    this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow);
+    this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
+      leaves: theme.leaves[0],
+      trunk: theme.trunk,
+      snowy: climate.snowRoofs,
+    });
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.scene, this.world, this.walls));
 
     const { spawn } = this.city;
@@ -724,7 +729,7 @@ export class Game {
   private updatePropEffects(dt: number, breaks: PropBreak[]): void {
     for (const b of breaks) {
       if (this.state === 'playing') this.raiseStars(this.wanted.propSmashed());
-      this.audio.propBreak(b.kind, b.strength);
+      this.audio.propBreak(b.kind, b.strength, b.tree);
       if (b.kind === 'lamp' || b.kind === 'signal') {
         for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0); // sparks
       } else if (b.kind === 'hydrant') {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from './CityGenerator';
-import { footprintsOverlap, propFootprint, rectFootprint, type Footprint } from './StreetProps';
+import { PROP_SPECS, footprintsOverlap, propFootprint, propSpec, rectFootprint, type Footprint } from './StreetProps';
 
 const SEEDS = [1, 42, 1234, 99999];
 
@@ -80,5 +80,16 @@ describe('generateStreetProps', () => {
       ];
       expect(blockers.filter((b) => footprintsOverlap(fp, b))).toEqual([]);
     }
+  });
+});
+
+describe('breakable greenery', () => {
+  it('trees scale with size, need a real hit to snap and cacti give way easier', () => {
+    const tree = (tree: 'round' | 'cactus', scale = 1) => propSpec({ kind: 'tree', tree, scale, x: 0, z: 0, yaw: 0 });
+    expect(tree('round', 1.2).hx).toBeCloseTo(tree('round').hx * 1.2);
+    expect(tree('round').breakSpeed).toBeGreaterThan(PROP_SPECS.bench.breakSpeed);
+    expect(tree('round').slowdown).toBeGreaterThan(PROP_SPECS.lamp.slowdown);
+    expect(tree('cactus').breakSpeed).toBeLessThan(tree('round').breakSpeed);
+    expect(propSpec({ kind: 'umbrella', x: 0, z: 0, yaw: 0 }).breakSpeed).toBeLessThan(2);
   });
 });

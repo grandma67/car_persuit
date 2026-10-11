@@ -3,7 +3,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
-import { PROP_SPECS, footprintsOverlap, propFootprint, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
+import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
+import type { TreeKind } from './Climate';
 import { signalState, type SignalLight } from './TrafficControl';
 
 const GRID_CELL = 10; // metres, spatial hash for vehicle-vs-prop checks
@@ -44,11 +45,23 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   }
 };
 
-type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | `sign-${SignShape}` | 'signal' | 'cone';
-const modelKey = (p: StreetProp): ModelKey => (p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind);
+type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | `sign-${SignShape}` | 'signal' | 'cone' | `tree-${TreeKind}` | 'umbrella';
+const modelKey = (p: StreetProp): ModelKey =>
+  p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind;
+/** Props tinted per instance (umbrella canopies, tree shades). */
+const TINTED = new Set<PropKind>(['tree', 'umbrella']);
+
+/** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
+export interface Greenery {
+  leaves: number;
+  trunk: number;
+  snowy: boolean;
+}
+const DEFAULT_GREENERY: Greenery = { leaves: 0x3d7a3f, trunk: 0x4a3426, snowy: false };
 
 export interface PropBreak {
   kind: PropKind;
+  tree?: TreeKind; // trees: which kind (cacti don't sound like wood)
   position: THREE.Vector3;
   strength: number; // 0..1 from impact speed
 }
@@ -82,7 +95,40 @@ function part(geo: THREE.BufferGeometry, color: number, x = 0, y = 0, z = 0): TH
   return geo;
 }
 
-function buildModels(): Record<ModelKey, THREE.BufferGeometry> {
+/** Low-poly trees. Non-indexed so cones, cylinders and icosahedra merge together. */
+function treeModels(look: Greenery): Record<`tree-${TreeKind}`, THREE.BufferGeometry> {
+  const ni = (geo: THREE.BufferGeometry) => (geo.index ? geo.toNonIndexed() : geo);
+  const cyl = (top: number, bottom: number, h: number, seg: number) => ni(new THREE.CylinderGeometry(top, bottom, h, seg));
+  const cone = (r: number, h: number) => ni(new THREE.ConeGeometry(r, h, 7));
+  const SNOW = 0xeef2f6;
+  const pineGreen = look.snowy ? 0x3a5e48 : 0x2a4f36;
+  const fronds = Array.from({ length: 7 }, (_, k) =>
+    part(ni(new THREE.BoxGeometry(0.7, 0.06, 3.2)).translate(0, 0, 1.6).rotateX(0.45).rotateY((k / 7) * Math.PI * 2), 0x4f8a3a, 0, 6.4),
+  );
+  const cactus = 0x4f7a3a;
+  return {
+    'tree-round': mergeGeometries([
+      part(cyl(0.25, 0.35, 3, 5), look.trunk, 0, 1.5),
+      part(new THREE.IcosahedronGeometry(1.8, 0), look.leaves, 0, 4.2),
+    ]),
+    'tree-pine': mergeGeometries([
+      part(cyl(0.2, 0.3, 2, 5), look.trunk, 0, 1),
+      part(cone(2.2, 3.6), pineGreen, 0, 3.3),
+      part(cone(1.6, 2.8), pineGreen, 0, 5.1),
+      ...(look.snowy ? [part(cone(1.08, 1.85), SNOW, 0, 5.65)] : []), // snow cap over the top tier
+    ]),
+    'tree-palm': mergeGeometries([part(cyl(0.16, 0.26, 6.5, 6), 0x8a6a48, 0, 3.25), ...fronds]),
+    'tree-cactus': mergeGeometries([
+      part(cyl(0.38, 0.42, 3.4, 7), cactus, 0, 1.7),
+      part(cyl(0.22, 0.22, 0.9, 7).rotateZ(Math.PI / 2), cactus, 0.75, 1.5),
+      part(cyl(0.22, 0.22, 1.3, 7), cactus, 1.15, 2.05),
+      part(cyl(0.2, 0.2, 0.7, 7).rotateZ(Math.PI / 2), cactus, -0.65, 2.2),
+      part(cyl(0.2, 0.2, 1.0, 7), cactus, -0.95, 2.6),
+    ]),
+  };
+}
+
+function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
   const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
   const cyl = (r: number, h: number, seg = 8) => new THREE.CylinderGeometry(r, r, h, seg);
   const metal = 0x3a3f47;
@@ -136,7 +182,14 @@ function buildModels(): Record<ModelKey, THREE.BufferGeometry> {
     part(new THREE.CylinderGeometry(0.035, 0.2, 0.7, 10), 0xff5a10, 0, 0.4),
     part(new THREE.CylinderGeometry(0.1, 0.13, 0.14, 10), 0xf4f4f0, 0, 0.42),
   ]);
+  // Beach umbrella: the canopy is tinted per instance (white here, so the tint shows true).
+  const umbrella = mergeGeometries([
+    part(cyl(0.05, 2.6, 5), 0xe8e4dc, 0, 1.3),
+    part(new THREE.ConeGeometry(1.7, 0.7, 8), 0xffffff, 0, 2.55),
+  ]);
   return {
+    ...treeModels(look),
+    umbrella,
     lamp, hydrant, bench, fence, signal, cone,
     'sign-octagon': sign('octagon'), 'sign-round': sign('round'), 'sign-triangle': sign('triangle'), 'sign-square': sign('square'),
   };
@@ -332,12 +385,13 @@ export class PropSystem {
   private one = new THREE.Vector3(1, 1, 1);
   private color = new THREE.Color();
 
-  /** lampGlow: 0 = lamps off (daytime) … 1 = full night glow. */
-  constructor(city: CityData, scene: THREE.Scene, world: RAPIER.World, lampGlow: number) {
-    const models = buildModels();
+  /** lampGlow: 0 = lamps off (daytime) … 1 = full night glow. extra: trees and umbrellas from the city build. */
+  constructor(city: CityData, scene: THREE.Scene, world: RAPIER.World, lampGlow: number, extra: StreetProp[] = [], greenery = DEFAULT_GREENERY) {
+    const defs = [...city.streetProps, ...extra];
+    const models = buildModels(greenery);
     const counts = {} as Record<ModelKey, number>;
     for (const key of Object.keys(models) as ModelKey[]) counts[key] = 0;
-    for (const p of city.streetProps) counts[modelKey(p)]++;
+    for (const p of defs) counts[modelKey(p)]++;
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.2 });
     for (const key of Object.keys(models) as ModelKey[]) {
       const mesh = new THREE.InstancedMesh(models[key], material, Math.max(1, counts[key]));
@@ -377,7 +431,7 @@ export class PropSystem {
     // Sign faces: one textured mesh per sign type.
     const faceCounts = {} as Record<SignVariant, number>;
     for (const v of SIGN_VARIANTS) faceCounts[v] = 0;
-    for (const p of city.streetProps) if (p.kind === 'sign') faceCounts[p.variant ?? 'stop']++;
+    for (const p of defs) if (p.kind === 'sign') faceCounts[p.variant ?? 'stop']++;
     const faceMesh = {} as Record<SignVariant, THREE.InstancedMesh>;
     for (const v of SIGN_VARIANTS) {
       // A touch of self-illumination reads like retroreflective sheeting at night.
@@ -403,8 +457,8 @@ export class PropSystem {
     let nextLens = 0;
     const warm = new THREE.Color(0xffe2b0).lerp(new THREE.Color(0xc8c8c8), 1 - lampGlow); // unlit by day
 
-    city.streetProps.forEach((def, i) => {
-      const spec = PROP_SPECS[def.kind];
+    defs.forEach((def, i) => {
+      const spec = propSpec(def);
       this.q.setFromAxisAngle(UP, def.yaw);
       const body = world.createRigidBody(
         RAPIER.RigidBodyDesc.fixed()
@@ -418,8 +472,9 @@ export class PropSystem {
       const key = modelKey(def);
       const state: PropState = { def, body, broken: false, key, instance: next[key]++, attachments: [] };
       this.props.push(state);
-      const world4 = new THREE.Matrix4().compose(this.v.set(def.x, 0, def.z), this.q, this.one);
+      const world4 = new THREE.Matrix4().compose(this.v.set(def.x, 0, def.z), this.q, this.scale(def));
       this.meshes[key].setMatrixAt(state.instance, world4);
+      if (TINTED.has(def.kind)) this.meshes[key].setColorAt(state.instance, this.color.setHex(def.color ?? 0xffffff));
 
       const attach = (mesh: THREE.InstancedMesh, index: number, local: THREE.Matrix4, color?: THREE.Color) => {
         state.attachments.push({ mesh, index, local });
@@ -453,6 +508,10 @@ export class PropSystem {
         }
       }
     });
+  }
+
+  private scale(def: StreetProp): THREE.Vector3 {
+    return def.scale ? new THREE.Vector3().setScalar(def.scale) : this.one;
   }
 
   get brokenCount(): number {
@@ -502,7 +561,7 @@ export class PropSystem {
           if (seen.has(i)) continue;
           seen.add(i);
           const p = this.props[i];
-          const spec = PROP_SPECS[p.def.kind];
+          const spec = propSpec(p.def);
           if (p.broken || speed < spec.breakSpeed || !footprintsOverlap(car, propFootprint(p.def))) continue;
           events.push(this.knockLoose(i, vehicle, speed));
         }
@@ -513,7 +572,7 @@ export class PropSystem {
 
   private knockLoose(i: number, vehicle: Vehicle, speed: number): PropBreak {
     const p = this.props[i];
-    const spec = PROP_SPECS[p.def.kind];
+    const spec = propSpec(p.def);
     p.broken = true;
     p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
 
@@ -523,7 +582,7 @@ export class PropSystem {
     const dz = lv.z / speed;
     const lift = 1.5 + Math.random() * 2;
     p.body.setLinvel({ x: lv.x * 1.05 + (Math.random() - 0.5) * 2, y: lift, z: lv.z * 1.05 + (Math.random() - 0.5) * 2 }, true);
-    const tall = p.def.kind === 'lamp' || p.def.kind === 'signal';
+    const tall = p.def.kind === 'lamp' || p.def.kind === 'signal' || p.def.kind === 'tree' || p.def.kind === 'umbrella';
     const spin = (tall ? 3 : 6) * Math.min(1, speed / 15);
     p.body.setAngvel({ x: dz * spin, y: (Math.random() - 0.5) * 4, z: -dx * spin }, true);
 
@@ -544,7 +603,7 @@ export class PropSystem {
 
     const t = p.body.translation();
     const y = tall ? 2 : 0.5;
-    return { kind: p.def.kind, position: new THREE.Vector3(t.x, y, t.z), strength: Math.min(1, speed / 30) };
+    return { kind: p.def.kind, tree: p.def.tree, position: new THREE.Vector3(t.x, y, t.z), strength: Math.min(1, speed / 30) };
   }
 
   /** Move debris meshes to their physics bodies. Call once per rendered frame. */
@@ -555,7 +614,7 @@ export class PropSystem {
       const t = p.body.translation();
       const r = p.body.rotation();
       this.q.set(r.x, r.y, r.z, r.w);
-      this.m4.compose(this.v.set(t.x, t.y, t.z), this.q, this.one);
+      this.m4.compose(this.v.set(t.x, t.y, t.z), this.q, this.scale(p.def));
       const mesh = this.meshes[p.key];
       mesh.setMatrixAt(p.instance, this.m4);
       touched.add(mesh);

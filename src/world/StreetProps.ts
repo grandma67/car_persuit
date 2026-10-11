@@ -3,8 +3,9 @@
 import type { Rng } from '../core/Rng';
 import type { Block, CityConfig, Rect } from './CityGenerator';
 import type { Landmark } from './Landmarks';
+import type { TreeKind } from './Climate';
 
-export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone';
+export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone' | 'tree' | 'umbrella';
 export type SignVariant = 'stop' | 'speed30' | 'speed50' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian';
 
 export interface StreetProp {
@@ -16,6 +17,9 @@ export interface StreetProp {
   variant?: SignVariant; // signs
   axis?: 'x' | 'z'; // signals: travel axis of the traffic they face
   phase?: number; // signals: junction cycle offset, seconds
+  tree?: TreeKind; // trees
+  scale?: number; // trees: size multiplier
+  color?: number; // umbrellas: canopy colour; trees: tint
 }
 
 export interface PropSpec {
@@ -37,7 +41,27 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   sign: { hx: 0.08, hz: 0.08, height: 2.6, mass: 20, breakSpeed: 2.5, slowdown: 0.02 },
   signal: { hx: 0.15, hz: 0.15, height: 5.6, mass: 150, breakSpeed: 4, slowdown: 0.09 },
   cone: { hx: 0.25, hz: 0.25, height: 0.75, mass: 4, breakSpeed: 1, slowdown: 0.01 },
+  // Trees take a real hit to snap and cost a lot of speed; the footprint is the trunk only.
+  tree: { hx: 0.35, hz: 0.35, height: 5, mass: 300, breakSpeed: 7, slowdown: 0.28 },
+  umbrella: { hx: 0.12, hz: 0.12, height: 2.6, mass: 6, breakSpeed: 1.5, slowdown: 0.02 },
 };
+
+/** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */
+const TREE_SPECS: Record<TreeKind, Partial<PropSpec>> = {
+  round: { hx: 0.35, hz: 0.35, height: 5 },
+  pine: { hx: 0.3, hz: 0.3, height: 5.5 },
+  palm: { hx: 0.26, hz: 0.26, height: 6.5, mass: 200, breakSpeed: 6, slowdown: 0.2 },
+  cactus: { hx: 0.42, hz: 0.42, height: 3.4, mass: 150, breakSpeed: 3, slowdown: 0.1 },
+};
+
+/** The spec for this particular prop: trees vary by kind and size. */
+export function propSpec(p: StreetProp): PropSpec {
+  const base = PROP_SPECS[p.kind];
+  if (p.kind !== 'tree') return base;
+  const s = p.scale ?? 1;
+  const t = { ...base, ...TREE_SPECS[p.tree ?? 'round'] };
+  return { ...t, hx: t.hx * s, hz: t.hz * s, height: t.height * s, mass: t.mass * s * s };
+}
 
 /** Oriented rectangle on the ground plane. */
 export interface Footprint {
@@ -49,7 +73,7 @@ export interface Footprint {
 }
 
 export function propFootprint(p: StreetProp, margin = 0): Footprint {
-  const s = PROP_SPECS[p.kind];
+  const s = propSpec(p);
   return { x: p.x, z: p.z, hx: s.hx + margin, hz: s.hz + margin, yaw: p.yaw };
 }
 
