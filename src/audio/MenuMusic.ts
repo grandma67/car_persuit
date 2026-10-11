@@ -1,17 +1,43 @@
-// Gentle synthwave loop for the menu: soft pad chords, a plucked bass and a 16th-note arpeggio.
+// Synthwave loops (menu, win screen): soft pad chords, a plucked bass and a 16th-note arpeggio.
 // Scheduled slightly ahead on the audio clock so timing stays tight regardless of frame rate.
 
-const BPM = 96;
-const STEP = 60 / BPM / 4; // a 16th note
+export interface Song {
+  bpm: number;
+  chords: number[][]; // MIDI notes (root, third, fifth), one bar each
+  arp: number[]; // index into chord tones; 3 = root an octave up
+  kickEvery: number; // in 16th notes
+  padCutoff: number; // Hz; higher is brighter
+}
+
+/** Gentle and moody: Am – F – C – G. */
+export const MENU_SONG: Song = {
+  bpm: 96,
+  chords: [
+    [57, 60, 64],
+    [53, 57, 60],
+    [60, 64, 67],
+    [55, 59, 62],
+  ],
+  arp: [0, 1, 2, 1, 2, 3, 2, 1],
+  kickEvery: 8,
+  padCutoff: 900,
+};
+
+/** Upbeat victory lap: C – G – F – G, rising arpeggio and a four-on-the-floor kick. */
+export const WIN_SONG: Song = {
+  bpm: 124,
+  chords: [
+    [60, 64, 67],
+    [55, 59, 62],
+    [53, 57, 60],
+    [55, 59, 62],
+  ],
+  arp: [0, 1, 2, 3, 2, 3, 1, 3],
+  kickEvery: 4,
+  padCutoff: 1800,
+};
+
 const STEPS_PER_CHORD = 16;
-// Am – F – C – G, as MIDI notes (root, third, fifth).
-const CHORDS = [
-  [57, 60, 64],
-  [53, 57, 60],
-  [60, 64, 67],
-  [55, 59, 62],
-];
-const ARP = [0, 1, 2, 1, 2, 3, 2, 1]; // index into chord tones; 3 = root an octave up
 const LOOKAHEAD = 0.2; // seconds of notes scheduled ahead
 
 const midi = (n: number) => 440 * 2 ** ((n - 69) / 12);
@@ -23,19 +49,23 @@ export class MenuMusic {
   private nextTime = 0;
   private step = 0;
 
-  constructor(private ctx: AudioContext, destination: AudioNode) {
+  private readonly stepLength: number; // a 16th note, seconds
+
+  constructor(private ctx: AudioContext, destination: AudioNode, private song: Song = MENU_SONG) {
+    this.stepLength = 60 / song.bpm / 4;
     this.out = ctx.createGain();
     this.out.gain.value = 0;
     this.out.connect(destination);
     this.padFilter = ctx.createBiquadFilter();
     this.padFilter.type = 'lowpass';
-    this.padFilter.frequency.value = 900;
+    this.padFilter.frequency.value = song.padCutoff;
     this.padFilter.connect(this.out);
   }
 
-  start(): void {
+  /** Fade in, starting `delay` seconds from now. */
+  start(delay = 0): void {
     if (this.timer !== null) return;
-    const now = this.ctx.currentTime;
+    const now = this.ctx.currentTime + delay;
     this.out.gain.cancelScheduledValues(now);
     this.out.gain.setValueAtTime(this.out.gain.value, now);
     this.out.gain.linearRampToValueAtTime(0.5, now + 1.5);
@@ -58,19 +88,20 @@ export class MenuMusic {
   private schedule(): void {
     while (this.nextTime < this.ctx.currentTime + LOOKAHEAD) {
       this.playStep(this.step, this.nextTime);
-      this.step = (this.step + 1) % (STEPS_PER_CHORD * CHORDS.length);
-      this.nextTime += STEP;
+      this.step = (this.step + 1) % (STEPS_PER_CHORD * this.song.chords.length);
+      this.nextTime += this.stepLength;
     }
   }
 
   private playStep(step: number, t: number): void {
-    const chord = CHORDS[Math.floor(step / STEPS_PER_CHORD)];
+    const { chords, arp, kickEvery } = this.song;
+    const chord = chords[Math.floor(step / STEPS_PER_CHORD)];
     const inChord = step % STEPS_PER_CHORD;
 
-    if (inChord === 0) for (const n of chord) this.pad(midi(n - 12), t, STEP * STEPS_PER_CHORD);
+    if (inChord === 0) for (const n of chord) this.pad(midi(n - 12), t, this.stepLength * STEPS_PER_CHORD);
     if (inChord % 4 === 0) this.bass(midi(chord[0] - 24), t);
-    if (inChord % 8 === 0) this.kick(t);
-    const tone = ARP[inChord % ARP.length];
+    if (inChord % kickEvery === 0) this.kick(t);
+    const tone = arp[inChord % arp.length];
     this.pluck(midi(tone === 3 ? chord[0] + 12 : chord[tone]), t, inChord % 2 === 0 ? 0.07 : 0.045);
   }
 

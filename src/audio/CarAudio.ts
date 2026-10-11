@@ -1,6 +1,6 @@
 // Procedural car audio with Web Audio — no sound files. Browsers only allow audio after a user
 // gesture, so the context is created on the first key/pointer press.
-import { MenuMusic } from './MenuMusic';
+import { MenuMusic, WIN_SONG } from './MenuMusic';
 
 // Upper speed (m/s) of each gear; rpm sweeps within the band, dropping on each upshift.
 const GEAR_TOP_SPEEDS = [9, 17, 25, 33, 39, 46];
@@ -42,7 +42,6 @@ export class CarAudio {
   private gear = 0;
   private screechFilter!: BiquadFilterNode;
   private screechGain!: GainNode;
-  private windGain!: GainNode;
   private sirenOsc!: OscillatorNode;
   private sirenLfo!: OscillatorNode;
   private sirenFilter!: BiquadFilterNode;
@@ -52,6 +51,7 @@ export class CarAudio {
   private engineOff = false; // wrecked
   private engineRunning = false; // silent on the menu until the mission starts
   private music: MenuMusic | null = null;
+  private winMusic: MenuMusic | null = null;
   private wantMusic = false;
   private muted = false;
   private lastImpactTime = 0;
@@ -160,15 +160,6 @@ export class CarAudio {
     this.screechGain.gain.value = 0;
     this.loopNoise().connect(this.screechFilter).connect(this.screechGain).connect(this.master);
 
-    // Wind: low band-passed noise rising with speed.
-    const windFilter = ctx.createBiquadFilter();
-    windFilter.type = 'bandpass';
-    windFilter.frequency.value = 400;
-    windFilter.Q.value = 0.7;
-    this.windGain = ctx.createGain();
-    this.windGain.gain.value = 0;
-    this.loopNoise().connect(windFilter).connect(this.windGain).connect(this.master);
-
     // Police siren: a triangle wave whose pitch an LFO sweeps up and down (the classic wail).
     // Distance muffles it through a lowpass.
     this.sirenOsc = ctx.createOscillator();
@@ -197,6 +188,13 @@ export class CarAudio {
     this.wantMusic = on;
     if (on) this.music?.start();
     else this.music?.stop();
+  }
+
+  /** Victory loop for the win screen, fading in after the win jingle. */
+  playWinMusic(delay = 1.2): void {
+    if (!this.ctx || this.winMusic) return;
+    this.winMusic = new MenuMusic(this.ctx, this.master, WIN_SONG);
+    this.winMusic.start(delay);
   }
 
   /** Start the engine sound (mission start). */
@@ -278,9 +276,6 @@ export class CarAudio {
 
     this.screechGain.gain.setTargetAtTime(silent ? 0 : s.skid * 0.12, now, 0.04);
     this.screechFilter.frequency.setTargetAtTime(950 + s.skid * 250 + Math.random() * 80, now, 0.05);
-
-    const speedRatio = Math.min(absSpeed / s.maxSpeed, 1);
-    this.windGain.gain.setTargetAtTime(speedRatio * speedRatio * 0.18, now, 0.1);
   }
 
   /** Silence everything while the game is paused. */

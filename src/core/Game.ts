@@ -648,6 +648,7 @@ export class Game {
     this.marker.hide();
     // After an explosion, let the boom land before the jingle.
     this.audio.jingle(won ? 'won' : 'lost', this.mission.loseReason === 'destroyed' ? 0.9 : 0);
+    if (won) this.audio.playWinMusic();
     const reason = this.mission.loseReason;
     // Let an explosion play out before the end screen covers it.
     const showDelay = reason === 'destroyed' ? 2000 : 0;
