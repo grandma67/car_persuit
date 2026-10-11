@@ -464,8 +464,9 @@ export class Game {
     if (event === 'reached') {
       this.audio.jingle('reached');
       this.wanted.checkpoint(); // every delivery turns up the heat a little faster
+      const repaired = this.health.repair(this.difficulty.checkpointRepair) > 0;
       const left = this.mission.total - this.mission.index;
-      this.hud.toast(left === 1 ? 'FINAL DESTINATION!' : `DESTINATION REACHED · ${left} LEFT`);
+      this.hud.toast((left === 1 ? 'FINAL DESTINATION!' : `DESTINATION REACHED · ${left} LEFT`) + (repaired ? ' · CAR REPAIRED' : ''));
       this.showDestination();
     } else if (event === 'won' || event === 'lost') {
       this.endMission();

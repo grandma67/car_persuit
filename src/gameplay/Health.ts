@@ -32,6 +32,14 @@ export class Health {
     return damage;
   }
 
+  /** Restore a share (0..1) of max health, up to full. A wreck stays wrecked. Returns the health restored. */
+  repair(share: number): number {
+    if (this.destroyed) return 0;
+    const restored = Math.min(this.cfg.maxHealth - this.value, share * this.cfg.maxHealth);
+    this.value += restored;
+    return restored;
+  }
+
   /** Apply a collision (velocity change in m/s). Returns the damage dealt. */
   applyImpact(impact: number): number {
     if (this.destroyed) return 0;

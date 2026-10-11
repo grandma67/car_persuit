@@ -7,6 +7,7 @@ export interface Difficulty {
   label: string;
   timeLimit: number; // seconds
   maxHealth: number; // player car health
+  checkpointRepair: number; // share of max health restored on reaching a destination
   damageScale: number; // crash damage multiplier
   armor: number; // impacts (m/s of velocity change) up to this do no damage
   heatRate: number; // wanted-clock speed multiplier
@@ -14,10 +15,11 @@ export interface Difficulty {
 }
 
 export const DIFFICULTIES: Difficulty[] = [
-  // Easy: a tougher car — 60% more health, armor that shrugs off scrapes and light rams, half damage.
-  { id: 'easy', label: 'Easy', timeLimit: 720, maxHealth: 160, damageScale: 0.5, armor: 8, heatRate: 0.8, copCap: 0.75 },
-  { id: 'normal', label: 'Normal', timeLimit: 600, maxHealth: 100, damageScale: 1, armor: 5, heatRate: 1, copCap: 1 },
-  { id: 'hard', label: 'Hard', timeLimit: 480, maxHealth: 100, damageScale: 1.3, armor: 5, heatRate: 1.25, copCap: 1.25 },
+  // Easy: a tougher car — 60% more health than Normal, armor that shrugs off scrapes and light
+  // rams, half damage. Each destination reached patches the car up, less so on harder settings.
+  { id: 'easy', label: 'Easy', timeLimit: 720, maxHealth: 240, checkpointRepair: 0.25, damageScale: 0.5, armor: 8, heatRate: 0.8, copCap: 0.75 },
+  { id: 'normal', label: 'Normal', timeLimit: 600, maxHealth: 150, checkpointRepair: 0.15, damageScale: 1, armor: 5, heatRate: 1, copCap: 1 },
+  { id: 'hard', label: 'Hard', timeLimit: 480, maxHealth: 150, checkpointRepair: 0.08, damageScale: 1.3, armor: 5, heatRate: 1.25, copCap: 1.25 },
 ];
 
 export function difficultyById(id: string | null | undefined): Difficulty {

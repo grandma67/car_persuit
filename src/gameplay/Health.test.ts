@@ -49,7 +49,32 @@ describe('Easy mode car', () => {
       }
       return n;
     };
-    expect(hitsToWreck(make(normal))).toBe(5);
+    expect(hitsToWreck(make(normal))).toBe(7);
     expect(hitsToWreck(make(easy))).toBeGreaterThanOrEqual(15);
+  });
+});
+
+describe('checkpoint repair', () => {
+  const make = (d: (typeof DIFFICULTIES)[number]) => new Health({ ...DAMAGE, maxHealth: d.maxHealth });
+
+  it('restores less on harder difficulties', () => {
+    const restored = DIFFICULTIES.map((d) => {
+      const h = make(d);
+      h.applyDamage(d.maxHealth / 2);
+      return h.repair(d.checkpointRepair) / d.maxHealth;
+    });
+    expect(restored[0]).toBeGreaterThan(restored[1]);
+    expect(restored[1]).toBeGreaterThan(restored[2]);
+    expect(restored[2]).toBeGreaterThan(0);
+  });
+
+  it('never goes above full health or revives a wreck', () => {
+    const h = new Health({ ...DAMAGE, maxHealth: 100 });
+    h.applyDamage(5);
+    expect(h.repair(0.5)).toBe(5);
+    expect(h.value).toBe(100);
+    h.applyDamage(100);
+    expect(h.repair(0.5)).toBe(0);
+    expect(h.destroyed).toBe(true);
   });
 });
