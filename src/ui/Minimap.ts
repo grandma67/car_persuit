@@ -71,7 +71,7 @@ export class Minimap {
     // Landmarks: fountains as blue discs, monuments as light stone dots.
     for (const l of this.city.landmarks) {
       const [cx, cy] = this.toMap(l.x, l.z);
-      g.fillStyle = l.kind === 'fountain' ? '#4aa3d8' : '#d8d2c4';
+      g.fillStyle = l.kind === 'fountain' ? '#4aa3d8' : l.kind === 'ramp' ? '#e0b030' : '#d8d2c4';
       g.beginPath();
       g.arc(cx, cy, (l.kind === 'fountain' ? l.radius : l.radius + 1.5) * BASE_SCALE, 0, Math.PI * 2);
       g.fill();

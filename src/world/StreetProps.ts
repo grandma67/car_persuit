@@ -2,7 +2,7 @@
 // these into meshes and physics bodies.
 import type { Rng } from '../core/Rng';
 import type { Block, CityConfig, Rect } from './CityGenerator';
-import type { Landmark } from './Landmarks';
+import { inRampLane, type Landmark } from './Landmarks';
 import type { TreeKind } from './Climate';
 
 export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone' | 'tree' | 'umbrella';
@@ -191,6 +191,7 @@ export function generateStreetProps(
       const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
       const x = l.x + Math.cos(a) * r;
       const z = l.z + Math.sin(a) * r;
+      if (l.kind === 'ramp' && inRampLane(l, { x, z })) continue;
       props.push({ kind: 'bench', x, z, yaw: Math.atan2(l.x - x, l.z - z) });
     }
   }
@@ -227,5 +228,8 @@ export function generateStreetProps(
       }
     }
   }
-  return props;
+  // The jump ramp's run-up and landing stay clear, sidewalk edges included.
+  return props.filter(
+    (p) => !landmarks.some((l) => l.kind === 'ramp' && Math.abs(p.x - l.x) <= half && Math.abs(p.z - l.z) <= half && inRampLane(l, p)),
+  );
 }

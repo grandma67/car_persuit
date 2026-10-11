@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { Landmark } from '../world/Landmarks';
+import { RAMP, type Landmark } from '../world/Landmarks';
 import { TireSmoke } from './TireSmoke';
 
 const STONE = 0xc9c3b6;
@@ -9,6 +9,10 @@ const STONE_DARK = 0x9c968a;
 const BRONZE = 0x5e7f6e; // weathered patina
 const STEEL = 0xb8c0c8;
 const WATER = 0x3f8fb8;
+const DECK = 0x3a3d44; // polished dark granite
+const GOLD = 0xd8a62a;
+const WING = 0xb08a52; // polished bronze
+const RAMP_SEGMENTS = 16;
 const SPRAY_PER_SECOND = 40;
 const SPRAY_RANGE = 160; // only spray fountains near the camera
 
@@ -81,6 +85,81 @@ function sculpture(): THREE.BufferGeometry {
   ]);
 }
 
+/** Deck height at local z along the ramp (0 before the toe, peak at the lip). */
+function deckHeight(z: number): number {
+  const t = THREE.MathUtils.clamp((z - RAMP.toe) / (RAMP.lip - RAMP.toe), 0, 1);
+  return RAMP.height * Math.pow(t, RAMP.curve);
+}
+
+/**
+ * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
+ * pair of bronze wings sweeping up from plinths either side of the lip, as if the ramp itself
+ * were taking off. Returns the stone/deck geometry and the bronze wings separately.
+ */
+function rampMonument(): { stone: THREE.BufferGeometry; bronze: THREE.BufferGeometry } {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const quad = (a: number[], b: number[], c: number[], d: number[], hex: number) => {
+    const color = new THREE.Color(hex);
+    for (const v of [a, b, c, a, c, d]) {
+      pos.push(v[0], v[1], v[2]);
+      col.push(color.r, color.g, color.b);
+    }
+  };
+  const w = RAMP.width / 2;
+  const kerb = 0.6;
+  for (let i = 0; i < RAMP_SEGMENTS; i++) {
+    const z0 = RAMP.toe + ((RAMP.lip - RAMP.toe) * i) / RAMP_SEGMENTS;
+    const z1 = RAMP.toe + ((RAMP.lip - RAMP.toe) * (i + 1)) / RAMP_SEGMENTS;
+    const y0 = deckHeight(z0) + 0.06;
+    const y1 = deckHeight(z1) + 0.06;
+    const kerbColor = i % 2 ? GOLD : 0xf0ece2;
+    // Deck across the width: kerb, granite, kerb (counter-clockwise from above).
+    for (const [xa, xb, hex] of [[-w, -w + kerb, kerbColor], [-w + kerb, w - kerb, DECK], [w - kerb, w, kerbColor]] as const) {
+      quad([xa, y0, z0], [xa, y1, z1], [xb, y1, z1], [xb, y0, z0], hex);
+    }
+    // Side cheeks down to the ground.
+    quad([w, 0, z0], [w, y0, z0], [w, y1, z1], [w, 0, z1], STONE);
+    quad([-w, 0, z1], [-w, y1, z1], [-w, y0, z0], [-w, 0, z0], STONE);
+  }
+  // Vertical back face under the lip, with a gold band along its top.
+  const top = deckHeight(RAMP.lip) + 0.06;
+  quad([-w, 0, RAMP.lip], [w, 0, RAMP.lip], [w, top - 0.35, RAMP.lip], [-w, top - 0.35, RAMP.lip], STONE_DARK);
+  quad([-w, top - 0.35, RAMP.lip], [w, top - 0.35, RAMP.lip], [w, top, RAMP.lip], [-w, top, RAMP.lip], GOLD);
+  const deck = new THREE.BufferGeometry();
+  deck.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  deck.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  deck.computeVertexNormals();
+
+  // Plinths either side of the lip, with a gold cap, carrying the wings.
+  const plinthX = w + 0.9;
+  const plinthH = top + 0.6;
+  const plinths = [-1, 1].flatMap((side) => [
+    part(box(1.6, plinthH, 3.2), STONE, side * plinthX, plinthH / 2, RAMP.lip - 1.4),
+    part(box(1.8, 0.2, 3.4), GOLD, side * plinthX, plinthH + 0.1, RAMP.lip - 1.4),
+  ]);
+  const stone = mergeGeometries([deck, ...plinths.map((g) => g.toNonIndexed())]);
+
+  // Wings: a fan of long feathers per side, raked back and flaring outward and up.
+  const feathers = [-1, 1].flatMap((side) =>
+    [0, 1, 2, 3, 4, 5].map((k) => {
+      const len = 7 - k * 0.8;
+      return part(
+        box(0.5, 0.1, len)
+          .translate(0, 0, -len / 2) // pivot at the feather's root, pointing back (-Z)
+          .rotateX(-0.55 - k * 0.17) // fan upward
+          .rotateZ(side * (0.35 + k * 0.05)) // flare outward
+          .rotateY(side * -0.25),
+        WING,
+        side * plinthX,
+        plinthH + 0.3,
+        RAMP.lip - 0.2,
+      );
+    }),
+  );
+  return { stone, bronze: mergeGeometries(feathers) };
+}
+
 // Builds every landmark (meshes + solid colliders) and runs the fountain spray.
 export class Landmarks {
   private spray = new TireSmoke({
@@ -106,6 +185,10 @@ export class Landmarks {
     const models = { fountain: fountain(), statue: statue(), obelisk: obelisk(), sculpture: sculpture() };
 
     for (const l of landmarks) {
+      if (l.kind === 'ramp') {
+        this.addRamp(l, scene, world, solid, metal);
+        continue;
+      }
       const group = new THREE.Group();
       group.position.set(l.x, 0, l.z);
       group.rotation.y = l.yaw;
@@ -131,6 +214,46 @@ export class Landmarks {
       this.colliders.add(world.createCollider(desc).handle);
     }
     scene.add(this.spray.points);
+  }
+
+  /** The jump monument: drivable curved deck (convex slices), solid plinths. */
+  private addRamp(l: Landmark, scene: THREE.Scene, world: RAPIER.World, solid: THREE.Material, metal: THREE.Material): void {
+    const group = new THREE.Group();
+    group.position.set(l.x, 0, l.z);
+    group.rotation.y = l.yaw;
+    const model = rampMonument();
+    const stone = new THREE.Mesh(model.stone, solid);
+    const wings = new THREE.Mesh(model.bronze, metal);
+    for (const m of [stone, wings]) {
+      m.castShadow = m.receiveShadow = true;
+      group.add(m);
+    }
+    scene.add(group);
+    group.updateMatrixWorld();
+
+    // Deck: one convex slice per segment, from the ground up to the deck surface.
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), l.yaw);
+    const rot = { x: q.x, y: q.y, z: q.z, w: q.w };
+    const w = RAMP.width / 2;
+    for (let i = 0; i < RAMP_SEGMENTS; i++) {
+      const z0 = RAMP.toe + ((RAMP.lip - RAMP.toe) * i) / RAMP_SEGMENTS;
+      const z1 = RAMP.toe + ((RAMP.lip - RAMP.toe) * (i + 1)) / RAMP_SEGMENTS;
+      const y0 = deckHeight(z0) + 0.06;
+      const y1 = deckHeight(z1) + 0.06;
+      const pts = new Float32Array([
+        -w, 0, z0, w, 0, z0, -w, 0, z1, w, 0, z1,
+        -w, y0, z0, w, y0, z0, -w, y1, z1, w, y1, z1,
+      ]);
+      const desc = RAPIER.ColliderDesc.convexHull(pts);
+      if (desc) world.createCollider(desc.setTranslation(l.x, 0, l.z).setRotation(rot).setFriction(1));
+    }
+    // Plinths are solid walls (they take crash marks).
+    const plinthH = deckHeight(RAMP.lip) + 0.7;
+    for (const side of [-1, 1]) {
+      const local = new THREE.Vector3(side * (w + 0.9), plinthH / 2, RAMP.lip - 1.4).applyQuaternion(q);
+      const desc = RAPIER.ColliderDesc.cuboid(0.8, plinthH / 2, 1.6).setTranslation(l.x + local.x, local.y, l.z + local.z).setRotation(rot);
+      this.colliders.add(world.createCollider(desc).handle);
+    }
   }
 
   update(dt: number, camera: THREE.Camera, viewportHeight: number, fov: number): void {

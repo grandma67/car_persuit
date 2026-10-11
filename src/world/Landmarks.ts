@@ -3,7 +3,7 @@
 import type { Rng } from '../core/Rng';
 import type { Block, Building, CityConfig } from './CityGenerator';
 
-export type LandmarkKind = 'fountain' | 'statue' | 'obelisk' | 'sculpture';
+export type LandmarkKind = 'fountain' | 'statue' | 'obelisk' | 'sculpture' | 'ramp';
 
 export interface Landmark {
   kind: LandmarkKind;
@@ -19,7 +19,29 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   statue: 1.6,
   obelisk: 1.8,
   sculpture: 2.2,
+  ramp: 4,
 };
+
+/**
+ * "The Leap": one town square per city has a monument you can drive up and jump off. Local
+ * space: the car drives along +Z, from the toe (low end, near the square's edge) to the lip.
+ */
+export const RAMP = {
+  toe: -24, // metres from the square's centre
+  lip: -9,
+  width: 7,
+  height: 3.0,
+  curve: 1.6, // deck height = height * t^curve, so it kicks up toward the lip
+  lane: 8, // half-width of the run-up and landing lane kept clear of trees and benches
+};
+
+/** Is a world point in the ramp's run-up/landing lane? */
+export function inRampLane(l: Landmark, p: { x: number; z: number }): boolean {
+  const dx = p.x - l.x;
+  const dz = p.z - l.z;
+  const across = dx * Math.cos(l.yaw) - dz * Math.sin(l.yaw); // local X
+  return Math.abs(across) < RAMP.lane;
+}
 
 /** Clear space kept around a centrepiece (benches ring just outside it). */
 export const LANDMARK_CLEARANCE = 6;
@@ -58,15 +80,24 @@ export function planLandmarks(
     const kind: LandmarkKind = roll < 0.5 ? 'fountain' : roll < 0.75 ? 'statue' : roll < 0.9 ? 'obelisk' : 'sculpture';
     landmarks.push({ kind, x: b.rect.x, z: b.rect.z, yaw: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), radius: LANDMARK_RADIUS[kind] });
   }
+  // One square's centrepiece is the jump ramp monument.
+  if (landmarks.length) {
+    const ramp = landmarks[0];
+    ramp.kind = 'ramp';
+    ramp.radius = LANDMARK_RADIUS.ramp;
+  }
   buildings = buildings.filter((bd) => !squares.some((s) => inBlock(s, bd)));
   trees = trees.filter((t) => !squares.some((s) => inBlock(s, t)));
   // A ring of trees around each square.
-  for (const s of squares) {
+  squares.forEach((s, i) => {
+    const centre = landmarks[i];
     for (let k = 0; k < SQUARE_RING_TREES; k++) {
       const a = (k / SQUARE_RING_TREES) * Math.PI * 2 + Math.PI / SQUARE_RING_TREES;
-      trees.push({ x: s.rect.x + Math.cos(a) * SQUARE_TREE_RADIUS, z: s.rect.z + Math.sin(a) * SQUARE_TREE_RADIUS });
+      const t = { x: s.rect.x + Math.cos(a) * SQUARE_TREE_RADIUS, z: s.rect.z + Math.sin(a) * SQUARE_TREE_RADIUS };
+      if (centre.kind === 'ramp' && inRampLane(centre, t)) continue; // keep the run-up and landing clear
+      trees.push(t);
     }
-  }
+  });
 
   // Parks: about half get a centrepiece (smaller fountain or a statue); clear trees around it.
   for (const p of blocks.filter((b) => b.park)) {
