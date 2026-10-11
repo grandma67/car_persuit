@@ -9,7 +9,9 @@ import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, type CityData } from '../world/CityGenerator';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
+import { applyClimate, CLIMATE_NAMES, CLIMATES, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
 import { Sky } from '../render/Sky';
+import { Precipitation } from '../render/Precipitation';
 import { CopDirector, type Cop } from '../ai/CopDirector';
 import { CivilianTraffic, civilianSpecVariants } from '../ai/CivilianTraffic';
 import { approachControls } from '../world/TrafficControl';
@@ -61,6 +63,8 @@ export class Game {
   readonly city: CityData;
   private fog: THREE.Fog;
   private time: TimeOfDay;
+  private precipitation: Precipitation | null = null;
+  private cityChoice: string; // menu "City" choice: 'random' or a climate name (?city=…)
   private sky: Sky;
   private overview = false; // ?debug only: top-down map view on C
   private debug = new URLSearchParams(window.location.search).has('debug');
@@ -125,9 +129,14 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(this.renderer.domElement);
 
-    // The seed picks a time of day (overridable with ?time=day|afternoon|night) and a city style.
-    const time = (this.time = pickTimeOfDay(seed, new URLSearchParams(window.location.search).get('time')));
-    const theme = pickTheme(seed);
+    // The seed picks a climate (?city=temperate|snow|beach|desert), a weather (?weather=clear|rain|snow),
+    // a time of day (?time=day|afternoon|night) and a building style that suits the climate.
+    const params = new URLSearchParams(window.location.search);
+    const climate = pickClimate(seed, params.get('city'));
+    this.cityChoice = params.get('city') && params.get('city')! in CLIMATES ? climate.name : 'random';
+    const weather = pickWeather(seed, climate, params.get('weather'));
+    const time = (this.time = applyClimate(pickTimeOfDay(seed, params.get('time')), climate, weather));
+    const theme = pickTheme(seed, climate);
     this.renderer.toneMappingExposure = time.exposure;
     this.fog = new THREE.Fog(time.skyHorizon, time.fogNear, time.fogFar);
     this.scene.background = new THREE.Color(time.skyHorizon);
@@ -151,15 +160,21 @@ export class Game {
     // ?roadworks forces the (rare) closed junction, for testing.
     const forceWorks = new URLSearchParams(window.location.search).has('roadworks');
     this.city = generateCity(seed, forceWorks ? { ...DEFAULT_CITY, roadworksChance: 1 } : DEFAULT_CITY);
-    this.walls = buildCity(this.city, this.scene, this.world, theme, time.windowGlow);
+    this.walls = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain' });
     this.landmarks = new Landmarks(this.city.landmarks, this.scene, this.world, time.lampGlow, this.walls);
-    this.sea = new Sea(this.city.islandSize / 2, time.sea);
+    this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow);
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow);
     if (this.city.roadworks) this.roadworks = new RoadworksSite(this.city.roadworks, this.scene, this.world, this.walls);
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
-    this.player.headlights = { day: 0, afternoon: 0.45, night: 1 }[time.name];
+    this.player.headlights = Math.max({ day: 0, afternoon: 0.45, night: 1 }[time.name], weather === 'clear' ? 0 : 0.45);
+    this.player.setGrip(playerGrip(climate, weather));
+    this.smoke.setColor(climate.spray);
+    if (weather !== 'clear') {
+      this.precipitation = new Precipitation(weather);
+      this.scene.add(this.precipitation.object);
+    }
     this.scene.add(this.player.mesh.root);
     this.scene.add(this.skidMarks.mesh, this.smoke.points, this.marker.group, this.sea.mesh);
     this.scene.add(this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points, this.blast);
@@ -205,7 +220,9 @@ export class Game {
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
     this.screens = new Screens(document.body, (kind) => this.audio.uiBlip(kind));
-    this.look = `${theme.name} · ${time.label}`;
+    this.look = [climate.name === 'temperate' ? null : climate.label, theme.name, time.label, weatherLabel(weather) || null]
+      .filter(Boolean)
+      .join(' · ');
     this.showMenu();
     if (mobile) {
       this.touch = new TouchControls(document.body, {
@@ -246,10 +263,13 @@ export class Game {
         look: this.look,
         difficulties: DIFFICULTIES,
         difficulty: this.difficulty.id,
+        cities: [{ id: 'random', label: 'Random' }, ...CLIMATE_NAMES.map((c) => ({ id: c, label: CLIMATES[c].label }))],
+        city: this.cityChoice,
         best: best ? formatTime(best.seconds) : null,
       },
       () => this.startMission(),
       (id) => this.setDifficulty(id),
+      (id) => this.setCity(id),
     );
   }
 
@@ -259,6 +279,17 @@ export class Game {
     // Rebuild the (not yet started) mission so the timer shows this difficulty's limit.
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
     this.showMenu();
+  }
+
+  /** A different climate means a different world: reload this seed with ?city= set (or cleared). */
+  private setCity(id: string): void {
+    if (id === this.cityChoice) return;
+    const url = new URL(window.location.href);
+    if (id === 'random') url.searchParams.delete('city');
+    else url.searchParams.set('city', id);
+    url.searchParams.delete('weather');
+    url.searchParams.set('seed', String(this.city.seed));
+    window.location.href = url.toString();
   }
 
   private startMission(): void {
@@ -437,6 +468,7 @@ export class Game {
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
     this.sea.update(frameDt);
+    this.precipitation?.update(frameDt, this.chase.camera.position);
     this.landmarks.update(frameDt, this.chase.camera, window.innerHeight, this.chase.camera.fov);
     this.updateEffects(frameDt, impact, crashSound);
     this.updatePropEffects(frameDt, breaks);

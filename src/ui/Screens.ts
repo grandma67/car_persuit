@@ -15,6 +15,8 @@ export interface MenuInfo {
   look: string; // style · time of day
   difficulties: { id: string; label: string }[];
   difficulty: string;
+  cities: { id: string; label: string }[]; // city climate: 'random' (from the seed) or a fixed one
+  city: string;
   best: string | null; // best time on this city at this difficulty
 }
 
@@ -73,12 +75,14 @@ export class Screens {
     }
   }
 
-  menu(info: MenuInfo, onStart: () => void, onDifficulty: (id: string) => void): void {
-    const choices = info.difficulties
-      .map((d) => `<button data-action="diff-${d.id}" class="choice${d.id === info.difficulty ? ' selected' : ''}">${d.label}</button>`)
-      .join('');
+  menu(info: MenuInfo, onStart: () => void, onDifficulty: (id: string) => void, onCity: (id: string) => void): void {
+    const row = (items: { id: string; label: string }[], selected: string, prefix: string) =>
+      items.map((d) => `<button data-action="${prefix}-${d.id}" class="choice${d.id === selected ? ' selected' : ''}">${d.label}</button>`).join('');
+    const choices = row(info.difficulties, info.difficulty, 'diff');
+    const cities = row(info.cities, info.city, 'city');
     const actions: Record<string, () => void> = { start: onStart, share: () => void this.share(info.seed) };
     for (const d of info.difficulties) actions[`diff-${d.id}`] = () => onDifficulty(d.id);
+    for (const c of info.cities) actions[`city-${c.id}`] = () => onCity(c.id);
     this.show(
       `
       <h1>CAR PURSUIT</h1>
@@ -90,6 +94,7 @@ export class Screens {
         <li><kbd>P</kbd> pause · <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen</li>
       </ul>
       <div class="screen-choices" role="group" aria-label="Difficulty">${choices}</div>
+      <div class="screen-choices screen-cities" role="group" aria-label="City">${cities}</div>
       <div class="screen-buttons">
         <button data-action="start">Start <kbd>Enter</kbd></button>
         <button data-action="share" class="secondary">Share this game</button>

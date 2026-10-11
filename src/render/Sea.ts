@@ -12,7 +12,7 @@ export class Sea {
   private time = { value: 0 };
 
   /** islandHalf: half the island's width, for shallows and shore foam. */
-  constructor(islandHalf: number, deepColor: number) {
+  constructor(islandHalf: number, deepColor: number, shallowColor = 0x66cfd9) {
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEGMENTS, SEGMENTS).rotateX(-Math.PI / 2);
     const material = new THREE.MeshStandardMaterial({
       color: deepColor, // shallows are mixed in by the shader
@@ -23,6 +23,7 @@ export class Sea {
     material.onBeforeCompile = (shader) => {
       shader.uniforms.time = this.time;
       shader.uniforms.islandHalf = { value: islandHalf };
+      shader.uniforms.shallow = { value: new THREE.Color(shallowColor) };
       shader.vertexShader = `uniform float time;\nvarying vec2 vSeaPos;\nvarying float vWave;\n${shader.vertexShader}`.replace(
         '#include <begin_vertex>',
         /* glsl */ `
@@ -39,6 +40,7 @@ export class Sea {
       shader.fragmentShader = /* glsl */ `
         uniform float time;
         uniform float islandHalf;
+        uniform vec3 shallow;
         varying vec2 vSeaPos;
         varying float vWave;
         float seaHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -55,7 +57,6 @@ export class Sea {
           #include <color_fragment>
           // Distance from the quay (island is an axis-aligned square).
           float shoreDist = max(abs(vSeaPos.x), abs(vSeaPos.y)) - islandHalf;
-          vec3 shallow = vec3(0.13, 0.62, 0.68);
           diffuseColor.rgb = mix(shallow, diffuseColor.rgb, smoothstep(0.0, 120.0, shoreDist));
 
           float n = seaNoise(vSeaPos * 0.07 + vec2(time * 0.12, -time * 0.09));

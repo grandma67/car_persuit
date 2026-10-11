@@ -261,6 +261,11 @@ export class Vehicle {
     this.updateLights();
   }
 
+  /** Scale tyre grip (wet or icy roads). */
+  setGrip(scale: number): void {
+    for (let i = 0; i < 4; i++) this.controller.setWheelFrictionSlip(i, this.spec.frictionSlip * scale);
+  }
+
   /** Brake lights on unless accelerating; headlights per time of day; everything off when wrecked. */
   private updateLights(): void {
     const m = this.mesh;

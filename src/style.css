@@ -537,6 +537,26 @@ kbd {
   background: rgb(255 255 255 / 0.18);
 }
 
+/* City climate row: its own line, under the difficulty row. */
+.screen-cities {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 6px;
+}
+
+.screen .screen-cities button.choice {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+@media (max-width: 420px) {
+  .screen .screen-cities button.choice {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}
+
 .screen-record {
   margin: 0 0 4px;
   font-weight: 900;

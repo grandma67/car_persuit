@@ -70,6 +70,10 @@ export class TireSmoke {
     this.points.frustumCulled = false;
   }
 
+  setColor(hex: number): void {
+    this.material.uniforms.color.value.set(hex);
+  }
+
   /** Keep particle size consistent across screen heights. */
   resize(heightPx: number, fovDeg: number): void {
     this.material.uniforms.pixelScale.value = heightPx / (2 * Math.tan(THREE.MathUtils.degToRad(fovDeg) / 2));

@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Rng } from '../core/Rng';
 import type { District } from './CityGenerator';
+import { pickClimate, type Climate } from './Climate';
 
 export interface CityTheme {
   name: string;
@@ -19,6 +20,7 @@ export interface CityTheme {
   trunk: number;
   centerLine: number;
   edgeLine: number;
+  promenade?: number; // seafront strip; defaults to the sidewalk colour
 }
 
 export type TimeOfDayName = 'day' | 'afternoon' | 'night';
@@ -103,6 +105,18 @@ const THEMES: CityTheme[] = [
     grass: 0x6b7a3e, leaves: [0x5f6e34, 0x6f7a3c, 0x55642f, 0x7a8240], trunk: 0x5a4632,
     centerLine: 0xe0b84a, edgeLine: 0xe6e2d8,
   },
+  {
+    name: 'Beach Pastel',
+    buildings: {
+      downtown: [0xa8c8d8, 0xd8e4ea, 0x9fbcc8, 0xc8d8d0, 0xb4c4d4],
+      midtown: [0xf2c6c2, 0xa8dcd0, 0xf4e2b0, 0xc8b8e0, 0xf0d8c8],
+      residential: [0xf4d0c8, 0xb8e0d4, 0xf6e6b8, 0xd8c8e8, 0xf6eee0],
+      industrial: [0xc4b8a4, 0xb0a894, 0xd0c4ae, 0x9c9484],
+    },
+    asphalt: 0x36383d, sidewalk: 0xcfc6b4, plaza: 0xc8bca6, quay: 0xa0988a, seaWall: 0xe8e2d6, planter: 0xc0a888,
+    grass: 0x5d8a3e, leaves: [0x4f8a3a, 0x5c9440, 0x467a34, 0x6a9a48], trunk: 0x8a6a48,
+    centerLine: 0xe0b84a, edgeLine: 0xeeeeea,
+  },
 ];
 
 const TIMES: Record<TimeOfDayName, TimeOfDay> = {
@@ -140,9 +154,13 @@ function jitter(hex: number, rng: Rng): number {
   return new THREE.Color().setHSL(h, s, l, THREE.SRGBColorSpace).getHex();
 }
 
-export function pickTheme(seed: number): CityTheme {
+const tint = (hex: number, to: { color: number; amount: number } | null) =>
+  to ? new THREE.Color(hex).lerp(new THREE.Color(to.color), to.amount).getHex() : hex;
+
+/** A building style that suits the climate, with the climate's ground cover and dusted paving. */
+export function pickTheme(seed: number, climate: Climate = pickClimate(seed)): CityTheme {
   const rng = new Rng(seed ^ 0x7e3e);
-  const base = rng.pick(THEMES);
+  const base = rng.pick(THEMES.filter((t) => climate.styles.includes(t.name)));
   const j = (hex: number) => jitter(hex, rng);
   const buildings = Object.fromEntries(
     Object.entries(base.buildings).map(([d, colors]) => [d, colors.map(j)]),
@@ -151,12 +169,13 @@ export function pickTheme(seed: number): CityTheme {
     ...base,
     buildings,
     asphalt: j(base.asphalt),
-    sidewalk: j(base.sidewalk),
-    plaza: j(base.plaza),
+    sidewalk: j(tint(base.sidewalk, climate.paveTint)),
+    plaza: j(tint(base.plaza, climate.paveTint)),
     quay: j(base.quay),
     seaWall: j(base.seaWall),
     planter: j(base.planter),
-    grass: j(base.grass),
+    grass: j(climate.ground ?? base.grass),
+    promenade: climate.promenade === null ? undefined : j(climate.promenade),
     leaves: base.leaves.map(j),
     trunk: j(base.trunk),
   };

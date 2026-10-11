@@ -5,7 +5,8 @@ island city before the clock runs out, while an escalating police force (GTA-sty
 tries to wreck you.
 
 **Play:** `npm install && npm run dev`, then open the printed URL. Every city comes from a seed —
-add `?seed=1234` to replay one, `?time=day|afternoon|night` to force the time of day.
+add `?seed=1234` to replay one, `?time=day|afternoon|night` to force the time of day,
+`?city=temperate|snow|beach|desert` for the climate (also on the menu) and `?weather=clear|rain|snow`.
 
 ## Controls
 
@@ -21,7 +22,10 @@ add `?seed=1234` to replay one, `?time=day|afternoon|night` to force the time of
 
 ## Features
 
-- Seeded island city: districts, parks, plazas, five real-world styles, day / golden hour / night.
+- Seeded island city: districts, parks, plazas, six real-world styles, day / golden hour / night.
+- City climates: classic, snow (snowy roofs and pines, falling snow, icy grip), beach (palms, sand
+  promenade with umbrellas, turquoise water) and desert (sand, cacti, hazy sky); random rain with
+  wet, slippery roads.
 - Raycast-vehicle physics (Rapier), drifting with smoke and skid marks, crash damage and explosions.
 - Wanted level 1–5 stars: patrol cars, interceptors, SUV rammers, armored trucks and roadblocks.
 - Cop AI that navigates the road network, cuts you off ahead on your route and rams.
