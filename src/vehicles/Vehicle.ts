@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { DriveInput } from '../core/Input';
 import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 import { buildCarMesh, type CarMesh } from './carMesh';
+import { gearFor } from './gears';
 
 const FORWARD = new THREE.Vector3(0, 0, 1);
 const RIGHT = new THREE.Vector3(-1, 0, 0);
@@ -24,6 +25,22 @@ const DRIFT_MAX_YAW = 2.4; // rad/s; spin cap so a drift stays catchable
 const DRIFT_POWER_PUSH = 9; // m/s² along the slide on full throttle at zero rear grip, so drifts keep their speed
 const DRIFT_HOLD_SLIP = 0.12; // rad; a slide at least this sideways counts as still drifting
 const DRIFT_CARRY = 0.9; // per second: how fast the velocity swings toward the nose mid-slide
+// Body on its suspension (visual only). Load moves to the front axle in proportion to deceleration
+// (m·a·h / wheelbase), so the nose dives under braking and the tail squats pulling away, and the
+// body leans out of corners. A damped spring, a touch under-damped so it rocks back once when the
+// car stops. Angles in radians per m/s² of acceleration, capped.
+const BODY_PITCH = 0.0042;
+const BODY_ROLL = 0.0035;
+const BODY_MAX_TILT = 0.07;
+const BODY_FREQ = 11; // rad/s
+const BODY_DAMPING = 0.45; // fraction of critical
+const ACCEL_SMOOTHING = 14; // per second: low-pass on the measured acceleration (contact jitter)
+// Gear changes (player only): the drive is cut while the clutch is in, then bites again with a kick:
+// the tail squats and the engine's torque twists the body. Flooring it from low speed twists it too.
+const SHIFT_CUT = 0.14; // seconds
+const SHIFT_CUT_DRIVE = 0.15; // share of the engine force left during the cut
+const SHIFT_KICK_PITCH = 0.35; // rad/s squat as the clutch bites
+const TORQUE_KICK_ROLL = 0.28; // rad/s torque reaction twist
 
 // A Rapier raycast vehicle plus its mesh. The same class drives the player and (later) cops;
 // only the DriveInput source differs.
@@ -52,6 +69,19 @@ export class Vehicle {
   private signalSince = 0;
   /** 0..1 how hard the tyres are sliding (drift, handbrake or locked brakes). */
   skid = 0;
+  /** Simulated gearbox with shift cuts and kicks (the player's car). */
+  gearShifts = false;
+  private gear = 0;
+  private shiftCut = 0;
+  private shifted = false;
+  private lastThrottle = 0;
+  private stepDt = 1 / 60;
+  private accelLong = 0; // smoothed, m/s², along the car (+ = speeding up)
+  private accelLat = 0; // smoothed, m/s², toward the car's left
+  private pitch = 0; // body tilt, rad (+ = nose down)
+  private pitchVel = 0;
+  private roll = 0; // rad (+ = left side up)
+  private rollVel = 0;
   /** Rear tyre grip, 0 (locked and sliding) .. 1 (normal). Drops on the handbrake, recovers after. */
   private rearGrip = 1;
   // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
@@ -201,6 +231,9 @@ export class Vehicle {
       brake = 1.5; // engine braking when coasting
     }
 
+    if (this.gearShifts) engine = this.gearbox(input, speed, engine, dt);
+    this.stepDt = dt;
+
     const absSpeed = Math.abs(speed);
     const drifting = this.updateRearGrip(input, speed, dt);
     // Handbrake = rear wheels only, clutch in: the locked rears get no drive.
@@ -259,6 +292,58 @@ export class Vehicle {
     const step = rate * dt;
     this.rearGrip += THREE.MathUtils.clamp(target - this.rearGrip, -step, step);
     return this.rearGrip < 0.98;
+  }
+
+  /**
+   * Gear changes: on an upshift under throttle the drive is mostly cut for SHIFT_CUT, then bites
+   * again with a kick to the body. Snapping the throttle open from low speed kicks it too. Returns
+   * the engine force to apply.
+   */
+  private gearbox(input: DriveInput, speed: number, engine: number, dt: number): number {
+    const gear = gearFor(speed);
+    if (gear > this.gear && input.throttle > 0 && speed > 0) this.shiftCut = SHIFT_CUT;
+    this.gear = gear;
+    if (this.shiftCut > 0) {
+      this.shiftCut -= dt;
+      if (this.shiftCut > 0) return engine * SHIFT_CUT_DRIVE;
+      // Clutch bites: squat, and the engine twists the body against its rotation.
+      this.pitchVel -= SHIFT_KICK_PITCH * input.throttle;
+      this.rollVel += TORQUE_KICK_ROLL * 0.6 * input.throttle;
+      this.shifted = true;
+    }
+    if (input.throttle > 0.6 && this.lastThrottle < 0.1 && speed > -1 && speed < 12) {
+      this.rollVel += TORQUE_KICK_ROLL;
+      this.pitchVel -= SHIFT_KICK_PITCH * 0.5;
+    }
+    this.lastThrottle = input.throttle;
+    return engine;
+  }
+
+  /** A gear change just completed (for the exhaust puff); clears the flag. */
+  consumeShift(): boolean {
+    const s = this.shifted;
+    this.shifted = false;
+    return s;
+  }
+
+  /** Body pitch and roll on the suspension, from the acceleration this step (see BODY_PITCH). */
+  private updateBody(ax: number, ay: number, az: number, dt: number): void {
+    const f = this.forward(tmpVec);
+    const along = ax * f.x + ay * f.y + az * f.z;
+    const left = ax * f.z - az * f.x; // horizontal, toward the car's left (+X)
+    const k = Math.min(1, ACCEL_SMOOTHING * dt);
+    const grounded = [0, 1, 2, 3].some((i) => this.controller.wheelIsInContact(i));
+    // In the air nothing loads the springs: the body settles level.
+    this.accelLong += ((grounded ? along : 0) - this.accelLong) * k;
+    this.accelLat += ((grounded ? left : 0) - this.accelLat) * k;
+    const pitchTarget = THREE.MathUtils.clamp(-this.accelLong * BODY_PITCH, -BODY_MAX_TILT, BODY_MAX_TILT);
+    const rollTarget = THREE.MathUtils.clamp(this.accelLat * BODY_ROLL, -BODY_MAX_TILT, BODY_MAX_TILT);
+    const w2 = BODY_FREQ * BODY_FREQ;
+    const c = 2 * BODY_DAMPING * BODY_FREQ;
+    this.pitchVel += (w2 * (pitchTarget - this.pitch) - c * this.pitchVel) * dt;
+    this.rollVel += (w2 * (rollTarget - this.roll) - c * this.rollVel) * dt;
+    this.pitch = THREE.MathUtils.clamp(this.pitch + this.pitchVel * dt, -BODY_MAX_TILT * 1.5, BODY_MAX_TILT * 1.5);
+    this.roll = THREE.MathUtils.clamp(this.roll + this.rollVel * dt, -BODY_MAX_TILT * 1.5, BODY_MAX_TILT * 1.5);
   }
 
   /**
@@ -330,6 +415,8 @@ export class Vehicle {
     // Normal driving changes velocity < 0.2 m/s per step; anything well above is a hit.
     const v = this.body.linvel();
     const dv = Math.hypot(v.x - this.lastVel.x, v.y - this.lastVel.y, v.z - this.lastVel.z);
+    const dt = this.stepDt;
+    this.updateBody((v.x - this.lastVel.x) / dt, (v.y - this.lastVel.y) / dt, (v.z - this.lastVel.z) / dt, dt);
     if (dv > 1.5 && dv > this.impact) {
       this.impact = dv;
       this.impactVelocity.copy(this.lastVel);
@@ -361,6 +448,7 @@ export class Vehicle {
     this.body.setLinvel(v, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.lastVel.set(v.x, v.y, v.z);
+    this.pitch = this.pitchVel = this.roll = this.rollVel = this.accelLong = this.accelLat = 0;
     this.snapshot();
     this.prevPos.copy(this.currPos);
     this.prevQuat.copy(this.currQuat);
@@ -370,6 +458,7 @@ export class Vehicle {
   syncMesh(alpha: number): void {
     this.mesh.root.position.lerpVectors(this.prevPos, this.currPos, alpha);
     this.mesh.root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha);
+    this.mesh.body.rotation.set(this.pitch, 0, this.roll);
     const c = this.controller;
     this.mesh.wheels.forEach(({ pivot, spinner }, i) => {
       const conn = c.wheelChassisConnectionPointCs(i)!;

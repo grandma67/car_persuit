@@ -87,7 +87,7 @@ export function scratchCar(vehicle: Vehicle, toward: THREE.Vector3, strength: nu
     mesh.count = 0;
     mesh.frustumCulled = false;
     mesh.renderOrder = 1;
-    vehicle.mesh.root.add(mesh);
+    vehicle.mesh.body.add(mesh); // rides the body's pitch and roll
     layer = { mesh, next: 0 };
     layers.set(vehicle, layer);
   }

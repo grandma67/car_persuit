@@ -3,11 +3,10 @@
 // audio after a user gesture, so the context is created on the first key/pointer press.
 import { MenuMusic, WIN_SONG } from './MenuMusic';
 import { SoundEffects } from './SoundEffects';
+import { gearFor, GEAR_TOP_SPEEDS } from '../vehicles/gears';
 import type { TreeKind } from '../world/Climate';
 import type { PropKind } from '../world/StreetProps';
 
-// Upper speed (m/s) of each gear; rpm sweeps within the band, dropping on each upshift.
-const GEAR_TOP_SPEEDS = [9, 17, 25, 33, 39, 46];
 
 /** Soft-clip curve: warms the engine with low-order harmonics instead of harsh buzz. */
 function createSaturationCurve(drive: number): Float32Array<ArrayBuffer> {
@@ -229,8 +228,7 @@ export class CarAudio {
     const absSpeed = Math.abs(s.speed);
 
     // Engine rpm from simulated gears; revs toward the redline when throttling at a standstill.
-    let gear = GEAR_TOP_SPEEDS.findIndex((top) => absSpeed < top);
-    if (gear < 0) gear = GEAR_TOP_SPEEDS.length - 1;
+    const gear = gearFor(absSpeed);
     const low = gear === 0 ? 0 : GEAR_TOP_SPEEDS[gear - 1];
     const bandRatio = (absSpeed - low) / (GEAR_TOP_SPEEDS[gear] - low);
     let targetRpm = 0.25 + 0.7 * Math.min(bandRatio, 1);

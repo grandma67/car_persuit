@@ -163,6 +163,7 @@ export class Game {
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
+    this.player.gearShifts = true;
     this.player.headlights = Math.max({ day: 0, afternoon: 0.45, night: 1 }[time.name], weather === 'clear' ? 0 : 0.45);
     this.player.setGrip(playerGrip(climate, weather));
     this.effects = new Effects(this.scene, climate.spray);

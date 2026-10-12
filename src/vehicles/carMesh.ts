@@ -4,6 +4,10 @@ import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 
 export interface CarMesh {
   root: THREE.Group;
+  /** Everything but the wheels: pitches and rolls on the suspension (Vehicle sets its rotation). */
+  body: THREE.Group;
+  /** Tailpipe tips, body-local, where exhaust smoke comes out. */
+  exhausts: THREE.Vector3[];
   /** Per wheel: pivot (positioned + steered) and spinner (rolls about X). Order: FL, FR, RL, RR. */
   wheels: { pivot: THREE.Group; spinner: THREE.Mesh }[];
   /** Brake lights: lit red when braking or not driving, dark while accelerating. */
@@ -274,7 +278,44 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     return beam;
   });
 
-  return { root, wheels, taillight, headlight, headGlows, tailGlows, indicators, beams, paint, sirenLights };
+  // Tailpipes under the rear bumper: twin on the sports car, one on the right otherwise. The
+  // ramp truck's rear is its deck, so it gets an upright stack on the cab instead.
+  const pipe = new THREE.MeshStandardMaterial({ color: 0x8c9096, metalness: 0.9, roughness: 0.3 });
+  const soot = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
+  let exhausts: THREE.Vector3[];
+  if (body === 'ramptruck') {
+    // Up the right side of the cab, clear of the deck cars launch off.
+    const { z0, z1, top } = RAMP.cab;
+    const x = -RAMP.halfWidth - 0.12;
+    const z = z0 + (z1 - z0) * 0.25;
+    const length = top + 0.5 - hy;
+    const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, length, 10), pipe);
+    stack.position.set(x, hy + length / 2, z);
+    root.add(stack);
+    exhausts = [new THREE.Vector3(x, top + 0.55, z)];
+  } else {
+    const pipeGeo = new THREE.CylinderGeometry(0.055, 0.06, 0.24, 10).rotateX(Math.PI / 2);
+    const sootGeo = new THREE.CircleGeometry(0.04, 10).rotateY(Math.PI);
+    const pipeY = -hy + 0.1;
+    const pipeZ = -hz - 0.06;
+    exhausts = (body === 'sports' ? [0.42, -0.42] : [-0.5]).map((f) => {
+      const x = f * hx;
+      const p = new THREE.Mesh(pipeGeo, pipe);
+      p.position.set(x, pipeY, pipeZ);
+      const hole = new THREE.Mesh(sootGeo, soot);
+      hole.position.set(x, pipeY, pipeZ - 0.121);
+      root.add(p, hole);
+      return new THREE.Vector3(x, pipeY, pipeZ - 0.15);
+    });
+  }
+
+  // Body on its own group, so it can pitch and roll on the suspension while the wheels stay put.
+  const bodyGroup = new THREE.Group();
+  const pivots = new Set<THREE.Object3D>(wheels.map((w) => w.pivot));
+  for (const child of [...root.children]) if (!pivots.has(child)) bodyGroup.add(child);
+  root.add(bodyGroup);
+
+  return { root, body: bodyGroup, exhausts, wheels, taillight, headlight, headGlows, tailGlows, indicators, beams, paint, sirenLights };
 }
 
 let glowCache: THREE.Texture | null | undefined;
