@@ -28,7 +28,7 @@ import { Screens } from '../ui/Screens';
 import { CarAudio } from '../audio/CarAudio';
 import { Effects } from '../render/Effects';
 import { Sirens } from '../render/Sirens';
-import { Sea } from '../render/Sea';
+import { Sea, SEA_LEVEL } from '../render/Sea';
 import type { CanalWater } from '../render/CanalWater';
 import { Minimap } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
@@ -435,6 +435,7 @@ export class Game {
     this.sun.target.position.copy(carPos);
 
     if (this.state === 'playing') this.applyDamage(impact, ramDamage);
+    if (this.state === 'playing' && this.player.position.y < SEA_LEVEL - 0.3) this.drown();
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
     this.sea.update(frameDt);
@@ -526,6 +527,22 @@ export class Game {
     }
     return contact.damage * this.difficulty.damageScale;
   }
+  /** Into the sea or a canal: a splash, the car sinks, and that's the run over. */
+  private drown(): void {
+    const body = this.player.body;
+    const v = body.linvel();
+    this.effects.splash(this.player.position.clone().setY(SEA_LEVEL), new THREE.Vector3(v.x, 0, v.z));
+    // Water drag: it slows hard and settles slowly into the deep.
+    body.setLinearDamping(3);
+    body.setAngularDamping(2);
+    this.player.lightsOff = true;
+    this.chase.shake(0.6);
+    this.audio.stopEngine();
+    this.audio.impact(0.8);
+    this.mission.fail('drowned');
+    this.endMission();
+  }
+
   /** Wrecked: the car blows up — fireball, flash, smoke, a jolt into the air — then the lose screen. */
   private explode(): void {
     const body = this.player.body;
@@ -610,7 +627,7 @@ export class Game {
     if (won) this.audio.playWinMusic();
     const reason = this.mission.loseReason;
     // Let an explosion play out before the end screen covers it.
-    const showDelay = reason === 'destroyed' ? 2000 : 0;
+    const showDelay = reason === 'destroyed' ? 2000 : reason === 'drowned' ? 1500 : 0;
     window.setTimeout(() => this.showEndScreen(won), showDelay);
   }
 
@@ -631,7 +648,7 @@ export class Game {
     this.screens.end(
       {
         won,
-        title: won ? 'YOU MADE IT!' : reason === 'destroyed' ? 'WRECKED' : "TIME'S UP",
+        title: won ? 'YOU MADE IT!' : reason === 'destroyed' ? 'WRECKED' : reason === 'drowned' ? 'SLEEPING WITH THE FISHES' : "TIME'S UP",
         detail: won
           ? `All ${this.mission.total} destinations in ${formatTime(this.mission.elapsed)}.`
           : `Reached ${this.mission.index} of ${this.mission.total} destinations.`,

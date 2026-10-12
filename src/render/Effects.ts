@@ -57,6 +57,17 @@ export class Effects {
     this.flash.intensity = blast.flash;
   }
 
+  /** A car plunging into the water at `at` (on the surface), moving at `velocity`. */
+  splash(at: THREE.Vector3, velocity: THREE.Vector3): void {
+    for (let i = 0; i < 90; i++) {
+      // Flung outward in a ring, carried on a little in the car's direction.
+      const a = Math.random() * Math.PI * 2;
+      const out = 15 + Math.random() * 25; // emit() keeps 15% of this as sideways speed
+      this.tmpVel.set(Math.cos(a) * out + velocity.x * 0.8, 0, Math.sin(a) * out + velocity.z * 0.8);
+      this.water.emit(at, this.tmpVel, 0);
+    }
+  }
+
   /** Lamps and signals spark; hydrants start a geyser. */
   propBreak(b: PropBreak): void {
     if (b.kind === 'lamp' || b.kind === 'signal') {

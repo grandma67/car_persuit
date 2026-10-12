@@ -4,7 +4,7 @@ import type { RoadGraph, RoadNode } from '../world/RoadGraph';
 import { MISSION, type MissionConfig } from './balance';
 
 export type MissionStatus = 'playing' | 'won' | 'lost';
-export type LoseReason = 'time' | 'destroyed';
+export type LoseReason = 'time' | 'destroyed' | 'drowned';
 export type MissionEvent = 'reached' | 'won' | 'lost';
 
 /** Pick sequential destinations, each min..max metres by road from the previous one. */
