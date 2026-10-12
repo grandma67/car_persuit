@@ -1,7 +1,10 @@
 // Offline support for the installed app.
-// Pages: network-first (so a new deploy is picked up), falling back to the cached shell.
+// Pages and the manifest: network-first (so a new deploy is picked up), falling back to the cache.
 // Everything else same-origin (hashed Vite assets, icons): cache-first, filled on demand.
-const CACHE = 'car-pursuit-v1';
+// Only this game's cache is read: other apps on the same github.io origin have their own.
+// Bump CACHE when cached files change without changing their URL.
+const CACHE = 'car-pursuit-v2';
+const fromCache = (req) => caches.open(CACHE).then((c) => c.match(req));
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './manifest.webmanifest'])));
@@ -20,21 +23,24 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
-  if (req.mode === 'navigate') {
+  if (req.mode === 'navigate' || req.url.endsWith('/manifest.webmanifest')) {
+    const key = req.mode === 'navigate' ? './' : req;
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('./', copy));
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(key, copy));
+          }
           return res;
         })
-        .catch(() => caches.match('./')),
+        .catch(() => fromCache(key)),
     );
     return;
   }
 
   event.respondWith(
-    caches.match(req).then(
+    fromCache(req).then(
       (hit) =>
         hit ||
         fetch(req).then((res) => {
