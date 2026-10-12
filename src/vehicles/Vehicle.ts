@@ -10,6 +10,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const tmpQuat = new THREE.Quaternion();
 const tmpVec = new THREE.Vector3();
 const BRAKE_LIGHT_HOLD = 0.4; // seconds
+const INDICATOR_HZ = 1.5; // turn-signal flashes per second
 // Footbrake balance: weight shifts forward under braking, so real cars put ~65% of it on the front.
 const FRONT_BRAKE = 1.3;
 const REAR_BRAKE = 0.7;
@@ -46,6 +47,9 @@ export class Vehicle {
   beamEnabled = true;
   /** All lights out (wrecked). */
   lightsOff = false;
+  /** Turn signal the driver has on; set by the AI. */
+  private signal: 'left' | 'right' | null = null;
+  private signalSince = 0;
   /** 0..1 how hard the tyres are sliding (drift, handbrake or locked brakes). */
   skid = 0;
   /** Rear tyre grip, 0 (locked and sliding) .. 1 (normal). Drops on the handbrake, recovers after. */
@@ -374,6 +378,16 @@ export class Vehicle {
     this.updateLights();
   }
 
+  get indicator(): 'left' | 'right' | null {
+    return this.signal;
+  }
+
+  /** Switch the turn signal; a fresh signal starts on a flash, like the real thing. */
+  set indicator(side: 'left' | 'right' | null) {
+    if (side !== this.signal) this.signalSince = performance.now();
+    this.signal = side;
+  }
+
   /** Scale tyre grip (wet or icy roads). */
   setGrip(scale: number): void {
     for (let i = 0; i < 4; i++) this.controller.setWheelFrictionSlip(i, this.spec.frictionSlip * scale);
@@ -396,6 +410,15 @@ export class Vehicle {
       beam.visible = head > 0 && this.beamEnabled;
     }
     for (const g of m.headGlows) (g.material as THREE.SpriteMaterial).opacity = head * 0.9;
+
+    // About 1.5 flashes a second (road rules allow 1–2), lit for the first half of each.
+    const flash = !this.lightsOff && this.signal !== null && ((performance.now() - this.signalSince) / 1000) * INDICATOR_HZ % 1 < 0.5;
+    for (const side of ['left', 'right'] as const) {
+      const on = flash && this.signal === side ? 1 : 0;
+      const { lamp, glows } = m.indicators[side];
+      lamp.emissiveIntensity = on * 2.5;
+      for (const g of glows) (g.material as THREE.SpriteMaterial).opacity = on * (0.55 + this.headlights * 0.35);
+    }
   }
 
   dispose(): void {

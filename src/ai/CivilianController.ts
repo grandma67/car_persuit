@@ -18,6 +18,7 @@ const CORNER_SPEED = 6;
 const GAP = 6; // metres kept to the vehicle ahead
 const STOP_SIGN_WAIT = 1.2;
 const STOP_MARGIN = 1.5; // metres short of the stop line
+const SIGNAL_DISTANCE = 40; // metres before a junction to start indicating a turn
 const PANIC_TIME = 1; // seconds stopped after a knock before carrying on
 const DODGE_OFFSET = 3.5; // metres sideways to pass something blocking the lane
 const DODGE_SPEED = 5;
@@ -126,6 +127,7 @@ export class CivilianController {
     // Backing away from a crash.
     const backing = this.recovery.override(dt);
     if (backing) {
+      v.indicator = null;
       this.stuckFor = Math.abs(speed) < 0.3 ? this.stuckFor + dt : 0;
       return backing;
     }
@@ -151,6 +153,7 @@ export class CivilianController {
     this.segment = purePursuit(this.path, this.segment, rear, lookahead, this.aim).segment;
     const dodging = this.recovery.dodgeFor > 0;
     if (dodging) this.offsetAim(this.recovery.dodgeSide * DODGE_OFFSET);
+    v.indicator = this.signal(pos, dodging);
     const toX = this.aim.x - rear.x;
     const toZ = this.aim.z - rear.z;
     const alpha = Math.atan2(toX * -fwd.z + toZ * fwd.x, toX * fwd.x + toZ * fwd.z);
@@ -221,6 +224,20 @@ export class CivilianController {
     this.stuckFor = desired > 2 && Math.abs(speed) < 0.5 ? this.stuckFor + dt : 0;
     if (this.recovery.gaveUp) this.stuckFor = Infinity;
     return input;
+  }
+
+  /**
+   * Turn signal: the side we're pulling out to round an obstacle, else the turn at the next
+   * junction from SIGNAL_DISTANCE out until we've left it (straight on: none).
+   */
+  private signal(pos: P, dodging: boolean): 'left' | 'right' | null {
+    if (dodging) return this.recovery.dodgeSide > 0 ? 'right' : 'left';
+    const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
+    if (Math.hypot(b.x - pos.x, b.z - pos.z) > SIGNAL_DISTANCE) return null;
+    const turn = turnAngle(a, b, c);
+    // Positive turn angle is a right turn (the lane sits on that side); a U-turn swings left.
+    if (Math.abs(turn) > 2.8) return 'left';
+    return turn > 0.5 ? 'right' : turn < -0.5 ? 'left' : null;
   }
 
   /** Shift the aim point sideways off the lane (+ = right), along the current path segment. */

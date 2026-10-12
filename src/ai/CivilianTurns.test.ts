@@ -53,9 +53,11 @@ function driveThrough(spec: VehicleSpec, to: number) {
   let wheelsOff = 0;
   let bodyOff = 0;
   let lateral = 0;
+  const signals = new Set<string | null>(); // indicator on the approach, 30m out to the junction
   let t = 0;
   for (; t < 40; t += DT) {
     v.drive(c.update(DT, t), DT);
+    if (v.position.x > 70 && v.position.x < 95) signals.add(v.indicator);
     world.step();
     v.snapshot();
     const r = v.body.rotation();
@@ -65,7 +67,7 @@ function driveThrough(spec: VehicleSpec, to: number) {
     lateral = Math.max(lateral, Math.abs(v.body.angvel().y * v.speed));
     if (Math.hypot(v.position.x - exit.x, v.position.z - exit.z) < 5) break;
   }
-  return { arrived: t < 40, wheelsOff, bodyOff, lateral };
+  return { arrived: t < 40, wheelsOff, bodyOff, lateral, signals: [...signals] };
 }
 
 const CARS = [{ ...PLAYER_SPEC, body: 'sedan' as const }, VAN_SPEC, PICKUP_SPEC].map((s) => asCivilian(s));
@@ -95,6 +97,8 @@ describe('civilian turns', () => {
       const r = driveThrough(spec, to);
       expect(r.arrived).toBe(true);
       expect(r.wheelsOff).toBeLessThan(0.3);
+      // Indicates the whole approach: the side it turns to, nothing going straight on.
+      expect(r.signals).toEqual([to === RIGHT ? 'right' : to === LEFT ? 'left' : null]);
     },
   );
 });

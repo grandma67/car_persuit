@@ -12,6 +12,8 @@ export interface CarMesh {
   /** Soft glow sprites around the lamps, so they read at night. */
   headGlows: THREE.Sprite[];
   tailGlows: THREE.Sprite[];
+  /** Amber turn indicators per side (front, rear and side repeater share a material), with glows. */
+  indicators: Record<'left' | 'right', { lamp: THREE.MeshStandardMaterial; glows: THREE.Sprite[] }>;
   /** Road-lighting headlight beams, one per lamp (off by day). */
   beams: THREE.SpotLight[];
   /** Police light bar halves (red, blue), flashed by the cop code. */
@@ -43,6 +45,11 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   };
   const headGlows: THREE.Sprite[] = [];
   const tailGlows: THREE.Sprite[] = [];
+  const indicatorLamp = () => new THREE.MeshStandardMaterial({ color: 0x6a4410, emissive: 0xff7a00, emissiveIntensity: 0 });
+  const indicators: CarMesh['indicators'] = {
+    left: { lamp: indicatorLamp(), glows: [] },
+    right: { lamp: indicatorLamp(), glows: [] },
+  };
 
   const body = spec.body ?? 'sports';
   // Body: a box with the front top edge pulled down — a sharp wedge for sports cars, a gentle
@@ -184,6 +191,25 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     headGlows.push(hg);
     tailGlows.push(tg);
     root.add(tl);
+
+    // Turn indicators (+X is the car's left): front and rear just outboard of the lamps, plus a
+    // repeater on the flank behind the front wheel, so a car alongside can see it too.
+    const side = indicators[x > 0 ? 'left' : 'right'];
+    const ix = Math.sign(x) * (Math.abs(x) * (hx / 0.95) + 0.12);
+    const front = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.05), side.lamp);
+    front.position.set(ix, lampY - 0.1, hz + 0.01);
+    // Below the tail lamp, except on the ramp truck where the deck lip sits under it.
+    const rearY = tailY + (body === 'ramptruck' ? 0.12 : -0.12);
+    const rear = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.05), side.lamp);
+    rear.position.set(ix, rearY, tailZ - 0.01);
+    const repeater = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.2), side.lamp);
+    repeater.position.set(Math.sign(x) * (hx + 0.02), lampY, hz * 0.55);
+    const fg = glow(0xffa02a, 0.9);
+    fg.position.set(ix, lampY - 0.1, hz + 0.1);
+    const rg = glow(0xffa02a, 0.9);
+    rg.position.set(ix, rearY, tailZ - 0.1);
+    side.glows.push(fg, rg);
+    root.add(front, rear, repeater, fg, rg);
   }
 
   const tireGeo = new THREE.CylinderGeometry(spec.wheelRadius, spec.wheelRadius, 0.32, 12);
@@ -245,7 +271,7 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     return beam;
   });
 
-  return { root, wheels, taillight, headlight, headGlows, tailGlows, beams, paint, sirenLights };
+  return { root, wheels, taillight, headlight, headGlows, tailGlows, indicators, beams, paint, sirenLights };
 }
 
 let glowCache: THREE.Texture | null | undefined;
