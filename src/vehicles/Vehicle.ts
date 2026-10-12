@@ -59,6 +59,8 @@ export class Vehicle {
   private impact = 0;
   /** Velocity just before the strongest recent impact (direction of travel into the obstacle). */
   readonly impactVelocity = new THREE.Vector3();
+  /** Velocity lost in that impact: points from the car toward what it hit. */
+  readonly impactPush = new THREE.Vector3();
   // Previous/current physics transforms, for render interpolation between fixed steps.
   private prevPos = new THREE.Vector3();
   private prevQuat = new THREE.Quaternion();
@@ -331,6 +333,7 @@ export class Vehicle {
     if (dv > 1.5 && dv > this.impact) {
       this.impact = dv;
       this.impactVelocity.copy(this.lastVel);
+      this.impactPush.set(this.lastVel.x - v.x, this.lastVel.y - v.y, this.lastVel.z - v.z);
     }
     this.lastVel.set(v.x, v.y, v.z);
   }

@@ -29,6 +29,7 @@ import { CarAudio } from '../audio/CarAudio';
 import { Effects } from '../render/Effects';
 import { Sirens } from '../render/Sirens';
 import { Sea, SEA_LEVEL } from '../render/Sea';
+import { scratchCar } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
 import { Minimap } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
@@ -375,10 +376,12 @@ export class Game {
       this.player.snapshot();
       const playerHit = this.player.consumeImpact();
       if (playerHit > 0) this.markWall(this.player, playerHit);
+      this.scratch(this.player, playerHit);
       impact = Math.max(impact, playerHit);
       for (const car of this.traffic.cars) {
         car.vehicle.snapshot();
         const hit = car.vehicle.consumeImpact();
+        this.scratch(car.vehicle, hit);
         if (hit > 3) crashSound = Math.max(crashSound, this.crashLoudness(car.vehicle, hit));
         if (hit > 3) {
           car.controller.hit();
@@ -390,13 +393,14 @@ export class Game {
           if (this.state === 'playing' && !onRamp && car.vehicle.position.distanceTo(this.player.position) < 8) this.raiseStars(this.wanted.civilianHit());
         }
       }
-      breaks.push(...this.props.checkVehicle(this.player, FIXED_DT));
+      breaks.push(...this.scratchOnProps(this.player, this.props.checkVehicle(this.player, FIXED_DT)));
       for (const cop of this.director.cops) {
         cop.vehicle.snapshot();
-        breaks.push(...this.props.checkVehicle(cop.vehicle, FIXED_DT));
+        breaks.push(...this.scratchOnProps(cop.vehicle, this.props.checkVehicle(cop.vehicle, FIXED_DT)));
         if (copsChase && cop.wreckedFor === null) ramDamage += this.copContactDamage(cop, FIXED_DT);
         const hit = cop.vehicle.consumeImpact();
         if (hit > 0) this.markWall(cop.vehicle, hit);
+        this.scratch(cop.vehicle, hit);
         if (hit > 0) crashSound = Math.max(crashSound, this.crashLoudness(cop.vehicle, hit));
         if (hit > 0 && cop.wreckedFor === null) {
           cop.health.applyImpact(hit);
@@ -561,6 +565,20 @@ export class Game {
     this.audio.explosion();
     this.mission.fail('destroyed');
     this.endMission();
+  }
+
+  /** Scratch a car's paint where an impact (velocity change, m/s) struck it. */
+  private scratch(vehicle: Vehicle, impact: number): void {
+    if (impact > 0) scratchCar(vehicle, vehicle.impactPush, Math.min(1, impact / 15));
+  }
+
+  /** Smashing through street furniture scuffs the front (or whichever way the car was going). */
+  private scratchOnProps(vehicle: Vehicle, hits: PropBreak[]): PropBreak[] {
+    if (hits.length) {
+      const v = vehicle.body.linvel();
+      scratchCar(vehicle, new THREE.Vector3(v.x, 0, v.z), 0.15 * hits.length);
+    }
+    return hits;
   }
 
   /** A hard hit into something solid: scuff the wall where the car struck it. */
