@@ -37,7 +37,7 @@ export interface TerrainConfig {
   hillHeight: [number, number]; // metres
   maxGrade: number; // steepest slope the hill may have (rise over run)
   canalOdds: [number, number, number]; // weights for 0, 1 and 2 canals
-  canalWidth: number; // metres, quay wall to quay wall
+  canalWidth: [number, number]; // metres, quay wall to quay wall: each canal picks its own
   bridgeSpacing: [number, number]; // road lines between neighbouring bridges over a canal
 }
 
@@ -56,7 +56,7 @@ export function planTerrain(
   const roll = rng.next() * (config.canalOdds[0] + config.canalOdds[1] + config.canalOdds[2]);
   const count = roll < config.canalOdds[0] ? 0 : roll < config.canalOdds[0] + config.canalOdds[1] ? 1 : 2;
   const canals: Canal[] = [];
-  const make = (axis: 'x' | 'z', index: number): Canal => ({ axis, line: index, at: line(index), half: config.canalWidth / 2 });
+  const make = (axis: 'x' | 'z', index: number): Canal => ({ axis, line: index, at: line(index), half: 0 });
   const first = make(rng.next() < 0.5 ? 'x' : 'z', rng.int(2, blocks - 2));
   if (count >= 1) canals.push(first);
   if (count === 2) {
@@ -87,6 +87,8 @@ export function planTerrain(
       yaw: rng.range(-0.5, 0.5),
     };
   }
+  // Widths are drawn last so a seed's hill doesn't depend on them.
+  for (const c of canals) c.half = Math.round(rng.range(config.canalWidth[0], config.canalWidth[1])) / 2;
   return { hill, canals };
 }
 

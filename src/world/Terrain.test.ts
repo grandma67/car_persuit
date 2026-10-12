@@ -9,10 +9,18 @@ import { Vehicle } from '../vehicles/Vehicle';
 import { PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 3);
-const cities = new Map<number, CityData>();
-const cityFor = (seed: number) => {
-  if (!cities.has(seed)) cities.set(seed, generateCity(seed, { ...DEFAULT_CITY, roadworksChance: 0 }));
-  return cities.get(seed)!;
+// Every seed with its own canal widths, plus some pinned to the narrowest and widest canals.
+const WIDTHS = [DEFAULT_CITY.canalWidth[0], DEFAULT_CITY.canalWidth[1]];
+const CASES: [number, number | null][] = [
+  ...SEEDS.map((s): [number, null] => [s, null]),
+  ...SEEDS.slice(0, 12).flatMap((s) => WIDTHS.map((w): [number, number] => [s, w])),
+];
+const cities = new Map<string, CityData>();
+const cityFor = (seed: number, width: number | null = null) => {
+  const key = `${seed}:${width}`;
+  const canalWidth: [number, number] = width === null ? DEFAULT_CITY.canalWidth : [width, width];
+  if (!cities.has(key)) cities.set(key, generateCity(seed, { ...DEFAULT_CITY, roadworksChance: 0, canalWidth }));
+  return cities.get(key)!;
 };
 const contains = (r: Rect, x: number, z: number) => Math.abs(x - r.x) <= r.w / 2 + 1e-6 && Math.abs(z - r.z) <= r.d / 2 + 1e-6;
 
@@ -30,6 +38,9 @@ describe('terrain', () => {
     const hills = SEEDS.map((s) => cityFor(s).terrain.hill);
     expect(hills.some((h) => h === null)).toBe(true);
     expect(new Set(hills.filter(Boolean).map((h) => Math.round(h!.height))).size).toBeGreaterThan(4);
+    const widths = canals.map((c) => c.half * 2);
+    expect(Math.min(...widths)).toBeLessThan(40);
+    expect(Math.max(...widths)).toBeGreaterThan(70);
   });
 
   it.each(SEEDS.slice(0, 12))('seed %i: the hill is gentle and the shore stays at sea level', (seed) => {
@@ -49,8 +60,8 @@ describe('terrain', () => {
     expect(steepest).toBeLessThanOrEqual(DEFAULT_CITY.maxGrade + 0.005);
   });
 
-  it.each(SEEDS)('seed %i: canals cut the island shore to shore, bridged every few blocks', (seed) => {
-    const city = cityFor(seed);
+  it.each(CASES)('seed %i, width %s: canals cut the island shore to shore, bridged every few blocks', (seed, pinned) => {
+    const city = cityFor(seed, pinned);
     const t = city.terrain;
     // No road runs along a canal, and every road edge that crosses one lands on a bridge.
     for (const a of city.graph.nodes) {
@@ -71,20 +82,19 @@ describe('terrain', () => {
       expect(on.length).toBeGreaterThan(0);
       expect(on.length).toBeLessThan(city.config.blocks / 2);
       for (let k = 1; k < on.length; k++) expect(on[k] - on[k - 1]).toBeGreaterThanOrEqual(2 * (city.config.blockSize + city.config.roadWidth));
-      expect(c.half * 2).toBe(city.config.canalWidth);
+      expect(c.half * 2).toBeGreaterThanOrEqual(city.config.canalWidth[0]);
+      expect(c.half * 2).toBeLessThanOrEqual(city.config.canalWidth[1]);
     }
     // The land pieces plus the canal strips make up the whole island.
     const land = t.land.reduce((sum, r) => sum + r.w * r.d, 0);
     const island = city.islandSize ** 2;
-    const xs = t.canals.filter((c) => c.axis === 'x').length;
-    const zs = t.canals.filter((c) => c.axis === 'z').length;
-    const w = 2 * (t.canals[0]?.half ?? 0);
-    const water = (xs + zs) * w * city.islandSize - xs * zs * w * w;
+    const width = (axis: 'x' | 'z') => t.canals.filter((c) => c.axis === axis).reduce((sum, c) => sum + 2 * c.half, 0);
+    const water = (width('x') + width('z')) * city.islandSize - width('x') * width('z');
     expect(land + water).toBeCloseTo(island, 3);
   });
 
-  it.each(SEEDS)('seed %i: nothing stands in the water and the spawn is on dry land', (seed) => {
-    const city = cityFor(seed);
+  it.each(CASES)('seed %i, width %s: nothing stands in the water and the spawn is on dry land', (seed, width) => {
+    const city = cityFor(seed, width);
     const t = city.terrain;
     const wet = (x: number, z: number) => !onGround(t, x, z);
     expect(city.buildings.filter((b) => inCanal(t, b.x, b.z, Math.max(b.w, b.d) / 2))).toEqual([]);

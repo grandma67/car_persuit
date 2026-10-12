@@ -31,7 +31,7 @@ export const DEFAULT_CITY: CityConfig = {
   hillHeight: [8, 22],
   maxGrade: 0.11,
   canalOdds: [0.3, 0.45, 0.25],
-  canalWidth: 28,
+  canalWidth: [12, 100],
   bridgeSpacing: [3, 5],
 };
 
