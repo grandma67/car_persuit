@@ -240,8 +240,12 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
 
   // --- Town squares, park centrepieces and the jump ramp (own RNG stream). The ramp wants a
   // paved-over street with a road straight on at both ends: run-up through one junction, landing
-  // beyond the other. ---
-  const rampStreets = plazaEdges.filter((e) => isRoad(inLine(e, -1)) && isRoad(inLine(e, 1)));
+  // beyond the other, none of it over a bridge (jumping the water is the canal ramp's job). ---
+  const rampStreets = plazaEdges.filter((e) => {
+    const before = inLine(e, -1);
+    const after = inLine(e, 1);
+    return isRoad(before) && isRoad(after) && [before!.a, e.a, e.b, after!.b].every((id) => !canalNodes.has(id));
+  });
   const rampSpots = rampStreets.flatMap((e) => {
     const r = edgeRect(e);
     return [1, -1].map((dir) => ({ x: r.x, z: r.z, yaw: yawAlong(e, dir) }));

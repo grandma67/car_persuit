@@ -30,6 +30,26 @@ describe('jump ramp monument', () => {
   });
 });
 
+// Nothing of a bridge in a ramp's lane, from behind the run-up to past the landing.
+function laneCrossesBridge(city: ReturnType<typeof generateCity>, l: ReturnType<typeof generateCity>['landmarks'][number]): boolean {
+  const fx = Math.sin(l.yaw);
+  const fz = Math.cos(l.yaw);
+  for (let a = -100; a <= 120; a += 2) {
+    const p = { x: l.x + fx * a, z: l.z + fz * a };
+    if (city.terrain.bridges.some((b) => inside(b, p))) return true;
+  }
+  return false;
+}
+
+describe('ramps and bridges', () => {
+  it('neither ramp runs over a bridge', () => {
+    for (let seed = 1; seed <= 120; seed++) {
+      const city = generateCity(seed, { ...DEFAULT_CITY, canalRampChance: 1 });
+      for (const l of city.landmarks.filter((l) => l.kind === 'ramp')) expect(laneCrossesBridge(city, l), `seed ${seed}`).toBe(false);
+    }
+  });
+});
+
 describe('canal ramp', () => {
   const withCanals = { ...DEFAULT_CITY, canalOdds: [0, 1, 0] as [number, number, number], canalRampChance: 1 };
 
