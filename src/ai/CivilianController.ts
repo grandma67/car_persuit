@@ -9,7 +9,7 @@ import type { RoadGraph } from '../world/RoadGraph';
 import { signalState, type ApproachControl } from '../world/TrafficControl';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
-import { CrashRecovery, hazardSpeedLimit, type Awareness } from './awareness';
+import { CrashRecovery, hazardSpeedLimit, type Awareness, type Self } from './awareness';
 import type { Keep } from '../world/driveSide';
 
 const LANE_OFFSET = 3; // metres to the kerb side of the road centre line
@@ -204,7 +204,7 @@ export class CivilianController {
     // Yield to anything on a collision course: cross traffic, a light-runner, the player head-on.
     if (this.awareness) {
       const lv = v.body.linvel();
-      const self = { handle: v.body.handle, x: pos.x, z: pos.z, vx: lv.x, vz: lv.z, fx: fwd.x, fz: fwd.z, halfWidth: v.spec.halfExtents.x, halfLength: v.spec.halfExtents.z, turning: Math.abs(input.steer) > 0.3 };
+      const self = { handle: v.body.handle, x: pos.x, z: pos.z, vx: lv.x, vz: lv.z, fx: fwd.x, fz: fwd.z, halfWidth: v.spec.halfExtents.x, halfLength: v.spec.halfExtents.z, turning: Math.abs(input.steer) > 0.3, nearTurn: this.nearTurn(pos) };
       desired = Math.min(desired, hazardSpeedLimit(self, this.awareness.movers(), speed, this.keep));
     }
 
@@ -243,6 +243,19 @@ export class CivilianController {
     // Positive turn angle is a right turn; a U-turn swings across the road, away from the kerb.
     if (Math.abs(turn) > 2.8) return this.keep > 0 ? 'left' : 'right';
     return turn > 0.5 ? 'right' : turn < -0.5 ? 'left' : null;
+  }
+
+  /**
+   * The kerb-side turn at the next junction, once we're closing on it: a car's turn stays in its
+   * own corner (heavies swing out over the centre lines, so they get none).
+   */
+  private nearTurn(pos: P): Self['nearTurn'] {
+    if (this.style.rightTurnStart !== null) return null;
+    const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
+    if (turnAngle(a, b, c) * this.keep <= 0.5 || Math.abs(turnAngle(a, b, c)) > 2.8) return null;
+    if (Math.hypot(b.x - pos.x, b.z - pos.z) > SIGNAL_DISTANCE) return null;
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    return { x: b.x, z: b.z, ux: (b.x - a.x) / len, uz: (b.z - a.z) / len };
   }
 
   /** Shift the aim point sideways off the lane (+ = right), along the current path segment. */

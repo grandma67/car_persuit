@@ -40,6 +40,12 @@ export interface Self {
   halfWidth: number;
   halfLength: number;
   turning: boolean;
+  /**
+   * Taking the kerb-side turn (right, or left keeping left) at the junction ahead: its centre and
+   * our heading into it. That turn stays in the corner between our lane and the exit lane, so
+   * traffic that never enters that corner (oncoming, or crossing in the far lane) is no threat.
+   */
+  nearTurn?: { x: number; z: number; ux: number; uz: number } | null;
 }
 
 const HAZARD_RANGE = 50; // metres
@@ -48,6 +54,22 @@ const HAZARD_REACT = 1.2; // closer than this in time: stop
 const HAZARD_MARGIN = 0.8; // metres of clearance wanted
 const OTHER_HALF_WIDTH = 1.3; // assume a car-sized other
 const OTHER_HALF_LENGTH = 2.5;
+const CORNER_SLACK = 1; // metres past the centre lines a mover's centre may stray and still miss our corner
+const CORNER_SAMPLES = 12;
+
+/** Whether a mover's straight-line course over the horizon enters the corner a kerb-side turn sweeps. */
+function entersCorner(turn: NonNullable<Self['nearTurn']>, m: Mover, keep: Keep): boolean {
+  // u: along our approach (negative before the junction centre); s: toward the kerb side (the exit road).
+  const sx = -turn.uz * keep;
+  const sz = turn.ux * keep;
+  for (let i = 0; i <= CORNER_SAMPLES; i++) {
+    const t = (HAZARD_HORIZON * i) / CORNER_SAMPLES;
+    const px = m.x + m.vx * t - turn.x;
+    const pz = m.z + m.vz * t - turn.z;
+    if (px * turn.ux + pz * turn.uz < CORNER_SLACK && px * sx + pz * sz > -CORNER_SLACK) return true;
+  }
+  return false;
+}
 
 /**
  * Speed limit that avoids a moving vehicle on a collision course (one crossing a junction in
@@ -56,6 +78,8 @@ const OTHER_HALF_LENGTH = 2.5;
  * about to rear-end us would only make it worse. Everyone gives way to the player and cops;
  * between civilians only one side gives way, or both would brake, then both creep on together:
  * yield to the right (to the left when keeping left), and a turning car yields to oncoming traffic.
+ * A car turning onto its kerb side only minds traffic that will come into the corner it turns
+ * through: it doesn't cross the oncoming lane or the far lane of the road it joins.
  */
 export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number, keep: Keep = 1): number {
   const rightX = -me.fz;
@@ -69,6 +93,7 @@ export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number, keep:
     const rz = m.z - me.z;
     if (rx * me.fx + rz * me.fz < 0 || rx * rx + rz * rz > HAZARD_RANGE * HAZARD_RANGE) continue;
     if (m.vx * m.vx + m.vz * m.vz < 4) continue;
+    if (me.nearTurn && !entersCorner(me.nearTurn, m, keep)) continue;
     if (m.civilian) {
       const onRight = (rx * rightX + rz * rightZ) * keep > 0; // keeping left: yield to the left
       const oncoming = m.vx * me.fx + m.vz * me.fz < 0;

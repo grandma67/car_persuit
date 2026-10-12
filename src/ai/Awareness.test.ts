@@ -41,6 +41,33 @@ describe('hazardSpeedLimit', () => {
     expect(hazardSpeedLimit(me, [oncoming], 10)).toBe(Infinity);
     expect(hazardSpeedLimit({ ...me, turning: true }, [oncoming], 10)).toBeLessThan(10);
   });
+
+  describe('turning right (onto the kerb side) at a junction 20m ahead', () => {
+    // Heading +X in the lane at z=+3 toward a junction at (20, 0); turning right means into +Z.
+    const turner: Self = { ...me, z: 3, nearTurn: { x: 20, z: 0, ux: 1, uz: 0 } };
+
+    it('does not wait for traffic crossing in the far lane, or for oncoming traffic', () => {
+      // From the right, heading -Z in its lane at x=23 (past the centre line): straight-line, we'd meet.
+      const fromRight = mover({ x: 23, z: 23, vz: -10 });
+      expect(hazardSpeedLimit({ ...me, z: 3 }, [fromRight], 10)).toBeLessThan(10);
+      expect(hazardSpeedLimit(turner, [fromRight], 10)).toBe(Infinity);
+      const oncoming = mover({ x: 30, z: -3, vx: -10, civilian: true });
+      expect(hazardSpeedLimit({ ...turner, turning: true }, [oncoming], 10)).toBe(Infinity);
+    });
+
+    it('still gives way to the player coming along the lane it turns into', () => {
+      // From the left, heading +Z in its lane at x=17: right through the corner we turn across.
+      expect(hazardSpeedLimit(turner, [mover({ x: 17, z: -17, vz: 10 })], 10)).toBeLessThan(10);
+    });
+
+    it('mirrors when keeping left', () => {
+      // Keeping left in the lane at z=-3, the kerb-side turn is left (into -Z); cross traffic from
+      // the left uses the far lane at x=23.
+      const left: Self = { ...me, z: -3, nearTurn: { x: 20, z: 0, ux: 1, uz: 0 } };
+      expect(hazardSpeedLimit(left, [mover({ x: 23, z: -23, vz: 10 })], 10, -1)).toBe(Infinity);
+      expect(hazardSpeedLimit(left, [mover({ x: 17, z: 17, vz: -10 })], 10, -1)).toBeLessThan(10);
+    });
+  });
 });
 
 describe('crash recovery', () => {
