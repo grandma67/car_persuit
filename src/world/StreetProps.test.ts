@@ -4,6 +4,20 @@ import { PROP_SPECS, footprintsOverlap, propFootprint, propSpec, rectFootprint, 
 
 const SEEDS = [1, 42, 1234, 99999];
 
+// Generating a city is the slow part; each seed is checked by several tests.
+const cities = new Map<number, ReturnType<typeof generateCity>>();
+const cityFor = (seed: number) => {
+  if (!cities.has(seed)) cities.set(seed, generateCity(seed));
+  return cities.get(seed)!;
+};
+
+/** Broad phase: bounding circles apart means the footprints can't overlap. Skips most SAT checks. */
+const near = (a: Footprint, b: Footprint) => {
+  const r = Math.hypot(a.hx, a.hz) + Math.hypot(b.hx, b.hz);
+  return Math.abs(a.x - b.x) < r && Math.abs(a.z - b.z) < r;
+};
+const overlaps = (a: Footprint, b: Footprint) => near(a, b) && footprintsOverlap(a, b);
+
 describe('footprintsOverlap', () => {
   const box = (x: number, z: number, hx: number, hz: number, yaw = 0): Footprint => ({ x, z, hx, hz, yaw });
   it('detects axis-aligned overlap and separation', () => {
@@ -21,7 +35,7 @@ describe('footprintsOverlap', () => {
 
 describe('generateStreetProps', () => {
   it('is deterministic and has every kind in sensible numbers', () => {
-    const a = generateCity(42).streetProps;
+    const a = cityFor(42).streetProps;
     expect(generateCity(42).streetProps).toEqual(a);
     const count = (k: string) => a.filter((p) => p.kind === k).length;
     expect(count('lamp')).toBeGreaterThan(800);
@@ -32,7 +46,7 @@ describe('generateStreetProps', () => {
   });
 
   it.each(SEEDS)('seed %i: nothing on roads, intersections, buildings, planters or trees', (seed) => {
-    const city = generateCity(seed);
+    const city = cityFor(seed);
     const blockers: Footprint[] = [
       ...city.roads.map((r) => rectFootprint(r.rect)),
       ...city.intersections.map(rectFootprint),
@@ -41,12 +55,12 @@ describe('generateStreetProps', () => {
       ...city.trees.map((t) => ({ x: t.x, z: t.z, hx: 0.5, hz: 0.5, yaw: 0 })),
     ];
     // Roadworks cones stand on the road on purpose.
-    const bad = city.streetProps.filter((p) => p.kind !== 'cone' && blockers.some((b) => footprintsOverlap(propFootprint(p), b)));
+    const bad = city.streetProps.filter((p) => p.kind !== 'cone' && blockers.some((b) => overlaps(propFootprint(p), b)));
     expect(bad).toEqual([]);
   });
 
   it.each(SEEDS)('seed %i: props do not overlap each other and stay on the island', (seed) => {
-    const city = generateCity(seed);
+    const city = cityFor(seed);
     const half = city.islandSize / 2 - 0.6; // inside the sea wall
     const fps = city.streetProps.map((p) => propFootprint(p));
     let overlaps = 0;
@@ -60,7 +74,7 @@ describe('generateStreetProps', () => {
   });
 
   it.each(SEEDS)('seed %i: town squares are building-free with a centrepiece; landmarks are clear of everything', (seed) => {
-    const city = generateCity(seed);
+    const city = cityFor(seed);
     const squares = city.blocks.filter((b) => b.square);
     expect(squares.length).toBeGreaterThanOrEqual(2);
     for (const s of squares) {
@@ -78,7 +92,7 @@ describe('generateStreetProps', () => {
         ...city.trees.map((t) => ({ x: t.x, z: t.z, hx: 0.5, hz: 0.5, yaw: 0 })),
         ...city.streetProps.map((p) => propFootprint(p)),
       ];
-      expect(blockers.filter((b) => footprintsOverlap(fp, b))).toEqual([]);
+      expect(blockers.filter((b) => overlaps(fp, b))).toEqual([]);
     }
   });
 });
