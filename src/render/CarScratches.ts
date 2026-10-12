@@ -96,24 +96,34 @@ export function scratchCar(vehicle: Vehicle, toward: THREE.Vector3, strength: nu
   const flank = hx * (vehicle.spec.body === 'boxtruck' ? 1.02 : 1) + 0.012; // the cargo box stands a touch proud
   const count = 1 + Math.round(strength * 2);
   for (let k = 0; k < count; k++) {
-    const size = 0.5 + strength * 0.8 + Math.random() * 0.3;
+    // Small marks, kept wholly on the face they're on: never past the car's edges.
+    let w = 0.3 + strength * 0.5 + Math.random() * 0.2;
+    let h = w * 0.45;
     // The face the hit came through: a flank or an end, by where the direction meets the box.
     const side = Math.abs(local.x) / hx > Math.abs(local.z) / hz;
+    // Vertical band on the face; low on the ends, where the sloped noses leave little upright face.
+    const [bottom, top] = side ? [-hy * 0.9, hy * 0.9] : [-hy * 0.9, -hy * 0.15];
+    h = Math.min(h, (top - bottom) * 0.8);
+    const y = THREE.MathUtils.lerp(bottom + h / 2, top - h / 2, Math.random());
     if (side) {
       const sx = Math.sign(local.x);
-      const along = THREE.MathUtils.clamp((local.z / Math.abs(local.x)) * hx + (Math.random() - 0.5) * 1.2, -hz * 0.85, hz * 0.85);
+      const along = THREE.MathUtils.clamp((local.z / Math.abs(local.x)) * hx + (Math.random() - 0.5) * 1.2, -hz * 0.8, hz * 0.8);
+      w = Math.min(w, 2 * (hz * 0.95 - Math.abs(along)));
       normal.set(sx, 0, 0);
-      pos.set(sx * flank, THREE.MathUtils.lerp(-hy * 0.6, hy * 0.4, Math.random()), along);
+      pos.set(sx * flank, y, along);
     } else {
       const sz = Math.sign(local.z);
-      const across = THREE.MathUtils.clamp((local.x / Math.abs(local.z)) * hz + (Math.random() - 0.5) * 0.8, -hx * 0.8, hx * 0.8);
+      const across = THREE.MathUtils.clamp((local.x / Math.abs(local.z)) * hz + (Math.random() - 0.5) * 0.6, -hx * 0.6, hx * 0.6);
+      w = Math.min(w, 2 * (hx * 0.92 - Math.abs(across)));
       normal.set(0, 0, sz);
-      // Low on the ends: the sloped noses leave little upright face up top.
-      pos.set(across, -hy * 0.55 + (Math.random() - 0.5) * hy * 0.3, sz * (hz + 0.012));
+      pos.set(across, y, sz * (hz + 0.012));
     }
-    q.setFromUnitVectors(Z, normal).multiply(spin.setFromAxisAngle(Z, (Math.random() - 0.5) * 0.6));
-    // Not taller than the face; streaks run the long way.
-    m4.compose(pos, q, scale.set(size * 1.5, Math.min(size * 0.6, hy * 1.2), 1));
+    // A slight tilt, shrunk to keep the tilted corners on the face too.
+    const tilt = (Math.random() - 0.5) * 0.3;
+    const sin = Math.abs(Math.sin(tilt)); // tilted, a w×h mark spans (w + h·sin) × (h + w·sin)
+    const fit = Math.min(1 / (1 + (h / w) * sin), 1 / (1 + (w / h) * sin));
+    q.setFromUnitVectors(Z, normal).multiply(spin.setFromAxisAngle(Z, tilt));
+    m4.compose(pos, q, scale.set(w * fit, h * fit, 1));
     layer.mesh.setMatrixAt(layer.next, m4);
     layer.next = (layer.next + 1) % MAX_PER_CAR;
     layer.mesh.count = Math.min(MAX_PER_CAR, layer.mesh.count + 1);
