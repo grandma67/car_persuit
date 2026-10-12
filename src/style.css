@@ -681,7 +681,9 @@ kbd {
 }
 
 /* On touch devices: hide the keyboard help, move the speedo above the pedals. */
-.is-touch .hud-help {
+.is-touch .hud-help,
+.is-touch .screen-keys,
+.is-touch kbd {
   display: none;
 }
 

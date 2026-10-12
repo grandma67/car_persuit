@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Game } from './core/Game';
 import { seedFromUrl } from './core/Rng';
+import { isTouchDevice } from './ui/TouchControls';
 
 // Backstop for the CSS: some Android browsers still start a selection or open a menu on long-press.
 document.addEventListener('selectstart', (e) => e.preventDefault());
@@ -43,7 +44,9 @@ function dismissSplash(game: Game): void {
     return;
   }
   status.hidden = true;
-  splash.querySelector<HTMLElement>('.splash-continue')!.hidden = false;
+  const prompt = splash.querySelector<HTMLElement>('.splash-continue')!;
+  if (isTouchDevice()) prompt.textContent = 'Tap to continue';
+  prompt.hidden = false;
   const go = (e: Event) => {
     // This key only dismisses the splash; don't let it also press Start on the menu.
     e.stopPropagation();
