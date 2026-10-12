@@ -10,18 +10,19 @@ const REAR_WHEELS = [2, 3];
 const SMOKE_PER_SECOND = 55; // per rear wheel at full skid
 const ENGINE_SMOKE_PER_SECOND = 30;
 const FIRE_PER_SECOND = 40;
-// Exhaust: the engine's effort shows in the fumes. Fine pale wisps at idle, pulsing with the
-// firing; more, faster and denser under load (throttle at low speed, the engine working hardest);
-// and a dark puff of soot when it's kicked: each gear biting under throttle, and the throttle
-// snapped open (the rich mixture before the revs catch up).
-const EXHAUST_IDLE = 7; // wisps per second
-const EXHAUST_LOAD = 34; // more at full load
+// Exhaust: the engine's effort shows in the fumes, from every tailpipe the car's mesh has (rates
+// are per pipe). Grey-black puffs at idle, pulsing with the firing; more, faster and denser under
+// load (throttle at low speed, the engine working hardest); and a black cloud of soot when it's
+// kicked: each gear biting under throttle, and the throttle snapped open (the rich mixture
+// before the revs catch up).
+const EXHAUST_IDLE = 9; // wisps per second, per pipe
+const EXHAUST_LOAD = 34; // more at full load, per pipe
 const EXHAUST_PULSE_HZ = 2.2; // idle chug
 const EXHAUST_EXIT = [0.8, 3.5]; // m/s backward out of the pipe, idle → full throttle
 const EXHAUST_CARRY = 0.7; // share of the car's speed the fumes keep at first (its wake), then drag slows them
-const SOOT_SHIFT = 5; // dark puffs as a gear bites
-const SOOT_SNAP = 4; // dark puffs as the throttle snaps open
-const SOOT_LUGGING = 7; // per second at full throttle crawling away (lugging, rich)
+const SOOT_SHIFT = 5; // black puffs per pipe as a gear bites
+const SOOT_SNAP = 4; // black puffs per pipe as the throttle snaps open
+const SOOT_LUGGING = 7; // per pipe per second at full throttle crawling away (lugging, rich)
 const GEYSER_SECONDS = 6;
 const GEYSER_PER_SECOND = 70;
 
@@ -46,21 +47,22 @@ export class Effects {
   private fireball = new TireSmoke({
     color: 0xff8a2a, maxAlpha: 0.9, additive: true, growth: 5, lift: [1, 7], spread: 12, life: [0.5, 1.1],
   });
-  // Exhaust: small pale wisps, and darker soot puffs when the engine is kicked (see EXHAUST_*).
+  // Exhaust: grey-black puffs, and black soot clouds when the engine is kicked (see EXHAUST_*).
   // They ride the car's wake for a moment (carry) instead of dropping straight back into the chase
   // camera, and only fade right at the lens: the camera sits ~5 m from the pipe, inside the
   // default fade-in range that keeps tyre smoke out of your eyes.
   private exhaust = new TireSmoke({
-    color: 0xd4d7dc, maxAlpha: 0.42, additive: false, startSize: 0.14, growth: 0.7, lift: [0.15, 0.4], spread: 0.3, life: [0.5, 0.9], jitter: 0.05,
+    color: 0x4a4c50, maxAlpha: 0.6, additive: false, startSize: 0.3, growth: 1.6, lift: [0.2, 0.5], spread: 0.4, life: [0.7, 1.2], jitter: 0.06,
     carry: EXHAUST_CARRY, nearFade: [0.8, 2.2],
   });
   private soot = new TireSmoke({
-    color: 0x34363a, maxAlpha: 0.6, additive: false, startSize: 0.18, growth: 1.0, lift: [0.2, 0.5], spread: 0.4, life: [0.6, 1.1], jitter: 0.06,
+    color: 0x0e0f11, maxAlpha: 0.85, additive: false, startSize: 0.4, growth: 2.4, lift: [0.25, 0.6], spread: 0.5, life: [0.8, 1.4], jitter: 0.08,
     carry: EXHAUST_CARRY, nearFade: [0.8, 2.2],
   });
   private exhaustBudget = 0;
   private sootBudget = 0;
   private exhaustTime = 0;
+  private nextPipe = 0; // round-robin across the tailpipes, carried between frames
   private lastThrottle = 0;
   private flash = new THREE.PointLight(0xff9a40, 0, 60, 1.5);
   private geysers: { position: THREE.Vector3; timeLeft: number; budget: number }[] = [];
@@ -168,8 +170,9 @@ export class Effects {
   }
 
   /**
-   * Fumes from the tailpipes, following the engine's effort: wisps that thicken and blow out
-   * faster with load, and soot puffs on its kicks (gear biting, throttle snapped open, lugging).
+   * Fumes from each of the car's tailpipes in turn, following the engine's effort: puffs that
+   * thicken and blow out faster with load, and soot puffs on its kicks (gear biting, throttle
+   * snapped open, lugging).
    */
   private updateExhaust(dt: number, player: Vehicle): void {
     const shifted = player.consumeShift();
@@ -181,15 +184,16 @@ export class Effects {
       const speed = Math.abs(player.speed);
       const load = throttle * (1 - Math.min(1, speed / player.spec.maxSpeed) * 0.6);
       const chug = 0.6 + 0.4 * Math.sin(this.exhaustTime * EXHAUST_PULSE_HZ * Math.PI * 2);
-      this.exhaustBudget += (EXHAUST_IDLE * chug + EXHAUST_LOAD * load) * dt;
+      const { body, exhausts } = player.mesh;
+      const pipes = exhausts.length;
+      this.exhaustBudget += (EXHAUST_IDLE * chug + EXHAUST_LOAD * load) * pipes * dt;
       const lugging = throttle > 0.8 && speed < 8 ? SOOT_LUGGING * throttle * dt : 0;
-      this.sootBudget += lugging + (shifted ? SOOT_SHIFT * throttle : 0) + (snapped ? SOOT_SNAP : 0);
+      this.sootBudget += (lugging + (shifted ? SOOT_SHIFT * throttle : 0) + (snapped ? SOOT_SNAP : 0)) * pipes;
       const wisps = Math.floor(this.exhaustBudget);
       const puffs = Math.floor(this.sootBudget);
       this.exhaustBudget -= wisps;
       this.sootBudget -= puffs;
       if (wisps + puffs > 0) {
-        const { body, exhausts } = player.mesh;
         body.updateWorldMatrix(true, false);
         // Blown out backwards, harder the more throttle, then left hanging in the air.
         const exit = EXHAUST_EXIT[0] + (EXHAUST_EXIT[1] - EXHAUST_EXIT[0]) * throttle;
@@ -199,7 +203,7 @@ export class Effects {
         this.tmpVel.set(v.x + back.x / EXHAUST_CARRY, 0, v.z + back.z / EXHAUST_CARRY);
         const emit = (smoke: TireSmoke, count: number) => {
           for (let i = 0; i < count; i++) {
-            const tip = this.exhaustAt.copy(exhausts[i % exhausts.length]);
+            const tip = this.exhaustAt.copy(exhausts[this.nextPipe++ % pipes]);
             smoke.emit(body.localToWorld(tip).setY(tip.y - 0.15), this.tmpVel, 0);
           }
         };
