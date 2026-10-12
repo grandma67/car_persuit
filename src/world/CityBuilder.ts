@@ -52,6 +52,17 @@ class GeometryBuilder {
     this.quad([[x0, y, z1], [x1, y, z1], [x1, y, z0], [x0, y, z0]], [0, 1, 0], color);
   }
 
+  /** Flat rectangle at height y, split into cells of about `step` metres (for vertex animation). */
+  grid(r: Rect, y: number, color: THREE.Color, step: number): void {
+    const nx = Math.max(1, Math.round(r.w / step));
+    const nz = Math.max(1, Math.round(r.d / step));
+    for (let b = 0; b < nz; b++) {
+      for (let a = 0; a < nx; a++) {
+        this.rect({ x: r.x - r.w / 2 + (r.w * (a + 0.5)) / nx, z: r.z - r.d / 2 + (r.d * (b + 0.5)) / nz, w: r.w / nx, d: r.d / nz }, y, color);
+      }
+    }
+  }
+
   /** Box with 4 walls + roof. wallUv maps a face's (width, height) to UV corners. */
   box(r: Rect, y0: number, h: number, wallColor: THREE.Color, roof: GeometryBuilder | null, roofColor: THREE.Color,
       wallUv?: (w: number, h: number) => number[][]): void {
@@ -273,7 +284,7 @@ export function buildCity(
     for (const c of terrain.canals) {
       // Water runs under the shore's sea wall and out to sea, a touch below it so the sea wins there.
       const strip = c.axis === 'x' ? { x: 0, z: c.at, w: island + 8, d: c.half * 2 } : { x: c.at, z: 0, w: c.half * 2, d: island + 8 };
-      water.rect(strip, SEA_LEVEL - 0.05, seaColor);
+      water.grid(strip, SEA_LEVEL - 0.05, seaColor, 3);
       // Gaps in the canal-side walls: the bridges and any crossing canal.
       const gaps: [number, number][] = [
         ...terrain.bridges.filter((b) => (c.axis === 'x' ? b.z === c.at : b.x === c.at)).map((b) => span(b, c.axis)),
