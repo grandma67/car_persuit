@@ -34,9 +34,14 @@ export class SkidMarks {
       `,
       fragmentShader: /* glsl */ `
         varying float vAlpha;
-        void main() { gl_FragColor = vec4(0.04, 0.04, 0.05, vAlpha); }
+        void main() { gl_FragColor = vec4(vec3(1.0 - min(vAlpha * 1.25, 0.9)), 1.0); }
       `,
+      // Multiply: darken whatever is underneath by a ratio, so marks still show on asphalt in
+      // shadow or at night. A fixed dark colour vanished there (it was the road's own colour).
       transparent: true,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.ZeroFactor,
+      blendDst: THREE.SrcColorFactor,
       depthWrite: false,
       polygonOffset: true,
       polygonOffsetFactor: -4,
