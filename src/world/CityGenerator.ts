@@ -87,7 +87,7 @@ export interface CityData {
   trees: { x: number; z: number }[];
   landmarks: Landmark[]; // fountains, statues, obelisks, sculptures (solid)
   streetProps: StreetProp[]; // breakable lamps, hydrants, benches, fences, signs, signals
-  roadMarks: RoadMark[]; // zebra crossings and stop lines
+  roadMarks: RoadMark[]; // zebra crossings, stop lines, and the lines they add to
   roadworks: Roadworks[]; // the rare closed junctions (usually none)
   terrain: Terrain; // hill, canals and their bridges
   driveSide: DriveSide; // which side of the road traffic keeps to, for the whole game
@@ -351,7 +351,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   // signals, signs and stop lines go up on that side.
   const driveSide: DriveSide = new Rng(seed ^ 0x1e7f5d).next() < config.leftHandChance ? 'left' : 'right';
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
-  const traffic = generateTrafficControl(graph, blocksOut, config, size, new Rng(seed ^ 0x7aff1c), keepOf(driveSide));
+  const traffic = generateTrafficControl(graph, roads.map((r) => r.rect), blocksOut, config, size, new Rng(seed ^ 0x7aff1c), keepOf(driveSide));
   // Furniture is laid out for the full grid; drop whatever would stand in a canal or on a tree
   // (park benches are scattered without looking at the trees).
   const dry = (x: number, z: number, r: number) => onGround(terrain, x, z, r);

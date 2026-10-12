@@ -380,7 +380,8 @@ export function buildCity(
       markings.push(alongX ? { x: rect.x, z: rect.z + off, w: length, d: 0.15, c: theme.edgeLine } : { x: rect.x + off, z: rect.z, w: 0.15, d: length, c: theme.edgeLine });
     }
   }
-  for (const mark of city.roadMarks) markings.push({ ...mark, c: 0xf2f2ee });
+  const markColor = { centerline: theme.centerLine, edgeline: theme.edgeLine, crosswalk: 0xf2f2ee, stopline: 0xf2f2ee };
+  for (const mark of city.roadMarks) markings.push({ ...mark, c: markColor[mark.kind] });
   // Draped over the hill (roads run on over the bridge decks, which follow the same ground).
   const paint = new GeometryBuilder();
   for (const mk of markings) paint.drape(mk, 0.02, color(mk.c), terrain);

@@ -3,7 +3,10 @@
 // - Traffic lights at busy crossroads, far-side: across the junction on the driver's kerb side,
 //   head hanging over the driver's lane, facing them (visible while waiting at the stop line).
 // - Stop signs elsewhere, near-side on the driver's kerb side before the junction.
-// - Zebra crossings + stop lines on every controlled approach; some mid-block zebra crossings.
+// - Zebra crossings + stop lines on every controlled approach, with a solid centre line leading up
+//   to the stop line; zebras too across a priority road where a side road meets it (the top of
+//   the T); some mid-block zebra crossings.
+// - Edge lines carried on across a junction's closed sides (the top of a T, a corner's outside).
 // - Street signs where they make sense: speed limits, no parking, children, pedestrian crossing,
 //   no smoking at park entrances.
 // Pure data — PropSystem/CityBuilder render it.
@@ -14,7 +17,7 @@ import type { SignVariant, StreetProp } from './StreetProps';
 import type { Keep } from './driveSide';
 
 export interface RoadMark extends Rect {
-  kind: 'crosswalk' | 'stopline';
+  kind: 'crosswalk' | 'stopline' | 'centerline' | 'edgeline';
 }
 
 export interface TrafficControl {
@@ -40,6 +43,9 @@ const KERB_INSET = 0.7; // into the sidewalk
 const CROSSWALK_FROM = 0.5; // zebra band, measured back from the junction edge
 const CROSSWALK_DEPTH = 3;
 const STOPLINE_BACK = 4.4;
+const STOPLINE_DEPTH = 0.45;
+const SOLID_CENTER = 12; // no-overtaking centre line back from the stop line
+const EDGE_IN = 0.7; // edge line inset from the kerb (as CityBuilder paints it along the roads)
 
 /** Unit travel direction d and the driver's kerb side r (right, or left when keep is -1) for travel from a to b. */
 function travel(a: { x: number; z: number }, b: { x: number; z: number }, keep: Keep) {
@@ -54,6 +60,7 @@ const facingTraffic = (dx: number, dz: number) => Math.atan2(-dx, -dz);
 
 export function generateTrafficControl(
   graph: RoadGraph,
+  roads: Rect[],
   blocks: Block[],
   config: CityConfig,
   size: number,
@@ -97,10 +104,12 @@ export function generateTrafficControl(
 
     for (const nId of node.neighbors) {
       const from = graph.nodes[nId];
-      // A side road meeting the ring road stops; the ring road itself has priority.
-      if (!signals && onRing(node.x, node.z) && onRing(from.x, from.z)) continue;
       const t = travel(from, node, keep);
       const before = (m: number) => ({ x: node.x - t.dx * (rw / 2 + m), z: node.z - t.dz * (rw / 2 + m) });
+      const band = before(CROSSWALK_FROM + CROSSWALK_DEPTH / 2);
+      zebra(band.x, band.z, t);
+      // A side road meeting the ring road stops; the ring road itself has priority (crossings only).
+      if (!signals && onRing(node.x, node.z) && onRing(from.x, from.z)) continue;
 
       if (signals) {
         // Far side, driver's kerb side, facing back at the approaching driver.
@@ -118,13 +127,39 @@ export function generateTrafficControl(
         signBefore(node.x, node.z, t, rw / 2 + CORNER_BACK, 'stop');
       }
 
-      const band = before(CROSSWALK_FROM + CROSSWALK_DEPTH / 2);
-      zebra(band.x, band.z, t);
       const line = before(STOPLINE_BACK);
       const x = line.x + t.rx * (rw / 4);
       const z = line.z + t.rz * (rw / 4);
       const span = rw / 2 - 0.5;
-      marks.push(t.alongX ? { kind: 'stopline', x, z, w: 0.45, d: span } : { kind: 'stopline', x, z, w: span, d: 0.45 });
+      marks.push(t.alongX ? { kind: 'stopline', x, z, w: STOPLINE_DEPTH, d: span } : { kind: 'stopline', x, z, w: span, d: STOPLINE_DEPTH });
+      // Solid centre line from the stop line back: no overtaking into the junction.
+      const solid = before(STOPLINE_BACK - STOPLINE_DEPTH / 2 + SOLID_CENTER / 2);
+      const len = SOLID_CENTER;
+      marks.push(t.alongX ? { kind: 'centerline', x: solid.x, z: solid.z, w: len, d: 0.25 } : { kind: 'centerline', x: solid.x, z: solid.z, w: 0.25, d: len });
+    }
+  }
+
+  // --- Edge lines across each junction's closed sides (no paved road that way; a road closed for
+  // roadworks is still paved, so it stays open) ---
+  for (const node of graph.nodes) {
+    if (!node.neighbors.length) continue;
+    const open = (dx: number, dz: number) => {
+      const x = node.x + dx * (rw / 2 + 1);
+      const z = node.z + dz * (rw / 2 + 1);
+      return roads.some((r) => Math.abs(x - r.x) < r.w / 2 && Math.abs(z - r.z) < r.d / 2);
+    };
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (open(nx, nz)) continue;
+      // Along the closed side; each end meets the road's edge line (open that way) or the
+      // neighbouring closed side's edge line (a corner).
+      const [ax, az] = [-nz, nx];
+      const lo = open(-ax, -az) ? rw / 2 : rw / 2 - EDGE_IN + 0.075;
+      const hi = open(ax, az) ? rw / 2 : rw / 2 - EDGE_IN + 0.075;
+      const off = rw / 2 - EDGE_IN;
+      const mid = (hi - lo) / 2;
+      const x = node.x + nx * off + ax * mid;
+      const z = node.z + nz * off + az * mid;
+      marks.push(nx === 0 ? { kind: 'edgeline', x, z, w: lo + hi, d: 0.15 } : { kind: 'edgeline', x, z, w: 0.15, d: lo + hi });
     }
   }
 

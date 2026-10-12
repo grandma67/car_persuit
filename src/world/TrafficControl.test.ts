@@ -75,6 +75,27 @@ describe('generateTrafficControl', () => {
     expect(off).toEqual([]);
     expect(city.roadMarks.filter((m) => m.kind === 'stopline').length).toBeGreaterThan(100);
   });
+
+  it.each([1, 42, 1234])('seed %i: T-junctions on the ring road: zebras on every leg, edge line across the top of the T', (seed) => {
+    const city = generateCity(seed);
+    const rw = city.config.roadWidth;
+    const ring = city.size / 2 - rw / 2;
+    const near = (m: { x: number; z: number }, x: number, z: number, r: number) => Math.abs(m.x - x) <= r && Math.abs(m.z - z) <= r;
+    const ts = city.graph.nodes.filter((n) => n.neighbors.length === 3 && (Math.abs(Math.abs(n.x) - ring) < 0.5 || Math.abs(Math.abs(n.z) - ring) < 0.5));
+    expect(ts.length).toBeGreaterThan(10);
+    for (const n of ts) {
+      for (const id of n.neighbors) {
+        const o = city.graph.nodes[id];
+        const len = Math.hypot(o.x - n.x, o.z - n.z);
+        const at = (m: number) => ({ x: n.x + ((o.x - n.x) / len) * m, z: n.z + ((o.z - n.z) / len) * m });
+        const band = at(rw / 2 + 2);
+        expect(city.roadMarks.some((m) => m.kind === 'crosswalk' && near(m, band.x, band.z, rw / 2))).toBe(true);
+      }
+      // The sea side, where no road leaves the junction.
+      const sea = { x: n.x + Math.sign(n.x) * (Math.abs(Math.abs(n.x) - ring) < 0.5 ? rw / 2 : 0), z: n.z + Math.sign(n.z) * (Math.abs(Math.abs(n.z) - ring) < 0.5 ? rw / 2 : 0) };
+      expect(city.roadMarks.some((m) => m.kind === 'edgeline' && near(m, sea.x, sea.z, 1))).toBe(true);
+    }
+  });
 });
 
 import { approachControls } from './TrafficControl';
