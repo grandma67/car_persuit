@@ -29,6 +29,7 @@ import { CarAudio } from '../audio/CarAudio';
 import { Effects } from '../render/Effects';
 import { Sirens } from '../render/Sirens';
 import { Sea, SEA_LEVEL } from '../render/Sea';
+import { keepOf } from '../world/driveSide';
 import { scratchCar } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
 import { Minimap } from '../ui/Minimap';
@@ -140,11 +141,12 @@ export class Game {
     this.scene.add(this.sun, this.sun.target);
 
     this.world.timestep = FIXED_DT;
-    // ?roadworks forces every (rare) roadworks slot and ?canalramp the (rare) canal jump, for testing. With ?debug, ?canals=0|1|2 and
+    // ?roadworks forces every (rare) roadworks slot, ?canalramp the canal jumps and ?england left-hand traffic, for testing. With ?debug, ?canals=0|1|2 and
     // ?hill=0|1 force the terrain.
     const config: CityConfig = { ...DEFAULT_CITY };
     if (params.has('roadworks')) config.roadworksChance = 1;
     if (params.has('canalramp')) config.canalRampChance = 1;
+    if (params.has('england')) config.leftHandChance = 1;
     const canals = Number.parseInt(params.get('canals') ?? '', 10);
     if (this.debug && canals >= 0 && canals <= 2) config.canalOdds = [canals === 0 ? 1 : 0, canals === 1 ? 1 : 0, canals === 2 ? 1 : 0];
     if (this.debug && params.has('hill')) config.hillChance = params.get('hill') === '0' ? 0 : 1;
@@ -179,7 +181,7 @@ export class Game {
     this.destinations = pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id);
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
 
-    this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground);
+    this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground, keepOf(this.city.driveSide));
     this.traffic = new CivilianTraffic(
       this.world,
       this.scene,
@@ -188,6 +190,7 @@ export class Game {
       new Rng(seed ^ 0x7a4f1c),
       this.player.headlights,
       this.ground,
+      keepOf(this.city.driveSide),
     );
     this.scene.add(this.crashMarks.mesh);
     this.sirens = new Sirens(this.scene);
@@ -197,7 +200,8 @@ export class Game {
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
     this.screens = new Screens(document.body, (kind) => this.audio.uiBlip(kind));
-    this.look = [climate.name === 'temperate' ? null : climate.label, theme.name, time.label, weatherLabel(weather) || null]
+    const england = this.city.driveSide === 'left' ? 'England · drive on the left' : null;
+    this.look = [england, climate.name === 'temperate' ? null : climate.label, theme.name, time.label, weatherLabel(weather) || null]
       .filter(Boolean)
       .join(' · ');
     this.showMenu();
@@ -273,7 +277,7 @@ export class Game {
     this.audio.uiBlip('click');
     this.screens.hide();
     this.showDestination();
-    this.hud.toast('GO!', 1.2);
+    this.hud.toast(this.city.driveSide === 'left' ? 'GO!  ·  ENGLAND: KEEP LEFT' : 'GO!', this.city.driveSide === 'left' ? 2.5 : 1.2);
     this.prewarmShaders();
   }
 

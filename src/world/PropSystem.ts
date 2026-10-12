@@ -52,9 +52,9 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   }
 };
 
-type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | `sign-${SignShape}` | 'signal' | 'cone' | `tree-${TreeKind}` | 'umbrella';
+type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | `sign-${SignShape}` | 'signal' | 'signal-right' | 'cone' | `tree-${TreeKind}` | 'umbrella';
 const modelKey = (p: StreetProp): ModelKey =>
-  p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind;
+  p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
 /** Props tinted per instance (umbrella canopies, tree shades). */
 const TINTED = new Set<PropKind>(['tree', 'umbrella']);
 
@@ -166,14 +166,19 @@ function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
       part(cyl(0.045, SIGN_FACE_Y + 0.2), signPost, 0, (SIGN_FACE_Y + 0.2) / 2),
       part(plateGeometry(shape, 0.02).rotateY(Math.PI), signBack, 0, SIGN_FACE_Y, 0.05),
     ]);
-  // Signal: pole, arm over the lane, housing hanging at the arm's end.
-  const signal = mergeGeometries([
-    part(cyl(0.2, 0.3), iron, 0, 0.15),
-    part(cyl(0.1, 5.6), iron, 0, 2.8),
-    part(box(3.9, 0.12, 0.12), iron, SIGNAL_HEAD_X / 2, 5.45),
-    part(box(0.42, 1.15, 0.3), 0x1d2024, SIGNAL_HEAD_X, 4.85),
-    part(box(0.52, 1.25, 0.04), 0x111316, SIGNAL_HEAD_X, 4.85, -0.16), // backboard
-  ]);
+  // Signal: pole, arm over the lane, housing hanging at the arm's end. `side` -1 reaches to the
+  // driver's left (pole on the right kerb), +1 to the right (left-hand traffic).
+  const signalModel = (side: number) => {
+    const headX = side * -SIGNAL_HEAD_X;
+    return mergeGeometries([
+      part(cyl(0.2, 0.3), iron, 0, 0.15),
+      part(cyl(0.1, 5.6), iron, 0, 2.8),
+      part(box(3.9, 0.12, 0.12), iron, headX / 2, 5.45),
+      part(box(0.42, 1.15, 0.3), 0x1d2024, headX, 4.85),
+      part(box(0.52, 1.25, 0.04), 0x111316, headX, 4.85, -0.16), // backboard
+    ]);
+  };
+  const signal = signalModel(-1);
   // Traffic cone: black base, orange body, reflective white band.
   const cone = mergeGeometries([
     part(box(0.5, 0.05, 0.5), 0x1a1a1a, 0, 0.025),
@@ -188,7 +193,7 @@ function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
   return {
     ...treeModels(look),
     umbrella,
-    lamp, hydrant, bench, fence, signal, cone,
+    lamp, hydrant, bench, fence, signal, 'signal-right': signalModel(1), cone,
     'sign-octagon': sign('octagon'), 'sign-round': sign('round'), 'sign-triangle': sign('triangle'), 'sign-square': sign('square'),
   };
 }
@@ -492,7 +497,7 @@ export class PropSystem {
         state.lenses = nextLens;
         this.signals.push(i);
         for (const [, y, , dark] of SIGNAL_LIGHTS) {
-          attach(this.lenses, nextLens++, new THREE.Matrix4().makeTranslation(SIGNAL_HEAD_X, y, 0.16), this.color.setHex(dark));
+          attach(this.lenses, nextLens++, new THREE.Matrix4().makeTranslation(def.armRight ? -SIGNAL_HEAD_X : SIGNAL_HEAD_X, y, 0.16), this.color.setHex(dark));
         }
       }
 

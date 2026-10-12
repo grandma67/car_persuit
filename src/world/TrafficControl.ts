@@ -1,7 +1,8 @@
-// Junction control and street signage. Traffic drives on the right.
-// - Traffic lights at busy crossroads, far-side: across the junction on the driver's right, head
-//   hanging over the driver's lane, facing them (visible while waiting at the stop line).
-// - Stop signs elsewhere, near-side on the driver's right before the junction.
+// Junction control and street signage, for traffic keeping right (or, in an English city, left:
+// everything below mirrors to the driver's left).
+// - Traffic lights at busy crossroads, far-side: across the junction on the driver's kerb side,
+//   head hanging over the driver's lane, facing them (visible while waiting at the stop line).
+// - Stop signs elsewhere, near-side on the driver's kerb side before the junction.
 // - Zebra crossings + stop lines on every controlled approach; some mid-block zebra crossings.
 // - Street signs where they make sense: speed limits, no parking, children, pedestrian crossing,
 //   no smoking at park entrances.
@@ -10,6 +11,7 @@ import type { Rng } from '../core/Rng';
 import type { Block, CityConfig, Rect } from './CityGenerator';
 import type { RoadGraph } from './RoadGraph';
 import type { SignVariant, StreetProp } from './StreetProps';
+import type { Keep } from './driveSide';
 
 export interface RoadMark extends Rect {
   kind: 'crosswalk' | 'stopline';
@@ -39,12 +41,12 @@ const CROSSWALK_FROM = 0.5; // zebra band, measured back from the junction edge
 const CROSSWALK_DEPTH = 3;
 const STOPLINE_BACK = 4.4;
 
-/** Unit travel direction d and the driver's right-hand side r for travel from a to b. */
-function travel(a: { x: number; z: number }, b: { x: number; z: number }) {
+/** Unit travel direction d and the driver's kerb side r (right, or left when keep is -1) for travel from a to b. */
+function travel(a: { x: number; z: number }, b: { x: number; z: number }, keep: Keep) {
   const len = Math.hypot(b.x - a.x, b.z - a.z);
   const dx = (b.x - a.x) / len;
   const dz = (b.z - a.z) / len;
-  return { dx, dz, rx: -dz, rz: dx, alongX: Math.abs(dx) > 0.5 };
+  return { dx, dz, rx: -dz * keep, rz: dx * keep, alongX: Math.abs(dx) > 0.5 };
 }
 
 /** Yaw that turns a sign's face (local +Z) toward traffic travelling along (dx, dz). */
@@ -56,6 +58,7 @@ export function generateTrafficControl(
   config: CityConfig,
   size: number,
   rng: Rng,
+  keep: Keep = 1,
 ): TrafficControl {
   const rw = config.roadWidth;
   const half = config.blockSize / 2;
@@ -73,7 +76,7 @@ export function generateTrafficControl(
       marks.push(t.alongX ? { kind: 'crosswalk', x, z, w: CROSSWALK_DEPTH, d: 0.55 } : { kind: 'crosswalk', x, z, w: 0.55, d: CROSSWALK_DEPTH });
     }
   };
-  /** Sign on the driver's right, `back` metres before point (px, pz), facing them. */
+  /** Sign on the driver's kerb side, `back` metres before point (px, pz), facing them. */
   const signBefore = (px: number, pz: number, t: ReturnType<typeof travel>, back: number, variant: SignVariant) => {
     props.push({
       kind: 'sign',
@@ -96,16 +99,17 @@ export function generateTrafficControl(
       const from = graph.nodes[nId];
       // A side road meeting the ring road stops; the ring road itself has priority.
       if (!signals && onRing(node.x, node.z) && onRing(from.x, from.z)) continue;
-      const t = travel(from, node);
+      const t = travel(from, node, keep);
       const before = (m: number) => ({ x: node.x - t.dx * (rw / 2 + m), z: node.z - t.dz * (rw / 2 + m) });
 
       if (signals) {
-        // Far side, driver's right, facing back at the approaching driver.
+        // Far side, driver's kerb side, facing back at the approaching driver.
         const far = { x: node.x + t.dx * (rw / 2 + CORNER_BACK), z: node.z + t.dz * (rw / 2 + CORNER_BACK) };
         props.push({
           kind: 'signal',
           axis: t.alongX ? 'x' : 'z',
           phase,
+          ...(keep < 0 && { armRight: true }),
           x: far.x + t.rx * (rw / 2 + KERB_INSET),
           z: far.z + t.rz * (rw / 2 + KERB_INSET),
           yaw: facingTraffic(t.dx, t.dz),
@@ -134,14 +138,14 @@ export function generateTrafficControl(
 
       // Mid-block zebra crossing on some busy streets, announced in both directions.
       if (busy && !onRing(mid.x, mid.z) && rng.next() < 0.3) {
-        zebra(mid.x, mid.z, travel(node, other));
-        for (const [a, b] of [[node, other], [other, node]]) signBefore(mid.x, mid.z, travel(a, b), 6, 'pedestrian');
+        zebra(mid.x, mid.z, travel(node, other, keep));
+        for (const [a, b] of [[node, other], [other, node]]) signBefore(mid.x, mid.z, travel(a, b, keep), 6, 'pedestrian');
         continue;
       }
 
       for (const [a, b] of [[node, other], [other, node]]) {
-        const t = travel(a, b);
-        // The block on this direction's right decides what the street is like.
+        const t = travel(a, b, keep);
+        // The block on this direction's kerb side decides what the street is like.
         const side = blockAt(mid.x + t.rx * (rw / 2 + 10), mid.z + t.rz * (rw / 2 + 10));
         const homes = side?.district === 'residential' || side?.park === true;
         const roll = rng.next();

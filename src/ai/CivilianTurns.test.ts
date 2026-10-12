@@ -43,12 +43,17 @@ function intoOncoming(x: number, z: number, to: number): number {
 }
 const distOffRoad = (x: number, z: number) => (onRoad(x, z) ? 0 : Math.min(Math.abs(z), Math.abs(x - 100)) - HALF_ROAD);
 
-/** Drive a civilian through the junction; report how far any wheel or body corner strayed off the road. */
-function driveThrough(spec: VehicleSpec, to: number) {
+/**
+ * Drive a civilian through the junction; report how far any wheel or body corner strayed off the
+ * road. keep -1: left-hand traffic, starting in the left lane (z = -3). The crossroads mirrors
+ * across z = 0 onto the right-hand one, so oncoming-lane checks run on the mirrored position.
+ */
+function driveThrough(spec: VehicleSpec, to: number, keep: 1 | -1 = 1) {
+  const mirroredTo = keep > 0 ? to : to === RIGHT ? LEFT : to === LEFT ? RIGHT : to;
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.createCollider(RAPIER.ColliderDesc.cuboid(500, 0.5, 500).setTranslation(0, -0.5, 0));
-  const v = new Vehicle(world, spec, { x: 40, y: 1.2 - (spec.wheelY ?? 0), z: 3 }, Math.PI / 2);
-  const c = new CivilianController(v, crossroads(), new Map(), () => Infinity, new Rng(1), 0, 1);
+  const v = new Vehicle(world, spec, { x: 40, y: 1.2 - (spec.wheelY ?? 0), z: 3 * keep }, Math.PI / 2);
+  const c = new CivilianController(v, crossroads(), new Map(), () => Infinity, new Rng(1), 0, 1, undefined, keep);
   const internals = c as unknown as { route: number[]; rebuild(): void };
   internals.route = [0, 1, to, to + 3, to];
   internals.rebuild();
@@ -77,7 +82,7 @@ function driveThrough(spec: VehicleSpec, to: number) {
     q.set(r.x, r.y, r.z, r.w);
     wheelsOff = Math.max(wheelsOff, worst(wheels));
     bodyOff = Math.max(bodyOff, worst(corners));
-    oncoming = Math.max(oncoming, worst(corners, (x, z) => intoOncoming(x, z, to)));
+    oncoming = Math.max(oncoming, worst(corners, (x, z) => intoOncoming(x, z * keep, mirroredTo)));
     lateral = Math.max(lateral, Math.abs(v.body.angvel().y * v.speed));
     if (Math.hypot(v.position.x - exit.x, v.position.z - exit.z) < 5) break;
   }
@@ -146,4 +151,42 @@ describe('civilian turns', () => {
       expect(r.signals).toEqual([to === RIGHT ? 'right' : to === LEFT ? 'left' : null]);
     },
   );
+
+  // England: everyone keeps left. The near-side (tight) turn is now the left one.
+  describe('keeping left', () => {
+    it.each(CARS.flatMap((s) => [[label(s), 'left', s, LEFT], [label(s), 'right', s, RIGHT], [label(s), 'straight on', s, STRAIGHT]] as const))(
+      '%s turns %s in the left lane, signalling the way it goes',
+      (_name, _turn, spec, to) => {
+        const r = driveThrough(spec, to, -1);
+        expect(r.arrived).toBe(true);
+        expect(r.wheelsOff).toBeLessThan(0.3);
+        expect(r.oncoming).toBeLessThan(0.8);
+        expect(r.signals).toEqual([to === RIGHT ? 'right' : to === LEFT ? 'left' : null]);
+      },
+    );
+
+    it.each(HEAVIES.flatMap((s) => [[label(s), 'right', s, RIGHT], [label(s), 'straight on', s, STRAIGHT]] as const))(
+      '%s going %s keeps out of the queueing lanes',
+      (_name, _turn, spec, to) => {
+        const r = driveThrough(spec, to, -1);
+        expect(r.arrived).toBe(true);
+        expect(r.oncoming).toBeLessThan(0.3);
+      },
+    );
+
+    it.each(HEAVIES.map((s) => [label(s), s] as const))('%s keeps off left turns when it has another way on', (_name, spec) => {
+      for (let seed = 1; seed <= 40; seed++) {
+        const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+        const v = new Vehicle(world, spec, { x: 40, y: 1.2, z: -3 }, Math.PI / 2);
+        const c = new CivilianController(v, crossroads(), new Map(), () => Infinity, new Rng(seed), 0, 1, undefined, -1);
+        expect((c as unknown as { route: number[] }).route[2]).not.toBe(LEFT);
+      }
+    });
+
+    it.each(HEAVIES.map((s) => [label(s), s] as const))('%s still gets round a left turn with its wheels on the road', (_name, spec) => {
+      const r = driveThrough(spec, LEFT, -1);
+      expect(r.arrived).toBe(true);
+      expect(r.wheelsOff).toBeLessThan(spec.body === 'ramptruck' ? 0.5 : 0.3);
+    });
+  });
 });

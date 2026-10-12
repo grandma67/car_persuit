@@ -94,3 +94,57 @@ describe('approachControls', () => {
     }
   });
 });
+
+describe('left-hand traffic (England)', () => {
+  const english = (seed: number) => generateCity(seed, { ...DEFAULT_CITY, leftHandChance: 1 });
+  const facing = (p: { yaw: number }) => ({ fx: Math.sin(p.yaw), fz: Math.cos(p.yaw) });
+
+  it('is rare, and decided by the seed', () => {
+    let left = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const side = generateCity(seed).driveSide;
+      if (side === 'left') left++;
+      expect(generateCity(seed).driveSide).toBe(side);
+    }
+    expect(left).toBeGreaterThan(0);
+    expect(left).toBeLessThan(25);
+  });
+
+  it.each([1, 42, 1234])("seed %i: junction signs and signals stand on the driver's left", (seed) => {
+    const city = english(seed);
+    expect(city.driveSide).toBe('left');
+    for (const p of city.streetProps.filter((q) => q.kind === 'signal' || q.variant === 'stop')) {
+      const { fx, fz } = facing(p);
+      const [dx, dz] = [-fx, -fz];
+      const node = city.graph.nearest(p.x, p.z);
+      const toNode = { x: node.x - p.x, z: node.z - p.z };
+      // Left of travel is (dz, -dx): the post is on that side, so the junction centre is to its right.
+      const left = -(toNode.x * dz + toNode.z * -dx);
+      expect(left).toBeGreaterThan(city.config.roadWidth / 2);
+    }
+  });
+
+  it.each([1, 42])('seed %i: signal heads reach right, over the left lane', (seed) => {
+    const city = english(seed);
+    const signals = city.streetProps.filter((q) => q.kind === 'signal');
+    expect(signals.length).toBeGreaterThan(0);
+    for (const p of signals) {
+      expect(p.armRight).toBe(true);
+      const hx = p.x + 3.7 * Math.cos(p.yaw);
+      const hz = p.z - 3.7 * Math.sin(p.yaw);
+      expect(city.roads.some((r) => Math.abs(hx - r.rect.x) < r.rect.w / 2 && Math.abs(hz - r.rect.z) < r.rect.d / 2)).toBe(true);
+    }
+  });
+
+  it('stop lines cover the left half of each approach', () => {
+    const city = english(42);
+    const right = generateCity(42, { ...DEFAULT_CITY, leftHandChance: 0 });
+    const lines = (c: typeof city) => c.roadMarks.filter((m) => m.kind === 'stopline');
+    expect(lines(city).length).toBe(lines(right).length);
+    // Same junctions, each line mirrored across its road's centre line: no line in the same place.
+    const at = (m: { x: number; z: number }) => `${m.x.toFixed(1)},${m.z.toFixed(1)}`;
+    const rightSpots = new Set(lines(right).map(at));
+    expect(lines(city).filter((m) => rightSpots.has(at(m)))).toEqual([]);
+  });
+});
+

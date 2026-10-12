@@ -1,4 +1,5 @@
-// Civilian driver: wanders the road network in the right-hand lane, obeys traffic lights and
+// Civilian driver: wanders the road network in its lane (the right-hand one, or the left in an
+// English city: `keep` mirrors every side below), obeys traffic lights and
 // stop signs, keeps its distance from whatever is ahead, yields to traffic about to cross its
 // path, and after a crash backs off and drives round whatever it's wedged against.
 import * as THREE from 'three';
@@ -9,8 +10,9 @@ import { signalState, type ApproachControl } from '../world/TrafficControl';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
 import { CrashRecovery, hazardSpeedLimit, type Awareness } from './awareness';
+import type { Keep } from '../world/driveSide';
 
-const LANE_OFFSET = 3; // metres right of the road centre line
+const LANE_OFFSET = 3; // metres to the kerb side of the road centre line
 const JUNCTION_EDGE = 7; // lane points sit this far from the junction centre
 const STOP_LINE = 6 + 4.4; // junction centre → stop line
 const COMFORT_DECEL = 4; // m/s² for planned stops
@@ -28,7 +30,8 @@ const HEAVY_LATERAL = 1.8; // m/s² sideways in a corner: standing passengers, h
 const HEAVY_ACCEL = 1.5; // m/s² pulling away, about what a loaded bus manages
 const HEAVY_DECEL = 2.2; // m/s² for planned stops
 const TURN_SPEED = 3.5; // m/s a heavy rolls through a tight turn (sets its turning radius)
-// Where a heavy's right turn pivots, relative to its turning radius (see rightTurnStart). Tuned in
+// Where a heavy's near-side turn (right, or left keeping left) pivots, relative to its turning
+// radius (see rightTurnStart). Tuned in
 // CivilianTurns.test: 2m less and the front swings over the far kerb, 2m more and the rear wheels
 // cut over the near kerb corner.
 const RIGHT_TURN_SETBACK = 12.5;
@@ -87,7 +90,7 @@ export class CivilianController {
   private panicFor = 0;
   private stoppedAt: number | null = null; // junction where we've already stopped at the sign
   private stopWait = 0;
-  private recovery = new CrashRecovery();
+  private recovery: CrashRecovery;
   private rear = new THREE.Vector3();
   private style: DrivingStyle;
   readonly cruise: number;
@@ -103,7 +106,9 @@ export class CivilianController {
     from: number,
     to: number,
     private awareness?: Awareness,
+    private keep: Keep = 1,
   ) {
+    this.recovery = new CrashRecovery(keep);
     this.route = [from, to];
     // Buses and trucks cruise a little slower than cars.
     this.cruise = Math.min(rng.range(10, 13.5), vehicle.spec.maxSpeed - 3);
@@ -200,7 +205,7 @@ export class CivilianController {
     if (this.awareness) {
       const lv = v.body.linvel();
       const self = { handle: v.body.handle, x: pos.x, z: pos.z, vx: lv.x, vz: lv.z, fx: fwd.x, fz: fwd.z, halfWidth: v.spec.halfExtents.x, halfLength: v.spec.halfExtents.z, turning: Math.abs(input.steer) > 0.3 };
-      desired = Math.min(desired, hazardSpeedLimit(self, this.awareness.movers(), speed));
+      desired = Math.min(desired, hazardSpeedLimit(self, this.awareness.movers(), speed, this.keep));
     }
 
     if (this.panicFor > 0) {
@@ -235,8 +240,8 @@ export class CivilianController {
     const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
     if (Math.hypot(b.x - pos.x, b.z - pos.z) > SIGNAL_DISTANCE) return null;
     const turn = turnAngle(a, b, c);
-    // Positive turn angle is a right turn (the lane sits on that side); a U-turn swings left.
-    if (Math.abs(turn) > 2.8) return 'left';
+    // Positive turn angle is a right turn; a U-turn swings across the road, away from the kerb.
+    if (Math.abs(turn) > 2.8) return this.keep > 0 ? 'left' : 'right';
     return turn > 0.5 ? 'right' : turn < -0.5 ? 'left' : null;
   }
 
@@ -251,7 +256,8 @@ export class CivilianController {
 
   /**
    * Keep at least three junctions of route ahead: random turns, no U-turns unless a dead end.
-   * Heavies keep off right turns when there's another way on: however they take one, the front
+   * Heavies keep off near-side turns (right, or left keeping left) when there's another way on:
+   * however they take one, the front
    * swings deep into the new road's oncoming lane, right where its traffic waits at the stop line
    * (CivilianTurns.test). Left and straight on, they keep to their side.
    */
@@ -261,13 +267,13 @@ export class CivilianController {
       const cur = this.graph.nodes[this.route[this.route.length - 1]];
       const options = cur.neighbors.filter((n) => n !== prev);
       const from = this.graph.nodes[prev];
-      const easy = this.style.rightTurnStart === null ? options : options.filter((n) => turnAngle(from, cur, this.graph.nodes[n]) <= 0.5);
+      const easy = this.style.rightTurnStart === null ? options : options.filter((n) => turnAngle(from, cur, this.graph.nodes[n]) * this.keep <= 0.5);
       const pool = easy.length ? easy : options;
       this.route.push(pool.length ? this.rng.pick(pool) : prev);
     }
   }
 
-  /** Lane polyline: for each junction, an entry point and an exit point offset into the right lane. */
+  /** Lane polyline: for each junction, an entry point and an exit point offset into our lane. */
   private rebuild(): void {
     const g = this.graph;
     const n = this.route.map((id) => g.nodes[id]);
@@ -275,9 +281,10 @@ export class CivilianController {
       const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
       return { dx: (b.x - a.x) / len, dz: (b.z - a.z) / len };
     };
-    // `side` metres right of the direction of travel (the right-hand lane by default).
+    // `side` metres to the kerb side of the direction of travel (our lane by default).
+    const k = this.keep;
     const lanePoint = (at: P, d: { dx: number; dz: number }, along: number, side = LANE_OFFSET) =>
-      new THREE.Vector3(at.x + d.dx * along + -d.dz * side, 0, at.z + d.dz * along + d.dx * side);
+      new THREE.Vector3(at.x + d.dx * along + -d.dz * side * k, 0, at.z + d.dz * along + d.dx * side * k);
     const { rightTurnStart: start, turnRadius } = this.style;
     const pts: THREE.Vector3[] = [];
     const first = dir(n[0], n[1]);
@@ -286,8 +293,8 @@ export class CivilianController {
       const dIn = dir(n[i - 1], n[i]);
       const dOut = dir(n[i], n[i + 1]);
       pts.push(lanePoint(n[i], dIn, -JUNCTION_EDGE));
-      if (start !== null && turnAngle(n[i - 1], n[i], n[i + 1]) > 0.5) {
-        // Heavy turning right: carry on deeper into the junction before turning, swing a wide
+      if (start !== null && turnAngle(n[i - 1], n[i], n[i + 1]) * k > 0.5) {
+        // Heavy turning near-side: carry on deeper into the junction before turning, swing a wide
         // arc onto the new road, then ease back into the right lane.
         pts.push(lanePoint(n[i], dIn, start));
         pts.push(lanePoint(n[i], dOut, LANE_OFFSET + turnRadius, -start));

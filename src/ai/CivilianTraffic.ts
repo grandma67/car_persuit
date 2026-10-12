@@ -19,6 +19,7 @@ import {
 } from '../vehicles/VehicleSpecs';
 import { CivilianController, type ForwardSensor } from './CivilianController';
 import type { Awareness, Mover, Obstacle } from './awareness';
+import type { Keep } from '../world/driveSide';
 
 export const TRAFFIC = {
   count: 20, // default (menu); each difficulty sets its own
@@ -140,6 +141,7 @@ export class CivilianTraffic {
     private rng: Rng,
     private headlights: number,
     private ground: GroundHeight = FLAT,
+    private keep: Keep = 1,
   ) {
     // Forward sensor: a ray from the front bumper that only sees moving bodies (cars), so
     // buildings at junction corners don't make drivers brake.
@@ -190,15 +192,15 @@ export class CivilianTraffic {
     if (!candidates.length) return;
     const node = this.rng.pick(candidates);
     const to = g.nodes[this.rng.pick(node.neighbors)];
-    // Start in the right-hand lane just past the junction, heading along the road.
+    // Start in our lane (right, or left in an English city) just past the junction, heading along the road.
     const len = Math.hypot(to.x - node.x, to.z - node.z);
     const dx = (to.x - node.x) / len;
     const dz = (to.z - node.z) / len;
-    const x = node.x + dx * 12 - dz * 3;
-    const z = node.z + dz * 12 + dx * 3;
+    const x = node.x + dx * 12 - dz * 3 * this.keep;
+    const z = node.z + dz * 12 + dx * 3 * this.keep;
     if (this.cars.some((c) => Math.hypot(c.vehicle.position.x - x, c.vehicle.position.z - z) < TRAFFIC.spacing)) return;
     const ramp = !this.rampTruck && this.rng.next() < TRAFFIC.rampChance;
-    const spec = ramp ? rampTruckSpec() : civilianSpec(this.rng);
+    const spec: VehicleSpec = { ...(ramp ? rampTruckSpec() : civilianSpec(this.rng)), kerb: this.keep > 0 ? 'right' : 'left' };
     // Drop tall bodies in from a little higher so their wheels land rather than spawn in the road.
     const y = this.ground(x, z) + 1.2 - (spec.wheelY ?? 0);
     const vehicle = new Vehicle(this.world, spec, { x, y, z }, Math.atan2(dx, dz));
@@ -206,6 +208,6 @@ export class CivilianTraffic {
     vehicle.headlights = this.headlights;
     vehicle.beamEnabled = false;
     this.scene.add(vehicle.mesh.root);
-    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness) });
+    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep) });
   }
 }

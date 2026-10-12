@@ -5,6 +5,7 @@ import { footprintsOverlap, generateStreetProps, propFootprint, type StreetProp 
 import { generateTrafficControl, type RoadMark } from './TrafficControl';
 import { canalRampShape, planLandmarks, type Landmark } from './Landmarks';
 import { planRoadworks, type Roadworks } from './Roadworks';
+import { keepOf, type DriveSide } from './driveSide';
 import { clipRect, inCanal, landPieces, onGround, pickBridges, planTerrain, type Terrain, type TerrainConfig } from './Terrain';
 
 export interface CityConfig extends TerrainConfig {
@@ -18,6 +19,7 @@ export interface CityConfig extends TerrainConfig {
   roadworksChance: number; // chance per site slot (up to 3) of a junction closed for repairs
   canalRampChance: number; // chance of ramps built to jump the canals (cities with canals only)
   canalRamps: [number, number]; // how many, when there are: picked by the seed
+  leftHandChance: number; // chance the city is English: everyone drives on the left
 }
 
 export const DEFAULT_CITY: CityConfig = {
@@ -31,6 +33,7 @@ export const DEFAULT_CITY: CityConfig = {
   roadworksChance: 0.5,
   canalRampChance: 0.6,
   canalRamps: [1, 3],
+  leftHandChance: 0.05,
   hillChance: 0.75,
   hillHeight: [8, 22],
   maxGrade: 0.11,
@@ -87,6 +90,7 @@ export interface CityData {
   roadMarks: RoadMark[]; // zebra crossings and stop lines
   roadworks: Roadworks[]; // the rare closed junctions (usually none)
   terrain: Terrain; // hill, canals and their bridges
+  driveSide: DriveSide; // which side of the road traffic keeps to, for the whole game
   spawn: { x: number; z: number; yaw: number };
 }
 
@@ -340,8 +344,11 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   // Roadworks close junctions away from the spawn (and off the bridges), before signs and signals go up.
   const keepOpen = new Set([centre.id, ...centre.neighbors, ...centre.neighbors.flatMap((id) => nodes[id].neighbors), ...canalNodes, ...rampNodes]);
   const works = planRoadworks(graph, roadWidth, size, keepOpen, config.roadworksChance, new Rng(seed ^ 0x0c0e5));
+  // Rarely the city is English and drives on the left (own RNG stream, decided by the seed);
+  // signals, signs and stop lines go up on that side.
+  const driveSide: DriveSide = new Rng(seed ^ 0x1e7f5d).next() < config.leftHandChance ? 'left' : 'right';
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
-  const traffic = generateTrafficControl(graph, blocksOut, config, size, new Rng(seed ^ 0x7aff1c));
+  const traffic = generateTrafficControl(graph, blocksOut, config, size, new Rng(seed ^ 0x7aff1c), keepOf(driveSide));
   // Furniture is laid out for the full grid; drop whatever would stand in a canal or on a tree
   // (park benches are scattered without looking at the trees).
   const dry = (x: number, z: number, r: number) => onGround(terrain, x, z, r);
@@ -370,7 +377,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
     landmarks: landmarks.filter((l) => dry(l.x, l.z, l.radius)),
     streetProps,
     roadMarks: traffic.marks.filter((m) => dry(m.x, m.z, 0)),
-    roadworks: works.sites, terrain, spawn,
+    roadworks: works.sites, terrain, spawn, driveSide,
   };
 }
 

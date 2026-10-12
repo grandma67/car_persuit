@@ -3,6 +3,7 @@
 // supplies what the world looks like.
 import type { DriveInput } from '../core/Input';
 import type { Vehicle } from '../vehicles/Vehicle';
+import type { Keep } from '../world/driveSide';
 
 /** A moving heavy body (car, cop, the player), sampled once per frame. */
 export interface Mover {
@@ -54,9 +55,9 @@ const OTHER_HALF_LENGTH = 2.5;
  * bodies are left to the forward sensor, and anything behind us is ignored — braking for a car
  * about to rear-end us would only make it worse. Everyone gives way to the player and cops;
  * between civilians only one side gives way, or both would brake, then both creep on together:
- * yield to the right, and a turning car yields to oncoming traffic.
+ * yield to the right (to the left when keeping left), and a turning car yields to oncoming traffic.
  */
-export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number): number {
+export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number, keep: Keep = 1): number {
   const rightX = -me.fz;
   const rightZ = me.fx;
   const sideClear = me.halfWidth + OTHER_HALF_WIDTH + HAZARD_MARGIN;
@@ -69,7 +70,7 @@ export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number): numb
     if (rx * me.fx + rz * me.fz < 0 || rx * rx + rz * rz > HAZARD_RANGE * HAZARD_RANGE) continue;
     if (m.vx * m.vx + m.vz * m.vz < 4) continue;
     if (m.civilian) {
-      const onRight = rx * rightX + rz * rightZ > 0;
+      const onRight = (rx * rightX + rz * rightZ) * keep > 0; // keeping left: yield to the left
       const oncoming = m.vx * me.fx + m.vz * me.fz < 0;
       if (!onRight && !(oncoming && me.turning)) continue;
     }
@@ -114,6 +115,9 @@ export class CrashRecovery {
   /** Backing off hasn't worked several times: the manager should recycle the car. */
   gaveUp = false;
 
+  /** keep: +1 traffic keeps right (pass blockages on the left), -1 keeps left. */
+  constructor(private keep: Keep = 1) {}
+
   hit(): void {
     this.sinceHit = 0;
   }
@@ -151,8 +155,8 @@ export class CrashRecovery {
       this.gaveUp = true;
       return;
     }
-    // Pull out away from the blocker: past its left by default, like overtaking.
-    this.dodgeSide = ahead.side < 0 ? 1 : -1;
+    // Pull out away from the blocker: on the overtaking side (away from the kerb) by default.
+    this.dodgeSide = ahead.side < 0 ? 1 : ahead.side > 0 ? -1 : -this.keep;
     this.dodgeFor = DODGE_TIME;
     this.reverseFor = REVERSE_TIME;
     // Reversing swings the nose opposite to the wheels, so steer away from the side we'll pass on.

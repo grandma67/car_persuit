@@ -104,8 +104,9 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     box(hx * 1.8, hy * 0.75, 0.04, glass, 0, hy * 0.3, hz + 0.01);
     box(hx * 1.8, 0.4, 0.04, glass, 0, hy * 0.75, -hz - 0.01);
     box(hx * 1.95, 0.08, hz * 1.95, new THREE.MeshStandardMaterial({ color: 0xe8e8e4, roughness: 0.6, flatShading: true }), 0, hy + 0.04, 0);
-    // Door on the kerb (right, -X) side.
-    box(0.05, hy * 1.5, 1.1, trim, -hx - 0.02, -hy * 0.2, hz * 0.72);
+    // Door on the kerb side: right (-X), or left (+X) where traffic keeps left.
+    const door = spec.kerb === 'left' ? 1 : -1;
+    box(0.05, hy * 1.5, 1.1, trim, door * (hx + 0.02), -hy * 0.2, hz * 0.72);
     roof = hy + 0.08;
   } else if (body === 'boxtruck') {
     // Short cab with a windscreen, tall white cargo box behind it.

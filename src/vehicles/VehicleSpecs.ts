@@ -6,6 +6,7 @@ export interface VehicleSpec {
   livery?: 'police';
   body?: 'sports' | 'sedan' | 'suv' | 'truck' | 'van' | 'pickup' | 'bus' | 'boxtruck' | 'ramptruck'; // mesh shape, default sports
   maxHealth?: number; // default 100
+  kerb?: 'left' | 'right'; // side the doors open onto (buses), default right
   mass: number; // kg
   halfExtents: { x: number; y: number; z: number }; // chassis collider, metres
   wheelRadius: number;

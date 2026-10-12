@@ -10,6 +10,7 @@ import { COP_SPECS } from '../vehicles/VehicleSpecs';
 import { Health } from '../gameplay/Health';
 import { DAMAGE, ROADBLOCK_INTERVAL, type CopType, type StarLevel } from '../gameplay/balance';
 import { COP_TUNING, CopController, type ChaseTarget, type LineOfSight } from './CopController';
+import type { Keep } from '../world/driveSide';
 
 export interface DirectorTuning {
   firstSpawnDelay: number; // seconds after the mission starts
@@ -37,7 +38,7 @@ export const DIRECTOR_TUNING: DirectorTuning = {
   startSpeed: 10,
 };
 
-const LANE_OFFSET = 3; // right-hand lane, as civilians drive
+const LANE_OFFSET = 3; // in the lane, as civilians drive (kerb side of the centre line)
 const SPAWN_TRIES = 16; // candidate junctions tried before giving up on a hidden spot
 
 type Point = { x: number; z: number };
@@ -79,6 +80,7 @@ export class CopDirector {
     private headlights: number,
     private tuning: DirectorTuning = DIRECTOR_TUNING,
     private ground: GroundHeight = FLAT,
+    private keep: Keep = 1,
   ) {
     this.spawnTimer = tuning.firstSpawnDelay;
   }
@@ -222,7 +224,7 @@ export class CopDirector {
 
   /**
    * Hidden spawn at a junction: a little way down a side street (not the road leading to the
-   * player), in its right-hand lane, rolling toward the corner — out of the player's line of
+   * player), in its lane, rolling toward the corner — out of the player's line of
    * sight, never near the destination. Null if every side street is visible, taken or too close.
    */
   private aroundCorner(nodeId: number, towardId: number, player: ChaseTarget): Spot | null {
@@ -239,8 +241,8 @@ export class CopDirector {
       const fx = (node.x - side.x) / len;
       const fz = (node.z - side.z) / len;
       const spot = {
-        x: node.x - fx * back + -fz * LANE_OFFSET,
-        z: node.z - fz * back + fx * LANE_OFFSET,
+        x: node.x - fx * back + -fz * LANE_OFFSET * this.keep,
+        z: node.z - fz * back + fx * LANE_OFFSET * this.keep,
         yaw: Math.atan2(fx, fz),
         speed: this.tuning.startSpeed,
       };

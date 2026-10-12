@@ -17,6 +17,7 @@ export interface StreetProp {
   variant?: SignVariant; // signs
   axis?: 'x' | 'z'; // signals: travel axis of the traffic they face
   phase?: number; // signals: junction cycle offset, seconds
+  armRight?: boolean; // signals: arm reaches to the driver's right (pole on the left kerb, left-hand traffic)
   tree?: TreeKind; // trees
   scale?: number; // trees: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint
