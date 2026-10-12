@@ -29,9 +29,6 @@ export interface RampShape {
   curve: number; // deck height = height * t^curve, so it kicks up toward the lip
 }
 
-const LANDMARK_KINDS: readonly LandmarkKind[] = ['fountain', 'statue', 'obelisk', 'sculpture', 'ramp'];
-const MONUMENT_KINDS = LANDMARK_KINDS.filter((k) => k !== 'ramp');
-
 export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   fountain: 5,
   statue: 1.6,
@@ -39,6 +36,8 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   sculpture: 2.2,
   ramp: 4,
 };
+const LANDMARK_KINDS = Object.keys(LANDMARK_RADIUS) as LandmarkKind[];
+const MONUMENT_KINDS = LANDMARK_KINDS.filter((k) => k !== 'ramp');
 
 /**
  * "The Leap": a monument you can drive up and jump off, rolled like any other centrepiece. It
