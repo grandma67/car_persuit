@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateCity, type Rect } from './CityGenerator';
+import { DEFAULT_CITY, generateCity, type Rect } from './CityGenerator';
 import { RoadGraph, type RoadNode } from './RoadGraph';
 
 const overlaps = (a: Rect, b: Rect) =>
@@ -18,7 +18,8 @@ describe('generateCity', () => {
   });
 
   it.each(SEEDS)('seed %i: road network is connected with no dead ends', (seed) => {
-    const city = generateCity(seed);
+    // Before any roadworks close junctions (Roadworks.test checks the network around those).
+    const city = generateCity(seed, { ...DEFAULT_CITY, roadworksChance: 0 });
     expect(city.graph.reachable(0).size).toBe(city.graph.nodes.length);
     for (const node of city.graph.nodes) expect(node.neighbors.length).toBeGreaterThanOrEqual(2);
     expect(city.plazas.length).toBeGreaterThan(0);

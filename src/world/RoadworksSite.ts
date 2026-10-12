@@ -1,14 +1,12 @@
-// Meshes and colliders for the roadworks site: a dug-up patch of road, a concrete mixer with a
-// turning drum and a yellow backhoe tractor, both parked solid, with amber beacons flashing.
+// Meshes and colliders for a roadworks site, from the layout Roadworks planned: machines (concrete
+// mixer with a turning drum, backhoe, tipper) with amber beacons flashing, a fenced-off dig, dirt,
+// pipes, a light tower, a portable toilet, barrier boards and repair patches. All solid but the patches.
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from '../render/geometry';
-import type { Roadworks } from './Roadworks';
+import type { Roadworks, WorksItem, WorksItemKind } from './Roadworks';
 
-const MIXER_LATERAL = 3.2; // metres from the junction centre, sideways
-const TRACTOR_LATERAL = -2.4;
-const TRACTOR_ANGLE = 0.35; // parked a little askew
 const DRUM_SPEED = 1.2; // rad/s
 const BEACON_ON = 0xffa21a;
 const BEACON_OFF = 0x3a2508;
@@ -80,87 +78,213 @@ function tractorModel(): { body: THREE.BufferGeometry; half: THREE.Vector3; cent
   return { body, half: new THREE.Vector3(1.2, 1.5, 3.3), centreZ: 0.05 };
 }
 
+/** Tipper truck, +Z forward: cab and a raised-sided bed of gravel. */
+function tipperModel(): THREE.BufferGeometry {
+  const cab = 0xd9442b;
+  const frame = 0x2d3036;
+  return mergeGeometries([
+    part(box(2.2, 0.4, 7.0), frame, 0, 1.0),
+    part(box(2.4, 1.8, 1.9), cab, 0, 2.0, 2.6),
+    part(box(2.2, 0.7, 0.05), GLASS, 0, 2.4, 3.56),
+    part(box(0.05, 0.6, 1.1), GLASS, -1.21, 2.45, 2.8),
+    part(box(0.05, 0.6, 1.1), GLASS, 1.21, 2.45, 2.8),
+    part(box(2.4, 1.2, 4.4), 0x6b6f76, 0, 1.85, -1.2), // bed
+    part(box(2.1, 0.5, 4.1), 0x8d7b62, 0, 2.4, -1.2), // gravel load
+    ...[2.6, -0.8, -2.4].flatMap((z) =>
+      [-1.1, 1.1].flatMap((x) => [part(wheel(0.55, 0.45), TYRE, x, 0.55, z), part(wheel(0.3, 0.47), HUB, x, 0.55, z)]),
+    ),
+  ]);
+}
+
+const BOARD_RED = 0xd8262b;
+const BOARD_WHITE = 0xf2f2ee;
+/** Red/white striped barrier board on two feet, along Z, `len` long. */
+function boardParts(len: number, x = 0, z = 0, alongX = false): THREE.BufferGeometry[] {
+  const parts: THREE.BufferGeometry[] = [];
+  const stripes = Math.max(3, Math.round(len / 0.4));
+  for (let k = 0; k < stripes; k++) {
+    const t = -len / 2 + (len * (k + 0.5)) / stripes;
+    const g = alongX ? box(len / stripes, 0.28, 0.05) : box(0.05, 0.28, len / stripes);
+    parts.push(part(g, k % 2 ? BOARD_WHITE : BOARD_RED, x + (alongX ? t : 0), 0.85, z + (alongX ? 0 : t)));
+  }
+  for (const e of [-1, 1]) {
+    const fx = x + (alongX ? e * len * 0.4 : 0);
+    const fz = z + (alongX ? 0 : e * len * 0.4);
+    parts.push(part(box(0.06, 0.8, 0.06), 0xdddddd, fx, 0.4, fz), part(box(0.5, 0.06, 0.5), 0x2a2c30, fx, 0.03, fz));
+  }
+  return parts;
+}
+
+/** A dig: hole in the road ringed by barrier boards, spoil heaped at one end. */
+function digModel(hw: number, hl: number): THREE.BufferGeometry {
+  return mergeGeometries([
+    part(box(hw * 2 - 0.6, 0.02, hl * 2 - 1.6), 0x1d1610, 0, 0.03, 0.3), // the hole
+    part(new THREE.ConeGeometry(0.9, 0.8, 7), 0x6b5236, 0, 0.4, -hl + 0.8), // spoil
+    ...boardParts(hl * 2, -hw),
+    ...boardParts(hl * 2, hw),
+    ...boardParts(hw * 2, 0, hl, true),
+    ...boardParts(hw * 2, 0, -hl, true),
+  ]);
+}
+
+/** Heap of dirt, roughly oval. */
+function moundModel(): THREE.BufferGeometry {
+  return mergeGeometries([
+    part(new THREE.SphereGeometry(1.5, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.55, 1.25), 0x6b5236),
+    part(new THREE.ConeGeometry(0.6, 0.5, 6), 0x5d4630, 0.5, 0.75, 0.4),
+  ]);
+}
+
+/** Concrete pipes stacked three and two, lying along Z. */
+function pipesModel(): THREE.BufferGeometry {
+  const pipe = (x: number, y: number) => [
+    part(new THREE.CylinderGeometry(0.42, 0.42, 3.0, 10).rotateX(Math.PI / 2), 0xa9a49a, x, y, 0),
+    part(new THREE.CylinderGeometry(0.3, 0.3, 3.02, 10).rotateX(Math.PI / 2), 0x3a3833, x, y, 0),
+  ];
+  return mergeGeometries([...pipe(-0.68, 0.42), ...pipe(0, 0.42), ...pipe(0.68, 0.42), ...pipe(-0.34, 1.1), ...pipe(0.34, 1.1)]);
+}
+
+/** Light tower on a trailer: mast and a bar of four lamps (lamps returned separately, they glow). */
+function towerModel(): { body: THREE.BufferGeometry; lamps: THREE.Vector3[] } {
+  const yellow = 0xf2b705;
+  const body = mergeGeometries([
+    part(box(1.3, 0.9, 1.9), yellow, 0, 0.75),
+    part(box(0.2, 0.2, 0.9), 0x2a2c30, 0, 0.4, 1.3), // drawbar
+    ...[-1, 1].flatMap((s) => [part(wheel(0.32, 0.22), TYRE, s * 0.75, 0.32, -0.3)]),
+    part(box(0.14, 4.2, 0.14), 0x8a8f96, 0, 3.2, -0.5), // mast
+    part(box(1.6, 0.12, 0.2), 0x2a2c30, 0, 5.3, -0.5),
+  ]);
+  const lamps = [-0.6, -0.2, 0.2, 0.6].map((x) => new THREE.Vector3(x, 5.42, -0.5));
+  return { body, lamps };
+}
+
+/** Portable toilet. */
+function toiletModel(): THREE.BufferGeometry {
+  return mergeGeometries([
+    part(box(1.2, 2.2, 1.2), 0x2a6fb0, 0, 1.1),
+    part(box(1.3, 0.1, 1.3), 0xe8e8e8, 0, 2.25),
+    part(box(0.05, 1.8, 0.8), 0x245f98, 0.62, 1.0),
+  ]);
+}
+
+/** Collider height per item (its footprint comes from the plan). */
+const SOLID_HEIGHT: Record<Exclude<WorksItemKind, 'patch'>, number> = {
+  mixer: 3.9, backhoe: 3.0, tipper: 3.0, dig: 1.0, mound: 0.8, pipes: 1.5, tower: 1.3, toilet: 2.3, barrier: 1.0,
+};
+
 export class RoadworksSite {
-  private drum: THREE.Mesh;
-  private beacons: THREE.InstancedMesh;
+  private drums: THREE.Mesh[] = [];
+  private beacons: THREE.InstancedMesh | null = null;
   private beaconLit = -1;
   private color = new THREE.Color();
 
-  /** Adds the trucks to the scene and the world; their collider handles go into `walls`. */
+  /** Adds the site to the scene and the world; collider handles go into `walls`. */
   constructor(site: Roadworks, scene: THREE.Scene, world: RAPIER.World, walls: Set<number>) {
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.6, metalness: 0.15 });
-    const baseYaw = site.alongX ? Math.PI / 2 : 0;
     const up = new THREE.Vector3(0, 1, 0);
-    // Sideways direction in the world for the junction's local frame.
-    const latX = Math.cos(baseYaw);
-    const latZ = -Math.sin(baseYaw);
-    const at = (lateral: number) => new THREE.Vector3(site.x + latX * lateral * site.side, 0, site.z + latZ * lateral * site.side);
+    const beaconAt: THREE.Vector3[] = [];
+    const lampAt: THREE.Vector3[] = [];
 
-    // Dug-up patch of road under the trucks.
-    const patch = new THREE.Mesh(
-      new THREE.PlaneGeometry(9, 7).rotateX(-Math.PI / 2),
-      new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 1 }),
-    );
-    patch.position.set(site.x, 0.026, site.z);
-    patch.rotation.y = baseYaw;
-    patch.receiveShadow = true;
-    scene.add(patch);
-
-    const place = (geo: THREE.BufferGeometry, pos: THREE.Vector3, yaw: number) => {
+    const place = (geo: THREE.BufferGeometry, item: WorksItem) => {
       const mesh = new THREE.Mesh(geo, material);
-      mesh.position.copy(pos);
-      mesh.rotation.y = yaw;
+      mesh.position.set(item.x, 0, item.z);
+      mesh.rotation.y = item.yaw;
       mesh.castShadow = mesh.receiveShadow = true;
       scene.add(mesh);
+      mesh.updateMatrixWorld();
       return mesh;
     };
-    const collider = (pos: THREE.Vector3, yaw: number, half: THREE.Vector3, offsetZ = 0) => {
-      const q = new THREE.Quaternion().setFromAxisAngle(up, yaw);
-      const off = new THREE.Vector3(0, half.y, offsetZ).applyQuaternion(q);
+
+    for (const item of site.items) {
+      if (item.kind === 'patch') {
+        // Fresh tarmac or dug-up road: flat, under everything else.
+        const patch = new THREE.Mesh(
+          new THREE.PlaneGeometry(item.hw * 2, item.hl * 2).rotateX(-Math.PI / 2),
+          new THREE.MeshStandardMaterial({ color: Math.abs(item.x * 7 + item.z * 13) % 2 < 1 ? 0x4a3a2a : 0x1e1f22, roughness: 1 }),
+        );
+        patch.position.set(item.x, 0.026, item.z);
+        patch.rotation.y = item.yaw;
+        patch.receiveShadow = true;
+        scene.add(patch);
+        continue;
+      }
+      let mesh: THREE.Mesh;
+      switch (item.kind) {
+        case 'mixer': {
+          const mixer = mixerModel();
+          mesh = place(mixer.body, item);
+          const drum = new THREE.Mesh(mixer.drum, material);
+          drum.position.copy(mixer.drumAt);
+          drum.rotation.x = 0.12; // tilted up toward the back
+          drum.castShadow = true;
+          mesh.add(drum);
+          this.drums.push(drum);
+          beaconAt.push(mesh.localToWorld(new THREE.Vector3(0, 3.12, 3.2)));
+          break;
+        }
+        case 'backhoe':
+          mesh = place(tractorModel().body, item);
+          beaconAt.push(mesh.localToWorld(new THREE.Vector3(0, 3.0, -0.5)));
+          break;
+        case 'tipper':
+          mesh = place(tipperModel(), item);
+          beaconAt.push(mesh.localToWorld(new THREE.Vector3(0, 3.02, 2.6)));
+          break;
+        case 'dig':
+          mesh = place(digModel(item.hw, item.hl), item);
+          break;
+        case 'mound':
+          mesh = place(moundModel(), item);
+          break;
+        case 'pipes':
+          mesh = place(pipesModel(), item);
+          break;
+        case 'tower': {
+          const tower = towerModel();
+          mesh = place(tower.body, item);
+          for (const l of tower.lamps) lampAt.push(mesh.localToWorld(l.clone()));
+          break;
+        }
+        case 'toilet':
+          mesh = place(toiletModel(), item);
+          break;
+        case 'barrier':
+          mesh = place(mergeGeometries(boardParts(item.hl * 2)), item);
+          break;
+      }
+      const h = SOLID_HEIGHT[item.kind] / 2;
+      const q = new THREE.Quaternion().setFromAxisAngle(up, item.yaw);
       const c = world.createCollider(
-        RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z)
-          .setTranslation(pos.x + off.x, off.y, pos.z + off.z)
-          .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
+        RAPIER.ColliderDesc.cuboid(item.hw, h, item.hl).setTranslation(item.x, h, item.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
       );
       walls.add(c.handle);
-    };
+    }
 
-    const mixer = mixerModel();
-    const mixerYaw = baseYaw + (site.side > 0 ? 0 : Math.PI);
-    const mixerPos = at(MIXER_LATERAL);
-    const mixerMesh = place(mixer.body, mixerPos, mixerYaw);
-    this.drum = new THREE.Mesh(mixer.drum, material);
-    this.drum.position.copy(mixer.drumAt);
-    this.drum.rotation.x = 0.12; // tilted up toward the back
-    this.drum.castShadow = true;
-    mixerMesh.add(this.drum);
-    collider(mixerPos, mixerYaw, mixer.half);
-
-    const tractor = tractorModel();
-    const tractorYaw = baseYaw + Math.PI + TRACTOR_ANGLE * site.side;
-    const tractorPos = at(TRACTOR_LATERAL);
-    const tractorMesh = place(tractor.body, tractorPos, tractorYaw);
-    collider(tractorPos, tractorYaw, tractor.half, tractor.centreZ);
-
-    // Amber beacons on the cab roofs (unlit material so they glow at night).
-    this.beacons = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.16, 0.22, 10), new THREE.MeshBasicMaterial({ toneMapped: false }), 2);
-    const beaconAt = (mesh: THREE.Object3D, local: THREE.Vector3) => mesh.localToWorld(local.clone());
-    mixerMesh.updateMatrixWorld();
-    tractorMesh.updateMatrixWorld();
-    [beaconAt(mixerMesh, new THREE.Vector3(0, 3.12, 3.2)), beaconAt(tractorMesh, new THREE.Vector3(0, 3.0, -0.5))].forEach((p, i) => {
-      this.beacons.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y, p.z));
-      this.beacons.setColorAt(i, this.color.setHex(BEACON_OFF));
-    });
-    scene.add(this.beacons);
+    // Amber beacons on the machines' cabs (unlit material so they glow at night).
+    if (beaconAt.length) {
+      this.beacons = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.16, 0.22, 10), new THREE.MeshBasicMaterial({ toneMapped: false }), beaconAt.length);
+      beaconAt.forEach((p, i) => {
+        this.beacons!.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y, p.z));
+        this.beacons!.setColorAt(i, this.color.setHex(BEACON_OFF));
+      });
+      scene.add(this.beacons);
+    }
+    // Light tower lamps: always on, bright white faces.
+    if (lampAt.length) {
+      const lamps = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.26, 0.12), new THREE.MeshBasicMaterial({ color: 0xfff6dc, toneMapped: false }), lampAt.length);
+      lampAt.forEach((p, i) => lamps.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y, p.z)));
+      scene.add(lamps);
+    }
   }
 
-  /** Turn the drum and flash the beacons, alternating. `time` in seconds. */
+  /** Turn the drums and flash the beacons, alternating. `time` in seconds. */
   update(dt: number, time: number): void {
-    this.drum.rotateZ(DRUM_SPEED * dt);
+    for (const drum of this.drums) drum.rotateZ(DRUM_SPEED * dt);
+    if (!this.beacons) return;
     const lit = Math.floor(time * 2.5) % 2;
     if (lit === this.beaconLit) return;
     this.beaconLit = lit;
-    for (let i = 0; i < 2; i++) this.beacons.setColorAt(i, this.color.setHex(i === lit ? BEACON_ON : BEACON_OFF));
+    for (let i = 0; i < this.beacons.count; i++) this.beacons.setColorAt(i, this.color.setHex(i % 2 === lit ? BEACON_ON : BEACON_OFF));
     this.beacons.instanceColor!.needsUpdate = true;
   }
 }
