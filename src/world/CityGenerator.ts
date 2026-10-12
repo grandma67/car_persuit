@@ -5,7 +5,7 @@ import { footprintsOverlap, generateStreetProps, propFootprint, type StreetProp 
 import { generateTrafficControl, type RoadMark } from './TrafficControl';
 import { planLandmarks, type Landmark } from './Landmarks';
 import { planRoadworks, type Roadworks } from './Roadworks';
-import { inCanal, landPieces, onGround, planTerrain, type Terrain, type TerrainConfig } from './Terrain';
+import { clipRect, inCanal, landPieces, onGround, pickBridges, planTerrain, type Terrain, type TerrainConfig } from './Terrain';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
@@ -31,6 +31,8 @@ export const DEFAULT_CITY: CityConfig = {
   hillHeight: [8, 22],
   maxGrade: 0.11,
   canalOdds: [0.3, 0.45, 0.25],
+  canalWidth: 28,
+  bridgeSpacing: [3, 5],
 };
 
 export type District = 'downtown' | 'midtown' | 'residential' | 'industrial';
@@ -128,10 +130,11 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   edges.forEach((e) => link(e, true));
   const graph = new RoadGraph(nodes);
 
-  // --- Canals (own RNG stream): the roads along a canal's line become water. Every road crossing
-  // it gets a bridge; where two canals cross, that junction is lost to the water altogether. ---
+  // --- Canals (own RNG stream): the roads along a canal's line become water. Every few blocks a
+  // road crosses it on a bridge; the others end at the quay in a small paved square. Where two
+  // canals cross, that junction is lost to the water altogether. ---
   const islandSize = size + config.promenade * 2;
-  const shape = planTerrain(new Rng(seed ^ 0x7e44a1), config, n, line, islandSize / 2, roadWidth / 2 + config.sidewalk);
+  const shape = planTerrain(new Rng(seed ^ 0x7e44a1), config, n, line, islandSize / 2);
   const canalLines = (axis: 'x' | 'z') => new Set(shape.canals.filter((c) => c.axis === axis).map((c) => c.line));
   const alongX = canalLines('x');
   const alongZ = canalLines('z');
@@ -141,13 +144,32 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
       link(e, false);
     }
   }
+  const bridgeRng = new Rng(seed ^ 0xb41d6e);
   const bridges: Rect[] = [];
   const canalNodes = new Set<number>();
+  const quaySquares: Edge[] = [];
   for (const c of shape.canals) {
+    const crossing = c.axis === 'x' ? alongZ : alongX;
+    const runs: number[][] = [[]];
     for (let k = 0; k <= n; k++) {
+      if (crossing.has(k)) runs.push([]); // the canals' crossing: open water
+      else runs[runs.length - 1].push(k);
+    }
+    const bridged = new Set(pickBridges(bridgeRng, runs, config.bridgeSpacing));
+    for (const k of runs.flat()) {
       const [i, j] = c.axis === 'x' ? [k, c.line] : [c.line, k];
       canalNodes.add(nodeId(i, j));
-      if ((c.axis === 'x' ? alongZ : alongX).has(k)) continue; // the canals' crossing: open water
+      if (!bridged.has(k)) {
+        // The road segments either side of the water become dead ends: pave them over.
+        for (const e of edges) {
+          if (!e.canal && !e.removed && (e.a === nodeId(i, j) || e.b === nodeId(i, j))) {
+            e.removed = true;
+            link(e, false);
+            quaySquares.push(e);
+          }
+        }
+        continue;
+      }
       // The ring road's bridges also carry the promenade out to the sea wall.
       const outer = k === 0 ? -1 : k === n ? 1 : 0;
       const across = roadWidth + (outer ? config.promenade : 0);
@@ -161,7 +183,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   // Turn some inner segments into plazas. The outer ring always stays; no dead ends are allowed
   // (degree ≥ 2) and the network must stay connected.
   const isBorder = (e: Edge) => (e.horizontal ? e.j === 0 || e.j === n : e.i === 0 || e.i === n);
-  const candidates = edges.filter((e) => !isBorder(e) && !e.canal);
+  const candidates = edges.filter((e) => !isBorder(e) && !e.canal && !e.removed);
   shuffle(candidates, rng);
   let toRemove = Math.round(candidates.length * config.removeRoadFraction);
   for (const e of candidates) {
@@ -181,7 +203,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
       ? { x: (line(e.i) + line(e.i + 1)) / 2, z: line(e.j), w: blockSize, d: roadWidth }
       : { x: line(e.i), z: (line(e.j) + line(e.j + 1)) / 2, w: roadWidth, d: blockSize };
   const roads = edges.filter((e) => !e.removed && !e.canal).map((e) => ({ a: e.a, b: e.b, rect: edgeRect(e) }));
-  const plazaEdges = edges.filter((e) => e.removed);
+  const plazaEdges = edges.filter((e) => e.removed && !quaySquares.includes(e));
   const intersections = nodes.filter((nd) => nd.neighbors.length).map((nd) => ({ x: nd.x, z: nd.z, w: roadWidth, d: roadWidth }));
 
   // --- Districts: downtown core by distance, then smooth noise splits residential/industrial ---
@@ -230,6 +252,12 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
       );
     }
   }
+  // Squares where a street meets the canal without a bridge: paved up to the quay, no planters.
+  for (const e of quaySquares) {
+    const r = edgeRect(e);
+    const part = terrain.land.map((piece) => clipRect(r, piece)).find(Boolean);
+    if (part) plazas.push(part);
+  }
 
   // --- Spawn: on a road segment next to the centre, facing along it ---
   const centre = graph.nearest(0, 0);
@@ -265,7 +293,8 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
     .filter((p) => dry(p.x, p.z, 0.8) && (p.kind === 'cone' || !onTree(p)));
   return {
     config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut,
-    buildings: buildings.filter((b) => !inCanal(terrain, b.x, b.z, Math.max(b.w, b.d) / 2)),
+    // A footpath's width of quay is left clear along the water.
+    buildings: buildings.filter((b) => !inCanal(terrain, b.x, b.z, Math.max(b.w, b.d) / 2 + config.sidewalk)),
     props: props.filter((p) => dry(p.x, p.z, Math.max(p.w, p.d) / 2)),
     trees: keptTrees,
     landmarks: landmarks.filter((l) => dry(l.x, l.z, l.radius)),

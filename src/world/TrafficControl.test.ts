@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateCity } from './CityGenerator';
+import { DEFAULT_CITY, generateCity } from './CityGenerator';
 import { signalState, SIGNAL_CYCLE } from './TrafficControl';
 
 const inside = (m: { x: number; z: number; w: number; d: number }, r: { x: number; z: number; w: number; d: number }) =>
@@ -56,7 +56,8 @@ describe('generateTrafficControl', () => {
   });
 
   it.each([1, 42, 1234])('seed %i: signals downtown, stop signs elsewhere, speed signs', (seed) => {
-    const city = generateCity(seed);
+    // Without canals: a canal through downtown turns its four-way junctions into T-junctions.
+    const city = generateCity(seed, { ...DEFAULT_CITY, canalOdds: [1, 0, 0] });
     const kinds = (k: string, v?: string) => city.streetProps.filter((p) => p.kind === k && (v === undefined || p.variant === v)).length;
     expect(kinds('signal')).toBeGreaterThan(40);
     expect(kinds('sign', 'stop')).toBeGreaterThan(100);

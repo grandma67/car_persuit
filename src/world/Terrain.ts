@@ -1,5 +1,5 @@
 // The ground the city stands on: an optional hill and 0–2 sea canals that cut the island from
-// shore to shore, crossed by a bridge on every road. Pure data and maths — no Three.js.
+// shore to shore, crossed by bridges every few blocks. Pure data and maths — no Three.js.
 import { Rng } from '../core/Rng';
 import type { Rect } from './CityGenerator';
 
@@ -22,13 +22,13 @@ export interface Canal {
   axis: 'x' | 'z';
   line: number; // index of the road line it replaces
   at: number; // world coordinate of its centre line
-  half: number; // half its width: the road plus the sidewalks either side
+  half: number; // half its width
 }
 
 export interface Terrain {
   hill: Hill | null;
   canals: Canal[];
-  bridges: Rect[]; // decks across the canals, one per crossing road
+  bridges: Rect[]; // decks across the canals, on some of the roads that meet them
   land: Rect[]; // the island cut into pieces by the canals
 }
 
@@ -37,6 +37,8 @@ export interface TerrainConfig {
   hillHeight: [number, number]; // metres
   maxGrade: number; // steepest slope the hill may have (rise over run)
   canalOdds: [number, number, number]; // weights for 0, 1 and 2 canals
+  canalWidth: number; // metres, quay wall to quay wall
+  bridgeSpacing: [number, number]; // road lines between neighbouring bridges over a canal
 }
 
 /**
@@ -50,12 +52,11 @@ export function planTerrain(
   blocks: number,
   line: (i: number) => number,
   islandHalf: number,
-  canalHalf: number,
 ): Pick<Terrain, 'hill' | 'canals'> {
   const roll = rng.next() * (config.canalOdds[0] + config.canalOdds[1] + config.canalOdds[2]);
   const count = roll < config.canalOdds[0] ? 0 : roll < config.canalOdds[0] + config.canalOdds[1] ? 1 : 2;
   const canals: Canal[] = [];
-  const make = (axis: 'x' | 'z', index: number): Canal => ({ axis, line: index, at: line(index), half: canalHalf });
+  const make = (axis: 'x' | 'z', index: number): Canal => ({ axis, line: index, at: line(index), half: config.canalWidth / 2 });
   const first = make(rng.next() < 0.5 ? 'x' : 'z', rng.int(2, blocks - 2));
   if (count >= 1) canals.push(first);
   if (count === 2) {
@@ -87,6 +88,22 @@ export function planTerrain(
     };
   }
   return { hill, canals };
+}
+
+/**
+ * Which of a canal's crossing roads get a bridge. `runs` are the crossing road lines in order,
+ * split wherever another canal cuts across; every run gets at least one bridge so the island
+ * stays connected, the rest end at the quay.
+ */
+export function pickBridges(rng: Rng, runs: number[][], spacing: [number, number]): number[] {
+  const out: number[] = [];
+  for (const run of runs) {
+    if (!run.length) continue;
+    // Start part-way into the run so bridges don't always line up with the shore.
+    let at = rng.int(0, Math.min(spacing[0], run.length) - 1);
+    for (; at < run.length; at += rng.int(spacing[0], spacing[1])) out.push(run[at]);
+  }
+  return out;
 }
 
 /** Ground height at a point (bridges carry the road across at this height too). */

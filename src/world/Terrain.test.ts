@@ -49,7 +49,7 @@ describe('terrain', () => {
     expect(steepest).toBeLessThanOrEqual(DEFAULT_CITY.maxGrade + 0.005);
   });
 
-  it.each(SEEDS)('seed %i: canals cut the island shore to shore, with a bridge on every road across', (seed) => {
+  it.each(SEEDS)('seed %i: canals cut the island shore to shore, bridged every few blocks', (seed) => {
     const city = cityFor(seed);
     const t = city.terrain;
     // No road runs along a canal, and every road edge that crosses one lands on a bridge.
@@ -64,6 +64,14 @@ describe('terrain', () => {
           expect(t.bridges.some((r) => contains(r, across.x, across.z))).toBe(true);
         }
       }
+    }
+    // Bridges only on some of the roads that meet each canal, a few blocks apart.
+    for (const c of t.canals) {
+      const on = t.bridges.filter((b) => (c.axis === 'x' ? b.z : b.x) === c.at).map((b) => (c.axis === 'x' ? b.x : b.z)).sort((a, b) => a - b);
+      expect(on.length).toBeGreaterThan(0);
+      expect(on.length).toBeLessThan(city.config.blocks / 2);
+      for (let k = 1; k < on.length; k++) expect(on[k] - on[k - 1]).toBeGreaterThanOrEqual(2 * (city.config.blockSize + city.config.roadWidth));
+      expect(c.half * 2).toBe(city.config.canalWidth);
     }
     // The land pieces plus the canal strips make up the whole island.
     const land = t.land.reduce((sum, r) => sum + r.w * r.d, 0);

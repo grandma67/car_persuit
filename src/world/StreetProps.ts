@@ -200,7 +200,7 @@ export function generateStreetProps(
   for (const p of plazas) {
     const alongX = p.w > p.d;
     for (const end of [-1, 1]) {
-      const t = end * (config.blockSize / 2 - 4);
+      const t = end * ((alongX ? p.w : p.d) / 2 - 4);
       const off = (rng.next() < 0.5 ? -1 : 1) * 4;
       props.push({
         kind: 'bench',
