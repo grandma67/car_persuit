@@ -11,6 +11,15 @@ import { Health } from '../gameplay/Health';
 import { DAMAGE, ROADBLOCK_INTERVAL, type CopType, type StarLevel } from '../gameplay/balance';
 import { COP_TUNING, CopController, type ChaseTarget, type LineOfSight } from './CopController';
 import type { Keep } from '../world/driveSide';
+import type { NavGrid } from './NavGrid';
+import { obstacleProbe } from './lineOfSight';
+
+/** Off-road routing and feelers for the cops; without it they keep to the roads and drive blind. */
+export interface CopSteering {
+  nav: NavGrid;
+  /** Colliders the feelers look past: the suspect's car, which cops are meant to hit. */
+  ignore: (collider: RAPIER.Collider) => boolean;
+}
 
 export interface DirectorTuning {
   firstSpawnDelay: number; // seconds after the mission starts
@@ -81,6 +90,7 @@ export class CopDirector {
     private tuning: DirectorTuning = DIRECTOR_TUNING,
     private ground: GroundHeight = FLAT,
     private keep: Keep = 1,
+    private steering: CopSteering | null = null,
   ) {
     this.spawnTimer = tuning.firstSpawnDelay;
   }
@@ -153,7 +163,14 @@ export class CopDirector {
     const cop: Cop = {
       type,
       vehicle,
-      controller: new CopController(vehicle, this.graph, this.canSee),
+      controller: new CopController(
+        vehicle,
+        this.graph,
+        this.canSee,
+        COP_TUNING,
+        this.steering?.nav ?? null,
+        this.steering ? obstacleProbe(this.world, vehicle.body, this.steering.ignore, this.ground) : null,
+      ),
       health: new Health({ ...DAMAGE, maxHealth: COP_SPECS[type].maxHealth ?? DAMAGE.maxHealth }),
       wreckedFor: null,
       flippedFor: 0,

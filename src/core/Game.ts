@@ -21,6 +21,7 @@ import { CrashMarks } from '../render/CrashMarks';
 import { Landmarks } from '../render/Landmarks';
 import type { ChaseTarget } from '../ai/CopController';
 import { staticLineOfSight } from '../ai/lineOfSight';
+import { NavGrid } from '../ai/NavGrid';
 import { PropSystem, type PropBreak } from '../world/PropSystem';
 import { RoadworksSite } from '../world/RoadworksSite';
 import { Hud, formatTime } from '../ui/Hud';
@@ -181,7 +182,10 @@ export class Game {
     this.destinations = pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id);
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
 
-    this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground, keepOf(this.city.driveSide));
+    this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground, keepOf(this.city.driveSide), {
+      nav: new NavGrid(this.city, built.props),
+      ignore: (collider) => collider.parent()?.handle === this.player.body.handle,
+    });
     this.traffic = new CivilianTraffic(
       this.world,
       this.scene,

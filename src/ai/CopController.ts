@@ -5,11 +5,16 @@
 //   ram      — close: floor it at the suspect
 //   recover  — stuck: reverse out with opposite lock, then carry on
 //   backoff  — rammed into the suspect and pinned against them: reverse a few metres, ram again
+// Off the road network (suspect or cop in a park, square or plaza) the route comes from the
+// NavGrid instead, round statues, planters and trees; and in every state a few feeler rays steer
+// round whatever is in the way right now (civilians, other cops, props).
 import * as THREE from 'three';
 import type { DriveInput } from '../core/Input';
 import type { RoadGraph } from '../world/RoadGraph';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
+import type { NavGrid } from './NavGrid';
+import type { ObstacleProbe } from './lineOfSight';
 
 export type CopState = 'navigate' | 'chase' | 'ram' | 'recover' | 'backoff';
 
@@ -42,6 +47,12 @@ export interface CopTuning {
   catchUp: number;
   /** Above this speed (m/s) the route never doubles back: we carry on to the next junction. */
   uTurnSpeed: number;
+  /** Plan on the NavGrid when the suspect is within this many metres and either of us is off the road… */
+  navRange: number;
+  /** …or this close regardless (out of sight but near: behind planters, round a corner). */
+  navAlways: number;
+  /** Seconds between feeler checks for something in the way. */
+  probeInterval: number;
 }
 
 export const COP_TUNING: CopTuning = {
@@ -62,7 +73,15 @@ export const COP_TUNING: CopTuning = {
   runUpTime: 1.0,
   catchUp: 1.15,
   uTurnSpeed: 8,
+  navRange: 220,
+  navAlways: 60,
+  probeInterval: 0.1,
 };
+
+const NOSE = 2.4; // metres from the car's centre to its front bumper
+const OFF_ROAD = 7.5; // metres from a road's centre line: past its kerb
+/** Headings tried round an obstacle, relative to where we want to go (radians, + = right). */
+const DODGES = [0.35, 0.7, 1.05, 1.4];
 
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
@@ -82,6 +101,10 @@ export class CopController {
   private pinnedFor = 0;
   private backoffFor = 0;
   private runUpFor = 0; // after backing off: charging back in, not pinned yet
+  private probeTimer = 0;
+  private dodge = 0; // heading offset currently steering round an obstacle (0 = way clear)
+  private dodgeSide = 0; // which way we're swerving round it (+1 right, −1 left)
+  private dodgeSpeed = Infinity; // speed that still stops short of it
   private aim = new THREE.Vector3();
   private tmp = new THREE.Vector3();
 
@@ -90,6 +113,8 @@ export class CopController {
     private graph: RoadGraph,
     private canSee: LineOfSight,
     public tuning: CopTuning = COP_TUNING,
+    private nav: NavGrid | null = null,
+    private probe: ObstacleProbe | null = null,
   ) {}
 
   /** Call once per physics step, before vehicle.drive(). */
@@ -155,8 +180,18 @@ export class CopController {
       this.repathTimer = 0; // replan when we drop back to road following
     }
 
-    // Steering toward the aim point, in the car's frame.
-    const angle = this.angleTo(this.aim, fwd);
+    // Steering toward the aim point, in the car's frame, round anything in the way.
+    let angle = this.angleTo(this.aim, fwd);
+    if (this.probe) {
+      this.probeTimer -= dt;
+      if (this.probeTimer <= 0) {
+        this.probeTimer = t.probeInterval;
+        // Chasing or ramming, only what's between us and the suspect counts.
+        this.avoid(angle, speed, this.state === 'navigate' ? Infinity : dist);
+      }
+      angle += this.dodge;
+      desiredSpeed = Math.min(desiredSpeed, this.dodgeSpeed);
+    }
     const steer = THREE.MathUtils.clamp(angle * 2.2, -1, 1);
 
     // Big heading errors need a slower car to turn in.
@@ -195,6 +230,48 @@ export class CopController {
     return input;
   }
 
+  /**
+   * Feelers: is the way toward `angle` (relative to our heading) clear for the distance we need to
+   * stop or swerve? If not, pick the nearest heading either side that is (sticking to the side
+   * already chosen, so we don't dither), and the speed that stops short of whatever's ahead.
+   */
+  private avoid(angle: number, speed: number, targetDist: number): void {
+    const fwd = this.vehicle.forward(this.tmp);
+    const reach = THREE.MathUtils.clamp(4 + Math.abs(speed) * 0.7, 6, 26);
+    const len = Math.min(reach, targetDist - 1) + NOSE;
+    const base = THREE.MathUtils.clamp(angle, -0.8, 0.8);
+    const free = (off: number) => {
+      const a = base + off;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      return this.probe!(this.vehicle.position, fwd.x * c - fwd.z * s, fwd.z * c + fwd.x * s, len) - NOSE; // right of travel is (-fz, fx)
+    };
+    const ahead = len > NOSE + 1 ? free(0) : Infinity;
+    if (ahead >= len - NOSE - 0.01) {
+      this.dodge = this.dodgeSide = 0;
+      this.dodgeSpeed = Infinity;
+      return;
+    }
+    let best = 0;
+    let bestScore = ahead;
+    const side = this.dodgeSide;
+    for (const off of DODGES) {
+      for (const sign of side ? [side, -side] : [1, -1]) {
+        const o = off * sign;
+        if (Math.abs(base + o) > 1.6) continue;
+        const score = free(o) - off * 4 + (sign === side ? 3 : 0);
+        if (score > bestScore) {
+          best = o;
+          bestScore = score;
+        }
+      }
+    }
+    this.dodgeSide = Math.sign(best);
+    this.dodge = best + base - angle; // relative to the aim, which moves on between checks
+    const room = best === 0 ? ahead : Math.max(ahead, free(best));
+    this.dodgeSpeed = Math.sqrt(2 * this.tuning.brakeDecel * Math.max(0, room - 1.5)) + 2;
+  }
+
   /** Signed angle (radians, + = right) from the car's heading to a point. */
   private angleTo(p: THREE.Vector3, fwd: THREE.Vector3): number {
     const pos = this.vehicle.position;
@@ -221,11 +298,23 @@ export class CopController {
     return cornerSpeedLimit(this.path, this.segment, pos, speed, t.cornerSpeed, t.brakeDecel);
   }
 
-  /** Route: our position → road nodes → the suspect. */
+  /** Route: our position → road nodes → the suspect, or across open ground when off the roads. */
   private replan(target: ChaseTarget): void {
     const v = this.vehicle;
-    this.path = planRoute(this.graph, v.position, v.forward(this.tmp), Math.abs(v.speed), target.position, this.tuning);
     this.segment = 0;
+    const t = this.tuning;
+    const dist = Math.hypot(target.position.x - v.position.x, target.position.z - v.position.z);
+    if (this.nav && dist < t.navRange) {
+      const offRoad = (p: THREE.Vector3) => this.graph.nearestEdge(p.x, p.z).off > OFF_ROAD;
+      if (dist < t.navAlways || offRoad(target.position) || offRoad(v.position)) {
+        const path = this.nav.findPath(v.position, target.position);
+        if (path) {
+          this.path = path.map((p) => new THREE.Vector3(p.x, 0, p.z));
+          return;
+        }
+      }
+    }
+    this.path = planRoute(this.graph, v.position, v.forward(this.tmp), Math.abs(v.speed), target.position, this.tuning);
   }
 }
 
