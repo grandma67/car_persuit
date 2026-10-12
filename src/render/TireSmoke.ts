@@ -7,12 +7,13 @@ const vertexShader = /* glsl */ `
   attribute float alpha;
   varying float vAlpha;
   uniform float pixelScale;
+  uniform vec2 nearFade;
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = size * pixelScale / -mv.z;
     gl_Position = projectionMatrix * mv;
     // Fade puffs right in front of the camera so lingering smoke never blinds the view.
-    vAlpha = alpha * smoothstep(2.0, 6.0, -mv.z);
+    vAlpha = alpha * smoothstep(nearFade.x, nearFade.y, -mv.z);
   }
 `;
 
@@ -36,6 +37,10 @@ export interface SmokeStyle {
   gravity?: number; // m/s², for water that falls back down
   spread?: number; // sideways speed range, m/s
   life?: [number, number]; // lifetime range, seconds
+  carry?: number; // share of the source's velocity a particle keeps (default 0.15: left behind)
+  nearFade?: [number, number]; // camera distance (m) over which particles fade in; default [2, 6]
+  startSize?: number; // metres at birth (default 0.7)
+  jitter?: number; // metres of random scatter around the emit point (default 0.3)
 }
 
 const TYRE_SMOKE: SmokeStyle = { color: 0xd8dde4, maxAlpha: 0.3, additive: false, growth: 2.0 };
@@ -61,7 +66,11 @@ export class TireSmoke {
     this.material = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
-      uniforms: { color: { value: new THREE.Color(style.color) }, pixelScale: { value: 600 } },
+      uniforms: {
+        color: { value: new THREE.Color(style.color) },
+        pixelScale: { value: 600 },
+        nearFade: { value: new THREE.Vector2(...(style.nearFade ?? [2, 6])) },
+      },
       transparent: true,
       depthWrite: false,
       blending: style.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -82,15 +91,16 @@ export class TireSmoke {
   emit(at: THREE.Vector3, carVelocity: THREE.Vector3, intensity: number): void {
     const i = this.next;
     this.next = (this.next + 1) % MAX_PARTICLES;
-    this.positions.set([at.x + (Math.random() - 0.5) * 0.3, at.y + 0.15, at.z + (Math.random() - 0.5) * 0.3], i * 3);
+    const jitter = this.style.jitter ?? 0.3;
+    this.positions.set([at.x + (Math.random() - 0.5) * jitter, at.y + 0.15, at.z + (Math.random() - 0.5) * jitter], i * 3);
     // Left behind: a fraction of the source's velocity plus random spread and lift.
     const [liftMin, liftMax] = this.style.lift ?? [0.6, 1.4];
     const spread = this.style.spread ?? 1.5;
     this.velocities.set(
       [
-        carVelocity.x * 0.15 + (Math.random() - 0.5) * spread,
+        carVelocity.x * (this.style.carry ?? 0.15) + (Math.random() - 0.5) * spread,
         liftMin + Math.random() * (liftMax - liftMin),
-        carVelocity.z * 0.15 + (Math.random() - 0.5) * spread,
+        carVelocity.z * (this.style.carry ?? 0.15) + (Math.random() - 0.5) * spread,
       ],
       i * 3,
     );
@@ -117,7 +127,7 @@ export class TireSmoke {
       this.positions[j] += this.velocities[j] * dt;
       this.positions[j + 1] += this.velocities[j + 1] * dt;
       this.positions[j + 2] += this.velocities[j + 2] * dt;
-      this.sizes[i] = 0.7 + t * this.style.growth;
+      this.sizes[i] = (this.style.startSize ?? 0.7) + t * this.style.growth;
       this.alphas[i] = Math.min(t * 8, 1) * (1 - t) * this.style.maxAlpha;
     }
     const geo = this.points.geometry;
