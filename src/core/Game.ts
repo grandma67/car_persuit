@@ -29,6 +29,7 @@ import { CarAudio } from '../audio/CarAudio';
 import { Effects } from '../render/Effects';
 import { Sirens } from '../render/Sirens';
 import { Sea } from '../render/Sea';
+import type { CanalWater } from '../render/CanalWater';
 import { Minimap } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
 import { DestinationMarker } from '../render/DestinationMarker';
@@ -72,6 +73,7 @@ export class Game {
   private effects: Effects;
   private marker = new DestinationMarker(MISSION.reachRadius);
   private sea: Sea;
+  private canalWater: CanalWater | null;
   private minimap: Minimap;
   private health = new Health();
   private difficulty: Difficulty = difficultyById(storageGet('cp-difficulty'));
@@ -145,7 +147,8 @@ export class Game {
     if (this.debug && canals >= 0 && canals <= 2) config.canalOdds = [canals === 0 ? 1 : 0, canals === 1 ? 1 : 0, canals === 2 ? 1 : 0];
     if (this.debug && params.has('hill')) config.hillChance = params.get('hill') === '0' ? 0 : 1;
     this.city = generateCity(seed, config);
-    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea });
+    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
+    this.canalWater = built.canalWater;
     this.walls = built.walls;
     this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls);
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
@@ -435,6 +438,7 @@ export class Game {
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
     this.sea.update(frameDt);
+    this.canalWater?.update(frameDt);
     this.precipitation?.update(frameDt, this.chase.camera.position);
     this.landmarks.update(frameDt, this.chase.camera, window.innerHeight, this.chase.camera.fov);
     this.effects.update(frameDt, this.player, this.health);

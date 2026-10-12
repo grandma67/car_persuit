@@ -7,6 +7,7 @@ import type { Climate, TreeKind } from './Climate';
 import type { StreetProp } from './StreetProps';
 import { clipRect, groundBase, groundHeight, groundNormal, isFlat, type Terrain } from './Terrain';
 import { SEA_LEVEL } from '../render/Sea';
+import { CanalWater } from '../render/CanalWater';
 
 const WINDOW_CELLS = 8; // window texture is an 8×8 grid of window cells
 const FLOOR_HEIGHT = 3.5;
@@ -209,6 +210,7 @@ export interface CityLook {
   windowGlow: number; // emissive strength of lit windows (time of day, weather)
   wet: boolean; // rain: glossy, darker roads and pavements
   sea: number; // deep water colour, for the canals
+  shallow: number; // the sea's colour at the shore, where the canals open into it
 }
 
 /**
@@ -220,7 +222,7 @@ export function buildCity(
   scene: THREE.Scene,
   world: RAPIER.World,
   look: CityLook,
-): { walls: Set<number>; props: StreetProp[] } {
+): { walls: Set<number>; props: StreetProp[]; canalWater: CanalWater | null } {
   const { theme, climate, windowGlow, wet } = look;
   const terrain = city.terrain;
   const wallColliders = new Set<number>();
@@ -262,6 +264,7 @@ export function buildCity(
   scene.add(ground, quayMesh);
 
   // --- Canals: sea water between the quays, a parapet along each side and on every bridge ---
+  let canalWater: CanalWater | null = null;
   if (terrain.canals.length) {
     const water = new GeometryBuilder();
     const walls = new GeometryBuilder();
@@ -299,7 +302,8 @@ export function buildCity(
         }
       }
     }
-    const waterMesh = new THREE.Mesh(water.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.18, metalness: 0.2 }));
+    canalWater = new CanalWater(terrain.canals, island / 2, look.sea, look.shallow);
+    const waterMesh = new THREE.Mesh(water.build(), canalWater.material);
     waterMesh.receiveShadow = true;
     const wallMesh = new THREE.Mesh(walls.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
     wallMesh.castShadow = wallMesh.receiveShadow = true;
@@ -439,7 +443,7 @@ export function buildCity(
   const seaWallMesh = new THREE.Mesh(seaWall.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
   seaWallMesh.castShadow = seaWallMesh.receiveShadow = true;
   scene.add(seaWallMesh);
-  return { walls: wallColliders, props };
+  return { walls: wallColliders, props, canalWater };
 }
 
 function addBuilding(b: Building, y0: number, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng, snowy: boolean): void {

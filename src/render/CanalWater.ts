@@ -1,0 +1,158 @@
+import * as THREE from 'three';
+import type { Canal } from '../world/Terrain';
+
+// Still, stale canal water: unlike the open sea it barely moves. A murky green-brown body with
+// slowly drifting silt clouds (domain-warped noise), faint Voronoi light lines on the surface,
+// algae scum collecting along the quay walls, rafts of duckweed, and now and then a ring ripple
+// (a bug, a drip) that catches the light. Everything is computed in world space, so the strips
+// that overlap where two canals cross shade identically and never show a seam. Toward the open
+// sea the water clears to the sea's own shallows colour so the mouth blends in.
+
+const GLSL = /* glsl */ `
+  uniform float time;
+  uniform float islandHalf;
+  uniform vec4 canalA; // (along X ? 1 : 0, centre line, half width, active)
+  uniform vec4 canalB;
+  uniform vec3 deep;
+  uniform vec3 murk;
+  uniform vec3 algae;
+  uniform vec3 shallow;
+  varying vec2 vCanalPos;
+
+  float cwHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  vec2 cwHash2(vec2 p) {
+    return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453);
+  }
+  float cwNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(cwHash(i), cwHash(i + vec2(1, 0)), u.x), mix(cwHash(i + vec2(0, 1)), cwHash(i + vec2(1, 1)), u.x), u.y);
+  }
+  float cwFbm(vec2 p) {
+    float v = 0.0, a = 0.5;
+    for (int k = 0; k < 4; k++) { v += a * cwNoise(p); p = p * 2.03 + 17.1; a *= 0.5; }
+    return v;
+  }
+  // Distances to the nearest and second-nearest jittered cell point (F1, F2).
+  vec2 cwVoronoi(vec2 p, float t) {
+    vec2 i = floor(p), f = fract(p);
+    float f1 = 8.0, f2 = 8.0;
+    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+      vec2 g = vec2(x, y);
+      vec2 o = cwHash2(i + g);
+      o = 0.5 + 0.4 * sin(t + 6.2831 * o); // points wander slowly in place
+      float d = length(g + o - f);
+      if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
+    }
+    return vec2(f1, f2);
+  }
+  // Metres from the point to the nearest quay wall (negative outside the water).
+  float cwEdge(vec4 c, vec2 p) {
+    if (c.w < 0.5) return -1e3;
+    return c.z - abs((c.x > 0.5 ? p.y : p.x) - c.y);
+  }
+`;
+
+export class CanalWater {
+  readonly material: THREE.MeshStandardMaterial;
+  private time = { value: 0 };
+
+  constructor(canals: Canal[], islandHalf: number, seaColor: number, shallowColor: number) {
+    const sea = new THREE.Color(seaColor);
+    const deep = sea.clone().lerp(new THREE.Color(0x1f2d1a), 0.72);
+    const murk = deep.clone().lerp(new THREE.Color(0x4d5a2e), 0.6);
+    const algae = new THREE.Color(0x5f7a2c).lerp(sea, 0.15);
+    const pack = (c?: Canal) => (c ? new THREE.Vector4(c.axis === 'x' ? 1 : 0, c.at, c.half, 1) : new THREE.Vector4(0, 0, 0, 0));
+    this.material = new THREE.MeshStandardMaterial({ roughness: 0.15, metalness: 0.1 });
+    this.material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, {
+        time: this.time,
+        islandHalf: { value: islandHalf },
+        canalA: { value: pack(canals[0]) },
+        canalB: { value: pack(canals[1]) },
+        deep: { value: deep },
+        murk: { value: murk },
+        algae: { value: algae },
+        shallow: { value: new THREE.Color(shallowColor) },
+      });
+      shader.vertexShader = `varying vec2 vCanalPos;\n${shader.vertexShader}`.replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvCanalPos = (modelMatrix * vec4(position, 1.0)).xz;',
+      );
+      shader.fragmentShader = `${GLSL}\n${shader.fragmentShader}`
+        .replace(
+          '#include <color_fragment>',
+          /* glsl */ `
+          #include <color_fragment>
+          vec2 p = vCanalPos;
+          float t = time;
+          float edge = max(cwEdge(canalA, p), cwEdge(canalB, p));
+          // 0 in the canal, 1 out at the shore line where it opens to the sea.
+          float toSea = islandHalf - max(abs(p.x), abs(p.y));
+          float open = 1.0 - smoothstep(0.0, 30.0, toSea);
+
+          // Silt clouds: domain-warped fbm, drifting very slowly.
+          vec2 q = p * 0.035;
+          vec2 warp = vec2(cwFbm(q + vec2(t * 0.010, 0.0)), cwFbm(q + vec2(5.2, 1.3) - t * 0.008));
+          float silt = cwFbm(q * 1.3 + warp * 1.8 + t * 0.004);
+          vec3 water = mix(deep, murk, smoothstep(0.35, 0.75, silt) * 0.85);
+
+          // Light lines: thin bright borders between slowly wobbling Voronoi cells.
+          // Only in patches, where the murk thins.
+          vec2 v = cwVoronoi(p * 0.42 + warp * 1.2, t * 0.3);
+          float gap = v.y - v.x;
+          float lines = (1.0 - smoothstep(0.0, 0.05, gap)) * smoothstep(0.45, 0.75, cwNoise(p * 0.06 - t * 0.04));
+          lines *= 1.0 - smoothstep(0.03, 0.12, fwidth(gap)); // fade out before they alias in the distance
+          water += vec3(0.5, 0.65, 0.45) * lines * 0.07;
+
+          // Algae scum gathered against the quay walls, ragged at its edge.
+          float band = 1.0 - smoothstep(0.4, 2.5 + 4.0 * cwNoise(p * 0.12), edge);
+          float scum = band * smoothstep(0.3, 0.6, cwNoise(p * 0.55 + warp * 2.0));
+          // Duckweed: rafts of tiny round leaves drifting on the open water.
+          float raft = smoothstep(0.5, 0.64, cwFbm(p * 0.045 + vec2(13.0, 7.0) + t * 0.003));
+          float leaf = 1.0 - smoothstep(0.16, 0.24, cwVoronoi(p * 1.7, 0.0).x);
+          float weed = raft * leaf;
+          scum *= 1.0 - open;
+          weed *= 1.0 - open;
+          float cover = clamp(max(scum * 0.9, weed), 0.0, 1.0);
+          water = mix(water, algae * (0.85 + 0.3 * cwNoise(p * 2.1)), cover);
+          diffuseColor.rgb = mix(water, shallow, open * 0.8);
+          `,
+        )
+        .replace(
+          '#include <roughnessmap_fragment>',
+          // Open water is glassy, the scum matte.
+          '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.8, cover);',
+        )
+        .replace(
+          '#include <normal_fragment_maps>',
+          /* glsl */ `
+          #include <normal_fragment_maps>
+          // Ring ripples: each 10 m cell now and then sends out a ring that spreads and fades.
+          vec2 slope = vec2(0.0);
+          vec2 cell = floor(p / 10.0);
+          for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+            vec2 id = cell + vec2(x, y);
+            vec2 h = cwHash2(id * 1.37);
+            float period = 5.0 + 6.0 * h.x;
+            float life = fract(t / period + h.y);
+            vec2 centre = (id + 0.2 + 0.6 * cwHash2(id + floor(t / period + h.y))) * 10.0;
+            vec2 d = p - centre;
+            float r = length(d) + 1e-3;
+            float front = r - life * 7.0;
+            float ring = sin(front * 4.0) * exp(-front * front * 1.5) * (1.0 - life) * (1.0 - life);
+            slope += d / r * ring * 0.35;
+          }
+          // A faint, slow swell so the reflections are not mirror-flat.
+          slope += vec2(cwNoise(p * 0.3 + t * 0.1) - 0.5, cwNoise(p * 0.3 - t * 0.1 + 9.0) - 0.5) * 0.08;
+          slope *= 1.0 - cover;
+          normal = normalize((viewMatrix * vec4(normalize(vec3(-slope.x, 1.0, -slope.y)), 0.0)).xyz);
+          `,
+        );
+    };
+  }
+
+  update(dt: number): void {
+    this.time.value += dt;
+  }
+}
