@@ -1,6 +1,7 @@
 // Round, heading-up minimap: the city is pre-drawn once, then each frame it's rotated around the
 // player, with the road route and destination drawn on top.
 import type { CityData } from '../world/CityGenerator';
+import { groundHeight } from '../world/Terrain';
 
 const SIZE_CSS = 180; // on-screen diameter
 const VIEW_RADIUS = 230; // metres from the player to the map edge
@@ -65,6 +66,26 @@ export class Minimap {
     g.fillRect(0, 0, c.width, c.height);
     rect(0, 0, this.city.islandSize, this.city.islandSize, COLORS.promenade);
     rect(0, 0, this.city.size, this.city.size, COLORS.land);
+    // The hill: land lightens with height.
+    const { terrain } = this.city;
+    if (terrain.hill) {
+      const step = 8;
+      const half = this.city.size / 2;
+      for (let x = -half + step / 2; x < half; x += step) {
+        for (let z = -half + step / 2; z < half; z += step) {
+          const h = groundHeight(terrain, x, z) / terrain.hill.height;
+          if (h < 0.02) continue;
+          g.globalAlpha = h * 0.22;
+          rect(x, z, step, step, '#ffffff');
+        }
+      }
+      g.globalAlpha = 1;
+    }
+    const water = this.city.islandSize + 2 * SEA_MARGIN;
+    for (const c of terrain.canals) {
+      if (c.axis === 'x') rect(0, c.at, water, c.half * 2, COLORS.sea);
+      else rect(c.at, 0, c.half * 2, water, COLORS.sea);
+    }
     for (const b of this.city.blocks) if (b.park) rect(b.rect.x, b.rect.z, b.rect.w, b.rect.d, COLORS.park);
     for (const p of this.city.plazas) rect(p.x, p.z, p.w, p.d, COLORS.plaza);
     for (const b of this.city.blocks) if (b.square) rect(b.rect.x, b.rect.z, b.rect.w - 6, b.rect.d - 6, COLORS.plaza);
@@ -78,6 +99,7 @@ export class Minimap {
     }
     for (const r of this.city.roads) rect(r.rect.x, r.rect.z, r.rect.w, r.rect.d, COLORS.road);
     for (const i of this.city.intersections) rect(i.x, i.z, i.w, i.d, COLORS.road);
+    for (const b of terrain.bridges) rect(b.x, b.z, b.w, b.d, COLORS.road);
     return c;
   }
 

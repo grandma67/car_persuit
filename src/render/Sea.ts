@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const SIZE = 3000;
-const LEVEL = -1.6; // below the island top so waves never poke through the streets
+export const SEA_LEVEL = -1.6; // below the island top so waves never poke through the streets
 const NEAR_STEP = 4; // grid spacing (m) in the surf zone, fine enough for the shore swell
 const SURF_ZONE = 140; // metres of sea around the island meshed at NEAR_STEP
 const FAR_GROWTH = 1.18; // beyond that, each grid step is this much wider than the last
@@ -164,7 +164,7 @@ export class Sea {
         );
     };
     this.mesh = new THREE.Mesh(geo, material);
-    this.mesh.position.y = LEVEL;
+    this.mesh.position.y = SEA_LEVEL;
     this.mesh.receiveShadow = true;
   }
 

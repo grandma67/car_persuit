@@ -6,6 +6,8 @@ const overlaps = (a: Rect, b: Rect) =>
   Math.abs(a.x - b.x) < (a.w + b.w) / 2 - 1e-6 && Math.abs(a.z - b.z) < (a.d + b.d) / 2 - 1e-6;
 
 const SEEDS = [1, 42, 1234, 99999, 314159];
+const crossings = (city: { terrain: { canals: { axis: string }[] } }) =>
+  city.terrain.canals.filter((c) => c.axis === 'x').length * city.terrain.canals.filter((c) => c.axis === 'z').length;
 
 describe('generateCity', () => {
   it('is deterministic for a seed', () => {
@@ -20,8 +22,11 @@ describe('generateCity', () => {
   it.each(SEEDS)('seed %i: road network is connected with no dead ends', (seed) => {
     // Before any roadworks close junctions (Roadworks.test checks the network around those).
     const city = generateCity(seed, { ...DEFAULT_CITY, roadworksChance: 0 });
-    expect(city.graph.reachable(0).size).toBe(city.graph.nodes.length);
-    for (const node of city.graph.nodes) expect(node.neighbors.length).toBeGreaterThanOrEqual(2);
+    // Where two canals cross, that junction is open water: no roads at all.
+    const open = city.graph.nodes.filter((n) => n.neighbors.length);
+    expect(city.graph.nodes.length - open.length).toBe(crossings(city));
+    expect(city.graph.reachable(0).size).toBe(open.length);
+    for (const node of open) expect(node.neighbors.length).toBeGreaterThanOrEqual(2);
     expect(city.plazas.length).toBeGreaterThan(0);
   });
 

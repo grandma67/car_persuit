@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from './geometry';
 import { RAMP, type Landmark } from '../world/Landmarks';
+import { groundBase, groundHeight, groundNormal, groundTop, type Terrain } from '../world/Terrain';
 import { TireSmoke } from './TireSmoke';
 
 const STONE = 0xc9c3b6;
@@ -161,7 +162,7 @@ export class Landmarks {
    * lampGlow: 0 by day … 1 at night (fountain water glows a little after dark).
    * Returns collider handles so crash marks treat landmarks like walls.
    */
-  constructor(landmarks: Landmark[], scene: THREE.Scene, world: RAPIER.World, lampGlow: number, readonly colliders = new Set<number>()) {
+  constructor(landmarks: Landmark[], terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, lampGlow: number, readonly colliders = new Set<number>()) {
     const solid = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 });
     const metal = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.4, metalness: 0.6 });
     const water = new THREE.MeshStandardMaterial({
@@ -176,41 +177,53 @@ export class Landmarks {
 
     for (const l of landmarks) {
       if (l.kind === 'ramp') {
-        this.addRamp(l, scene, world, solid, metal);
+        this.addRamp(l, terrain, scene, world, solid, metal);
         continue;
       }
+      // A circle of darker paving under the centrepiece; on a slope it's a level terrace, its top
+      // flush with the ground uphill.
+      const pad = l.radius + 3.5;
+      const y = groundTop(terrain, l.x, l.z, pad);
+      const step = y - groundBase(terrain, l.x, l.z, pad) + 0.1;
       const group = new THREE.Group();
-      group.position.set(l.x, 0, l.z);
+      group.position.set(l.x, y, l.z);
       group.rotation.y = l.yaw;
-      // A circle of darker paving under the centrepiece.
-      const base = new THREE.Mesh(new THREE.CircleGeometry(l.radius + 3.5, 24).rotateX(-Math.PI / 2), paving);
-      base.position.y = 0.055;
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(pad, pad, step, 24).translate(0, 0.055 - step / 2, 0), paving);
       base.receiveShadow = true;
+      if (step > 0.3) {
+        this.colliders.add(world.createCollider(RAPIER.ColliderDesc.cylinder(step / 2, pad).setTranslation(l.x, y + 0.055 - step / 2, l.z)).handle);
+      }
       group.add(base);
       const mesh = new THREE.Mesh(models[l.kind], l.kind === 'statue' || l.kind === 'sculpture' ? metal : solid);
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
       if (l.kind === 'fountain') {
         group.add(new THREE.Mesh(fountainWater(), water));
-        this.spouts.push({ position: new THREE.Vector3(l.x, 3.45, l.z), budget: 0 });
+        this.spouts.push({ position: new THREE.Vector3(l.x, y + 3.45, l.z), budget: 0 });
       }
       scene.add(group);
 
       // Solid footprint: the basin for fountains, the plinth/base otherwise.
       const desc =
         l.kind === 'fountain'
-          ? RAPIER.ColliderDesc.cylinder(0.6, l.radius).setTranslation(l.x, 0.6, l.z)
-          : RAPIER.ColliderDesc.cuboid(l.radius * 0.8, 3, l.radius * 0.8).setTranslation(l.x, 3, l.z);
+          ? RAPIER.ColliderDesc.cylinder(0.6, l.radius).setTranslation(l.x, y + 0.6, l.z)
+          : RAPIER.ColliderDesc.cuboid(l.radius * 0.8, 3, l.radius * 0.8).setTranslation(l.x, y + 3, l.z);
       this.colliders.add(world.createCollider(desc).handle);
     }
     scene.add(this.spray.points);
   }
 
-  /** The jump monument: drivable curved deck (convex slices), solid plinths. */
-  private addRamp(l: Landmark, scene: THREE.Scene, world: RAPIER.World, solid: THREE.Material, metal: THREE.Material): void {
+  /** The jump monument: drivable curved deck (convex slices), solid plinths. Tilted with the slope. */
+  private addRamp(l: Landmark, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, solid: THREE.Material, metal: THREE.Material): void {
+    const up = new THREE.Vector3(0, 1, 0);
+    const n = groundNormal(terrain, l.x, l.z);
+    const q = new THREE.Quaternion()
+      .setFromUnitVectors(up, new THREE.Vector3(n.x, n.y, n.z))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(up, l.yaw));
+    const y = groundHeight(terrain, l.x, l.z) - 0.03;
     const group = new THREE.Group();
-    group.position.set(l.x, 0, l.z);
-    group.rotation.y = l.yaw;
+    group.position.set(l.x, y, l.z);
+    group.quaternion.copy(q);
     const model = rampMonument();
     const stone = new THREE.Mesh(model.stone, solid);
     const wings = new THREE.Mesh(model.bronze, metal);
@@ -222,7 +235,6 @@ export class Landmarks {
     group.updateMatrixWorld();
 
     // Deck: one convex slice per segment, from the ground up to the deck surface.
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), l.yaw);
     const rot = { x: q.x, y: q.y, z: q.z, w: q.w };
     const w = RAMP.width / 2;
     for (let i = 0; i < RAMP_SEGMENTS; i++) {
@@ -235,13 +247,13 @@ export class Landmarks {
         -w, y0, z0, w, y0, z0, -w, y1, z1, w, y1, z1,
       ]);
       const desc = RAPIER.ColliderDesc.convexHull(pts);
-      if (desc) world.createCollider(desc.setTranslation(l.x, 0, l.z).setRotation(rot).setFriction(1));
+      if (desc) world.createCollider(desc.setTranslation(l.x, y, l.z).setRotation(rot).setFriction(1));
     }
     // Plinths are solid walls (they take crash marks).
     const plinthH = deckHeight(RAMP.lip) + 0.7;
     for (const side of [-1, 1]) {
       const local = new THREE.Vector3(side * (w + 0.9), plinthH / 2, RAMP.lip - 1.4).applyQuaternion(q);
-      const desc = RAPIER.ColliderDesc.cuboid(0.8, plinthH / 2, 1.6).setTranslation(l.x + local.x, local.y, l.z + local.z).setRotation(rot);
+      const desc = RAPIER.ColliderDesc.cuboid(0.8, plinthH / 2, 1.6).setTranslation(l.x + local.x, y + local.y, l.z + local.z).setRotation(rot);
       this.colliders.add(world.createCollider(desc).handle);
     }
   }

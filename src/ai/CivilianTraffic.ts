@@ -5,6 +5,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/Rng';
 import type { RoadGraph } from '../world/RoadGraph';
 import type { ApproachControl } from '../world/TrafficControl';
+import { FLAT, type GroundHeight } from '../world/Terrain';
 import { Vehicle } from '../vehicles/Vehicle';
 import {
   PLAYER_SPEC,
@@ -98,7 +99,8 @@ export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: nu
     // Right of the heading is (-f.z, f.x).
     const ox = p.x + f.x * start - f.z * reach * side;
     const oz = p.z + f.z * start + f.x * reach * side;
-    const ray = new RAPIER.Ray({ x: ox, y, z: oz }, { x: f.x, y: 0, z: f.z });
+    // Along the car's pitch, so on a hill it still sees the car ahead up (or down) the slope.
+    const ray = new RAPIER.Ray({ x: ox, y, z: oz }, { x: f.x, y: f.y, z: f.z });
     const hit = world.castRay(ray, best?.distance ?? range, true, RAPIER.QueryFilterFlags.EXCLUDE_FIXED, undefined, vehicle.collider, vehicle.body);
     if (!hit) continue;
     best = { distance: hit.timeOfImpact, aligned: true, moving: false, side };
@@ -137,6 +139,7 @@ export class CivilianTraffic {
     private controls: Map<string, ApproachControl>,
     private rng: Rng,
     private headlights: number,
+    private ground: GroundHeight = FLAT,
   ) {
     // Forward sensor: a ray from the front bumper that only sees moving bodies (cars), so
     // buildings at junction corners don't make drivers brake.
@@ -197,7 +200,7 @@ export class CivilianTraffic {
     const ramp = !this.rampTruck && this.rng.next() < TRAFFIC.rampChance;
     const spec = ramp ? rampTruckSpec() : civilianSpec(this.rng);
     // Drop tall bodies in from a little higher so their wheels land rather than spawn in the road.
-    const y = 1.2 - (spec.wheelY ?? 0);
+    const y = this.ground(x, z) + 1.2 - (spec.wheelY ?? 0);
     const vehicle = new Vehicle(this.world, spec, { x, y, z }, Math.atan2(dx, dz));
     vehicle.tractionAssist = CIVILIAN_TRACTION;
     vehicle.headlights = this.headlights;

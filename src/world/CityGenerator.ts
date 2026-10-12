@@ -1,12 +1,13 @@
 // Seed → city layout as plain data. CityBuilder turns it into meshes and colliders.
 import { Rng } from '../core/Rng';
 import { RoadGraph, type RoadNode } from './RoadGraph';
-import { generateStreetProps, type StreetProp } from './StreetProps';
+import { footprintsOverlap, generateStreetProps, propFootprint, type StreetProp } from './StreetProps';
 import { generateTrafficControl, type RoadMark } from './TrafficControl';
 import { planLandmarks, type Landmark } from './Landmarks';
 import { planRoadworks, type Roadworks } from './Roadworks';
+import { inCanal, landPieces, onGround, planTerrain, type Terrain, type TerrainConfig } from './Terrain';
 
-export interface CityConfig {
+export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
   blockSize: number; // metres
   roadWidth: number;
@@ -26,6 +27,10 @@ export const DEFAULT_CITY: CityConfig = {
   removeRoadFraction: 0.1,
   parkChance: 0.08,
   roadworksChance: 0.5,
+  hillChance: 0.75,
+  hillHeight: [8, 22],
+  maxGrade: 0.11,
+  canalOdds: [0.3, 0.45, 0.25],
 };
 
 export type District = 'downtown' | 'midtown' | 'residential' | 'industrial';
@@ -75,6 +80,7 @@ export interface CityData {
   streetProps: StreetProp[]; // breakable lamps, hydrants, benches, fences, signs, signals
   roadMarks: RoadMark[]; // zebra crossings and stop lines
   roadworks: Roadworks[]; // the rare closed junctions (usually none)
+  terrain: Terrain; // hill, canals and their bridges
   spawn: { x: number; z: number; yaw: number };
 }
 
@@ -85,6 +91,7 @@ interface Edge {
   i: number; // grid coords of the edge's lower node
   j: number;
   removed: boolean;
+  canal: boolean; // under a canal: no road, no plaza
 }
 
 export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): CityData {
@@ -103,8 +110,8 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const edges: Edge[] = [];
   for (let j = 0; j <= n; j++) {
     for (let i = 0; i <= n; i++) {
-      if (i < n) edges.push({ a: nodeId(i, j), b: nodeId(i + 1, j), horizontal: true, i, j, removed: false });
-      if (j < n) edges.push({ a: nodeId(i, j), b: nodeId(i, j + 1), horizontal: false, i, j, removed: false });
+      if (i < n) edges.push({ a: nodeId(i, j), b: nodeId(i + 1, j), horizontal: true, i, j, removed: false, canal: false });
+      if (j < n) edges.push({ a: nodeId(i, j), b: nodeId(i, j + 1), horizontal: false, i, j, removed: false, canal: false });
     }
   }
   const link = (e: Edge, on: boolean) => {
@@ -121,17 +128,47 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   edges.forEach((e) => link(e, true));
   const graph = new RoadGraph(nodes);
 
+  // --- Canals (own RNG stream): the roads along a canal's line become water. Every road crossing
+  // it gets a bridge; where two canals cross, that junction is lost to the water altogether. ---
+  const islandSize = size + config.promenade * 2;
+  const shape = planTerrain(new Rng(seed ^ 0x7e44a1), config, n, line, islandSize / 2, roadWidth / 2 + config.sidewalk);
+  const canalLines = (axis: 'x' | 'z') => new Set(shape.canals.filter((c) => c.axis === axis).map((c) => c.line));
+  const alongX = canalLines('x');
+  const alongZ = canalLines('z');
+  for (const e of edges) {
+    if (e.horizontal ? alongX.has(e.j) : alongZ.has(e.i)) {
+      e.canal = true;
+      link(e, false);
+    }
+  }
+  const bridges: Rect[] = [];
+  const canalNodes = new Set<number>();
+  for (const c of shape.canals) {
+    for (let k = 0; k <= n; k++) {
+      const [i, j] = c.axis === 'x' ? [k, c.line] : [c.line, k];
+      canalNodes.add(nodeId(i, j));
+      if ((c.axis === 'x' ? alongZ : alongX).has(k)) continue; // the canals' crossing: open water
+      // The ring road's bridges also carry the promenade out to the sea wall.
+      const outer = k === 0 ? -1 : k === n ? 1 : 0;
+      const across = roadWidth + (outer ? config.promenade : 0);
+      const centre = line(k) + (outer * config.promenade) / 2;
+      bridges.push(c.axis === 'x' ? { x: centre, z: c.at, w: across, d: c.half * 2 } : { x: c.at, z: centre, w: c.half * 2, d: across });
+    }
+  }
+  const terrain: Terrain = { ...shape, bridges, land: landPieces(islandSize / 2, shape.canals) };
+  const openNodes = nodes.filter((nd) => nd.neighbors.length).length;
+
   // Turn some inner segments into plazas. The outer ring always stays; no dead ends are allowed
   // (degree ≥ 2) and the network must stay connected.
   const isBorder = (e: Edge) => (e.horizontal ? e.j === 0 || e.j === n : e.i === 0 || e.i === n);
-  const candidates = edges.filter((e) => !isBorder(e));
+  const candidates = edges.filter((e) => !isBorder(e) && !e.canal);
   shuffle(candidates, rng);
   let toRemove = Math.round(candidates.length * config.removeRoadFraction);
   for (const e of candidates) {
     if (toRemove === 0) break;
     if (nodes[e.a].neighbors.length <= 2 || nodes[e.b].neighbors.length <= 2) continue;
     link(e, false);
-    if (graph.reachable(e.a).size === nodes.length) {
+    if (graph.reachable(e.a).size === openNodes) {
       e.removed = true;
       toRemove--;
     } else {
@@ -143,9 +180,9 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
     e.horizontal
       ? { x: (line(e.i) + line(e.i + 1)) / 2, z: line(e.j), w: blockSize, d: roadWidth }
       : { x: line(e.i), z: (line(e.j) + line(e.j + 1)) / 2, w: roadWidth, d: blockSize };
-  const roads = edges.filter((e) => !e.removed).map((e) => ({ a: e.a, b: e.b, rect: edgeRect(e) }));
+  const roads = edges.filter((e) => !e.removed && !e.canal).map((e) => ({ a: e.a, b: e.b, rect: edgeRect(e) }));
   const plazaEdges = edges.filter((e) => e.removed);
-  const intersections = nodes.map((nd) => ({ x: nd.x, z: nd.z, w: roadWidth, d: roadWidth }));
+  const intersections = nodes.filter((nd) => nd.neighbors.length).map((nd) => ({ x: nd.x, z: nd.z, w: roadWidth, d: roadWidth }));
 
   // --- Districts: downtown core by distance, then smooth noise splits residential/industrial ---
   const noise = makeValueNoise(rng, 4);
@@ -202,16 +239,39 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const len = Math.hypot(dx, dz);
   const spawn = { x: centre.x + (dx / len) * 15, z: centre.z + (dz / len) * 15, yaw: Math.atan2(dx, dz) };
 
-  const islandSize = size + config.promenade * 2;
-  // Roadworks close junctions away from the spawn, before signs and signals go up.
-  const keepOpen = new Set([centre.id, ...centre.neighbors, ...centre.neighbors.flatMap((id) => nodes[id].neighbors)]);
+  // Roadworks close junctions away from the spawn (and off the bridges), before signs and signals go up.
+  const keepOpen = new Set([centre.id, ...centre.neighbors, ...centre.neighbors.flatMap((id) => nodes[id].neighbors), ...canalNodes]);
   const works = planRoadworks(graph, roadWidth, size, keepOpen, config.roadworksChance, new Rng(seed ^ 0x0c0e5));
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
   const traffic = generateTrafficControl(graph, blocksOut, config, size, new Rng(seed ^ 0x7aff1c));
-  const streetProps = [...generateStreetProps(blocksOut, plazas, landmarks, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props, ...works.cones];
+  // Furniture is laid out for the full grid; drop whatever would stand in a canal or on a tree
+  // (park benches are scattered without looking at the trees).
+  const dry = (x: number, z: number, r: number) => onGround(terrain, x, z, r);
+  const keptTrees = trees.filter((t) => dry(t.x, t.z, 1.5));
+  const treeCells = new Map<string, { x: number; z: number }[]>();
+  const cellOf = (x: number, z: number) => `${Math.floor(x / 10)},${Math.floor(z / 10)}`;
+  for (const t of keptTrees) treeCells.set(cellOf(t.x, t.z), [...(treeCells.get(cellOf(t.x, t.z)) ?? []), t]);
+  const onTree = (p: StreetProp) => {
+    const fp = propFootprint(p);
+    for (let a = -1; a <= 1; a++) {
+      for (let b = -1; b <= 1; b++) {
+        const near = treeCells.get(cellOf(p.x + a * 10, p.z + b * 10)) ?? [];
+        if (near.some((t) => footprintsOverlap(fp, { x: t.x, z: t.z, hx: 0.5, hz: 0.5, yaw: 0 }))) return true;
+      }
+    }
+    return false;
+  };
+  const streetProps = [...generateStreetProps(blocksOut, plazas, landmarks, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props, ...works.cones]
+    .filter((p) => dry(p.x, p.z, 0.8) && (p.kind === 'cone' || !onTree(p)));
   return {
-    config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut, buildings, props, trees,
-    landmarks, streetProps, roadMarks: traffic.marks, roadworks: works.sites, spawn,
+    config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut,
+    buildings: buildings.filter((b) => !inCanal(terrain, b.x, b.z, Math.max(b.w, b.d) / 2)),
+    props: props.filter((p) => dry(p.x, p.z, Math.max(p.w, p.d) / 2)),
+    trees: keptTrees,
+    landmarks: landmarks.filter((l) => dry(l.x, l.z, l.radius)),
+    streetProps,
+    roadMarks: traffic.marks.filter((m) => dry(m.x, m.z, 0)),
+    roadworks: works.sites, terrain, spawn,
   };
 }
 

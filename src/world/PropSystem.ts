@@ -7,6 +7,7 @@ import type { CityData } from './CityGenerator';
 import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
 import type { TreeKind } from './Climate';
 import { signalState, type SignalLight } from './TrafficControl';
+import { groundBase, groundHeight, groundNormal } from './Terrain';
 
 const GRID_CELL = 10; // metres, spatial hash for vehicle-vs-prop checks
 const LAMP_HEAD = new THREE.Vector3(0, 5.8, 1.3); // bulb position in lamp space
@@ -81,6 +82,7 @@ interface Attachment {
 
 interface PropState {
   def: StreetProp;
+  y: number; // ground under it
   body: RAPIER.RigidBody | null; // null while no vehicle is near (intact props only)
   broken: boolean;
   key: ModelKey;
@@ -461,9 +463,10 @@ export class PropSystem {
       const spec = propSpec(def);
       this.q.setFromAxisAngle(UP, def.yaw);
       const key = modelKey(def);
-      const state: PropState = { def, body: null, broken: false, key, instance: next[key]++, attachments: [] };
+      const y = groundBase(city.terrain, def.x, def.z, Math.max(spec.hx, spec.hz));
+      const state: PropState = { def, y, body: null, broken: false, key, instance: next[key]++, attachments: [] };
       this.props.push(state);
-      const world4 = new THREE.Matrix4().compose(this.v.set(def.x, 0, def.z), this.q, this.scale(def));
+      const world4 = new THREE.Matrix4().compose(this.v.set(def.x, y, def.z), this.q, this.scale(def));
       this.meshes[key].setMatrixAt(state.instance, world4);
       if (TINTED.has(def.kind)) this.meshes[key].setColorAt(state.instance, this.color.setHex(def.color ?? 0xffffff));
 
@@ -475,8 +478,13 @@ export class PropSystem {
       if (def.kind === 'lamp') {
         const li = (state.pool = state.instance); // lamp, bulb and pool share an index
         attach(this.bulbs, li, new THREE.Matrix4().makeTranslation(LAMP_HEAD), warm);
+        // The pool lies on the ground, tilted to the slope.
         const head = LAMP_HEAD.clone().applyQuaternion(this.q);
-        this.pools.setMatrixAt(li, new THREE.Matrix4().makeTranslation(def.x + head.x, 0.06, def.z + head.z));
+        const px = def.x + head.x;
+        const pz = def.z + head.z;
+        const n = groundNormal(city.terrain, px, pz);
+        const tilt = new THREE.Quaternion().setFromUnitVectors(UP, new THREE.Vector3(n.x, n.y, n.z));
+        this.pools.setMatrixAt(li, new THREE.Matrix4().compose(new THREE.Vector3(px, groundHeight(city.terrain, px, pz) + 0.1, pz), tilt, this.one));
       } else if (def.kind === 'sign') {
         const variant = def.variant ?? 'stop';
         attach(faceMesh[variant], nextFace[variant]++, new THREE.Matrix4().makeTranslation(0, SIGN_FACE_Y, 0.065));
@@ -513,7 +521,7 @@ export class PropSystem {
     this.q.setFromAxisAngle(UP, p.def.yaw);
     p.body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.fixed()
-        .setTranslation(p.def.x, 0, p.def.z)
+        .setTranslation(p.def.x, p.y, p.def.z)
         .setRotation({ x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w }),
     );
     this.world.createCollider(
@@ -649,7 +657,7 @@ export class PropSystem {
     this.moving.add(i);
 
     const t = body.translation();
-    const y = tall ? 2 : 0.5;
+    const y = p.y + (tall ? 2 : 0.5);
     return { kind: p.def.kind, tree: p.def.tree, position: new THREE.Vector3(t.x, y, t.z), strength: Math.min(1, speed / 30) };
   }
 

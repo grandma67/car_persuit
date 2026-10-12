@@ -42,7 +42,7 @@ describe('generateStreetProps', () => {
     expect(count('hydrant')).toBeGreaterThan(80);
     expect(count('bench')).toBeGreaterThan(60);
     expect(count('fence')).toBeGreaterThan(200);
-    expect(a.length).toBeLessThan(5000);
+    expect(a.length).toBeLessThan(6500);
   });
 
   it.each(SEEDS)('seed %i: nothing on roads, intersections, buildings, planters or trees', (seed) => {

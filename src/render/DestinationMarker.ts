@@ -49,11 +49,11 @@ export class DestinationMarker {
     this.group.visible = false;
   }
 
-  show(x: number, z: number, final: boolean): void {
+  show(x: number, y: number, z: number, final: boolean): void {
     const color = new THREE.Color(final ? 0x4dff88 : 0xffb020);
     this.beamMaterial.uniforms.color.value.copy(color);
     this.ringMaterial.color.copy(color);
-    this.group.position.set(x, 0, z);
+    this.group.position.set(x, y, z);
     this.group.visible = true;
   }
 

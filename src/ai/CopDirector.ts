@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/Rng';
 import type { RoadGraph } from '../world/RoadGraph';
+import { FLAT, type GroundHeight } from '../world/Terrain';
 import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS } from '../vehicles/VehicleSpecs';
 import { Health } from '../gameplay/Health';
@@ -77,6 +78,7 @@ export class CopDirector {
     private rng: Rng,
     private headlights: number,
     private tuning: DirectorTuning = DIRECTOR_TUNING,
+    private ground: GroundHeight = FLAT,
   ) {
     this.spawnTimer = tuning.firstSpawnDelay;
   }
@@ -183,7 +185,9 @@ export class CopDirector {
       const across = Math.atan2(-dz, dx); // perpendicular to the road
       for (const side of [-1, 1]) {
         const cop = this.create('suv');
-        cop.vehicle.teleport(cx + -dz * side * 3, 1.2, cz + dx * side * 3, across + (side > 0 ? Math.PI : 0));
+        const x = cx + -dz * side * 3;
+        const z = cz + dx * side * 3;
+        cop.vehicle.teleport(x, this.ground(x, z) + 1.2, z, across + (side > 0 ? Math.PI : 0));
         cop.controller.holdUntilClose = true;
       }
       return true;
@@ -282,7 +286,7 @@ export class CopDirector {
     for (const c of candidates) {
       const spot = this.aroundCorner(c.node, c.toward >= 0 ? c.toward : towardPlayer(c.node), player);
       if (spot) {
-        vehicle.teleport(spot.x, 1.2, spot.z, spot.yaw, spot.speed);
+        vehicle.teleport(spot.x, this.ground(spot.x, spot.z) + 1.2, spot.z, spot.yaw, spot.speed);
         return;
       }
     }
@@ -291,6 +295,6 @@ export class CopDirector {
     const pool = [behind.filter(ok), inRange.filter(ok), inRange, g.nodes.filter((n) => n.neighbors.length)].find((l) => l.length)!;
     const node = this.rng.pick(pool);
     const next = g.nodes[towardPlayer(node.id)];
-    vehicle.teleport(node.x, 1.2, node.z, Math.atan2(next.x - node.x, next.z - node.z));
+    vehicle.teleport(node.x, this.ground(node.x, node.z) + 1.2, node.z, Math.atan2(next.x - node.x, next.z - node.z));
   }
 }

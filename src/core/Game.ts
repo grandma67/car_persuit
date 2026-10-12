@@ -7,13 +7,14 @@ import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { buildCarMesh } from '../vehicles/carMesh';
 import { ChaseCamera } from '../render/ChaseCamera';
-import { DEFAULT_CITY, generateCity, type CityData } from '../world/CityGenerator';
+import { DEFAULT_CITY, generateCity, type CityConfig, type CityData } from '../world/CityGenerator';
+import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
 import { applyClimate, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
 import { Sky } from '../render/Sky';
 import { Precipitation } from '../render/Precipitation';
-import { CopDirector, type Cop } from '../ai/CopDirector';
+import { CopDirector, DIRECTOR_TUNING, type Cop } from '../ai/CopDirector';
 import { CivilianTraffic, civilianSpecVariants } from '../ai/CivilianTraffic';
 import { approachControls } from '../world/TrafficControl';
 import { CrashMarks } from '../render/CrashMarks';
@@ -58,6 +59,7 @@ export class Game {
   private sun: THREE.DirectionalLight;
   private player: Vehicle;
   readonly city: CityData;
+  private ground: GroundHeight = (x, z) => groundHeight(this.city.terrain, x, z);
   private fog: THREE.Fog;
   private time: TimeOfDay;
   private precipitation: Precipitation | null = null;
@@ -135,22 +137,27 @@ export class Game {
     this.scene.add(this.sun, this.sun.target);
 
     this.world.timestep = FIXED_DT;
-    // ?roadworks forces every (rare) roadworks slot, for testing.
-    const forceWorks = new URLSearchParams(window.location.search).has('roadworks');
-    this.city = generateCity(seed, forceWorks ? { ...DEFAULT_CITY, roadworksChance: 1 } : DEFAULT_CITY);
-    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain' });
+    // ?roadworks forces every (rare) roadworks slot, for testing. With ?debug, ?canals=0|1|2 and
+    // ?hill=0|1 force the terrain.
+    const config: CityConfig = { ...DEFAULT_CITY };
+    if (params.has('roadworks')) config.roadworksChance = 1;
+    const canals = Number.parseInt(params.get('canals') ?? '', 10);
+    if (this.debug && canals >= 0 && canals <= 2) config.canalOdds = [canals === 0 ? 1 : 0, canals === 1 ? 1 : 0, canals === 2 ? 1 : 0];
+    if (this.debug && params.has('hill')) config.hillChance = params.get('hill') === '0' ? 0 : 1;
+    this.city = generateCity(seed, config);
+    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea });
     this.walls = built.walls;
-    this.landmarks = new Landmarks(this.city.landmarks, this.scene, this.world, time.lampGlow, this.walls);
+    this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls);
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow);
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
       leaves: theme.leaves[0],
       trunk: theme.trunk,
       snowy: climate.snowRoofs,
     });
-    this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.scene, this.world, this.walls));
+    this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
 
     const { spawn } = this.city;
-    this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: 1.2, z: spawn.z }, spawn.yaw);
+    this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
     this.player.headlights = Math.max({ day: 0, afternoon: 0.45, night: 1 }[time.name], weather === 'clear' ? 0 : 0.45);
     this.player.setGrip(playerGrip(climate, weather));
     this.effects = new Effects(this.scene, climate.spray);
@@ -166,7 +173,7 @@ export class Game {
     this.destinations = pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id);
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
 
-    this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world), new Rng(seed ^ 0xc095), this.player.headlights);
+    this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground);
     this.traffic = new CivilianTraffic(
       this.world,
       this.scene,
@@ -174,6 +181,7 @@ export class Game {
       approachControls(this.city.graph, this.city.streetProps),
       new Rng(seed ^ 0x7a4f1c),
       this.player.headlights,
+      this.ground,
     );
     this.scene.add(this.crashMarks.mesh);
     this.sirens = new Sirens(this.scene);
@@ -323,7 +331,7 @@ export class Game {
       }
       // T: jump to the current destination. Y: leave 3 seconds on the clock.
       const target = this.mission.current;
-      if (pressed('KeyT') && target && this.state === 'playing') this.player.teleport(target.x, 1.2, target.z, 0);
+      if (pressed('KeyT') && target && this.state === 'playing') this.player.teleport(target.x, this.ground(target.x, target.z) + 1.2, target.z, 0);
       if (pressed('KeyY') && this.state === 'playing') this.mission.elapsed = MISSION.timeLimit - 3;
       if (pressed('KeyK') && this.state === 'playing') this.raiseStars(this.wanted.bump());
     }
@@ -371,7 +379,10 @@ export class Game {
         if (hit > 3) {
           car.controller.hit();
           // Hitting a civilian draws attention — but driving up the ramp truck's deck isn't a crash.
-          const onRamp = car.vehicle.spec.body === 'ramptruck' && this.player.position.y > car.vehicle.position.y - 0.5;
+          // Measured along the truck's own up axis, so it still holds parked on a slope.
+          const onRamp =
+            car.vehicle.spec.body === 'ramptruck' &&
+            this.player.position.clone().sub(car.vehicle.position).dot(new THREE.Vector3(0, 1, 0).applyQuaternion(car.vehicle.quaternion)) > -0.5;
           if (this.state === 'playing' && !onRamp && car.vehicle.position.distanceTo(this.player.position) < 8) this.raiseStars(this.wanted.civilianHit());
         }
       }
@@ -582,7 +593,7 @@ export class Game {
   private showDestination(): void {
     const target = this.mission.current;
     if (!target) return;
-    this.marker.show(target.x, target.z, this.mission.index === this.mission.total - 1);
+    this.marker.show(target.x, this.ground(target.x, target.z), target.z, this.mission.index === this.mission.total - 1);
     this.routeTimer = 0; // recompute the route on the next update
   }
 

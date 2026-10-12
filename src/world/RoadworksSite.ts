@@ -6,6 +6,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from '../render/geometry';
 import type { Roadworks, WorksItem, WorksItemKind } from './Roadworks';
+import { groundBase, groundHeight, groundNormal, type Terrain } from './Terrain';
 
 const DRUM_SPEED = 1.2; // rad/s
 const BEACON_ON = 0xffa21a;
@@ -179,15 +180,17 @@ export class RoadworksSite {
   private color = new THREE.Color();
 
   /** Adds the site to the scene and the world; collider handles go into `walls`. */
-  constructor(site: Roadworks, scene: THREE.Scene, world: RAPIER.World, walls: Set<number>) {
+  constructor(site: Roadworks, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, walls: Set<number>) {
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.6, metalness: 0.15 });
     const up = new THREE.Vector3(0, 1, 0);
     const beaconAt: THREE.Vector3[] = [];
     const lampAt: THREE.Vector3[] = [];
 
+    // Machines and kit stand upright on the lowest ground under them.
+    const baseOf = (item: WorksItem) => groundBase(terrain, item.x, item.z, Math.max(item.hw, item.hl));
     const place = (geo: THREE.BufferGeometry, item: WorksItem) => {
       const mesh = new THREE.Mesh(geo, material);
-      mesh.position.set(item.x, 0, item.z);
+      mesh.position.set(item.x, baseOf(item), item.z);
       mesh.rotation.y = item.yaw;
       mesh.castShadow = mesh.receiveShadow = true;
       scene.add(mesh);
@@ -202,8 +205,11 @@ export class RoadworksSite {
           new THREE.PlaneGeometry(item.hw * 2, item.hl * 2).rotateX(-Math.PI / 2),
           new THREE.MeshStandardMaterial({ color: Math.abs(item.x * 7 + item.z * 13) % 2 < 1 ? 0x4a3a2a : 0x1e1f22, roughness: 1 }),
         );
-        patch.position.set(item.x, 0.026, item.z);
-        patch.rotation.y = item.yaw;
+        const n = groundNormal(terrain, item.x, item.z);
+        patch.position.set(item.x, groundHeight(terrain, item.x, item.z) + 0.026, item.z);
+        patch.quaternion
+          .setFromUnitVectors(up, new THREE.Vector3(n.x, n.y, n.z))
+          .multiply(new THREE.Quaternion().setFromAxisAngle(up, item.yaw));
         patch.receiveShadow = true;
         scene.add(patch);
         continue;
@@ -255,7 +261,7 @@ export class RoadworksSite {
       const h = SOLID_HEIGHT[item.kind] / 2;
       const q = new THREE.Quaternion().setFromAxisAngle(up, item.yaw);
       const c = world.createCollider(
-        RAPIER.ColliderDesc.cuboid(item.hw, h, item.hl).setTranslation(item.x, h, item.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
+        RAPIER.ColliderDesc.cuboid(item.hw, h, item.hl).setTranslation(item.x, baseOf(item) + h, item.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
       );
       walls.add(c.handle);
     }

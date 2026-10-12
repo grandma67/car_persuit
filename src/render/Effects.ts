@@ -62,7 +62,7 @@ export class Effects {
     if (b.kind === 'lamp' || b.kind === 'signal') {
       for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0);
     } else if (b.kind === 'hydrant') {
-      this.geysers.push({ position: b.position.clone().setY(0.3), timeLeft: GEYSER_SECONDS, budget: 0 });
+      this.geysers.push({ position: b.position.clone().setY(b.position.y - 0.2), timeLeft: GEYSER_SECONDS, budget: 0 });
     }
   }
 
