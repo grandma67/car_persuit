@@ -69,6 +69,12 @@ export class Vehicle {
   private signalSince = 0;
   /** 0..1 how hard the tyres are sliding (drift, handbrake or locked brakes). */
   skid = 0;
+  /**
+   * 0..1 how hard the front tyres are sliding: scrubbing sideways (understeer, a spin) or braking
+   * hard. Not the handbrake: that locks only the rears, and in a drift the fronts point where the
+   * car is going, so they roll and leave no mark.
+   */
+  frontSkid = 0;
   /** Simulated gearbox with shift cuts and kicks (the player's car). */
   gearShifts = false;
   private gear = 0;
@@ -264,6 +270,10 @@ export class Vehicle {
     skid = Math.max(skid, Math.abs(this.steer) * THREE.MathUtils.clamp((absSpeed - 20) / 15, 0, 1) * 0.35);
     if (brake >= s.brakeForce * 0.5 && absSpeed > 8) skid = Math.max(skid, 0.4);
     this.skid = c.wheelIsInContact(2) || c.wheelIsInContact(3) ? skid : 0;
+    // Weight moves forward under braking, so the fronts mark hardest when you stand on the brakes.
+    let frontSkid = THREE.MathUtils.clamp((Math.abs(this.frontSlipSpeed(steerAngle)) - 2.5) / 6, 0, 1);
+    if (brake >= s.brakeForce * 0.5 && absSpeed > 8) frontSkid = Math.max(frontSkid, 0.5);
+    this.frontSkid = c.wheelIsInContact(0) || c.wheelIsInContact(1) ? frontSkid : 0;
 
     if (this.tractionAssist > 0 && (c.wheelIsInContact(0) || c.wheelIsInContact(2))) this.assistTraction(dt);
 
@@ -382,6 +392,23 @@ export class Vehicle {
     const v = this.body.linvel();
     const f = this.forward(tmpVec);
     return Math.atan2(v.x * f.z - v.z * f.x, v.x * f.x + v.z * f.z);
+  }
+
+  /** Sideways speed of the front tyres across the way they're steered (m/s, 0 = rolling true). */
+  private frontSlipSpeed(steerAngle: number): number {
+    const v = this.body.linvel();
+    const wy = this.body.angvel().y;
+    const f = this.forward(tmpVec);
+    // Velocity at the front axle: the body's, plus the yaw spin swinging the nose round.
+    const rx = f.x * this.spec.wheelZ;
+    const rz = f.z * this.spec.wheelZ;
+    const vx = v.x + wy * rz;
+    const vz = v.z - wy * rx;
+    const cos = Math.cos(steerAngle);
+    const sin = Math.sin(steerAngle);
+    const hx = f.x * cos + f.z * sin;
+    const hz = -f.x * sin + f.z * cos;
+    return vx * hz - vz * hx;
   }
 
   /** Remove part of the sideways velocity, and of any yaw spin the steering isn't asking for. */

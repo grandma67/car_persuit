@@ -5,6 +5,7 @@ import type { PropBreak } from '../world/PropSystem';
 import { SkidMarks } from './SkidMarks';
 import { TireSmoke } from './TireSmoke';
 
+const FRONT_WHEELS = [0, 1];
 const REAR_WHEELS = [2, 3];
 const SMOKE_PER_SECOND = 55; // per rear wheel at full skid
 const ENGINE_SMOKE_PER_SECOND = 30;
@@ -121,6 +122,12 @@ export class Effects {
       const contact = player.wheelContact(w, this.tmpContact);
       this.skidMarks.add(w, skid > 0.25 ? contact : null, skid);
       if (contact) for (let i = 0; i < puffs; i++) this.smoke.emit(contact, this.tmpVel, skid);
+    }
+    // Fronts leave their own marks when they scrub or the brakes bite (no smoke: the rears carry that).
+    const frontSkid = player.frontSkid;
+    for (const w of FRONT_WHEELS) {
+      const contact = frontSkid > 0.25 ? player.wheelContact(w, this.tmpContact) : null;
+      this.skidMarks.add(w, contact, frontSkid);
     }
     this.smoke.update(dt);
     this.updateExhaust(dt, player);
