@@ -6,6 +6,14 @@ import { seedFromUrl } from './core/Rng';
 document.addEventListener('selectstart', (e) => e.preventDefault());
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// Service worker makes the game installable as an app and playable offline. Production only:
+// in dev it would cache Vite's unhashed modules and serve stale code.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
 const splash = document.getElementById('splash')!;
 const bar = splash.querySelector<HTMLElement>('.splash-bar-fill')!;
 const status = splash.querySelector<HTMLElement>('.splash-status')!;
