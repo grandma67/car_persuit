@@ -22,6 +22,10 @@ const COLORS = {
   ramp: '#f2c12e',
 };
 
+/** Screen-space icons, pointing up (−y): a chevron on a bar for ramp monuments, an arrow for the truck. */
+const RAMP_ICON = [[0, -10], [8, -1], [3, -1], [3, 8], [-3, 8], [-3, -1], [-8, -1]];
+const TRUCK_ICON = [[0, -8], [6, 6], [0, 3], [-6, 6]];
+
 export interface MinimapTarget {
   x: number;
   z: number;
@@ -92,7 +96,7 @@ export class Minimap {
     for (const b of this.city.blocks) if (b.square) rect(b.rect.x, b.rect.z, b.rect.w - 6, b.rect.d - 6, COLORS.plaza);
     // Landmarks: fountains as blue discs, monuments as light stone dots.
     for (const l of this.city.landmarks) {
-      if (l.kind === 'ramp') continue; // drawn over the roads, below
+      if (l.kind === 'ramp') continue; // drawn each frame, as arrows
       const [cx, cy] = this.toMap(l.x, l.z);
       g.fillStyle = l.kind === 'fountain' ? '#4aa3d8' : '#d8d2c4';
       g.beginPath();
@@ -102,24 +106,6 @@ export class Minimap {
     for (const r of this.city.roads) rect(r.rect.x, r.rect.z, r.rect.w, r.rect.d, COLORS.road);
     for (const i of this.city.intersections) rect(i.x, i.z, i.w, i.d, COLORS.road);
     for (const b of terrain.bridges) rect(b.x, b.z, b.w, b.d, COLORS.road);
-    // Jump ramps: a gold arrow from the toe, pointing the way you fly off the lip.
-    for (const l of this.city.landmarks) {
-      if (l.kind !== 'ramp') continue;
-      const s = rampShape(l);
-      const fx = Math.sin(l.yaw);
-      const fz = Math.cos(l.yaw);
-      const at = (along: number, across: number) => this.toMap(l.x + fx * along + fz * across, l.z + fz * along - fx * across);
-      const w = Math.max(s.width / 2, 5);
-      const tip = s.lip + Math.max(10, (s.lip - s.toe) * 0.5);
-      g.beginPath();
-      for (const [a, c] of [[s.toe, -w * 0.6], [s.lip, -w * 0.6], [s.lip, -w * 1.5], [tip, 0], [s.lip, w * 1.5], [s.lip, w * 0.6], [s.toe, w * 0.6]]) g.lineTo(...at(a, c));
-      g.closePath();
-      g.fillStyle = '#ffc21a';
-      g.strokeStyle = '#3a2a00';
-      g.lineWidth = 2;
-      g.fill();
-      g.stroke();
-    }
     return c;
   }
 
@@ -132,7 +118,7 @@ export class Minimap {
     route: number[] | null,
     target: MinimapTarget | null,
     cops: { x: number; z: number }[] = [],
-    ramp: { x: number; z: number } | null = null,
+    ramp: { x: number; z: number; yaw: number } | null = null,
   ): void {
     this.time += dt;
     const g = this.ctx;
@@ -218,26 +204,45 @@ export class Minimap {
       g.stroke();
     }
 
-    // Ramp truck: a yellow triangle, only while it's on the visible map.
-    if (ramp) {
-      const [cx, cy] = this.toMap(ramp.x, ramp.z);
+    // Jumps, while on the visible map, as arrows pointing the way you fly: the ramp monuments
+    // (a chevron on a bar, at the middle of the deck) and the ramp truck (a plain arrow).
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    /** World point → screen offset from the centre; world heading → screen angle (0 = up). */
+    const toScreen = (x: number, z: number): [number, number] => {
+      const [cx, cy] = this.toMap(x, z);
       const dx = (cx - mx) * (zoom / BASE_SCALE);
       const dy = (cy - my) * (zoom / BASE_SCALE);
-      const sx = dx * Math.cos(yaw) - dy * Math.sin(yaw);
-      const sy = dx * Math.sin(yaw) + dy * Math.cos(yaw);
-      if (Math.hypot(sx, sy) < r - 8) {
-        g.fillStyle = COLORS.ramp;
-        g.strokeStyle = '#000';
-        g.lineWidth = 1.5;
-        g.beginPath();
-        g.moveTo(r + sx, r + sy - 7);
-        g.lineTo(r + sx + 6, r + sy + 5);
-        g.lineTo(r + sx - 6, r + sy + 5);
-        g.closePath();
-        g.fill();
-        g.stroke();
-      }
+      return [dx * cos - dy * sin, dx * sin + dy * cos];
+    };
+    const angleOf = (heading: number) => {
+      const fx = -Math.sin(heading); // map axes run against world X and Z
+      const fy = -Math.cos(heading);
+      return Math.atan2(fx * cos - fy * sin, -(fx * sin + fy * cos));
+    };
+    const arrow = (x: number, z: number, heading: number, points: number[][]) => {
+      const [sx, sy] = toScreen(x, z);
+      if (Math.hypot(sx, sy) > r - 8) return;
+      g.save();
+      g.translate(r + sx, r + sy);
+      g.rotate(angleOf(heading));
+      g.fillStyle = COLORS.ramp;
+      g.strokeStyle = '#000';
+      g.lineWidth = 1.5;
+      g.beginPath();
+      for (const [px2, py2] of points) g.lineTo(px2, py2);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.restore();
+    };
+    for (const l of this.city.landmarks) {
+      if (l.kind !== 'ramp') continue;
+      const s = rampShape(l);
+      const mid = (s.toe + s.lip) / 2;
+      arrow(l.x + Math.sin(l.yaw) * mid, l.z + Math.cos(l.yaw) * mid, l.yaw, RAMP_ICON);
     }
+    if (ramp) arrow(ramp.x, ramp.z, ramp.yaw, TRUCK_ICON);
 
     // Player arrow, always centred and pointing up.
     g.translate(r, r);

@@ -473,7 +473,7 @@ export class Game {
       target ? (this.route?.path ?? null) : null,
       target ? { x: target.x, z: target.z, final: this.mission.index === this.mission.total - 1 } : null,
       this.director.activeCops.map((c) => c.vehicle.position),
-      this.traffic.rampTruck?.vehicle.position ?? null,
+      this.rampTruckOnMap(),
     );
 
     this.sky.follow(this.chase.camera);
@@ -565,6 +565,14 @@ export class Game {
     this.audio.explosion();
     this.mission.fail('destroyed');
     this.endMission();
+  }
+
+  /** The ramp truck for the minimap: where it is and which way it launches you. */
+  private rampTruckOnMap(): { x: number; z: number; yaw: number } | null {
+    const truck = this.traffic.rampTruck?.vehicle;
+    if (!truck) return null;
+    const f = truck.forward();
+    return { x: truck.position.x, z: truck.position.z, yaw: Math.atan2(f.x, f.z) };
   }
 
   /** Scratch a car's paint where an impact (velocity change, m/s) struck it. */
