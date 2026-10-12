@@ -203,6 +203,10 @@ export class Game {
     };
     onResize();
     window.addEventListener('resize', onResize);
+    // Switching tab or app mid-run pauses it; the player resumes from the pause menu.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.setPaused(true);
+    });
 
     if (this.debug) (window as unknown as { __game: Game }).__game = this; // for browser tests
   }
