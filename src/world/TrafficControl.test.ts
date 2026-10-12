@@ -96,6 +96,19 @@ describe('generateTrafficControl', () => {
       expect(city.roadMarks.some((m) => m.kind === 'edgeline' && near(m, sea.x, sea.z, 1))).toBe(true);
     }
   });
+
+  it.each([1, 42, 1234])('seed %i: the dashed centre line carries on through straight-through joins', (seed) => {
+    const city = generateCity(seed);
+    const straight = city.graph.nodes.filter((n) => {
+      if (n.neighbors.length !== 2) return false;
+      const [a, b] = n.neighbors.map((id) => city.graph.nodes[id]);
+      return a.x === b.x || a.z === b.z;
+    });
+    for (const n of straight) {
+      const dashes = city.roadMarks.filter((m) => m.kind === 'centerline' && inside(m, { x: n.x, z: n.z, w: 24, d: 24 }));
+      expect(dashes.length).toBe(4);
+    }
+  });
 });
 
 import { approachControls } from './TrafficControl';

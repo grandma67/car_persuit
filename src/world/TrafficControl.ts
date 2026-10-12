@@ -97,6 +97,16 @@ export function generateTrafficControl(
   // --- Junctions ---
   for (const node of graph.nodes) {
     const degree = node.neighbors.length;
+    if (degree === 2) {
+      // Straight through: carry the dashed centre line across, in step with the segments' dashes
+      // (3m dash, 3m gap; they stop 8m and 7m short of the node square either side).
+      const [a, b] = node.neighbors.map((id) => graph.nodes[id]);
+      if (a.x !== b.x && a.z !== b.z) continue; // a corner
+      const alongX = a.z === b.z;
+      for (const s of [-9.5, -3.5, 2.5, 8.5]) {
+        marks.push(alongX ? { kind: 'centerline', x: node.x + s, z: node.z, w: 3, d: 0.25 } : { kind: 'centerline', x: node.x, z: node.z + s, w: 0.25, d: 3 });
+      }
+    }
     if (degree < 3) continue; // straight-through or corner: nothing to control
     const busy = Math.hypot(node.x, node.z) < size * 0.3;
     const signals = degree === 4 && (busy || rng.next() < 0.15);
