@@ -16,7 +16,8 @@ export interface CityConfig extends TerrainConfig {
   removeRoadFraction: number; // share of inner road segments turned into plazas
   parkChance: number;
   roadworksChance: number; // chance per site slot (up to 3) of a junction closed for repairs
-  canalRampChance: number; // chance of a ramp built to jump a canal (cities with canals only)
+  canalRampChance: number; // chance of ramps built to jump the canals (cities with canals only)
+  canalRamps: [number, number]; // how many, when there are: picked by the seed
 }
 
 export const DEFAULT_CITY: CityConfig = {
@@ -28,7 +29,8 @@ export const DEFAULT_CITY: CityConfig = {
   removeRoadFraction: 0.1,
   parkChance: 0.08,
   roadworksChance: 0.5,
-  canalRampChance: 0.2,
+  canalRampChance: 0.6,
+  canalRamps: [1, 3],
   hillChance: 0.75,
   hillHeight: [8, 22],
   maxGrade: 0.11,
@@ -261,9 +263,9 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   // Junctions either side of the ramp street (and of a canal ramp's run-up) stay clear of roadworks.
   const rampNodes = rampStreet ? [rampStreet.a, rampStreet.b, inLine(rampStreet, -1)!.a, inLine(rampStreet, 1)!.b] : [];
 
-  // --- Rarely, a ramp built to jump a canal: at a street that ends at the quay with a road behind
-  // it for the run-up and the street's other half across the water to land on. Sized to the
-  // canal. ---
+  // --- Often, a few ramps built to jump the canals (whether, and how many, from the seed): each at
+  // a street that ends at the quay with a road behind it for the run-up and the street's other
+  // half across the water to land on. Sized to the canal; never two at one crossing, nor close. ---
   const canalRng = new Rng(seed ^ 0xca7a1);
   if (shape.canals.length && canalRng.next() < config.canalRampChance) {
     const spots = quaySquares.flatMap((e) => {
@@ -286,10 +288,17 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
           x: e.horizontal ? lipAt : wet.x, z: e.horizontal ? wet.z : lipAt,
         } satisfies Landmark,
         nodes: [aWet ? e.b : e.a, far],
+        wet,
       }];
     });
-    if (spots.length) {
-      const pick = canalRng.pick(spots);
+    const [fewest, most] = config.canalRamps;
+    const chosen: typeof spots = [];
+    for (let want = canalRng.int(fewest, most); want > 0; want--) {
+      const free = spots.filter((s) => chosen.every((c) => Math.hypot(c.wet.x - s.wet.x, c.wet.z - s.wet.z) > pitch * 1.5));
+      if (!free.length) break;
+      chosen.push(canalRng.pick(free));
+    }
+    for (const pick of chosen) {
       landmarks.push(pick.landmark);
       rampNodes.push(...pick.nodes);
     }

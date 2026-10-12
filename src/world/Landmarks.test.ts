@@ -53,16 +53,24 @@ describe('ramps and bridges', () => {
 describe('canal ramp', () => {
   const withCanals = { ...DEFAULT_CITY, canalOdds: [0, 1, 0] as [number, number, number], canalRampChance: 1 };
 
-  it('is rare, and decided by the seed', () => {
-    let found = 0;
-    for (let seed = 1; seed <= 60; seed++) {
+  it('is common, with how many decided by the seed', () => {
+    const counts = new Set<number>();
+    let cities = 0;
+    let withRamps = 0;
+    for (let seed = 1; seed <= 80; seed++) {
       const city = generateCity(seed);
-      const has = city.landmarks.some((l) => l.crossing !== undefined);
-      if (has) found++;
-      expect(generateCity(seed).landmarks.some((l) => l.crossing !== undefined)).toBe(has);
+      if (!city.terrain.canals.length) continue;
+      cities++;
+      const ramps = city.landmarks.filter((l) => l.crossing !== undefined);
+      if (ramps.length) withRamps++;
+      counts.add(ramps.length);
+      expect(ramps.length).toBeLessThanOrEqual(DEFAULT_CITY.canalRamps[1]);
+      expect(generateCity(seed).landmarks.filter((l) => l.crossing !== undefined).length).toBe(ramps.length);
+      // Never two at one crossing, nor within a block and a half of each other.
+      for (const a of ramps) for (const b of ramps) if (a !== b) expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(40);
     }
-    expect(found).toBeGreaterThan(0);
-    expect(found).toBeLessThan(25);
+    expect(withRamps / cities).toBeGreaterThan(0.4);
+    expect(counts.size).toBeGreaterThan(2); // none, one, several
   });
 
   it.each([3, 8, 21, 77])('seed %i: lip at the quay, facing straight across the canal', (seed) => {
