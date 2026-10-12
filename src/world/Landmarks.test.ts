@@ -77,7 +77,7 @@ describe('canal ramp', () => {
       const ramps = city.landmarks.filter((l) => l.crossing !== undefined);
       if (ramps.length) withRamps++;
       counts.add(ramps.length);
-      expect(ramps.length).toBeLessThanOrEqual(DEFAULT_CITY.canalRamps[1]);
+      expect(ramps.length).toBeLessThanOrEqual(DEFAULT_CITY.maxCanalRamps);
       expect(generateCity(seed).landmarks.filter((l) => l.crossing !== undefined).length).toBe(ramps.length);
       // Never two at one crossing, nor within a block and a half of each other.
       for (const a of ramps) for (const b of ramps) if (a !== b) expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(40);

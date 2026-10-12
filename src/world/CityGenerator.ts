@@ -17,8 +17,8 @@ export interface CityConfig extends TerrainConfig {
   removeRoadFraction: number; // share of inner road segments turned into plazas
   parkChance: number;
   roadworksChance: number; // chance per site slot (up to 3) of a junction closed for repairs
-  canalRampChance: number; // chance of ramps built to jump the canals (cities with canals only)
-  canalRamps: [number, number]; // how many, when there are: picked by the seed
+  canalRampChance: number; // chance of each canal-jump ramp, rolled again for every further one (cities with canals only)
+  maxCanalRamps: number; // cap on the rolls (spacing between ramps may stop it sooner)
   leftHandChance: number; // chance the city is English: everyone drives on the left
 }
 
@@ -32,7 +32,7 @@ export const DEFAULT_CITY: CityConfig = {
   parkChance: 0.08,
   roadworksChance: 0.5,
   canalRampChance: 0.6,
-  canalRamps: [1, 3],
+  maxCanalRamps: 4,
   leftHandChance: 0.05,
   hillChance: 0.75,
   hillHeight: [8, 22],
@@ -266,11 +266,11 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   // Junctions either side of the ramp streets (and of a canal ramp's run-up) stay clear of roadworks.
   const rampNodes = [...rampStreetSet].flatMap((e) => [e.a, e.b, inLine(e, -1)!.a, inLine(e, 1)!.b]);
 
-  // --- Often, a few ramps built to jump the canals (whether, and how many, from the seed): each at
+  // --- Often, a few ramps built to jump the canals (each one a fresh roll of the chance): each at
   // a street that ends at the quay with a road behind it for the run-up and the street's other
   // half across the water to land on. Sized to the canal; never two at one crossing, nor close. ---
   const canalRng = new Rng(seed ^ 0xca7a1);
-  if (shape.canals.length && canalRng.next() < config.canalRampChance) {
+  if (shape.canals.length) {
     const spots = quaySquares.flatMap((e) => {
       const aWet = canalNodes.has(e.a);
       if (aWet === canalNodes.has(e.b)) return [];
@@ -297,9 +297,8 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
         wet,
       }];
     });
-    const [fewest, most] = config.canalRamps;
     const chosen: typeof spots = [];
-    for (let want = canalRng.int(fewest, most); want > 0; want--) {
+    while (chosen.length < config.maxCanalRamps && canalRng.next() < config.canalRampChance) {
       const free = spots.filter((s) => chosen.every((c) => Math.hypot(c.wet.x - s.wet.x, c.wet.z - s.wet.z) > pitch * 1.5));
       if (!free.length) break;
       chosen.push(canalRng.pick(free));
