@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Canal } from '../world/Terrain';
 
 const SIZE = 3000;
 export const SEA_LEVEL = -1.6; // below the island top so waves never poke through the streets
@@ -80,8 +81,8 @@ export class Sea {
   readonly mesh: THREE.Mesh;
   private time = { value: 0 };
 
-  /** islandHalf: half the island's width, for shallows and shore foam. */
-  constructor(islandHalf: number, deepColor: number, shallowColor = 0x66cfd9) {
+  /** islandHalf: half the island's width, for shallows and shore foam; canals open into the sea. */
+  constructor(islandHalf: number, deepColor: number, shallowColor = 0x66cfd9, canals: Canal[] = []) {
     const geo = seaGeometry(islandHalf);
     const material = new THREE.MeshStandardMaterial({
       color: deepColor, // shallows are mixed in by the shader
@@ -93,6 +94,9 @@ export class Sea {
       shader.uniforms.time = this.time;
       shader.uniforms.islandHalf = { value: islandHalf };
       shader.uniforms.shallow = { value: new THREE.Color(shallowColor) };
+      const mouth = (c?: Canal) => (c ? new THREE.Vector4(c.axis === 'x' ? 1 : 0, c.at, c.half, 1) : new THREE.Vector4());
+      shader.uniforms.mouthA = { value: mouth(canals[0]) };
+      shader.uniforms.mouthB = { value: mouth(canals[1]) };
       shader.vertexShader = `${SHORE_GLSL}\nvarying vec2 vSeaPos;\nvarying float vWave;\n${shader.vertexShader}`.replace(
         '#include <begin_vertex>',
         /* glsl */ `
@@ -115,7 +119,16 @@ export class Sea {
       shader.fragmentShader = /* glsl */ `
         ${SHORE_GLSL}
         uniform vec3 shallow;
+        uniform vec4 mouthA; // canal: (along X ? 1 : 0, centre line, half width, active)
+        uniform vec4 mouthB;
         varying vec2 vSeaPos;
+        // 1 in front of a canal mouth, fading out to sea: no wall there for the waves to hit.
+        float seaMouth(vec4 c, vec2 p) {
+          if (c.w < 0.5) return 0.0;
+          float across = abs((c.x > 0.5 ? p.y : p.x) - c.y);
+          float out_ = abs(c.x > 0.5 ? p.x : p.y) - islandHalf;
+          return (1.0 - smoothstep(c.z - 3.0, c.z + 4.0, across)) * (1.0 - smoothstep(6.0, 30.0, out_));
+        }
         varying float vWave;
         float seaHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float seaNoise(vec2 p) {
@@ -130,6 +143,10 @@ export class Sea {
           /* glsl */ `
           #include <color_fragment>
           float shoreDist = seaShoreDist(vSeaPos);
+          // Inside the island the sea is hidden under the streets, except up the canals, which
+          // draw their own water.
+          if (shoreDist < 0.0) discard;
+          float mouth = max(seaMouth(mouthA, vSeaPos), seaMouth(mouthB, vSeaPos));
           diffuseColor.rgb = mix(shallow, diffuseColor.rgb, smoothstep(0.0, 120.0, shoreDist));
 
           float n = seaNoise(vSeaPos * 0.07 + vec2(time * 0.12, -time * 0.09));
@@ -149,7 +166,7 @@ export class Sea {
 
           // Splash at the wall: surges each time a crest arrives, then drains back.
           float arrive = seaSwellShape(seaSwellPhase(vSeaPos, 0.0) - 0.4);
-          float wallFoam = 1.0 - smoothstep(0.5, 2.5 + arrive * 6.0 + n * 3.0, shoreDist);
+          float wallFoam = (1.0 - smoothstep(0.5, 2.5 + arrive * 6.0 + n * 3.0, shoreDist)) * (1.0 - mouth);
 
           float foam = clamp(max(max(crest, wallFoam), max(breaker, trail)), 0.0, 1.0);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.97, 1.0), foam);

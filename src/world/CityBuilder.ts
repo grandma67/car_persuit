@@ -20,6 +20,9 @@ const segmentRect = (ax: number, az: number, bx: number, bz: number): Rect => ({
 const ISLAND_DEPTH = 8; // quay walls reach this far below the streets
 const DECK_DEPTH = 1.4; // bridge deck thickness
 const PARAPET = { thick: 0.5, height: 0.9 }; // low walls along the canals and bridges
+// Parapets stand this far back from the quay or deck edge, so their faces never share a plane
+// with the walls below (which z-fight along the ground line).
+const PARAPET_INSET = 0.04;
 
 /** Accumulates flat-shaded quads into one BufferGeometry. */
 class GeometryBuilder {
@@ -274,25 +277,25 @@ export function buildCity(
         ...terrain.canals.filter((o) => o.axis !== c.axis).map((o): [number, number] => [o.at - o.half, o.at + o.half]),
       ];
       for (const side of [-1, 1]) {
-        const off = c.at + side * (c.half + PARAPET.thick / 2);
+        const off = c.at + side * (c.half + PARAPET_INSET + PARAPET.thick / 2);
         for (const [u0, u1] of openSpans(-edge, edge, gaps)) {
           if (c.axis === 'x') wallAlong(walls, world, wallColliders, u0, off, u1, off, stone, terrain);
           else wallAlong(walls, world, wallColliders, off, u0, off, u1, stone, terrain);
         }
       }
     }
-    // Bridge railings on the road edges (the ring road's outer edge has the sea wall).
+    // Bridge railings on both road edges (the sea wall stops at the canal mouths).
     for (const b of terrain.bridges) {
       // Over a canal along X the deck runs along Z; railings reach on to the canal-side walls.
       const crossesX = terrain.canals.some((c) => c.axis === 'x' && c.at === b.z);
       const [lo, hi] = crossesX ? [b.z - b.d / 2 - PARAPET.thick, b.z + b.d / 2 + PARAPET.thick] : [b.x - b.w / 2 - PARAPET.thick, b.x + b.w / 2 + PARAPET.thick];
       for (const side of [-1, 1]) {
         if (crossesX) {
-          const x = b.x + side * (b.w / 2 - PARAPET.thick / 2);
-          if (Math.abs(x) < edge - 1) wallAlong(walls, world, wallColliders, x, lo, x, hi, stone, terrain);
+          const x = b.x + side * (b.w / 2 - PARAPET_INSET - PARAPET.thick / 2);
+          wallAlong(walls, world, wallColliders, x, lo, x, hi, stone, terrain);
         } else {
-          const z = b.z + side * (b.d / 2 - PARAPET.thick / 2);
-          if (Math.abs(z) < edge - 1) wallAlong(walls, world, wallColliders, lo, z, hi, z, stone, terrain);
+          const z = b.z + side * (b.d / 2 - PARAPET_INSET - PARAPET.thick / 2);
+          wallAlong(walls, world, wallColliders, lo, z, hi, z, stone, terrain);
         }
       }
     }
@@ -413,17 +416,23 @@ export function buildCity(
   if (climate.beachProps) props.push(...addBeach(city, scene, rng));
 
   // --- Sea wall along the island edge: a low visible barrier, plus a tall invisible one so a
-  // car launched off something can't sail into the sea ---
+  // car launched off something can't sail into the sea. It stops where a canal opens to the sea
+  // (bridges there have their own railings) ---
   const wallT = 0.6;
   const wallH = 1;
   const edge = island / 2 - wallT / 2;
+  const mouths = (axis: 'x' | 'z') =>
+    terrain.canals.filter((c) => c.axis === axis).map((c): [number, number] => [c.at - c.half, c.at + c.half]);
   const seaWall = new GeometryBuilder();
-  for (const r of [
-    { x: 0, z: edge, w: island, d: wallT },
-    { x: 0, z: -edge, w: island, d: wallT },
-    { x: edge, z: 0, w: wallT, d: island - wallT * 2 },
-    { x: -edge, z: 0, w: wallT, d: island - wallT * 2 },
-  ]) {
+  const runs: Rect[] = [];
+  // Walls along X are cut by canals running along Z, and vice versa.
+  for (const [u0, u1] of openSpans(-island / 2, island / 2, mouths('z'))) {
+    for (const z of [edge, -edge]) runs.push({ x: (u0 + u1) / 2, z, w: u1 - u0, d: wallT });
+  }
+  for (const [u0, u1] of openSpans(-island / 2 + wallT, island / 2 - wallT, mouths('x'))) {
+    for (const x of [edge, -edge]) runs.push({ x, z: (u0 + u1) / 2, w: wallT, d: u1 - u0 });
+  }
+  for (const r of runs) {
     seaWall.box(r, 0, wallH, color(theme.seaWall), null, color(theme.seaWall));
     wallColliders.add(world.createCollider(RAPIER.ColliderDesc.cuboid(r.w / 2, 10, r.d / 2).setTranslation(r.x, 10, r.z)).handle);
   }
