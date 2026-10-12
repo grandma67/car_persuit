@@ -249,13 +249,21 @@ export class CivilianController {
     this.aim.z += ((b.x - a.x) / len) * offset;
   }
 
-  /** Keep at least three junctions of route ahead: random turns, no U-turns unless a dead end. */
+  /**
+   * Keep at least three junctions of route ahead: random turns, no U-turns unless a dead end.
+   * Heavies keep off right turns when there's another way on: however they take one, the front
+   * swings deep into the new road's oncoming lane, right where its traffic waits at the stop line
+   * (CivilianTurns.test). Left and straight on, they keep to their side.
+   */
   private extend(): void {
     while (this.route.length < 4) {
       const prev = this.route[this.route.length - 2];
       const cur = this.graph.nodes[this.route[this.route.length - 1]];
       const options = cur.neighbors.filter((n) => n !== prev);
-      this.route.push(options.length ? this.rng.pick(options) : prev);
+      const from = this.graph.nodes[prev];
+      const easy = this.style.rightTurnStart === null ? options : options.filter((n) => turnAngle(from, cur, this.graph.nodes[n]) <= 0.5);
+      const pool = easy.length ? easy : options;
+      this.route.push(pool.length ? this.rng.pick(pool) : prev);
     }
   }
 
