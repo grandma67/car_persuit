@@ -392,7 +392,7 @@ export function buildCity(
   const roofs = new GeometryBuilder();
   // On a slope a building stands on its lowest corner; the uphill side sinks into the ground.
   const footings = city.buildings.map((b) => groundBase(terrain, b.x, b.z, Math.max(b.w, b.d) / 2) - 0.3);
-  city.buildings.forEach((b, i) => addBuilding(b, footings[i], theme.buildings[b.district], walls, roofs, rng, climate.snowRoofs));
+  city.buildings.forEach((b, i) => addBuilding(b, footings[i], theme.buildings[b.district], walls, roofs, rng, climate.snowRoofs, terrain));
   const tex = createWindowTextures(rng);
   const wallMesh = new THREE.Mesh(
     walls.build(true),
@@ -465,18 +465,39 @@ export function buildCity(
   return { walls: wallColliders, props, canalWater };
 }
 
-function addBuilding(b: Building, y0: number, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng, snowy: boolean): void {
+function addBuilding(b: Building, y0: number, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng, snowy: boolean, terrain: Terrain): void {
   const wallColor = new THREE.Color(palette[Math.floor(b.variant * palette.length)]);
   const roofColor = snowy ? new THREE.Color(SNOW) : wallColor.clone().multiplyScalar(0.55);
   // Per-building window pattern offset, snapped to whole cells so windows line up with floors.
   const uOff = Math.floor(b.variant * 97) % WINDOW_CELLS / WINDOW_CELLS;
   const vOff = Math.floor(b.variant * 389) % WINDOW_CELLS / WINDOW_CELLS;
-  const wallUv = (w: number, h: number) => {
-    const u = Math.max(1, Math.round(w / WINDOW_WIDTH)) / WINDOW_CELLS;
-    const v = Math.max(1, Math.round(h / FLOOR_HEIGHT)) / WINDOW_CELLS;
-    return [[uOff, vOff], [uOff + u, vOff], [uOff + u, vOff + v], [uOff, vOff + v]];
-  };
-  walls.box(b, y0, b.h, wallColor, roofs, roofColor, wallUv);
+  // Each wall in whole floors. On a slope the building stands on its lowest corner, so uphill the
+  // ground climbs its walls: any floor whose windows would start below the ground along that wall
+  // is a plain base course instead (untextured, with the roofs), and the windows begin above it.
+  const floors = Math.max(1, Math.round(b.h / FLOOR_HEIGHT));
+  const floor = b.h / floors;
+  const sill = 0.3; // window bottoms sit this far up their floor (see createWindowTextures)
+  const baseColor = wallColor.clone().multiplyScalar(0.72);
+  const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2, y1 = y0 + b.h;
+  const faces: [number[], number[], number[]][] = [
+    [[x0, z1], [x1, z1], [0, 0, 1]],
+    [[x1, z0], [x0, z0], [0, 0, -1]],
+    [[x1, z1], [x1, z0], [1, 0, 0]],
+    [[x0, z0], [x0, z1], [-1, 0, 0]],
+  ];
+  for (const [[ax, az], [bx, bz], normal] of faces) {
+    let ground = -Infinity;
+    for (let k = 0; k <= 4; k++) ground = Math.max(ground, groundHeight(terrain, ax + ((bx - ax) * k) / 4, az + ((bz - az) * k) / 4));
+    const blank = Math.min(floors, Math.max(0, Math.ceil((ground - y0) / floor - sill + 0.02)));
+    const yw = y0 + blank * floor;
+    if (blank > 0) roofs.quad([[ax, y0, az], [bx, y0, bz], [bx, yw, bz], [ax, yw, az]], normal, baseColor);
+    if (blank === floors) continue;
+    const u = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / WINDOW_WIDTH)) / WINDOW_CELLS;
+    const v0 = vOff + blank / WINDOW_CELLS;
+    const v1 = vOff + floors / WINDOW_CELLS;
+    walls.quad([[ax, yw, az], [bx, yw, bz], [bx, y1, bz], [ax, y1, az]], normal, wallColor, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
+  }
+  roofs.quad([[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [0, 1, 0], roofColor);
 
   // Rooftop details on taller buildings: AC units, stair housings.
   if (b.h > 14) {
