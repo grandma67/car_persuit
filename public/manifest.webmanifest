@@ -2,7 +2,7 @@
   "name": "Car Pursuit",
   "short_name": "Car Pursuit",
   "description": "Outrun the cops through a procedurally generated city.",
-  "id": "./",
+  "id": "/car_persuit/",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
