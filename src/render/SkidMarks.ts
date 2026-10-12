@@ -72,7 +72,9 @@ export class SkidMarks {
 
     this.dir.subVectors(point, last).normalize();
     this.side.crossVectors(this.dir, UP).multiplyScalar(MARK_WIDTH / 2);
-    const lift = 0.02;
+    // The physics ground is flat at y=0, but sidewalks, plazas and landmark paving are drawn up
+    // to 0.06 above it; stay above all of them or the marks vanish under those surfaces.
+    const lift = 0.07;
     const s = this.next;
     this.next = (this.next + 1) % MAX_SEGMENTS;
     const p = this.positions;
