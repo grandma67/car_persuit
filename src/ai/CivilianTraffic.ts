@@ -6,6 +6,7 @@ import type { Rng } from '../core/Rng';
 import type { RoadGraph } from '../world/RoadGraph';
 import type { ApproachControl } from '../world/TrafficControl';
 import { FLAT, type GroundHeight } from '../world/Terrain';
+import { SEA_LEVEL } from '../render/Sea';
 import { Vehicle } from '../vehicles/Vehicle';
 import {
   PLAYER_SPEC,
@@ -27,6 +28,7 @@ export const TRAFFIC = {
   spawnMax: 340,
   despawnDistance: 420, // straight-line
   stuckLimit: 6, // seconds
+  sunkDepth: 2.5, // metres under the water: gone in, out of sight, recycle it
   spacing: 18, // metres between spawn points and existing traffic
   rampChance: 0.05, // per spawn, while no ramp truck is around
 };
@@ -175,7 +177,8 @@ export class CivilianTraffic {
       const p = car.vehicle.position;
       const far = Math.hypot(p.x - playerPos.x, p.z - playerPos.z) > TRAFFIC.despawnDistance;
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(car.vehicle.quaternion).y;
-      if (far || car.controller.stuckFor > TRAFFIC.stuckLimit || up < 0.2) {
+      const sunk = p.y < SEA_LEVEL - TRAFFIC.sunkDepth;
+      if (far || sunk || car.controller.stuckFor > TRAFFIC.stuckLimit || up < 0.2) {
         car.vehicle.dispose();
         this.cars.splice(this.cars.indexOf(car), 1);
       }

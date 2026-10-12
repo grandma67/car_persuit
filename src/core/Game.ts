@@ -50,6 +50,7 @@ const MAX_STEPS_PER_FRAME = 3; // more only snowballs on a slow phone: each catc
 const ROUTE_REFRESH = 0.25; // seconds between GPS route recalculations
 const CIVILIAN_PROP_RANGE = 90; // metres: civilians nearer the player than this collide with props
 const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
+const SINK_DEPTH = 3; // metres under the surface a car in the water comes to rest
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
@@ -90,6 +91,7 @@ export class Game {
   private wanted = new WantedSystem();
   private traffic: CivilianTraffic;
   private crashMarks = new CrashMarks();
+  private sunk = new WeakSet<Vehicle>(); // cars that have gone into the water
   private walls: Set<number>; // collider handles of buildings, sea wall, landmarks
   private copContact: CopContact;
   private ramSound = 0; // a cop started ramming the player this frame: crash strength 0..1
@@ -426,6 +428,7 @@ export class Game {
     this.player.syncMesh(alpha);
     for (const cop of this.director.cops) cop.vehicle.syncMesh(alpha);
     for (const car of this.traffic.cars) car.vehicle.syncMesh(alpha);
+    this.checkWater();
     this.traffic.update(this.player.position);
     if (this.state === 'playing') {
       this.raiseStars(this.wanted.update(frameDt));
@@ -450,7 +453,6 @@ export class Game {
     this.sun.target.position.copy(carPos);
 
     if (this.state === 'playing') this.applyDamage(impact, ramDamage);
-    if (this.state === 'playing' && this.player.position.y < SEA_LEVEL - 0.3) this.drown();
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
     this.sea.update(frameDt);
@@ -542,18 +544,51 @@ export class Game {
     }
     return contact.damage * this.difficulty.damageScale;
   }
-  /** Into the sea or a canal: a splash, the car sinks, and that's the run over. */
-  private drown(): void {
-    const body = this.player.body;
+  /**
+   * Cars that go into the sea or a canal: a splash and a blast on the way in, then they come to rest
+   * a few metres down (there's no sea bed to stop them). The player's run is over; a cop is
+   * wrecked; a civilian sinks out of sight and the traffic manager recycles it.
+   */
+  private checkWater(): void {
+    const under = (v: Vehicle) => v.position.y < SEA_LEVEL - 0.3;
+    if (under(this.player) && !this.sunk.has(this.player)) {
+      this.waterBlast(this.player, 1);
+      if (this.state === 'playing') this.drown();
+    }
+    for (const cop of this.director.cops) {
+      if (!under(cop.vehicle) || this.sunk.has(cop.vehicle)) continue;
+      this.waterBlast(cop.vehicle, 0.6);
+      if (cop.wreckedFor === null) this.director.wreck(cop);
+    }
+    for (const car of this.traffic.cars) if (under(car.vehicle) && !this.sunk.has(car.vehicle)) this.waterBlast(car.vehicle, 0.6);
+    for (const v of [this.player, ...this.director.cops.map((c) => c.vehicle)]) {
+      if (!this.sunk.has(v) || v.position.y > SEA_LEVEL - SINK_DEPTH) continue;
+      v.body.setGravityScale(0, true);
+      v.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      v.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    }
+  }
+
+  /** Splash, fireball and boom where a car hits the water; it slows hard and goes dark. */
+  private waterBlast(vehicle: Vehicle, size: number): void {
+    this.sunk.add(vehicle);
+    const body = vehicle.body;
     const v = body.linvel();
-    this.effects.splash(this.player.position.clone().setY(SEA_LEVEL), new THREE.Vector3(v.x, 0, v.z));
-    // Water drag: it slows hard and settles slowly into the deep.
+    const at = vehicle.position.clone().setY(SEA_LEVEL);
+    this.effects.splash(at, new THREE.Vector3(v.x, 0, v.z));
+    this.effects.explode(at.setY(SEA_LEVEL + 0.8), { fireball: 90 * size, smoke: 60 * size, fire: 0, flash: 4000 * size });
     body.setLinearDamping(3);
     body.setAngularDamping(2);
-    this.player.lightsOff = true;
-    this.chase.shake(0.6);
+    vehicle.mesh.paint.color.multiplyScalar(0.15);
+    vehicle.lightsOff = true;
+    const dist = at.distanceTo(this.player.position);
+    this.chase.shake(size >= 1 ? 1.2 : Math.max(0, 1 - dist / 60));
+    this.audio.explosion(size >= 1 ? 1 : Math.max(0.15, 1 - dist / 200));
+  }
+
+  /** The player into the water: that's the run over. */
+  private drown(): void {
     this.audio.stopEngine();
-    this.audio.impact(0.8);
     this.mission.fail('drowned');
     this.endMission();
   }
@@ -660,11 +695,11 @@ export class Game {
     this.state = won ? 'won' : 'lost';
     this.marker.hide();
     // After an explosion, let the boom land before the jingle.
-    this.audio.jingle(won ? 'won' : 'lost', this.mission.loseReason === 'destroyed' ? 0.9 : 0);
+    this.audio.jingle(won ? 'won' : 'lost', this.mission.loseReason === 'destroyed' || this.mission.loseReason === 'drowned' ? 0.9 : 0);
     if (won) this.audio.playWinMusic();
     const reason = this.mission.loseReason;
     // Let an explosion play out before the end screen covers it.
-    const showDelay = reason === 'destroyed' ? 2000 : reason === 'drowned' ? 1500 : 0;
+    const showDelay = reason === 'destroyed' || reason === 'drowned' ? 2000 : 0;
     window.setTimeout(() => this.showEndScreen(won), showDelay);
   }
 
