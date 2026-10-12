@@ -1,16 +1,19 @@
 // Meshes and colliders for a roadworks site, from the layout Roadworks planned: machines (concrete
 // mixer with a turning drum, backhoe, tipper) with amber beacons flashing, a fenced-off dig, dirt,
 // pipes, a light tower, a portable toilet, barrier boards and repair patches. All solid but the patches.
+// Machines, the light tower, the toilet and the boards are loose physics bodies: boards and the
+// toilet go flying when hit, while the machines weigh so much a car barely nudges them.
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from '../render/geometry';
 import type { Roadworks, WorksItem, WorksItemKind } from './Roadworks';
-import { groundBase, groundHeight, groundNormal, type Terrain } from './Terrain';
+import { groundBase, groundHeight, groundNormal, groundTop, type Terrain } from './Terrain';
 
 const DRUM_SPEED = 1.2; // rad/s
 const BEACON_ON = 0xffa21a;
 const BEACON_OFF = 0x3a2508;
+const ONE = new THREE.Vector3(1, 1, 1);
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 /** Wheel: axle along X. */
@@ -173,21 +176,42 @@ const SOLID_HEIGHT: Record<Exclude<WorksItemKind, 'patch'>, number> = {
   mixer: 3.9, backhoe: 3.0, tipper: 3.0, dig: 1.0, mound: 0.8, pipes: 1.5, tower: 1.3, toilet: 2.3, barrier: 1.0,
 };
 
+/** Mass (kg) of the items that move when hit; the rest are fixed. Machines outweigh even the armored SUV many times over. */
+const LOOSE_MASS: Partial<Record<WorksItemKind, number>> = {
+  mixer: 60000, tipper: 50000, backhoe: 40000, tower: 600, toilet: 90, barrier: 12,
+};
+
+/** A loose item: its body, the mesh that follows it, and lights riding on it. */
+interface Loose {
+  body: RAPIER.RigidBody;
+  mesh: THREE.Mesh;
+  beacons: { index: number; local: THREE.Vector3 }[];
+  lamps: { index: number; local: THREE.Vector3 }[];
+}
+
 export class RoadworksSite {
   private drums: THREE.Mesh[] = [];
   private beacons: THREE.InstancedMesh | null = null;
+  private lamps: THREE.InstancedMesh | null = null;
   private beaconLit = -1;
   private color = new THREE.Color();
+  private loose: Loose[] = [];
+  private m4 = new THREE.Matrix4();
+  private v = new THREE.Vector3();
 
   /** Adds the site to the scene and the world; collider handles go into `walls`. */
   constructor(site: Roadworks, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, walls: Set<number>) {
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.6, metalness: 0.15 });
     const up = new THREE.Vector3(0, 1, 0);
-    const beaconAt: THREE.Vector3[] = [];
-    const lampAt: THREE.Vector3[] = [];
+    const beaconAt: { mesh: THREE.Mesh; local: THREE.Vector3 }[] = [];
+    const lampAt: { mesh: THREE.Mesh; local: THREE.Vector3 }[] = [];
 
-    // Machines and kit stand upright on the lowest ground under them.
-    const baseOf = (item: WorksItem) => groundBase(terrain, item.x, item.z, Math.max(item.hw, item.hl));
+    // Fixed kit stands upright on the lowest ground under it; loose items are dropped from just
+    // above the highest and settle onto the slope.
+    const baseOf = (item: WorksItem) =>
+      LOOSE_MASS[item.kind]
+        ? groundTop(terrain, item.x, item.z, Math.max(item.hw, item.hl)) + 0.05
+        : groundBase(terrain, item.x, item.z, Math.max(item.hw, item.hl));
     const place = (geo: THREE.BufferGeometry, item: WorksItem) => {
       const mesh = new THREE.Mesh(geo, material);
       mesh.position.set(item.x, baseOf(item), item.z);
@@ -225,16 +249,16 @@ export class RoadworksSite {
           drum.castShadow = true;
           mesh.add(drum);
           this.drums.push(drum);
-          beaconAt.push(mesh.localToWorld(new THREE.Vector3(0, 3.12, 3.2)));
+          beaconAt.push({ mesh, local: new THREE.Vector3(0, 3.12, 3.2) });
           break;
         }
         case 'backhoe':
           mesh = place(tractorModel().body, item);
-          beaconAt.push(mesh.localToWorld(new THREE.Vector3(0, 3.0, -0.5)));
+          beaconAt.push({ mesh, local: new THREE.Vector3(0, 3.0, -0.5) });
           break;
         case 'tipper':
           mesh = place(tipperModel(), item);
-          beaconAt.push(mesh.localToWorld(new THREE.Vector3(0, 3.02, 2.6)));
+          beaconAt.push({ mesh, local: new THREE.Vector3(0, 3.02, 2.6) });
           break;
         case 'dig':
           mesh = place(digModel(item.hw, item.hl), item);
@@ -248,7 +272,7 @@ export class RoadworksSite {
         case 'tower': {
           const tower = towerModel();
           mesh = place(tower.body, item);
-          for (const l of tower.lamps) lampAt.push(mesh.localToWorld(l.clone()));
+          for (const l of tower.lamps) lampAt.push({ mesh, local: l });
           break;
         }
         case 'toilet':
@@ -260,16 +284,38 @@ export class RoadworksSite {
       }
       const h = SOLID_HEIGHT[item.kind] / 2;
       const q = new THREE.Quaternion().setFromAxisAngle(up, item.yaw);
+      const mass = LOOSE_MASS[item.kind];
+      if (mass) {
+        // Body origin = mesh origin (on the ground at its centre), collider raised to sit on it.
+        const body = world.createRigidBody(
+          RAPIER.RigidBodyDesc.dynamic()
+            .setTranslation(item.x, baseOf(item), item.z)
+            .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+            .setAngularDamping(0.5),
+        );
+        world.createCollider(RAPIER.ColliderDesc.cuboid(item.hw, h, item.hl).setTranslation(0, h, 0).setMass(mass).setFriction(0.9), body);
+        this.loose.push({ body, mesh, beacons: [], lamps: [] });
+        continue;
+      }
       const c = world.createCollider(
         RAPIER.ColliderDesc.cuboid(item.hw, h, item.hl).setTranslation(item.x, baseOf(item) + h, item.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
       );
-      walls.add(c.handle);
+      walls.add(c.handle); // only fixed kit takes crash marks
     }
+    const ride = (lights: typeof beaconAt, pick: (l: Loose) => Loose['beacons']) =>
+      lights.forEach(({ mesh, local }, index) => {
+        const l = this.loose.find((l) => l.mesh === mesh);
+        if (l) pick(l).push({ index, local });
+      });
+    ride(beaconAt, (l) => l.beacons);
+    ride(lampAt, (l) => l.lamps);
 
     // Amber beacons on the machines' cabs (unlit material so they glow at night).
     if (beaconAt.length) {
       this.beacons = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.16, 0.22, 10), new THREE.MeshBasicMaterial({ toneMapped: false }), beaconAt.length);
-      beaconAt.forEach((p, i) => {
+      this.beacons.frustumCulled = false; // they ride on the machines
+      beaconAt.forEach(({ mesh, local }, i) => {
+        const p = mesh.localToWorld(local.clone());
         this.beacons!.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y, p.z));
         this.beacons!.setColorAt(i, this.color.setHex(BEACON_OFF));
       });
@@ -277,14 +323,36 @@ export class RoadworksSite {
     }
     // Light tower lamps: always on, bright white faces.
     if (lampAt.length) {
-      const lamps = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.26, 0.12), new THREE.MeshBasicMaterial({ color: 0xfff6dc, toneMapped: false }), lampAt.length);
-      lampAt.forEach((p, i) => lamps.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y, p.z)));
-      scene.add(lamps);
+      this.lamps = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.26, 0.12), new THREE.MeshBasicMaterial({ color: 0xfff6dc, toneMapped: false }), lampAt.length);
+      lampAt.forEach(({ mesh, local }, i) => {
+        const p = mesh.localToWorld(local.clone());
+        this.lamps!.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y, p.z));
+      });
+      this.lamps.frustumCulled = false;
+      scene.add(this.lamps);
     }
   }
 
-  /** Turn the drums and flash the beacons, alternating. `time` in seconds. */
+  /** Move loose items to their bodies, turn the drums and flash the beacons, alternating. `time` in seconds. */
   update(dt: number, time: number): void {
+    for (const l of this.loose) {
+      if (l.body.isSleeping()) continue;
+      const t = l.body.translation();
+      const r = l.body.rotation();
+      l.mesh.position.set(t.x, t.y, t.z);
+      l.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+      l.mesh.updateMatrixWorld();
+      for (const b of l.beacons) {
+        l.mesh.localToWorld(this.v.copy(b.local));
+        this.beacons!.setMatrixAt(b.index, this.m4.makeTranslation(this.v.x, this.v.y, this.v.z));
+        this.beacons!.instanceMatrix.needsUpdate = true;
+      }
+      for (const b of l.lamps) {
+        l.mesh.localToWorld(this.v.copy(b.local));
+        this.lamps!.setMatrixAt(b.index, this.m4.compose(this.v, l.mesh.quaternion, ONE));
+        this.lamps!.instanceMatrix.needsUpdate = true;
+      }
+    }
     for (const drum of this.drums) drum.rotateZ(DRUM_SPEED * dt);
     if (!this.beacons) return;
     const lit = Math.floor(time * 2.5) % 2;
