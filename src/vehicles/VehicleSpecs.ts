@@ -183,12 +183,13 @@ export const BUS_SPEC: VehicleSpec = {
   halfExtents: { x: 1.25, y: 1.15, z: 5.5 },
   wheelRadius: 0.5,
   wheelX: 1.1,
-  wheelZ: 3.4,
+  wheelZ: 3.0, // 6m wheelbase, like a real 12m city bus
   wheelY: -0.75,
   suspensionRestLength: 0.5,
   suspensionStiffness: 40,
   maxSpeed: 16,
   maxSteer: 0.7,
+  minSteer: 0.35, // heavies never go fast; keep most of the lock for slow turns
   frictionSlip: 2.6,
 };
 
