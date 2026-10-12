@@ -244,7 +244,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
     fillBlock(block, config.sidewalk, rng, buildings, trees);
   }
 
-  // --- Town squares, park centrepieces and the jump ramp (own RNG stream). The ramp wants a
+  // --- Town squares, park centrepieces and the jump ramps (own RNG stream). A ramp wants a
   // paved-over street with a road straight on at both ends: run-up through one junction, landing
   // beyond the other, none of it over a bridge (jumping the water is the canal ramp's job). ---
   const rampStreets = plazaEdges.filter((e) => {
@@ -259,13 +259,12 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const planned = planLandmarks(blocksOut, buildings, trees, config, new Rng(seed ^ 0x1a4d), rampSpots);
   ({ buildings, trees } = planned);
   const landmarks = planned.landmarks;
-  const ramp = landmarks.find((l) => l.kind === 'ramp');
-  const rampStreet = rampStreets.find((e) => {
+  const rampStreetSet = new Set(rampStreets.filter((e) => {
     const r = edgeRect(e);
-    return ramp && r.x === ramp.x && r.z === ramp.z;
-  });
-  // Junctions either side of the ramp street (and of a canal ramp's run-up) stay clear of roadworks.
-  const rampNodes = rampStreet ? [rampStreet.a, rampStreet.b, inLine(rampStreet, -1)!.a, inLine(rampStreet, 1)!.b] : [];
+    return landmarks.some((l) => l.kind === 'ramp' && r.x === l.x && r.z === l.z);
+  }));
+  // Junctions either side of the ramp streets (and of a canal ramp's run-up) stay clear of roadworks.
+  const rampNodes = [...rampStreetSet].flatMap((e) => [e.a, e.b, inLine(e, -1)!.a, inLine(e, 1)!.b]);
 
   // --- Often, a few ramps built to jump the canals (whether, and how many, from the seed): each at
   // a street that ends at the quay with a road behind it for the run-up and the street's other
@@ -317,7 +316,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   for (const e of plazaEdges) {
     const r = edgeRect(e);
     plazas.push(r);
-    if (e === rampStreet) continue; // no planters on the ramp's run
+    if (rampStreetSet.has(e)) continue; // no planters on a ramp's run
     const count = rng.int(2, 3);
     for (let k = 0; k < count; k++) {
       const t = (k + 1) / (count + 1) - 0.5;

@@ -29,6 +29,9 @@ export interface RampShape {
   curve: number; // deck height = height * t^curve, so it kicks up toward the lip
 }
 
+const LANDMARK_KINDS: readonly LandmarkKind[] = ['fountain', 'statue', 'obelisk', 'sculpture', 'ramp'];
+const MONUMENT_KINDS = LANDMARK_KINDS.filter((k) => k !== 'ramp');
+
 export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   fountain: 5,
   statue: 1.6,
@@ -38,9 +41,10 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
 };
 
 /**
- * "The Leap": one monument per city you can drive up and jump off. It stands on a paved-over
- * street in line with the roads either side, so the run-up comes straight through a junction and
- * the landing is the next road on; with no such street it goes in a town square instead.
+ * "The Leap": a monument you can drive up and jump off, rolled like any other centrepiece. It
+ * stands on a paved-over street in line with the roads either side, so the run-up comes straight
+ * through a junction and the landing is the next road on; with no such street it stays in its
+ * town square.
  */
 export const RAMP = {
   toe: -24, // metres from the landmark's centre
@@ -176,18 +180,23 @@ export function planLandmarks(
     if (squares.includes(b) || squares.some((s) => Math.hypot(s.rect.x - b.rect.x, s.rect.z - b.rect.z) < config.blockSize * 2.5)) continue;
     squares.push(b);
   }
+  // Each square's centrepiece is any landmark, ramp included, all equally likely. A ramp goes on
+  // a free street spot (lip toward a junction) when there is one, and the square re-rolls a
+  // monument; with no street spot left the ramp stays in the square as is.
+  const pitch = config.blockSize + config.roadWidth;
+  const streetRamps: Landmark[] = [];
   for (const b of squares) {
     b.square = true;
-    const roll = rng.next();
-    const kind: LandmarkKind = roll < 0.5 ? 'fountain' : roll < 0.75 ? 'statue' : roll < 0.9 ? 'obelisk' : 'sculpture';
+    let kind = rng.pick(LANDMARK_KINDS);
+    if (kind === 'ramp') {
+      // Never two on one street, nor one's run-up or landing on another's street.
+      const free = rampSpots.filter((p) => streetRamps.every((r) => Math.hypot(r.x - p.x, r.z - p.z) > pitch * 2));
+      if (free.length) {
+        streetRamps.push({ kind: 'ramp', ...rng.pick(free), radius: LANDMARK_RADIUS.ramp });
+        kind = rng.pick(MONUMENT_KINDS);
+      }
+    }
     landmarks.push({ kind, x: b.rect.x, z: b.rect.z, yaw: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), radius: LANDMARK_RADIUS[kind] });
-  }
-  // The jump ramp: on a straight paved-over street if there is one, else one square's centrepiece.
-  const street = rampSpots.length ? rng.pick(rampSpots) : null;
-  if (!street && landmarks.length) {
-    const ramp = landmarks[0];
-    ramp.kind = 'ramp';
-    ramp.radius = LANDMARK_RADIUS.ramp;
   }
   buildings = buildings.filter((bd) => !squares.some((s) => inBlock(s, bd)));
   trees = trees.filter((t) => !squares.some((s) => inBlock(s, t)));
@@ -202,7 +211,7 @@ export function planLandmarks(
     }
   });
 
-  if (street) landmarks.push({ kind: 'ramp', ...street, radius: LANDMARK_RADIUS.ramp });
+  landmarks.push(...streetRamps);
 
   // Parks: about half get a centrepiece (smaller fountain or a statue); clear trees around it.
   for (const p of blocks.filter((b) => b.park)) {

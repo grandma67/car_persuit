@@ -10,24 +10,36 @@ const inside = (r: { x: number; z: number; w: number; d: number }, p: { x: numbe
   Math.abs(p.x - r.x) <= r.w / 2 && Math.abs(p.z - r.z) <= r.d / 2;
 
 describe('jump ramp monument', () => {
-  it.each([1, 42, 1234, 99999])('seed %i: exactly one, on a paved street in line with the roads, with a clear run', (seed) => {
+  it.each([1, 42, 1234, 99999])('seed %i: each on a paved street in line with the roads (or in a square), with a clear run', (seed) => {
     const city = generateCity(seed, { ...DEFAULT_CITY, canalRampChance: 0 });
-    const ramps = city.landmarks.filter((l) => l.kind === 'ramp');
-    expect(ramps.length).toBe(1);
-    const ramp = ramps[0];
-    expect(city.plazas.some((p) => p.x === ramp.x && p.z === ramp.z)).toBe(true);
-    // A road straight on behind the run-up junction and beyond the landing one.
     const pitch = city.config.blockSize + city.config.roadWidth;
-    const fx = Math.sin(ramp.yaw);
-    const fz = Math.cos(ramp.yaw);
-    for (const along of [-pitch, pitch]) {
-      const p = { x: ramp.x + fx * along, z: ramp.z + fz * along };
-      expect(city.roads.some((r) => inside(r.rect, p))).toBe(true);
-    }
     const half = city.config.blockSize / 2;
-    const near = (p: { x: number; z: number }) => Math.abs(p.x - ramp.x) < half && Math.abs(p.z - ramp.z) < half;
-    for (const p of city.streetProps) if (near(p)) expect(inRampLane(ramp, p)).toBe(false);
-    for (const p of city.props) if (near(p)) expect(inRampLane(ramp, p)).toBe(false);
+    for (const ramp of city.landmarks.filter((l) => l.kind === 'ramp')) {
+      const inSquare = city.blocks.some((b) => b.square && b.rect.x === ramp.x && b.rect.z === ramp.z);
+      if (!inSquare) {
+        expect(city.plazas.some((p) => p.x === ramp.x && p.z === ramp.z)).toBe(true);
+        // A road straight on behind the run-up junction and beyond the landing one.
+        const fx = Math.sin(ramp.yaw);
+        const fz = Math.cos(ramp.yaw);
+        for (const along of [-pitch, pitch]) {
+          const p = { x: ramp.x + fx * along, z: ramp.z + fz * along };
+          expect(city.roads.some((r) => inside(r.rect, p))).toBe(true);
+        }
+      }
+      const near = (p: { x: number; z: number }) => Math.abs(p.x - ramp.x) < half && Math.abs(p.z - ramp.z) < half;
+      for (const p of city.streetProps) if (near(p)) expect(inRampLane(ramp, p)).toBe(false);
+      for (const p of city.props) if (near(p)) expect(inRampLane(ramp, p)).toBe(false);
+    }
+  });
+
+  it('is rolled like any other centrepiece: how many depends on the seed', () => {
+    const counts = new Set<number>();
+    for (let seed = 1; seed <= 60; seed++) {
+      const city = generateCity(seed, { ...DEFAULT_CITY, canalRampChance: 0 });
+      counts.add(city.landmarks.filter((l) => l.kind === 'ramp').length);
+    }
+    expect(counts.has(0)).toBe(true);
+    expect(counts.has(1)).toBe(true);
   });
 });
 
