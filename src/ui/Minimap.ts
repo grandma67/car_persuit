@@ -20,6 +20,7 @@ const COLORS = {
   routeFinal: '#4dff88',
   player: '#ffffff',
   ramp: '#f2c12e',
+  roadworks: '#ff8a1e',
 };
 
 /** Screen-space icons, pointing up (−y): a chevron on a bar for ramp monuments, an arrow for the truck. */
@@ -86,14 +87,15 @@ export class Minimap {
       }
       g.globalAlpha = 1;
     }
+    for (const b of this.city.blocks) if (b.park) rect(b.rect.x, b.rect.z, b.rect.w, b.rect.d, COLORS.park);
+    for (const p of this.city.plazas) rect(p.x, p.z, p.w, p.d, COLORS.plaza);
+    for (const b of this.city.blocks) if (b.square) rect(b.rect.x, b.rect.z, b.rect.w - 6, b.rect.d - 6, COLORS.plaza);
+    // Canals over the parks and squares (whose blocks reach under the water), below the bridges.
     const water = this.city.islandSize + 2 * SEA_MARGIN;
     for (const c of terrain.canals) {
       if (c.axis === 'x') rect(0, c.at, water, c.half * 2, COLORS.sea);
       else rect(c.at, 0, c.half * 2, water, COLORS.sea);
     }
-    for (const b of this.city.blocks) if (b.park) rect(b.rect.x, b.rect.z, b.rect.w, b.rect.d, COLORS.park);
-    for (const p of this.city.plazas) rect(p.x, p.z, p.w, p.d, COLORS.plaza);
-    for (const b of this.city.blocks) if (b.square) rect(b.rect.x, b.rect.z, b.rect.w - 6, b.rect.d - 6, COLORS.plaza);
     // Landmarks: fountains as blue discs, monuments as light stone dots.
     for (const l of this.city.landmarks) {
       if (l.kind === 'ramp') continue; // drawn each frame, as arrows
@@ -106,6 +108,18 @@ export class Minimap {
     for (const r of this.city.roads) rect(r.rect.x, r.rect.z, r.rect.w, r.rect.d, COLORS.road);
     for (const i of this.city.intersections) rect(i.x, i.z, i.w, i.d, COLORS.road);
     for (const b of terrain.bridges) rect(b.x, b.z, b.w, b.d, COLORS.road);
+    // Roadworks: the closed junction, or the closed road between its two junctions, in orange.
+    const { roadWidth } = this.city.config;
+    const nodes = this.city.graph.nodes;
+    for (const site of this.city.roadworks) {
+      if (site.node !== null) rect(nodes[site.node].x, nodes[site.node].z, roadWidth, roadWidth, COLORS.roadworks);
+      if (site.edge) {
+        const [a, b] = site.edge.map((id) => nodes[id]);
+        const w = Math.abs(a.x - b.x) > 1 ? Math.abs(a.x - b.x) - roadWidth : roadWidth;
+        const d = Math.abs(a.z - b.z) > 1 ? Math.abs(a.z - b.z) - roadWidth : roadWidth;
+        rect((a.x + b.x) / 2, (a.z + b.z) / 2, w, d, COLORS.roadworks);
+      }
+    }
     return c;
   }
 
