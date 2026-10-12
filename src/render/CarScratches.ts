@@ -7,27 +7,35 @@ import type { Vehicle } from '../vehicles/Vehicle';
 const MAX_PER_CAR = 28;
 const Z = new THREE.Vector3(0, 0, 1);
 
-/** Scraped paint: bright metal streaks, mostly along one direction, over a faint dark dent. */
+/**
+ * Crash damage: a dark dented scuff, scraped streaks (dark rubber/grime and bright bare metal, so
+ * it reads on light and dark paint alike) and a few chips of paint knocked off.
+ */
 function scratchTexture(): THREE.Texture | null {
   if (typeof document === 'undefined') return null;
   const s = 128;
   const c = document.createElement('canvas');
   c.width = c.height = s;
   const g = c.getContext('2d')!;
-  const dent = g.createRadialGradient(s * 0.45, s / 2, 2, s * 0.45, s / 2, s * 0.32);
-  dent.addColorStop(0, 'rgba(15,15,15,0.45)');
-  dent.addColorStop(1, 'rgba(15,15,15,0)');
+  const dent = g.createRadialGradient(s * 0.45, s / 2, 3, s * 0.45, s / 2, s * 0.4);
+  dent.addColorStop(0, 'rgba(12,12,12,0.75)');
+  dent.addColorStop(0.5, 'rgba(20,20,20,0.4)');
+  dent.addColorStop(1, 'rgba(20,20,20,0)');
   g.fillStyle = dent;
   g.fillRect(0, 0, s, s);
-  for (let i = 0; i < 22; i++) {
-    const y = s * 0.3 + Math.random() * s * 0.4;
+  for (let i = 0; i < 30; i++) {
+    const y = s * 0.25 + Math.random() * s * 0.5;
     const x = Math.random() * s * 0.35;
-    g.strokeStyle = Math.random() < 0.75 ? `rgba(225,228,232,${0.5 + Math.random() * 0.4})` : 'rgba(20,20,20,0.5)';
-    g.lineWidth = 0.4 + Math.random() * 1.4;
+    g.strokeStyle = i % 2 ? `rgba(20,20,22,${0.55 + Math.random() * 0.35})` : `rgba(230,232,236,${0.6 + Math.random() * 0.35})`;
+    g.lineWidth = 0.8 + Math.random() * 2;
     g.beginPath();
     g.moveTo(x, y);
-    g.lineTo(x + s * (0.25 + Math.random() * 0.4), y + (Math.random() - 0.5) * 10);
+    g.lineTo(x + s * (0.25 + Math.random() * 0.45), y + (Math.random() - 0.5) * 12);
     g.stroke();
+  }
+  for (let i = 0; i < 12; i++) {
+    g.fillStyle = i % 3 ? 'rgba(15,15,15,0.8)' : 'rgba(205,208,212,0.9)';
+    g.fillRect(s * 0.2 + Math.random() * s * 0.55, s * 0.3 + Math.random() * s * 0.4, 2 + Math.random() * 4, 2 + Math.random() * 3);
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -88,7 +96,7 @@ export function scratchCar(vehicle: Vehicle, toward: THREE.Vector3, strength: nu
   const flank = hx * (vehicle.spec.body === 'boxtruck' ? 1.02 : 1) + 0.012; // the cargo box stands a touch proud
   const count = 1 + Math.round(strength * 2);
   for (let k = 0; k < count; k++) {
-    const size = 0.35 + strength * 0.7 + Math.random() * 0.25;
+    const size = 0.5 + strength * 0.8 + Math.random() * 0.3;
     // The face the hit came through: a flank or an end, by where the direction meets the box.
     const side = Math.abs(local.x) / hx > Math.abs(local.z) / hz;
     if (side) {

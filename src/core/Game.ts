@@ -382,6 +382,7 @@ export class Game {
         car.vehicle.snapshot();
         const hit = car.vehicle.consumeImpact();
         this.scratch(car.vehicle, hit);
+        if (hit > 0) this.markWall(car.vehicle, hit);
         if (hit > 3) crashSound = Math.max(crashSound, this.crashLoudness(car.vehicle, hit));
         if (hit > 3) {
           car.controller.hit();
