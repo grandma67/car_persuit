@@ -10,6 +10,19 @@ const UP = new THREE.Vector3(0, 1, 0);
 const tmpQuat = new THREE.Quaternion();
 const tmpVec = new THREE.Vector3();
 const BRAKE_LIGHT_HOLD = 0.4; // seconds
+// Footbrake balance: weight shifts forward under braking, so real cars put ~65% of it on the front.
+const FRONT_BRAKE = 1.3;
+const REAR_BRAKE = 0.7;
+// Rear grip while drifting (0 = handbrake-locked, 1 = full grip), per second.
+const DRIFT_GRIP_DROP = 10; // handbrake pulled: rear lets go almost at once
+const DRIFT_GRIP_RECOVER = 1.2; // released: grip returns gradually, so the slide carries on
+const DRIFT_GRIP_POWER = 0.45; // on the throttle mid-slide the rears keep spinning: grip holds here (power oversteer)
+const DRIFT_MIN_SPEED = 6; // m/s; below this the handbrake just holds the car
+const DRIFT_YAW_KICK = 5; // rad/s² of extra rotation toward the steer while the handbrake is pulled
+const DRIFT_MAX_YAW = 2.4; // rad/s; spin cap so a drift stays catchable
+const DRIFT_POWER_PUSH = 9; // m/s² along the slide on full throttle at zero rear grip, so drifts keep their speed
+const DRIFT_HOLD_SLIP = 0.12; // rad; a slide at least this sideways counts as still drifting
+const DRIFT_CARRY = 0.9; // per second: how fast the velocity swings toward the nose mid-slide
 
 // A Rapier raycast vehicle plus its mesh. The same class drives the player and (later) cops;
 // only the DriveInput source differs.
@@ -35,6 +48,8 @@ export class Vehicle {
   lightsOff = false;
   /** 0..1 how hard the tyres are sliding (drift, handbrake or locked brakes). */
   skid = 0;
+  /** Rear tyre grip, 0 (locked and sliding) .. 1 (normal). Drops on the handbrake, recovers after. */
+  private rearGrip = 1;
   // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
   private lastVel = new THREE.Vector3();
   private impact = 0;
@@ -180,24 +195,32 @@ export class Vehicle {
       brake = 1.5; // engine braking when coasting
     }
 
+    const absSpeed = Math.abs(speed);
+    const drifting = this.updateRearGrip(input, speed, dt);
+    // Handbrake = rear wheels only, clutch in: the locked rears get no drive.
+    if (input.handbrake) engine = 0;
+    // Locked rears slide sideways at any speed; after release their grip comes back gradually.
+    const rearSide = input.handbrake ? s.driftSideFriction : THREE.MathUtils.lerp(s.driftSideFriction, s.sideFriction, this.rearGrip);
+
     // Rear-wheel drive.
     for (let i = 0; i < 4; i++) {
       const rear = i >= 2;
       c.setWheelEngineForce(i, rear ? engine : 0);
-      c.setWheelBrake(i, rear && input.handbrake ? s.handbrakeForce : brake);
-      c.setWheelSideFrictionStiffness(i, rear && input.handbrake ? s.driftSideFriction : s.sideFriction);
+      c.setWheelBrake(i, rear ? (input.handbrake ? s.handbrakeForce : brake * REAR_BRAKE) : brake * FRONT_BRAKE);
+      c.setWheelSideFrictionStiffness(i, rear ? rearSide : s.sideFriction);
     }
 
     c.updateVehicle(dt);
+    if (drifting && speed > 0) this.driftAssist(input, dt);
     this.lastInput = input;
     // Brake lights follow real braking (not coasting), held briefly so feathering doesn't flicker.
     const braking = (input.brake > 0 && speed > 0.5) || input.handbrake;
     this.brakeLightTimer = braking ? BRAKE_LIGHT_HOLD : Math.max(0, this.brakeLightTimer - dt);
 
     // Skid intensity: sideways slide, handbrake lock, or hard braking at speed.
-    const absSpeed = Math.abs(speed);
     let skid = THREE.MathUtils.clamp((Math.abs(this.lateralSpeed) - 2.5) / 6, 0, 1);
     if (input.handbrake && absSpeed > 5) skid = Math.max(skid, 0.6);
+    if (absSpeed > DRIFT_MIN_SPEED) skid = Math.max(skid, (1 - this.rearGrip) * 0.8);
     // Hard cornering at high speed: grip holds, but the tyres still squeal a little.
     skid = Math.max(skid, Math.abs(this.steer) * THREE.MathUtils.clamp((absSpeed - 20) / 15, 0, 1) * 0.35);
     if (brake >= s.brakeForce * 0.5 && absSpeed > 8) skid = Math.max(skid, 0.4);
@@ -210,6 +233,64 @@ export class Vehicle {
     tmpVec.copy(UP).applyQuaternion(tmpQuat.set(rot.x, rot.y, rot.z, rot.w));
     const f = -s.downforce * Math.abs(speed) * dt;
     this.body.applyImpulse({ x: tmpVec.x * f, y: tmpVec.y * f, z: tmpVec.z * f }, true);
+  }
+
+  /**
+   * Handbrake drops rear grip fast; on release it comes back slowly, and holds partway while the
+   * driver stays on the throttle in a slide. Returns whether the car is in a drift.
+   */
+  private updateRearGrip(input: DriveInput, speed: number, dt: number): boolean {
+    let target = 1;
+    let rate = DRIFT_GRIP_RECOVER;
+    // Forward speed only: a car shoved sideways (or reversing) on the handbrake isn't drifting.
+    if (input.handbrake && speed > DRIFT_MIN_SPEED) {
+      target = 0;
+      rate = DRIFT_GRIP_DROP;
+    } else if (this.rearGrip < 1 && input.throttle > 0 && Math.abs(this.slipAngle()) > DRIFT_HOLD_SLIP) {
+      target = DRIFT_GRIP_POWER;
+    }
+    if (speed < DRIFT_MIN_SPEED * 0.5) target = 1; // stopped: no drift to hold
+    const step = rate * dt;
+    this.rearGrip += THREE.MathUtils.clamp(target - this.rearGrip, -step, step);
+    return this.rearGrip < 0.98;
+  }
+
+  /**
+   * Arcade help that makes drifts satisfying rather than a spin: a yaw kick toward the steer while
+   * the handbrake is pulled, a cap on spin, and velocity that swings toward the nose so a held slide
+   * carries its speed around the corner and counter-steer straightens it out.
+   */
+  private driftAssist(input: DriveInput, dt: number): void {
+    const w = this.body.angvel();
+    let yaw = w.y;
+    // Positive yaw turns left; positive steer is right.
+    if (input.handbrake) yaw -= Math.sign(input.steer) * Math.min(1, Math.abs(input.steer)) * DRIFT_YAW_KICK * dt;
+    yaw = THREE.MathUtils.clamp(yaw, -DRIFT_MAX_YAW, DRIFT_MAX_YAW);
+    this.body.setAngvel({ x: w.x, y: yaw, z: w.z }, true);
+
+    const v = this.body.linvel();
+    const flat = Math.hypot(v.x, v.z);
+    if (flat < 1) return;
+    // Spinning rears still push: on the throttle the slide holds its speed instead of scrubbing off.
+    if (!input.handbrake && input.throttle > 0 && flat < this.spec.maxSpeed) {
+      const k = 1 + (DRIFT_POWER_PUSH * input.throttle * (1 - this.rearGrip) * dt) / flat;
+      v.x *= k;
+      v.z *= k;
+    }
+    // Swing the velocity a fraction of the way toward the heading each step; speed is kept.
+    const slip = this.slipAngle();
+    if (Math.abs(slip) > Math.PI / 2) return; // facing backwards: let it spin out
+    const turn = -slip * Math.min(1, DRIFT_CARRY * (1 - this.rearGrip * 0.5) * dt);
+    const cos = Math.cos(turn);
+    const sin = Math.sin(turn);
+    this.body.setLinvel({ x: v.x * cos + v.z * sin, y: v.y, z: -v.x * sin + v.z * cos }, true);
+  }
+
+  /** Signed angle between where the car points and where it's going (radians, 0 = no slide). */
+  private slipAngle(): number {
+    const v = this.body.linvel();
+    const f = this.forward(tmpVec);
+    return Math.atan2(v.x * f.z - v.z * f.x, v.x * f.x + v.z * f.z);
   }
 
   /** Remove part of the sideways velocity, and of any yaw spin the steering isn't asking for. */

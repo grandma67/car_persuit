@@ -50,7 +50,7 @@ export const PLAYER_SPEC: VehicleSpec = {
   steerRate: 6,
   frictionSlip: 2.2,
   sideFriction: 1.4,
-  driftSideFriction: 0.45,
+  driftSideFriction: 0.3,
   downforce: 60,
 };
 
