@@ -278,20 +278,23 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
       const dir = aWet ? -1 : 1; // toward the water
       const runUp = inLine(e, -dir);
       const across = inLine(e, dir); // shares the wet junction
-      if (!isRoad(runUp) || !across || !quaySquares.includes(across)) return [];
+      // Two whole blocks of straight road behind the quay street (kept clear of roadworks): enough
+      // run-up to reach the speed the ramp is built for (one block leaves a wide canal out of reach).
+      const longRunUp = runUp && inLine(runUp, -dir);
+      if (!isRoad(runUp) || !isRoad(longRunUp) || !across || !quaySquares.includes(across)) return [];
       const wet = nodes[aWet ? e.a : e.b];
       const canal = shape.canals.find((c) => (e.horizontal ? c.axis === 'z' && c.at === wet.x : c.axis === 'x' && c.at === wet.z));
       if (!canal) return [];
       const lipAt = canal.at - dir * (canal.half + 2); // just back from the quay edge
       const rampShape = canalRampShape(canal.half * 2 + 8); // over the far parapet line with room for the car
       if (-rampShape.toe > blockSize - 8) return [];
-      const far = dir > 0 ? runUp!.a : runUp!.b;
+      const far = dir > 0 ? longRunUp!.a : longRunUp!.b;
       return [{
         landmark: {
           kind: 'ramp', yaw: yawAlong(e, dir), radius: 1.5, shape: rampShape, crossing: canal.at,
           x: e.horizontal ? lipAt : wet.x, z: e.horizontal ? wet.z : lipAt,
         } satisfies Landmark,
-        nodes: [aWet ? e.b : e.a, far],
+        nodes: [aWet ? e.b : e.a, dir > 0 ? runUp!.a : runUp!.b, far],
         wet,
       }];
     });

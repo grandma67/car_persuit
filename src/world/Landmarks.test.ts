@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { DEFAULT_CITY, generateCity } from './CityGenerator';
-import { canalRampShape, inRampLane, rampDeckHulls } from './Landmarks';
+import { canalRampShape, inRampLane, rampDeckHulls, rampFrame, rampShape, type Landmark } from './Landmarks';
+import { groundHeight, inCanal } from './Terrain';
 import { Vehicle } from '../vehicles/Vehicle';
 import { PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 
@@ -120,3 +121,84 @@ describe('canal ramp', () => {
     expect(landed!).toBeGreaterThan(far + 2);
   });
 });
+
+/**
+ * Drive the player flat out at a canal ramp in a real city, along the ramp's line: from as far
+ * back as the road runs straight, over the ground as it lies (hill included), the ramp placed as
+ * the game places it. Returns how far past the lip it landed, and where the far bank starts.
+ */
+function jumpInCity(city: ReturnType<typeof generateCity>, l: Landmark) {
+  const s = rampShape(l);
+  const fx = Math.sin(l.yaw);
+  const fz = Math.cos(l.yaw);
+  const rx = Math.cos(l.yaw);
+  const rz = -Math.sin(l.yaw);
+  const at = (a: number) => ({ x: l.x + fx * a, z: l.z + fz * a });
+  const wet = (a: number) => {
+    const p = at(a);
+    return inCanal(city.terrain, p.x, p.z) && !city.terrain.bridges.some((b) => inside(b, p));
+  };
+  const drivable = (a: number) => {
+    const p = at(a);
+    return !wet(a) && [...city.roads.map((r) => r.rect), ...city.intersections, ...city.plazas].some((r) => inside(r, p));
+  };
+  let back = s.toe;
+  while (back > s.toe - 300 && drivable(back - 1)) back -= 1;
+  let wetFrom = 0;
+  while (!wet(wetFrom)) wetFrom += 0.5;
+  let farBank = wetFrom;
+  while (wet(farBank)) farBank += 0.5;
+
+  const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+  // The road along the line, a metre-long slab at a time following the hill, open over the water.
+  for (let a = back - 5; a < farBank + 150; a += 1) {
+    if (a + 1 > wetFrom && a < farBank) continue;
+    const pts: number[] = [];
+    for (const along of [a, a + 1]) {
+      for (const across of [-6, 6]) {
+        const x = l.x + fx * along + rx * across;
+        const z = l.z + fz * along + rz * across;
+        const y = groundHeight(city.terrain, x, z);
+        pts.push(x, y, z, x, y - 0.5, z);
+      }
+    }
+    world.createCollider(RAPIER.ColliderDesc.convexHull(new Float32Array(pts))!.setFriction(1));
+  }
+  const { y, quaternion: q } = rampFrame(l, city.terrain);
+  for (const pts of rampDeckHulls(s, 16)) {
+    world.createCollider(RAPIER.ColliderDesc.convexHull(pts)!.setTranslation(l.x, y, l.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }).setFriction(1));
+  }
+  const start = at(back + 3);
+  const car = new Vehicle(world, PLAYER_SPEC, { x: start.x, y: groundHeight(city.terrain, start.x, start.z) + 1, z: start.z }, l.yaw);
+  let airborne = false;
+  for (let i = 0; i < 40 * 60; i++) {
+    car.drive({ throttle: 1, brake: 0, steer: 0, handbrake: false }, 1 / 60);
+    world.step();
+    car.snapshot();
+    const along = (car.position.x - l.x) * fx + (car.position.z - l.z) * fz;
+    const touching = [0, 1, 2, 3].some((w) => car.controller.wheelIsInContact(w));
+    if (along > 1 && !touching) airborne = true;
+    if (airborne && touching) return { landed: along, farBank };
+    if (car.position.y < -6) break;
+  }
+  return { landed: NaN, farBank };
+}
+
+describe('canal ramps in real cities', () => {
+  beforeAll(() => RAPIER.init());
+
+  // Run-up as the road allows, hills and all: every ramp has to carry the car to the far bank.
+  it('every canal ramp in the first 40 seeds clears its canal', () => {
+    let ramps = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const city = generateCity(seed);
+      for (const l of city.landmarks.filter((q) => q.crossing !== undefined)) {
+        ramps++;
+        const { landed, farBank } = jumpInCity(city, l);
+        expect(landed, `seed ${seed} ramp at ${l.x},${l.z}`).toBeGreaterThan(farBank + 1);
+      }
+    }
+    expect(ramps).toBeGreaterThan(10);
+  });
+});
+

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from './geometry';
-import { deckHeight, rampDeckHulls, rampShape, type Landmark, type RampShape } from '../world/Landmarks';
-import { groundBase, groundHeight, groundNormal, groundTop, type Terrain } from '../world/Terrain';
+import { deckHeight, rampDeckHulls, rampFrame, rampShape, type Landmark, type RampShape } from '../world/Landmarks';
+import { groundBase, groundTop, type Terrain } from '../world/Terrain';
 import { TireSmoke } from './TireSmoke';
 
 const STONE = 0xc9c3b6;
@@ -210,12 +210,7 @@ export class Landmarks {
   /** The jump monument: drivable curved deck (convex slices), solid plinths. Tilted with the slope. */
   private addRamp(l: Landmark, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, solid: THREE.Material, metal: THREE.Material): void {
     const s = rampShape(l);
-    const up = new THREE.Vector3(0, 1, 0);
-    const n = groundNormal(terrain, l.x, l.z);
-    const q = new THREE.Quaternion()
-      .setFromUnitVectors(up, new THREE.Vector3(n.x, n.y, n.z))
-      .multiply(new THREE.Quaternion().setFromAxisAngle(up, l.yaw));
-    const y = groundHeight(terrain, l.x, l.z) - 0.03;
+    const { y, quaternion: q } = rampFrame(l, terrain);
     const group = new THREE.Group();
     group.position.set(l.x, y, l.z);
     group.quaternion.copy(q);

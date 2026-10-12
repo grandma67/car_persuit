@@ -1,7 +1,9 @@
 // Landmarks: town squares (a few downtown/midtown blocks paved over around a centrepiece),
 // centrepieces in some parks, and the jump ramps. Pure data — LandmarkBuilder renders it.
+import * as THREE from 'three';
 import type { Rng } from '../core/Rng';
 import type { Block, Building, CityConfig } from './CityGenerator';
+import { groundHeight, type Terrain } from './Terrain';
 
 export type LandmarkKind = 'fountain' | 'statue' | 'obelisk' | 'sculpture' | 'ramp';
 
@@ -57,16 +59,47 @@ export function deckHeight(s: RampShape, z: number): number {
   return s.height * Math.pow(t, s.curve);
 }
 
+/**
+ * Where a ramp stands: origin height and orientation, tilted so the deck's toe and lip both meet
+ * the road (the line through the ground under each) and leaning with the road's camber. Tilting
+ * to the slope at one point alone leaves the toe standing proud wherever a hill curves under a
+ * long ramp, and a fast car hits that edge like a kerb.
+ */
+export function rampFrame(l: Landmark, terrain: Terrain): { y: number; quaternion: THREE.Quaternion } {
+  const s = rampShape(l);
+  const fx = Math.sin(l.yaw);
+  const fz = Math.cos(l.yaw);
+  const rx = Math.cos(l.yaw); // local +X
+  const rz = -Math.sin(l.yaw);
+  const h = (along: number, across = 0) => groundHeight(terrain, l.x + fx * along + rx * across, l.z + fz * along + rz * across);
+  const slope = (h(s.lip) - h(s.toe)) / (s.lip - s.toe);
+  const mid = (s.toe + s.lip) / 2;
+  const w = s.width / 2;
+  const camber = (h(mid, w) - h(mid, -w)) / (2 * w);
+  const zAxis = new THREE.Vector3(fx, slope, fz).normalize();
+  const xAxis = new THREE.Vector3(rx, camber, rz);
+  xAxis.addScaledVector(zAxis, -xAxis.dot(zAxis)).normalize();
+  const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis);
+  const quaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis));
+  // Through the toe's ground point (sunk a touch so its edge is flush, never proud).
+  return { y: h(s.toe) - slope * s.toe - 0.03, quaternion };
+}
+
 /** The deck as convex slices (local space), from the ground up to the deck surface. */
 export function rampDeckHulls(s: RampShape, segments: number): Float32Array[] {
   const w = s.width / 2;
   const hulls: Float32Array[] = [];
+  const step = (s.lip - s.toe) / segments;
   for (let i = 0; i < segments; i++) {
-    const z0 = s.toe + ((s.lip - s.toe) * i) / segments;
-    const z1 = s.toe + ((s.lip - s.toe) * (i + 1)) / segments;
+    const z0 = s.toe + step * i;
+    const z1 = z0 + step;
     const y0 = deckHeight(s, z0) + 0.06;
     const y1 = deckHeight(s, z1) + 0.06;
-    hulls.push(new Float32Array([-w, 0, z0, w, 0, z0, -w, 0, z1, w, 0, z1, -w, y0, z0, w, y0, z0, -w, y1, z1, w, y1, z1]));
+    // Each slice reaches back under the one before along its own (lower, the deck curving up)
+    // slope, so no slice shows a front edge at the seam for a car's body to catch on.
+    const zb = i === 0 ? z0 : z0 - step * 0.5;
+    const yb = Math.max(0, y0 - ((y1 - y0) / step) * (z0 - zb));
+    hulls.push(new Float32Array([-w, 0, zb, w, 0, zb, -w, 0, z1, w, 0, z1, -w, yb, zb, w, yb, zb, -w, y1, z1, w, y1, z1]));
   }
   return hulls;
 }
