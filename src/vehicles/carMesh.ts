@@ -73,8 +73,9 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     return m;
   };
 
+  // Hangs 2 cm below the body: flush bottoms z-fight (seen on a car lying on its roof).
   const skirt = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 + 0.04, 0.12, hz * 2 - 0.3), trim);
-  skirt.position.y = -hy + 0.06;
+  skirt.position.y = -hy + 0.04;
   root.add(skirt);
 
   // Cabin / glasshouse, and where the roof ends up (for the light bar).
@@ -131,7 +132,9 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     box(RAMP.halfWidth * 1.7, (top - hy) * 0.4, 0.04, glass, 0, top - (top - hy) * 0.3, z1 + 0.01);
     for (const side of [-1, 1]) box(0.04, (top - hy) * 0.35, (z1 - z0) * 0.5, glass, side * (RAMP.halfWidth + 0.01), top - (top - hy) * 0.3, z1 - (z1 - z0) * 0.3);
     const steel = new THREE.MeshStandardMaterial({ color: 0x3a3e45, metalness: 0.7, roughness: 0.45, flatShading: true });
-    root.add(new THREE.Mesh(new ConvexGeometry(pointsOf(rampHullPoints(spec))), steel));
+    // Drawn 1 cm inside the body's sides and floor, which it would otherwise share and flicker against.
+    const hull = pointsOf(rampHullPoints(spec)).map((p) => p.set(p.x * (1 - 0.01 / RAMP.halfWidth), p.y <= -hy ? p.y + 0.01 : p.y, p.z));
+    root.add(new THREE.Mesh(new ConvexGeometry(hull), steel));
     const run = RAMP.top.z - RAMP.tail.z;
     const rise = RAMP.top.y - RAMP.tail.y;
     // Flat, facing up, texture-top toward the front; then tilted to the deck slope.
