@@ -307,12 +307,19 @@ function closeApproach(cx: number, cz: number, dx: number, dz: number, dist: num
   const count = rng.int(5, 7);
   const span = half - 1;
   for (let k = 0; k < count; k++) {
-    let along = dist + rng.range(-0.25, 0.25);
-    let across = -span + (2 * span * k) / (count - 1) + rng.range(-0.3, 0.3);
+    const along = dist + rng.range(-0.25, 0.25);
+    const across = -span + (2 * span * k) / (count - 1) + rng.range(-0.3, 0.3);
     if (rng.next() < 0.12) {
-      // Clipped by a car: knocked out of line.
-      along += rng.range(-1.5, 1.5);
-      across += rng.range(-0.8, 0.8);
+      // Clipped by a car: knocked out of line (but not onto another cone).
+      const knocked = at(along + rng.range(-1.5, 1.5), across + rng.range(-0.8, 0.8));
+      const lineAt = at(along, across);
+      const neighbours = [at(dist, across - (2 * span) / (count - 1)), at(dist, across + (2 * span) / (count - 1))];
+      if (neighbours.every((n) => Math.hypot(n.x - knocked.x, n.z - knocked.z) > 1.2)) {
+        cones.push(cone(knocked.x, knocked.z, rng.range(0, Math.PI * 2)));
+        continue;
+      }
+      cones.push(cone(lineAt.x, lineAt.z, rng.range(0, Math.PI * 2)));
+      continue;
     }
     const p = at(along, across);
     cones.push(cone(p.x, p.z, rng.range(0, Math.PI * 2)));
