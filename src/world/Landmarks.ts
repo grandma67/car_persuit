@@ -1,5 +1,5 @@
-// Landmarks: town squares (a few downtown/midtown blocks paved over around a centrepiece) and
-// centrepieces in some parks. Pure data — LandmarkBuilder renders it.
+// Landmarks: town squares (a few downtown/midtown blocks paved over around a centrepiece),
+// centrepieces in some parks, and the jump ramps. Pure data — LandmarkBuilder renders it.
 import type { Rng } from '../core/Rng';
 import type { Block, Building, CityConfig } from './CityGenerator';
 
@@ -12,6 +12,19 @@ export interface Landmark {
   yaw: number;
   /** Footprint radius in metres (solid). */
   radius: number;
+  /** Ramps: deck shape, when not the standard RAMP. */
+  shape?: RampShape;
+  /** Canal ramps: the `at` of the canal they jump. */
+  crossing?: number;
+}
+
+/** A jump ramp's deck in local space: the car drives along +Z from the toe to the lip. */
+export interface RampShape {
+  toe: number; // metres from the landmark's position
+  lip: number;
+  width: number;
+  height: number;
+  curve: number; // deck height = height * t^curve, so it kicks up toward the lip
 }
 
 export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
@@ -23,17 +36,72 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
 };
 
 /**
- * "The Leap": one town square per city has a monument you can drive up and jump off. Local
- * space: the car drives along +Z, from the toe (low end, near the square's edge) to the lip.
+ * "The Leap": one monument per city you can drive up and jump off. It stands on a paved-over
+ * street in line with the roads either side, so the run-up comes straight through a junction and
+ * the landing is the next road on; with no such street it goes in a town square instead.
  */
 export const RAMP = {
-  toe: -24, // metres from the square's centre
+  toe: -24, // metres from the landmark's centre
   lip: -9,
   width: 7,
   height: 3.0,
-  curve: 1.6, // deck height = height * t^curve, so it kicks up toward the lip
+  curve: 1.6,
   lane: 8, // half-width of the run-up and landing lane kept clear of trees and benches
 };
+
+export const rampShape = (l: Landmark): RampShape => l.shape ?? RAMP;
+
+/** Deck height at local z along the ramp (0 before the toe, peak at the lip). */
+export function deckHeight(s: RampShape, z: number): number {
+  const t = Math.min(1, Math.max(0, (z - s.toe) / (s.lip - s.toe)));
+  return s.height * Math.pow(t, s.curve);
+}
+
+/** The deck as convex slices (local space), from the ground up to the deck surface. */
+export function rampDeckHulls(s: RampShape, segments: number): Float32Array[] {
+  const w = s.width / 2;
+  const hulls: Float32Array[] = [];
+  for (let i = 0; i < segments; i++) {
+    const z0 = s.toe + ((s.lip - s.toe) * i) / segments;
+    const z1 = s.toe + ((s.lip - s.toe) * (i + 1)) / segments;
+    const y0 = deckHeight(s, z0) + 0.06;
+    const y1 = deckHeight(s, z1) + 0.06;
+    hulls.push(new Float32Array([-w, 0, z0, w, 0, z0, -w, 0, z1, w, 0, z1, -w, y0, z0, w, y0, z0, -w, y1, z1, w, y1, z1]));
+  }
+  return hulls;
+}
+
+/** Speed (m/s) a canal ramp is built for, at the lip: a street-length run-up, short of flat out. */
+export const CANAL_JUMP_SPEED = 35;
+/** Tightest the deck may curve (radius, m): any sharper and a fast car slams into it instead of riding up. */
+const MIN_DECK_RADIUS = 70;
+const G = 9.81;
+
+/** Flight distance from a lip `h` high, leaving at `speed` and `angle`, down to the lip's base level. */
+export function jumpRange(speed: number, angle: number, h: number): number {
+  const vx = speed * Math.cos(angle);
+  const vy = speed * Math.sin(angle);
+  return (vx * (vy + Math.sqrt(vy * vy + 2 * G * h))) / G;
+}
+
+/**
+ * A ramp that carries a car `gap` metres at CANAL_JUMP_SPEED: as shallow a kick as gets there,
+ * long enough that the deck never curves tighter than MIN_DECK_RADIUS (so steeper means longer
+ * and taller; the widest canals get a ski jump). The lip sits at the landmark's position.
+ */
+export function canalRampShape(gap: number): RampShape {
+  const curve = 1.6;
+  let shape: RampShape = { toe: -15, lip: 0, width: RAMP.width, height: 3, curve };
+  for (let angle = 0.31; angle <= 0.6; angle += 0.01) { // from the town ramp's kick up
+    const slope = Math.tan(angle);
+    // Deck y = h·t^c: slope at the lip h·c/L, curvature there h·c(c−1)/L².
+    const length = Math.max(15, (curve - 1) * MIN_DECK_RADIUS * slope);
+    const height = (length * slope) / curve;
+    shape = { toe: -length, lip: 0, width: RAMP.width, height, curve };
+    if (jumpRange(CANAL_JUMP_SPEED, angle, height) >= gap * 1.1) break;
+  }
+  return shape;
+}
 
 /** Is a world point in the ramp's run-up/landing lane? */
 export function inRampLane(l: Landmark, p: { x: number; z: number }): boolean {
@@ -59,6 +127,7 @@ export function planLandmarks(
   trees: { x: number; z: number }[],
   config: CityConfig,
   rng: Rng,
+  rampSpots: { x: number; z: number; yaw: number }[] = [],
 ): { landmarks: Landmark[]; buildings: Building[]; trees: { x: number; z: number }[] } {
   const landmarks: Landmark[] = [];
   const half = config.blockSize / 2;
@@ -80,8 +149,9 @@ export function planLandmarks(
     const kind: LandmarkKind = roll < 0.5 ? 'fountain' : roll < 0.75 ? 'statue' : roll < 0.9 ? 'obelisk' : 'sculpture';
     landmarks.push({ kind, x: b.rect.x, z: b.rect.z, yaw: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), radius: LANDMARK_RADIUS[kind] });
   }
-  // One square's centrepiece is the jump ramp monument.
-  if (landmarks.length) {
+  // The jump ramp: on a straight paved-over street if there is one, else one square's centrepiece.
+  const street = rampSpots.length ? rng.pick(rampSpots) : null;
+  if (!street && landmarks.length) {
     const ramp = landmarks[0];
     ramp.kind = 'ramp';
     ramp.radius = LANDMARK_RADIUS.ramp;
@@ -98,6 +168,8 @@ export function planLandmarks(
       trees.push(t);
     }
   });
+
+  if (street) landmarks.push({ kind: 'ramp', ...street, radius: LANDMARK_RADIUS.ramp });
 
   // Parks: about half get a centrepiece (smaller fountain or a statue); clear trees around it.
   for (const p of blocks.filter((b) => b.park)) {

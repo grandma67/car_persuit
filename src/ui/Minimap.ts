@@ -1,6 +1,7 @@
 // Round, heading-up minimap: the city is pre-drawn once, then each frame it's rotated around the
 // player, with the road route and destination drawn on top.
 import type { CityData } from '../world/CityGenerator';
+import { rampShape } from '../world/Landmarks';
 import { groundHeight } from '../world/Terrain';
 
 const SIZE_CSS = 180; // on-screen diameter
@@ -91,8 +92,9 @@ export class Minimap {
     for (const b of this.city.blocks) if (b.square) rect(b.rect.x, b.rect.z, b.rect.w - 6, b.rect.d - 6, COLORS.plaza);
     // Landmarks: fountains as blue discs, monuments as light stone dots.
     for (const l of this.city.landmarks) {
+      if (l.kind === 'ramp') continue; // drawn over the roads, below
       const [cx, cy] = this.toMap(l.x, l.z);
-      g.fillStyle = l.kind === 'fountain' ? '#4aa3d8' : l.kind === 'ramp' ? '#e0b030' : '#d8d2c4';
+      g.fillStyle = l.kind === 'fountain' ? '#4aa3d8' : '#d8d2c4';
       g.beginPath();
       g.arc(cx, cy, (l.kind === 'fountain' ? l.radius : l.radius + 1.5) * BASE_SCALE, 0, Math.PI * 2);
       g.fill();
@@ -100,6 +102,24 @@ export class Minimap {
     for (const r of this.city.roads) rect(r.rect.x, r.rect.z, r.rect.w, r.rect.d, COLORS.road);
     for (const i of this.city.intersections) rect(i.x, i.z, i.w, i.d, COLORS.road);
     for (const b of terrain.bridges) rect(b.x, b.z, b.w, b.d, COLORS.road);
+    // Jump ramps: a gold arrow from the toe, pointing the way you fly off the lip.
+    for (const l of this.city.landmarks) {
+      if (l.kind !== 'ramp') continue;
+      const s = rampShape(l);
+      const fx = Math.sin(l.yaw);
+      const fz = Math.cos(l.yaw);
+      const at = (along: number, across: number) => this.toMap(l.x + fx * along + fz * across, l.z + fz * along - fx * across);
+      const w = Math.max(s.width / 2, 5);
+      const tip = s.lip + Math.max(10, (s.lip - s.toe) * 0.5);
+      g.beginPath();
+      for (const [a, c] of [[s.toe, -w * 0.6], [s.lip, -w * 0.6], [s.lip, -w * 1.5], [tip, 0], [s.lip, w * 1.5], [s.lip, w * 0.6], [s.toe, w * 0.6]]) g.lineTo(...at(a, c));
+      g.closePath();
+      g.fillStyle = '#ffc21a';
+      g.strokeStyle = '#3a2a00';
+      g.lineWidth = 2;
+      g.fill();
+      g.stroke();
+    }
     return c;
   }
 

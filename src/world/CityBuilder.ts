@@ -24,6 +24,7 @@ const PARAPET = { thick: 0.5, height: 0.9 }; // low walls along the canals and b
 // Parapets stand this far back from the quay or deck edge, so their faces never share a plane
 // with the walls below (which z-fight along the ground line).
 const PARAPET_INSET = 0.04;
+const CANAL_RAMP_GAP = 6; // half-width of the parapet gaps at a canal ramp
 
 /** Accumulates flat-shaded quads into one BufferGeometry. */
 class GeometryBuilder {
@@ -289,6 +290,13 @@ export function buildCity(
       const gaps: [number, number][] = [
         ...terrain.bridges.filter((b) => (c.axis === 'x' ? b.z === c.at : b.x === c.at)).map((b) => span(b, c.axis)),
         ...terrain.canals.filter((o) => o.axis !== c.axis).map((o): [number, number] => [o.at - o.half, o.at + o.half]),
+        // A canal ramp's lane, on both banks: nothing to clip taking off or touching down.
+        ...city.landmarks
+          .filter((l) => l.crossing === c.at && (c.axis === 'x') === (Math.abs(Math.cos(l.yaw)) > 0.5))
+          .map((l): [number, number] => {
+            const u = c.axis === 'x' ? l.x : l.z;
+            return [u - CANAL_RAMP_GAP, u + CANAL_RAMP_GAP];
+          }),
       ];
       for (const side of [-1, 1]) {
         const off = c.at + side * (c.half + PARAPET_INSET + PARAPET.thick / 2);

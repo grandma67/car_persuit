@@ -3,7 +3,7 @@ import { Rng } from '../core/Rng';
 import { RoadGraph, type RoadNode } from './RoadGraph';
 import { footprintsOverlap, generateStreetProps, propFootprint, type StreetProp } from './StreetProps';
 import { generateTrafficControl, type RoadMark } from './TrafficControl';
-import { planLandmarks, type Landmark } from './Landmarks';
+import { canalRampShape, planLandmarks, type Landmark } from './Landmarks';
 import { planRoadworks, type Roadworks } from './Roadworks';
 import { clipRect, inCanal, landPieces, onGround, pickBridges, planTerrain, type Terrain, type TerrainConfig } from './Terrain';
 
@@ -16,6 +16,7 @@ export interface CityConfig extends TerrainConfig {
   removeRoadFraction: number; // share of inner road segments turned into plazas
   parkChance: number;
   roadworksChance: number; // chance per site slot (up to 3) of a junction closed for repairs
+  canalRampChance: number; // chance of a ramp built to jump a canal (cities with canals only)
 }
 
 export const DEFAULT_CITY: CityConfig = {
@@ -27,6 +28,7 @@ export const DEFAULT_CITY: CityConfig = {
   removeRoadFraction: 0.1,
   parkChance: 0.08,
   roadworksChance: 0.5,
+  canalRampChance: 0.2,
   hillChance: 0.75,
   hillHeight: [8, 22],
   maxGrade: 0.11,
@@ -128,6 +130,12 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
     }
   };
   edges.forEach((e) => link(e, true));
+  const edgeIndex = new Map(edges.map((e) => [`${e.horizontal ? 'h' : 'v'}${e.i},${e.j}`, e]));
+  /** The edge `steps` along from e in its own line (undefined off the grid). */
+  const inLine = (e: Edge, steps: number) => edgeIndex.get(e.horizontal ? `h${e.i + steps},${e.j}` : `v${e.i},${e.j + steps}`);
+  const isRoad = (e: Edge | undefined) => !!e && !e.removed && !e.canal;
+  /** Heading (yaw) along an edge, toward its b end (+1) or its a end (-1). */
+  const yawAlong = (e: Edge, dir: number) => (e.horizontal ? (dir * Math.PI) / 2 : dir > 0 ? 0 : Math.PI);
   const graph = new RoadGraph(nodes);
 
   // --- Canals (own RNG stream): the roads along a canal's line become water. Every few blocks a
@@ -230,10 +238,58 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
     fillBlock(block, config.sidewalk, rng, buildings, trees);
   }
 
-  // --- Town squares and park centrepieces (own RNG stream) ---
-  const planned = planLandmarks(blocksOut, buildings, trees, config, new Rng(seed ^ 0x1a4d));
+  // --- Town squares, park centrepieces and the jump ramp (own RNG stream). The ramp wants a
+  // paved-over street with a road straight on at both ends: run-up through one junction, landing
+  // beyond the other. ---
+  const rampStreets = plazaEdges.filter((e) => isRoad(inLine(e, -1)) && isRoad(inLine(e, 1)));
+  const rampSpots = rampStreets.flatMap((e) => {
+    const r = edgeRect(e);
+    return [1, -1].map((dir) => ({ x: r.x, z: r.z, yaw: yawAlong(e, dir) }));
+  });
+  const planned = planLandmarks(blocksOut, buildings, trees, config, new Rng(seed ^ 0x1a4d), rampSpots);
   ({ buildings, trees } = planned);
   const landmarks = planned.landmarks;
+  const ramp = landmarks.find((l) => l.kind === 'ramp');
+  const rampStreet = rampStreets.find((e) => {
+    const r = edgeRect(e);
+    return ramp && r.x === ramp.x && r.z === ramp.z;
+  });
+  // Junctions either side of the ramp street (and of a canal ramp's run-up) stay clear of roadworks.
+  const rampNodes = rampStreet ? [rampStreet.a, rampStreet.b, inLine(rampStreet, -1)!.a, inLine(rampStreet, 1)!.b] : [];
+
+  // --- Rarely, a ramp built to jump a canal: at a street that ends at the quay with a road behind
+  // it for the run-up and the street's other half across the water to land on. Sized to the
+  // canal. ---
+  const canalRng = new Rng(seed ^ 0xca7a1);
+  if (shape.canals.length && canalRng.next() < config.canalRampChance) {
+    const spots = quaySquares.flatMap((e) => {
+      const aWet = canalNodes.has(e.a);
+      if (aWet === canalNodes.has(e.b)) return [];
+      const dir = aWet ? -1 : 1; // toward the water
+      const runUp = inLine(e, -dir);
+      const across = inLine(e, dir); // shares the wet junction
+      if (!isRoad(runUp) || !across || !quaySquares.includes(across)) return [];
+      const wet = nodes[aWet ? e.a : e.b];
+      const canal = shape.canals.find((c) => (e.horizontal ? c.axis === 'z' && c.at === wet.x : c.axis === 'x' && c.at === wet.z));
+      if (!canal) return [];
+      const lipAt = canal.at - dir * (canal.half + 2); // just back from the quay edge
+      const rampShape = canalRampShape(canal.half * 2 + 8); // over the far parapet line with room for the car
+      if (-rampShape.toe > blockSize - 8) return [];
+      const far = dir > 0 ? runUp!.a : runUp!.b;
+      return [{
+        landmark: {
+          kind: 'ramp', yaw: yawAlong(e, dir), radius: 1.5, shape: rampShape, crossing: canal.at,
+          x: e.horizontal ? lipAt : wet.x, z: e.horizontal ? wet.z : lipAt,
+        } satisfies Landmark,
+        nodes: [aWet ? e.b : e.a, far],
+      }];
+    });
+    if (spots.length) {
+      const pick = canalRng.pick(spots);
+      landmarks.push(pick.landmark);
+      rampNodes.push(...pick.nodes);
+    }
+  }
 
   // --- Plazas: paved shortcuts with planters to weave between ---
   const plazas: Rect[] = [];
@@ -241,6 +297,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   for (const e of plazaEdges) {
     const r = edgeRect(e);
     plazas.push(r);
+    if (e === rampStreet) continue; // no planters on the ramp's run
     const count = rng.int(2, 3);
     for (let k = 0; k < count; k++) {
       const t = (k + 1) / (count + 1) - 0.5;
@@ -268,7 +325,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const spawn = { x: centre.x + (dx / len) * 15, z: centre.z + (dz / len) * 15, yaw: Math.atan2(dx, dz) };
 
   // Roadworks close junctions away from the spawn (and off the bridges), before signs and signals go up.
-  const keepOpen = new Set([centre.id, ...centre.neighbors, ...centre.neighbors.flatMap((id) => nodes[id].neighbors), ...canalNodes]);
+  const keepOpen = new Set([centre.id, ...centre.neighbors, ...centre.neighbors.flatMap((id) => nodes[id].neighbors), ...canalNodes, ...rampNodes]);
   const works = planRoadworks(graph, roadWidth, size, keepOpen, config.roadworksChance, new Rng(seed ^ 0x0c0e5));
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
   const traffic = generateTrafficControl(graph, blocksOut, config, size, new Rng(seed ^ 0x7aff1c));

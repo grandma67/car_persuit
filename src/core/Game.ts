@@ -139,10 +139,11 @@ export class Game {
     this.scene.add(this.sun, this.sun.target);
 
     this.world.timestep = FIXED_DT;
-    // ?roadworks forces every (rare) roadworks slot, for testing. With ?debug, ?canals=0|1|2 and
+    // ?roadworks forces every (rare) roadworks slot and ?canalramp the (rare) canal jump, for testing. With ?debug, ?canals=0|1|2 and
     // ?hill=0|1 force the terrain.
     const config: CityConfig = { ...DEFAULT_CITY };
     if (params.has('roadworks')) config.roadworksChance = 1;
+    if (params.has('canalramp')) config.canalRampChance = 1;
     const canals = Number.parseInt(params.get('canals') ?? '', 10);
     if (this.debug && canals >= 0 && canals <= 2) config.canalOdds = [canals === 0 ? 1 : 0, canals === 1 ? 1 : 0, canals === 2 ? 1 : 0];
     if (this.debug && params.has('hill')) config.hillChance = params.get('hill') === '0' ? 0 : 1;
