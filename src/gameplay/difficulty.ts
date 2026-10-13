@@ -1,6 +1,6 @@
 // Difficulty presets. Multipliers apply on top of the base tuning in balance.ts.
 
-export type DifficultyId = 'easy' | 'normal' | 'hard';
+export type DifficultyId = 'easy' | 'normal' | 'hard' | 'nopolice';
 
 export interface Difficulty {
   id: DifficultyId;
@@ -13,14 +13,19 @@ export interface Difficulty {
   heatRate: number; // wanted-clock speed multiplier
   copCap: number; // max-cops multiplier
   traffic: number; // civilian cars on the road around the player
+  police: boolean; // false: no cops spawn and the wanted level never rises (free drive / practice)
 }
+
+const HARD: Difficulty = { id: 'hard', label: 'Hard', timeLimit: 480, maxHealth: 150, checkpointRepair: 0.08, damageScale: 1.3, armor: 5, heatRate: 1.25, copCap: 1.25, traffic: 42, police: true };
 
 export const DIFFICULTIES: Difficulty[] = [
   // Easy: a tougher car — 60% more health than Normal, armor that shrugs off scrapes and light
   // rams, half damage. Each destination reached patches the car up, less so on harder settings.
-  { id: 'easy', label: 'Easy', timeLimit: 720, maxHealth: 240, checkpointRepair: 0.25, damageScale: 0.5, armor: 8, heatRate: 0.8, copCap: 0.75, traffic: 20 },
-  { id: 'normal', label: 'Normal', timeLimit: 600, maxHealth: 150, checkpointRepair: 0.15, damageScale: 1, armor: 5, heatRate: 1, copCap: 1, traffic: 30 },
-  { id: 'hard', label: 'Hard', timeLimit: 480, maxHealth: 150, checkpointRepair: 0.08, damageScale: 1.3, armor: 5, heatRate: 1.25, copCap: 1.25, traffic: 42 },
+  { id: 'easy', label: 'Easy', timeLimit: 720, maxHealth: 240, checkpointRepair: 0.25, damageScale: 0.5, armor: 8, heatRate: 0.8, copCap: 0.75, traffic: 20, police: true },
+  { id: 'normal', label: 'Normal', timeLimit: 600, maxHealth: 150, checkpointRepair: 0.15, damageScale: 1, armor: 5, heatRate: 1, copCap: 1, traffic: 30, police: true },
+  HARD,
+  // No Police: Hard's settings with the cops switched off, to learn the map or practice routes.
+  { ...HARD, id: 'nopolice', label: 'No Police', police: false },
 ];
 
 export function difficultyById(id: string | null | undefined): Difficulty {

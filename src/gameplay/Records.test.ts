@@ -54,4 +54,13 @@ describe('difficulty', () => {
     expect(scaledCopCap(10, hard)).toBe(13);
     expect(scaledCopCap(1, easy)).toBe(1);
   });
+
+  it('No Police is Hard with the cops switched off', () => {
+    const hard = difficultyById('hard');
+    const { id, label, police, ...rest } = difficultyById('nopolice');
+    expect(id).toBe('nopolice');
+    expect(police).toBe(false);
+    expect(hard.police).toBe(true);
+    expect({ ...hard, id, label, police }).toEqual({ id, label, police, ...rest });
+  });
 });

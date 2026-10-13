@@ -431,7 +431,7 @@ export class Game {
     for (const car of this.traffic.cars) car.vehicle.syncMesh(alpha);
     this.checkWater();
     this.traffic.update(this.player.position, [this.player, ...this.director.cops.map((c) => c.vehicle)]);
-    if (this.state === 'playing') {
+    if (this.state === 'playing' && this.difficulty.police) {
       this.raiseStars(this.wanted.update(frameDt));
       const level = this.wanted.level;
       this.director.update(
@@ -473,8 +473,8 @@ export class Game {
       timeLeft: this.mission.timeLeft,
       distance: this.state === 'playing' ? (this.route?.distance ?? null) : null,
       health: this.health.ratio,
-      stars: this.wanted.stars,
-      starProgress: this.wanted.progress,
+      stars: this.difficulty.police ? this.wanted.stars : 0,
+      starProgress: this.difficulty.police ? this.wanted.progress : 0,
     });
     const fwd = this.player.forward();
     const target = this.state === 'playing' ? this.mission.current : null;
@@ -660,7 +660,7 @@ export class Game {
 
   /** Announce a new wanted level. */
   private raiseStars(stars: number | null): void {
-    if (stars === null) return;
+    if (stars === null || !this.difficulty.police) return;
     const news = ['', '', 'MORE UNITS RESPONDING', 'INTERCEPTORS INBOUND', 'SUVs AND ROADBLOCKS', 'ARMORED UNITS DEPLOYED'][stars];
     this.hud.toast(`${'★'.repeat(stars)}  ${news}`, 2.5);
     this.hud.flashStars();
