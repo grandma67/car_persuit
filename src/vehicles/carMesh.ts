@@ -232,6 +232,12 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     const pivot = new THREE.Group();
     const spinner = new THREE.Mesh(tireGeo, tire);
     spinner.add(new THREE.Mesh(rimGeo, rim));
+    if (spec.dualRear && i >= 2) {
+      // Second tyre on the same hub, inboard (+X is the left side, wheels 2 and 3 are RL, RR).
+      const twin = new THREE.Mesh(tireGeo, tire);
+      twin.position.x = (i === 2 ? -1 : 1) * 0.34;
+      spinner.add(twin);
+    }
     pivot.add(spinner);
     root.add(pivot);
     wheels.push({ pivot, spinner });

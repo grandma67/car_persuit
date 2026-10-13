@@ -13,6 +13,7 @@ export interface VehicleSpec {
   wheelX: number; // lateral offset of wheels from centre
   wheelZ: number; // longitudinal offset of axles from centre
   wheelY?: number; // height of the wheel mounts relative to the chassis centre (tall bodies), default 0
+  dualRear?: boolean; // twin tyres on each rear hub, like a loaded truck or bus (drawn only: physics keeps 4 wheels)
   suspensionRestLength: number;
   suspensionStiffness: number;
   engineForce: number; // N per driven wheel
@@ -185,10 +186,13 @@ export const BUS_SPEC: VehicleSpec = {
   body: 'bus',
   ...heavy(11000),
   halfExtents: { x: 1.25, y: 1.15, z: 5.5 },
-  wheelRadius: 0.5,
+  // Real bus tyres (295/80R22.5, 11R22.5) stand about 1.05m tall, well over a car's ~0.65m;
+  // scaled like the cars' are. Mounted higher to keep the body at the same height.
+  wheelRadius: 0.6,
   wheelX: 1.2, // tyres a little proud of the body sides, so turning they don't cut through them
   wheelZ: 3.0, // 6m wheelbase, like a real 12m city bus
-  wheelY: -0.75,
+  wheelY: -0.65,
+  dualRear: true,
   suspensionRestLength: 0.5,
   suspensionStiffness: 40,
   maxSpeed: 16,
@@ -207,7 +211,8 @@ export const BOX_TRUCK_SPEC: VehicleSpec = {
   halfExtents: { x: 1.2, y: 1.2, z: 3.8 },
   wheelX: 1.2, // a little proud of the body, like the bus
   wheelZ: 2.5,
-  wheelY: -0.8,
+  wheelY: -0.7, // the bus's big 22.5" tyres (inherited), and twin rears for the load
+
   maxSteer: 0.75,
 };
 
@@ -220,10 +225,11 @@ export const RAMP_TRUCK_SPEC: VehicleSpec = {
   body: 'ramptruck',
   ...heavy(9000),
   halfExtents: { x: 2.0, y: 0.45, z: 4.6 },
-  wheelRadius: 0.55,
+  wheelRadius: 0.6, // truck tyres, like the bus's
   wheelX: 2.15,
   wheelZ: 3.0,
-  wheelY: 0,
+  wheelY: 0.05, // keeps the deck where it was with the bigger tyres
+  dualRear: false, // an inner twin would sit buried in the deck
   suspensionRestLength: 0.55,
   maxSpeed: 14,
   maxSteer: 0.6, // its wheels sit outside the deck: more lock would turn them into the hull
