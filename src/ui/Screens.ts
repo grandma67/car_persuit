@@ -10,6 +10,8 @@ export interface EndScreenInfo {
   /** Win only: leaderboard lines and whether this run set a new best. */
   newBest?: boolean;
   board?: { time: string; label: string; current: boolean }[];
+  /** The run traced on the city map, its legend (HTML) and a stats line. */
+  run?: { map: HTMLElement; legend: string; stats: string };
 }
 
 export interface MenuInfo {
@@ -40,8 +42,8 @@ export class Screens {
     if (button) button.textContent = this.fullscreenLabel();
   }
 
-  private show(html: string, actions: Record<string, () => void>): void {
-    this.el.innerHTML = `<div class="screen-card">${html}</div>`;
+  private show(html: string, actions: Record<string, () => void>, cardClass = ''): void {
+    this.el.innerHTML = `<div class="screen-card ${cardClass}">${html}</div>`;
     this.el.hidden = false;
     for (const [action, fn] of Object.entries(actions)) {
       const button = this.el.querySelector(`[data-action="${action}"]`);
@@ -148,11 +150,14 @@ export class Screens {
   }
 
   end(info: EndScreenInfo, onRetry: () => void, onNewCity: () => void): void {
+    const { run } = info;
     this.show(
       `
+      ${run ? `<div class="screen-run"><div data-slot="map"></div>${run.legend}</div><div class="screen-summary">` : ''}
       <h2 class="${info.won ? 'won' : 'lost'}">${info.title}</h2>
       ${info.newBest ? '<p class="screen-record">NEW RECORD!</p>' : ''}
       <p class="screen-lead">${info.detail}</p>
+      ${run ? `<p class="screen-stats">${run.stats}</p>` : ''}
       ${
         info.board?.length
           ? `<ol class="screen-board">${info.board
@@ -165,8 +170,11 @@ export class Screens {
         <button data-action="new" class="secondary">New city <kbd>N</kbd></button>
       </div>
       <p class="screen-seed">City #${info.seed}</p>
+      ${run ? '</div>' : ''}
     `,
       { retry: onRetry, new: onNewCity },
+      run ? 'with-run' : '',
     );
+    if (run) this.el.querySelector('[data-slot="map"]')?.replaceWith(run.map);
   }
 }

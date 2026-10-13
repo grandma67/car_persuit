@@ -43,6 +43,8 @@ import { WantedSystem } from '../gameplay/WantedSystem';
 import { DIFFICULTIES, difficultyById, scaledCopCap, type Difficulty } from '../gameplay/difficulty';
 import { Records } from '../gameplay/Records';
 import { CopContact } from '../gameplay/CopContact';
+import { RunLog, type IncidentKind } from '../gameplay/RunLog';
+import { RunMap } from '../ui/RunMap';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { DAMAGE } from '../gameplay/balance';
 
@@ -95,6 +97,7 @@ export class Game {
   private sunk = new WeakSet<Vehicle>(); // cars that have gone into the water
   private walls: Set<number>; // collider handles of buildings, sea wall, landmarks
   private copContact: CopContact;
+  private runLog = new RunLog(); // the route driven and what happened, for the end-screen map
   private ramSound = 0; // a cop started ramming the player this frame: crash strength 0..1
   private landmarks: Landmarks;
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
@@ -405,7 +408,10 @@ export class Game {
       this.world.step();
       this.player.snapshot();
       const playerHit = this.player.consumeImpact();
-      if (playerHit > 0) this.markWall(this.player, playerHit);
+      if (playerHit > 0 && this.markWall(this.player, playerHit) && this.state === 'playing') {
+        const v = this.player.impactVelocity;
+        this.logIncident('wall', `Hit a wall at ${Math.round(Math.hypot(v.x, v.z) * 3.6)} km/h`);
+      }
       this.scratch(this.player, playerHit);
       impact = Math.max(impact, playerHit);
       for (const car of this.traffic.cars) {
@@ -421,7 +427,10 @@ export class Game {
           const onRamp =
             car.vehicle.spec.body === 'ramptruck' &&
             this.player.position.clone().sub(car.vehicle.position).dot(new THREE.Vector3(0, 1, 0).applyQuaternion(car.vehicle.quaternion)) > -0.5;
-          if (this.state === 'playing' && !onRamp && car.vehicle.position.distanceTo(this.player.position) < 8) this.raiseStars(this.wanted.civilianHit());
+          if (this.state === 'playing' && !onRamp && car.vehicle.position.distanceTo(this.player.position) < 8) {
+            this.logIncident('civilian', `Crashed into a ${car.vehicle.spec.name.toLowerCase()}`);
+            this.raiseStars(this.wanted.civilianHit());
+          }
         }
       }
       breaks.push(...this.scratchOnProps(this.player, this.props.checkVehicle(this.player, FIXED_DT)));
@@ -525,6 +534,12 @@ export class Game {
 
   private updateMission(dt: number, carPos: THREE.Vector3): void {
     const event = this.mission.update(dt, carPos.x, carPos.z);
+    this.runLog.sample(this.mission.elapsed, carPos.x, carPos.z, this.player.speed);
+    if (event === 'reached' || event === 'won') {
+      const n = this.mission.index; // already counts the one just reached
+      this.logIncident('checkpoint', n === this.mission.total ? 'Final destination reached' : `Destination ${n} reached`);
+    }
+    if (event === 'lost' && this.mission.loseReason === 'time') this.logIncident('timeout', 'Ran out of time');
     if (event === 'reached') {
       this.audio.jingle('reached');
       this.wanted.checkpoint(); // every delivery turns up the heat a little faster
@@ -558,8 +573,14 @@ export class Game {
     if (contact.started) {
       // A ram can shove the player without a sharp velocity jump, so it gets its own bang.
       this.ramSound = Math.max(this.ramSound, impactStrength(contact.closing));
+      const kmh = Math.round(contact.closing * 3.6);
       // The player drove into the cop (not just got rammed): assaulting an officer raises the heat.
-      if (contact.whack > WHACK_SPEED && this.state === 'playing') this.raiseStars(this.wanted.copWhacked(contact.whack));
+      if (contact.whack > WHACK_SPEED && this.state === 'playing') {
+        this.logIncident('whack', `Rammed a ${cop.vehicle.spec.name.toLowerCase()} cop at ${kmh} km/h`, cop.vehicle.position);
+        this.raiseStars(this.wanted.copWhacked(contact.whack));
+      } else if (contact.closing > WHACK_SPEED && this.state === 'playing') {
+        this.logIncident('rammed', `Rammed by a ${cop.vehicle.spec.name.toLowerCase()} at ${kmh} km/h`);
+      }
     }
     return contact.damage * this.difficulty.damageScale;
   }
@@ -577,7 +598,10 @@ export class Game {
     for (const cop of this.director.cops) {
       if (!under(cop.vehicle) || this.sunk.has(cop.vehicle)) continue;
       this.waterBlast(cop.vehicle, 0.6);
-      if (cop.wreckedFor === null) this.director.wreck(cop);
+      if (cop.wreckedFor === null) {
+        this.director.wreck(cop);
+        this.logIncident('copWrecked', `A ${cop.vehicle.spec.name.toLowerCase()} cop went for a swim`, cop.vehicle.position);
+      }
     }
     for (const car of this.traffic.cars) if (under(car.vehicle) && !this.sunk.has(car.vehicle)) this.waterBlast(car.vehicle, 0.6);
     for (const v of [this.player, ...this.director.cops.map((c) => c.vehicle)]) {
@@ -608,6 +632,7 @@ export class Game {
   /** The player into the water: that's the run over. */
   private drown(): void {
     this.audio.stopEngine();
+    this.logIncident('drowned', 'Drove into the water');
     this.mission.fail('drowned');
     this.endMission();
   }
@@ -627,6 +652,7 @@ export class Game {
 
     this.audio.stopEngine();
     this.audio.explosion();
+    this.logIncident('wrecked', 'Car destroyed');
     this.mission.fail('destroyed');
     this.endMission();
   }
@@ -653,12 +679,12 @@ export class Game {
     return hits;
   }
 
-  /** A hard hit into something solid: scuff the wall where the car struck it. */
-  private markWall(vehicle: Vehicle, impact: number): void {
-    if (impact < 6) return;
+  /** A hard hit into something solid: scuff the wall where the car struck it. True if it was a wall. */
+  private markWall(vehicle: Vehicle, impact: number): boolean {
+    if (impact < 6) return false;
     const v = vehicle.impactVelocity;
     const speed = Math.hypot(v.x, v.z);
-    if (speed < 3) return;
+    if (speed < 3) return false;
     const p = vehicle.position;
     const ray = new RAPIER.Ray({ x: p.x, y: p.y, z: p.z }, { x: v.x / speed, y: 0, z: v.z / speed });
     const hit = this.world.castRayAndGetNormal(
@@ -671,14 +697,21 @@ export class Game {
       vehicle.body,
       (collider) => this.walls.has(collider.handle), // walls only, not lamps/trees/planters
     );
-    if (!hit) return;
+    if (!hit) return false;
     const point = new THREE.Vector3(p.x + (v.x / speed) * hit.timeOfImpact, p.y, p.z + (v.z / speed) * hit.timeOfImpact);
     this.crashMarks.add(point, new THREE.Vector3(hit.normal.x, hit.normal.y, hit.normal.z), Math.min(1, (impact - 6) / 25), vehicle.mesh.paint.color);
+    return true;
+  }
+
+  /** Note something that happened for the end-screen map: at the player, unless placed elsewhere. */
+  private logIncident(kind: IncidentKind, detail: string, at: THREE.Vector3 = this.player.position): void {
+    this.runLog.add(kind, this.mission.elapsed, at.x, at.z, detail);
   }
 
   /** Announce a new wanted level. */
   private raiseStars(stars: number | null): void {
     if (stars === null || !this.difficulty.police) return;
+    this.logIncident('stars', `Wanted level ${stars} ${'★'.repeat(stars)}`);
     const news = ['', '', 'MORE UNITS RESPONDING', 'INTERCEPTORS INBOUND', 'SUVs AND ROADBLOCKS', 'ARMORED UNITS DEPLOYED'][stars];
     this.hud.toast(`${'★'.repeat(stars)}  ${news}`, 2.5);
     this.hud.flashStars();
@@ -688,6 +721,7 @@ export class Game {
   /** A cop car wrecked: smaller blast, launched, burns until the director clears it. */
   private explodeCop(cop: Cop): void {
     this.director.wreck(cop);
+    if (this.state === 'playing') this.logIncident('copWrecked', `Wrecked a ${cop.vehicle.spec.name.toLowerCase()} cop`, cop.vehicle.position);
     if (this.state === 'playing') this.raiseStars(this.wanted.copWrecked());
     const v = cop.vehicle;
     const m = v.spec.mass;
@@ -746,10 +780,24 @@ export class Game {
         seed: this.city.seed,
         newBest,
         board,
+        run: this.runSummary(),
       },
       () => this.restart(this.city.seed),
       () => this.restart(Math.floor(Math.random() * 1_000_000)),
     );
+  }
+
+  /** The run traced on the city map for the end screen. */
+  private runSummary(): { map: HTMLElement; legend: string; stats: string } {
+    const log = this.runLog;
+    const map = new RunMap(this.minimap, {
+      log,
+      destinations: this.mission.destinations,
+      reached: this.mission.index,
+      maxSpeed: this.player.spec.maxSpeed,
+    });
+    const stats = [`${(log.distance / 1000).toFixed(1)} km driven`, `top speed ${Math.round(log.topSpeed * 3.6)} km/h`];
+    return { map: map.el, legend: map.legend(), stats: stats.join(' · ') };
   }
 
   private overviewCam?: THREE.PerspectiveCamera;

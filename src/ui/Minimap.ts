@@ -6,7 +6,7 @@ import { groundHeight } from '../world/Terrain';
 
 const SIZE_CSS = 180; // on-screen diameter
 const VIEW_RADIUS = 230; // metres from the player to the map edge
-const BASE_SCALE = 1; // pixels per metre in the pre-drawn city
+export const BASE_SCALE = 1; // pixels per metre in the pre-drawn city
 const SEA_MARGIN = 300; // metres of sea drawn around the island
 
 const COLORS = {
@@ -36,11 +36,12 @@ export interface MinimapTarget {
 export class Minimap {
   readonly canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private base: HTMLCanvasElement;
-  private half: number; // half the pre-drawn map size, in metres
+  /** The whole city, pre-drawn at BASE_SCALE: also the backdrop of the run map on the end screen. */
+  readonly base: HTMLCanvasElement;
+  readonly half: number; // half the pre-drawn map size, in metres
   private time = 0;
 
-  constructor(private city: CityData) {
+  constructor(readonly city: CityData) {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'hud-minimap';
     const dpr = Math.min(window.devicePixelRatio, 2);
@@ -55,7 +56,7 @@ export class Minimap {
    * World → base-canvas pixels. Looking down with +Z forward, +X is on the left, hence the minus
    * signs: this keeps the map un-mirrored relative to the 3D view.
    */
-  private toMap(x: number, z: number): [number, number] {
+  toMap(x: number, z: number): [number, number] {
     return [(this.half - x) * BASE_SCALE, (this.half - z) * BASE_SCALE];
   }
 
