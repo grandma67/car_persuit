@@ -123,7 +123,7 @@ function rampMonument(s: RampShape): { stone: THREE.BufferGeometry; bronze: THRE
     part(box(1.6, plinthH, 3.2), STONE, side * plinthX, plinthH / 2, s.lip - 1.4),
     part(box(1.8, 0.2, 3.4), GOLD, side * plinthX, plinthH + 0.1, s.lip - 1.4),
   ]);
-  const stone = mergeGeometries([deck, ...plinths.map((g) => g.toNonIndexed())]);
+  const stone = mergeGeometries([deck, ...plinths]); // part() already un-indexes
 
   // Wings: a fan of long feathers per side, raked back and flaring outward and up.
   const feathers = [-1, 1].flatMap((side) =>

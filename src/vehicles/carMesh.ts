@@ -329,6 +329,8 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     root.traverse((o) => {
+      // Others' layers (scratch decals) share geometry and material: free only their instance data.
+      if (o instanceof THREE.InstancedMesh && !owned.has(o)) o.dispose();
       if (!(o instanceof THREE.Mesh || o instanceof THREE.Sprite) || !owned.has(o)) return;
       geometries.add(o.geometry);
       materials.add(o.material as THREE.Material);
