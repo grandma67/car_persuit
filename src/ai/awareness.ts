@@ -21,11 +21,13 @@ export interface Obstacle {
   aligned: boolean; // pointing the same way as us (a queue), not across or at us (a crash)
   moving: boolean;
   side: number;
+  handle?: number; // the body it is
+  civilian?: boolean; // one of the traffic: queueing like us, never parked for good
 }
 
 export interface Awareness {
-  /** Nearest dynamic body ahead within `range`, null if the road is clear. */
-  obstacle(vehicle: Vehicle, range: number): Obstacle | null;
+  /** Nearest dynamic body ahead within `range` (along `corridor`, the lane ahead, if given), null if the road is clear. */
+  obstacle(vehicle: Vehicle, range: number, corridor?: readonly { x: number; z: number }[]): Obstacle | null;
   movers(): Mover[];
 }
 
@@ -80,8 +82,9 @@ function entersCorner(turn: NonNullable<Self['nearTurn']>, m: Mover, keep: Keep)
  * yield to the right (to the left when keeping left), and a turning car yields to oncoming traffic.
  * A car turning onto its kerb side only minds traffic that will come into the corner it turns
  * through: it doesn't cross the oncoming lane or the far lane of the road it joins.
+ * `civilians` false: leave other civilians out (junction turns sort out who goes first).
  */
-export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number, keep: Keep = 1): number {
+export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number, keep: Keep = 1, civilians = true): number {
   const rightX = -me.fz;
   const rightZ = me.fx;
   const sideClear = me.halfWidth + OTHER_HALF_WIDTH + HAZARD_MARGIN;
@@ -93,6 +96,7 @@ export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number, keep:
     const rz = m.z - me.z;
     if (rx * me.fx + rz * me.fz < 0 || rx * rx + rz * rz > HAZARD_RANGE * HAZARD_RANGE) continue;
     if (m.vx * m.vx + m.vz * m.vz < 4) continue;
+    if (m.civilian && !civilians) continue;
     if (me.nearTurn && !entersCorner(me.nearTurn, m, keep)) continue;
     if (m.civilian) {
       const onRight = (rx * rightX + rz * rightZ) * keep > 0; // keeping left: yield to the left
@@ -172,7 +176,11 @@ export class CrashRecovery {
       return;
     }
     const crash = !ahead.aligned || this.sinceHit < RECENT_HIT;
-    const patience = crash && !ahead.moving ? UNSTICK_AFTER : ahead.moving ? Infinity : QUEUE_PATIENCE;
+    // Queued behind another civilian: it's waiting its turn at a junction like us, so wait too
+    // (pulling out round the queue is driving down the oncoming lane). If it's really stuck, the
+    // manager recycles it and the queue moves.
+    const queue = !crash && ahead.civilian;
+    const patience = crash && !ahead.moving ? UNSTICK_AFTER : ahead.moving || queue ? Infinity : QUEUE_PATIENCE;
     this.blockedFor += dt;
     if (this.blockedFor < patience) return;
     this.blockedFor = 0;

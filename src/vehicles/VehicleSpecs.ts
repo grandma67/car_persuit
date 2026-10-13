@@ -174,6 +174,9 @@ export const PICKUP_SPEC: VehicleSpec = {
   ...heavy(2000),
   halfExtents: { x: 1.05, y: 0.45, z: 2.7 },
   wheelZ: 1.85,
+  // A real pickup's lock: with the SUV's 0.5 on this long wheelbase it couldn't get round a
+  // kerb-side turn without swinging over the centre line of the road it turned into.
+  maxSteer: 0.6,
 };
 
 export const BUS_SPEC: VehicleSpec = {

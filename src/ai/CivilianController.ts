@@ -1,7 +1,8 @@
 // Civilian driver: wanders the road network in its lane (the right-hand one, or the left in an
 // English city: `keep` mirrors every side below), obeys traffic lights and
-// stop signs, keeps its distance from whatever is ahead, yields to traffic about to cross its
-// path, and after a crash backs off and drives round whatever it's wedged against.
+// stop signs, keeps its distance from whatever is ahead, takes its turn at junctions with the other
+// civilians (junctions.ts), yields to the player and cops about to cross its path, and after a
+// crash backs off and drives round whatever it's wedged against.
 import * as THREE from 'three';
 import type { DriveInput } from '../core/Input';
 import type { Rng } from '../core/Rng';
@@ -11,6 +12,7 @@ import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
 import { CrashRecovery, hazardSpeedLimit, type Awareness, type Obstacle, type Self } from './awareness';
 import type { Keep } from '../world/driveSide';
+import { addFootprint, alongTrack, type JunctionClaim, type Junctions } from './junctions';
 
 const LANE_OFFSET = 3; // metres to the kerb side of the road centre line
 const JUNCTION_EDGE = 7; // lane points sit this far from the junction centre
@@ -18,8 +20,10 @@ const STOP_LINE = 6 + 4.4; // junction centre → stop line
 const COMFORT_DECEL = 4; // m/s² for planned stops
 const CORNER_SPEED = 6;
 const GAP = 6; // metres kept to the vehicle ahead
+const FOLLOW_CLOSE = 1.5; // m/s per metre of room left, closing up behind the vehicle ahead
 const STOP_SIGN_WAIT = 1.2;
 const STOP_MARGIN = 1.5; // metres short of the stop line
+const HARD_STEER = 0.6; // fraction of full lock above which we hold cornering speed
 const SIGNAL_DISTANCE = 40; // metres before a junction to start indicating a turn
 const PANIC_TIME = 1; // seconds stopped after a knock before carrying on
 const DODGE_OFFSET = 3.5; // metres sideways to pass something blocking the lane
@@ -38,6 +42,13 @@ const RIGHT_TURN_SETBACK = 12.5;
 // Physics steps between looks around (rays ahead, crossing traffic): 20 a second is plenty to
 // react, and sensing every step for every car was the bulk of the traffic AI's cost.
 const SENSE_EVERY = 3;
+const SWEEP_STEP = 0.5; // metres between poses when working out the ground we'll sweep through a junction
+const CORRIDOR_POINTS = 4; // lane points ahead the forward sensor follows
+const ASK_TIME = 3; // seconds out from the stop line we start asking for our turn at a junction
+const ASK_DISTANCE = 10; // …or metres, whichever is further
+const COMMIT_AFTER = 0.1; // seconds after first asking before we commit to a junction
+const CLAIM_MARGIN = 0.5; // metres round our body we want clear of anyone crossing
+const HEAVY_CLAIM_MARGIN = 0.8; // more round a heavy: it doesn't hold its line as closely
 
 /**
  * How a vehicle drives for its size. Long vehicles can't follow a car's line through a right
@@ -100,6 +111,12 @@ export class CivilianController {
   private ahead: Obstacle | null = null;
   private free = Infinity;
   private hazardLimit = Infinity;
+  private claim: JunctionClaim | null = null; // our turn through a junction (see junctions.ts)
+  private claimNode = -1;
+  private claimedAt = 0; // when we put in the claim we hold
+  private waitingFor = -1; // junction we've been waiting at, and since when (kept through red lights)
+  private waitingSince = 0;
+  private mayEnter = true;
   readonly cruise: number;
   /** Seconds spent unable to move for no traffic reason; the manager respawns stuck cars. */
   stuckFor = 0;
@@ -114,6 +131,7 @@ export class CivilianController {
     to: number,
     private awareness?: Awareness,
     private keep: Keep = 1,
+    private junctions?: Junctions,
   ) {
     this.recovery = new CrashRecovery(keep);
     this.route = [from, to];
@@ -174,13 +192,16 @@ export class CivilianController {
     input.steer = Math.abs(alpha) > Math.PI / 2 ? Math.sign(alpha) : THREE.MathUtils.clamp(wheelAngle / steerLimit(v.spec, speed), -1, 1);
 
     let desired = Math.min(this.cruise, cornerSpeedLimit(this.path, this.segment, pos, Math.abs(speed), cornerSpeed, decel));
+    // Still winding the wheel on: no pulling away out of a turn until it's coming straight, or
+    // the car runs wide over the centre line of the road it's turning into.
+    if (Math.abs(input.steer) > HARD_STEER) desired = Math.min(desired, cornerSpeed);
 
     // Junction control on our approach to the next node.
     const junction = this.graph.nodes[this.route[1]];
     const toStop = Math.hypot(junction.x - pos.x, junction.z - pos.z) - STOP_LINE - v.spec.halfExtents.z;
     const control = this.controls.get(`${this.route[0]}>${this.route[1]}`);
+    let mustStop = false;
     if (control && toStop > -1) {
-      let mustStop = false;
       if (control.kind === 'signal') {
         const light = signalState(control.axis, time + control.phase);
         // Stop for red; for yellow only if we can stop comfortably.
@@ -205,19 +226,28 @@ export class CivilianController {
     if (--this.senseIn <= 0) {
       this.senseIn = SENSE_EVERY;
       const range = Math.max(30, (speed * speed) / (2 * decel) + GAP + 10);
-      this.ahead = this.awareness?.obstacle(v, range) ?? null;
+      // Along the lane ahead, so through a turn the sensor looks where we're going.
+      const corridor = dodging ? undefined : this.path.slice(this.segment + 1, this.segment + 1 + CORRIDOR_POINTS);
+      this.ahead = this.awareness?.obstacle(v, range, corridor) ?? null;
       this.free = this.awareness ? (this.ahead?.distance ?? Infinity) : this.sense(v, range);
       // Yield to anything on a collision course: cross traffic, a light-runner, the player head-on.
       this.hazardLimit = Infinity;
       if (this.awareness) {
         const lv = v.body.linvel();
         const self: Self = { handle: v.body.handle, x: pos.x, z: pos.z, vx: lv.x, vz: lv.z, fx: fwd.x, fz: fwd.z, halfWidth: v.spec.halfExtents.x, halfLength: v.spec.halfExtents.z, turning: Math.abs(input.steer) > 0.3, nearTurn: this.nearTurn(pos) };
-        this.hazardLimit = hazardSpeedLimit(self, this.awareness.movers(), speed, this.keep);
+        this.hazardLimit = hazardSpeedLimit(self, this.awareness.movers(), speed, this.keep, !this.junctions);
       }
+      if (this.junctions) this.mayEnter = this.takeTurn(time, toStop, mustStop, speed, control);
     }
+    // Not our turn at the junction yet: wait at the stop line.
+    if (!this.mayEnter && toStop > -1) desired = Math.min(desired, toStop < STOP_MARGIN ? 0 : Math.sqrt(2 * decel * (toStop - STOP_MARGIN)));
     const { ahead, free } = this;
     const gap = dodging ? DODGE_GAP : GAP;
-    if (free < Infinity) desired = Math.min(desired, Math.max(0, (free - gap) * 0.8));
+    // Planned braking down to the gap (as for a stop line), tightening to a crawl in the last metres.
+    if (free < Infinity) {
+      const room = Math.max(0, free - gap);
+      desired = Math.min(desired, Math.sqrt(2 * decel * room), FOLLOW_CLOSE * room);
+    }
     if (dodging) desired = Math.min(desired, DODGE_SPEED);
     desired = Math.min(desired, this.hazardLimit);
 
@@ -242,6 +272,129 @@ export class CivilianController {
     this.stuckFor = desired > 2 && Math.abs(speed) < 0.5 ? this.stuckFor + dt : 0;
     if (this.recovery.gaveUp) this.stuckFor = Infinity;
     return input;
+  }
+
+  /**
+   * Our turn at the junction ahead (see junctions.ts): whether we may cross the stop line now.
+   * We ask once we're close, the light or sign lets us go, nobody's queued in front of us and
+   * there's room on the road out (we never stop in the middle of a junction waiting for it). We
+   * commit once we're inside comfortable braking distance, and keep the claim until our tail is
+   * out of the junction.
+   */
+  private takeTurn(time: number, toStop: number, held: boolean, speed: number, control: ApproachControl | undefined): boolean {
+    const j = this.junctions!;
+    const v = this.vehicle;
+    const node = this.route[1];
+    const owner = v.body.handle;
+    const halfLength = v.spec.halfExtents.z;
+    // Clearing the junction we've just driven through.
+    if (this.claim && this.claimNode !== node) {
+      const c = this.claim;
+      const at = this.graph.nodes[this.claimNode];
+      const out = Math.max(Math.abs(v.position.x - at.x), Math.abs(v.position.z - at.z));
+      if (out > STOP_LINE + halfLength) {
+        j.leave(this.claimNode, owner);
+        this.claim = null;
+      } else {
+        c.committed = true;
+        c.passed = alongTrack(c.track, v.position.x, v.position.z);
+        j.ask(this.claimNode, c, time);
+        return true;
+      }
+    }
+    if (this.graph.nodes[node].neighbors.length < 3) return true; // a bend: nobody to meet
+    // Caught by the light turning red before we reached the line: stand down, let the cross traffic go.
+    if (this.claim?.committed && held && toStop > 0) {
+      j.leave(node, owner);
+      this.claim = null;
+    }
+    if (this.claim?.committed) {
+      this.claim.passed = alongTrack(this.claim.track, v.position.x, v.position.z);
+      j.ask(node, this.claim, time);
+      return true;
+    }
+    const past = toStop < 0;
+    const ahead = this.ahead;
+    const firstInLine = !ahead || ahead.distance > toStop;
+    const exitClear = !ahead || ahead.moving || ahead.distance > toStop + 2 * STOP_LINE + 2 * halfLength + GAP;
+    const near = toStop < Math.max(ASK_DISTANCE, Math.abs(speed) * ASK_TIME);
+    if (!past && (held || !near || !firstInLine || !exitClear)) {
+      if (this.claim) j.leave(node, owner);
+      this.claim = null;
+      return near ? exitClear : true;
+    }
+    if (!this.claim) {
+      if (this.waitingFor !== node) {
+        this.waitingFor = node;
+        this.waitingSince = time;
+      }
+      this.claimedAt = time;
+      const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
+      const turn = turnAngle(a, b, c);
+      const giveWay = control?.kind === 'stop' ? 1 : 0;
+      const across = !giveWay && (turn * this.keep < -0.5 || Math.abs(turn) > 2.8) ? 1 : 0;
+      this.claim = {
+        owner,
+        entry: this.route[0],
+        ...this.sweep(a, b),
+        rank: [giveWay, across, this.waitingSince],
+        committed: false,
+        passed: -Infinity,
+        seen: time,
+      };
+      this.claimNode = node;
+    }
+    if (past) this.claim.committed = true;
+    const go = j.ask(node, this.claim, time);
+    // Commit once stopping would be a lurch, but not on the very look we first asked: everyone
+    // waiting on the same green asks within a look of each other, and the order sorts them out.
+    const asked = time - this.claimedAt > COMMIT_AFTER;
+    if (go && asked && toStop < (speed * speed) / (2 * this.style.decel) + 2) this.claim.committed = true;
+    return go || past;
+  }
+
+  /**
+   * The ground we'll sweep crossing junction b (coming from a): our own steering run ahead of
+   * time, from a standstill at the stop line until we're out the other side, at cornering speed.
+   */
+  private sweep(a: P, b: P): Pick<JunctionClaim, 'cells' | 'track'> {
+    const { spec } = this.vehicle;
+    const { wheelbase, cornerSpeed, rightTurnStart } = this.style;
+    const { x: hw, z: hl } = spec.halfExtents;
+    const margin = rightTurnStart !== null ? HEAVY_CLAIM_MARGIN : CLAIM_MARGIN;
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    let fx = (b.x - a.x) / len;
+    let fz = (b.z - a.z) / len;
+    const side = LANE_OFFSET * this.keep;
+    let x = b.x - fx * (STOP_LINE + hl) - fz * side;
+    let z = b.z - fz * (STOP_LINE + hl) + fx * side;
+    const cells = new Map<number, number>();
+    const track: JunctionClaim['track'] = [];
+    const aim = new THREE.Vector3();
+    const rear = new THREE.Vector3();
+    const limit = steerLimit(spec, cornerSpeed);
+    let segment = 0;
+    for (let s = 0; s < 80; s += SWEEP_STEP) {
+      addFootprint(cells, s, x, z, fx, fz, hw, hl, margin, b.x, b.z, STOP_LINE);
+      track.push({ x, z, s });
+      if (s > STOP_LINE && Math.max(Math.abs(x - b.x), Math.abs(z - b.z)) > STOP_LINE + hl) break;
+      rear.set(x - (fx * wheelbase) / 2, 0, z - (fz * wheelbase) / 2);
+      segment = purePursuit(this.path, segment, rear, wheelbase / 2 + 4 + 0.4 * cornerSpeed, aim).segment;
+      const toX = aim.x - rear.x;
+      const toZ = aim.z - rear.z;
+      const alpha = Math.atan2(toX * -fz + toZ * fx, toX * fx + toZ * fz);
+      const wheel = THREE.MathUtils.clamp(Math.atan((2 * wheelbase * Math.sin(alpha)) / Math.hypot(toX, toZ)), -limit, limit);
+      // Bicycle model about the rear axle: it moves along the heading, which turns toward the wheels.
+      rear.x += fx * SWEEP_STEP;
+      rear.z += fz * SWEEP_STEP;
+      const turn = (SWEEP_STEP * Math.tan(wheel)) / wheelbase;
+      const c = Math.cos(turn);
+      const sn = Math.sin(turn);
+      [fx, fz] = [fx * c - fz * sn, fz * c + fx * sn];
+      x = rear.x + (fx * wheelbase) / 2;
+      z = rear.z + (fz * wheelbase) / 2;
+    }
+    return { cells, track };
   }
 
   /**

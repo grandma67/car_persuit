@@ -20,6 +20,7 @@ import {
 } from '../vehicles/VehicleSpecs';
 import { CivilianController, type ForwardSensor } from './CivilianController';
 import type { Awareness, Mover, Obstacle } from './awareness';
+import { Junctions } from './junctions';
 import type { Keep } from '../world/driveSide';
 
 export const TRAFFIC = {
@@ -86,11 +87,13 @@ export function civilianSpecVariants(): VehicleSpec[] {
 /**
  * Forward sensor: rays from the centre and both corners of the front bumper, so a car half in
  * our lane is seen too. They only see moving bodies (cars), so buildings at junction corners
- * don't make drivers brake.
+ * don't make drivers brake. Given the lane ahead (`corridor`: points along it, nearest first),
+ * the rays follow it leg by leg, so through a turn they look where the car is going rather than
+ * straight off the bonnet at the cars waiting at the cross street's stop line.
  */
 let sensorRay: RAPIER.Ray | null = null; // reused: three new rays per car per look was GC churn
 
-export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: number): Obstacle | null {
+export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: number, corridor?: readonly { x: number; z: number }[]): Obstacle | null {
   const p = vehicle.position;
   const f = vehicle.forward();
   const start = vehicle.spec.halfExtents.z + 0.3;
@@ -99,30 +102,57 @@ export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: nu
   const y = p.y - vehicle.spec.halfExtents.y + 0.3;
   let best: Obstacle | null = null;
   let blocker: RAPIER.Collider | null = null;
-  for (const side of [0, -1, 1]) {
-    // Right of the heading is (-f.z, f.x).
-    const ox = p.x + f.x * start - f.z * reach * side;
-    const oz = p.z + f.z * start + f.x * reach * side;
-    // Along the car's pitch, so on a hill it still sees the car ahead up (or down) the slope.
-    const ray = (sensorRay ??= new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }));
-    ray.origin = { x: ox, y, z: oz };
-    ray.dir = { x: f.x, y: f.y, z: f.z };
-    const hit = world.castRay(ray, best?.distance ?? range, true, RAPIER.QueryFilterFlags.EXCLUDE_FIXED, undefined, vehicle.collider, vehicle.body);
-    if (!hit) continue;
-    best = { distance: hit.timeOfImpact, aligned: true, moving: false, side };
-    blocker = hit.collider;
+  let legDir = { x: f.x, z: f.z };
+  // Legs: bumper → each corridor point in turn; without a corridor, one leg straight ahead.
+  let from = { x: p.x + f.x * start, z: p.z + f.z * start };
+  let travelled = 0;
+  // Lane points the bumper has already passed would send the first leg backwards.
+  let first = 0;
+  while (corridor && first < corridor.length - 1 && (corridor[first].x - from.x) * f.x + (corridor[first].z - from.z) * f.z < 1) first++;
+  const legs = corridor?.length ? corridor.slice(first) : [{ x: from.x + f.x * range, z: from.z + f.z * range }];
+  for (let i = 0; i < legs.length && travelled < range && !best; i++) {
+    const to = i === legs.length - 1 && corridor ? extend(from, legs[i], range - travelled) : legs[i];
+    const len = Math.hypot(to.x - from.x, to.z - from.z);
+    if (len < 0.1) continue;
+    const dx = (to.x - from.x) / len;
+    const dz = (to.z - from.z) / len;
+    // The first leg rises and falls with the car's pitch, so on a hill it still sees the car ahead up (or down) the slope.
+    const dy = i === 0 ? f.y : 0;
+    const legLen = Math.min(len, range - travelled);
+    for (const side of [0, -1, 1]) {
+      // Right of the leg is (-dz, dx).
+      const ray = (sensorRay ??= new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }));
+      ray.origin = { x: from.x - dz * reach * side, y, z: from.z + dx * reach * side };
+      ray.dir = { x: dx, y: dy, z: dz };
+      const limit = best ? best.distance - travelled : legLen;
+      const hit = world.castRay(ray, limit, true, RAPIER.QueryFilterFlags.EXCLUDE_FIXED, undefined, vehicle.collider, vehicle.body);
+      if (!hit) continue;
+      best = { distance: travelled + hit.timeOfImpact, aligned: true, moving: false, side };
+      blocker = hit.collider;
+      legDir = { x: dx, z: dz };
+    }
+    travelled += legLen;
+    from = to;
   }
   const body = blocker?.parent();
   if (best && body) {
     const q = body.rotation();
-    // Blocker's heading (+Z rotated by its quaternion), dotted with ours.
+    // Blocker's heading (+Z rotated by its quaternion), dotted with the lane where we saw it.
     const bx = 2 * (q.x * q.z + q.w * q.y);
     const bz = 1 - 2 * (q.x * q.x + q.y * q.y);
-    best.aligned = bx * f.x + bz * f.z > ALIGNED;
+    best.aligned = bx * legDir.x + bz * legDir.z > ALIGNED;
     const v = body.linvel();
     best.moving = Math.hypot(v.x, v.z) > 1;
+    best.handle = body.handle;
   }
   return best;
+}
+
+/** The point `by` metres on from `to`, carrying on in the direction from → to. */
+function extend(from: { x: number; z: number }, to: { x: number; z: number }, by: number) {
+  const len = Math.hypot(to.x - from.x, to.z - from.z) || 1;
+  const k = Math.max(1, by / len);
+  return { x: from.x + (to.x - from.x) * k, z: from.z + (to.z - from.z) * k };
 }
 
 export interface Civilian {
@@ -137,6 +167,8 @@ export class CivilianTraffic {
   private sense: ForwardSensor;
   private awareness: Awareness;
   private moverList: Mover[] = [];
+  private handles = new Set<number>(); // our cars' bodies
+  private junctions = new Junctions();
   private spawnFrom = -1; // junction nearest the player when spawnNodes was worked out
   private spawnNodes: RoadGraph['nodes'] = [];
 
@@ -152,7 +184,14 @@ export class CivilianTraffic {
   ) {
     // Forward sensor: a ray from the front bumper that only sees moving bodies (cars), so
     // buildings at junction corners don't make drivers brake.
-    this.awareness = { obstacle: (vehicle, range) => forwardObstacle(this.world, vehicle, range), movers: () => this.moverList };
+    this.awareness = {
+      obstacle: (vehicle, range, corridor) => {
+        const o = forwardObstacle(this.world, vehicle, range, corridor);
+        if (o?.handle !== undefined) o.civilian = this.handles.has(o.handle);
+        return o;
+      },
+      movers: () => this.moverList,
+    };
     this.sense = (vehicle, range) => forwardObstacle(this.world, vehicle, range)?.distance ?? Infinity;
   }
 
@@ -170,7 +209,11 @@ export class CivilianTraffic {
       const t = b.translation();
       list.push({ handle: b.handle, x: t.x, z: t.z, vx: v.x, vz: v.z, civilian });
     };
-    for (const car of this.cars) add(car.vehicle, true);
+    this.handles.clear();
+    for (const car of this.cars) {
+      add(car.vehicle, true);
+      this.handles.add(car.vehicle.body.handle);
+    }
     for (const vehicle of others) add(vehicle, false);
     this.moverList = list;
   }
@@ -227,6 +270,6 @@ export class CivilianTraffic {
     vehicle.headlights = this.headlights;
     vehicle.beamEnabled = false;
     this.scene.add(vehicle.mesh.root);
-    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep) });
+    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep, this.junctions) });
   }
 }
