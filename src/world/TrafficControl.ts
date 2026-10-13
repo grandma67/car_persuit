@@ -10,6 +10,8 @@
 //   to the stop line; zebras too across a priority road where a side road meets it (the top of
 //   the T); some mid-block zebra crossings.
 // - Edge lines carried on across a junction's closed sides (the top of a T, a corner's outside).
+// - Main streets: where one runs between junctions it has priority at (or just bends), a fast
+//   stretch signed 90 km/h, no zebras.
 // - Street signs where they make sense: speed limits, no parking, children, pedestrian crossing,
 //   no smoking at park entrances.
 // Pure data — PropSystem/CityBuilder render it.
@@ -55,6 +57,7 @@ const CROSSWALK_DEPTH = 3;
 const STOPLINE_BACK = 4.4;
 const STOPLINE_DEPTH = 0.45;
 const SOLID_CENTER = 12; // no-overtaking centre line back from the stop line
+const MAIN_STREET_ODDS = 0.3; // chance a street (a whole line of the grid) is a main street
 const EDGE_IN = 0.7; // edge line inset from the kerb (as CityBuilder paints it along the roads)
 
 /** Unit travel direction d and the driver's kerb side r (right, or left when keep is -1) for travel from a to b. */
@@ -85,13 +88,19 @@ export function generateTrafficControl(
     blocks.find((b) => Math.abs(b.rect.x - x) <= half && Math.abs(b.rect.z - z) <= half);
   const props: StreetProp[] = [];
   const marks: RoadMark[] = [];
-  // How important each street is (keyed by axis and line coordinate): the ring road outranks all.
+  // How important each street is (keyed by axis and line coordinate): the ring road outranks all,
+  // then main streets (1 and up), then the rest.
   const rank = new Map<string, number>();
   const streetRank = (alongX: boolean, x: number, z: number) => {
     const key = alongX ? `x${Math.round(z)}` : `z${Math.round(x)}`;
-    if (!rank.has(key)) rank.set(key, onRing(alongX ? 0 : x, alongX ? z : 0) ? 2 : rng.next());
+    if (!rank.has(key)) {
+      const roll = rng.next();
+      rank.set(key, onRing(alongX ? 0 : x, alongX ? z : 0) ? 2 : roll < MAIN_STREET_ODDS ? 1 + roll : roll);
+    }
     return rank.get(key)!;
   };
+  // Unsignalled junctions: whether the road along X has priority there.
+  const priorityAt = new Map<number, boolean>();
 
   const zebra = (cx: number, cz: number, t: ReturnType<typeof travel>) => {
     for (let lat = -rw / 2 + 1; lat <= rw / 2 - 1 + 1e-6; lat += 1.1) {
@@ -132,6 +141,7 @@ export function generateTrafficControl(
     const legs = node.neighbors.map((id) => graph.nodes[id]);
     const xLegs = legs.filter((n) => n.z === node.z).length;
     const priorityX = degree === 3 ? xLegs === 2 : streetRank(true, node.x, node.z) > streetRank(false, node.x, node.z);
+    if (!signals) priorityAt.set(node.id, priorityX);
 
     for (const nId of node.neighbors) {
       const from = graph.nodes[nId];
@@ -204,6 +214,15 @@ export function generateTrafficControl(
       const other = graph.nodes[nId];
       const mid = { x: (node.x + other.x) / 2, z: (node.z + other.z) / 2 };
       const busy = Math.hypot(mid.x, mid.z) < size * 0.32;
+      const alongX = node.z === other.z;
+
+      // A fast stretch of main street: priority (or a bend) at both ends. 90 signs just past each end.
+      const clear = (n: typeof node) => n.neighbors.length === 2 || priorityAt.get(n.id) === alongX;
+      if (streetRank(alongX, mid.x, mid.z) >= 1 && clear(node) && clear(other)) {
+        const back = Math.hypot(other.x - node.x, other.z - node.z) / 2 - (rw / 2 + 8);
+        for (const [a, b] of [[node, other], [other, node]]) signBefore(mid.x, mid.z, travel(a, b, keep), back, 'speed90');
+        continue;
+      }
 
       // Mid-block zebra crossing on some busy streets, announced in both directions.
       if (busy && !onRing(mid.x, mid.z) && rng.next() < 0.3) {
@@ -241,6 +260,30 @@ export function generateTrafficControl(
     }
   }
   return { props, marks };
+}
+
+/**
+ * The fast stretches, keyed `${fromNode}>${toNode}` per direction: wherever a 90 sign faces the
+ * traffic (so drivers go by what's there, as with approachControls).
+ */
+export function fastStreets(graph: RoadGraph, props: StreetProp[]): Set<string> {
+  const fast = new Set<string>();
+  for (const p of props) {
+    if (p.kind !== 'sign' || p.variant !== 'speed90') continue;
+    const dx = -Math.sin(p.yaw);
+    const dz = -Math.cos(p.yaw);
+    for (const a of graph.nodes) {
+      for (const id of a.neighbors) {
+        const b = graph.nodes[id];
+        const len = Math.hypot(b.x - a.x, b.z - a.z);
+        if (((b.x - a.x) * dx + (b.z - a.z) * dz) / len < 0.99) continue;
+        const along = (p.x - a.x) * dx + (p.z - a.z) * dz;
+        const side = Math.abs((p.x - a.x) * dz - (p.z - a.z) * dx);
+        if (along > 0 && along < len && side < 12) fast.add(`${a.id}>${b.id}`);
+      }
+    }
+  }
+  return fast;
 }
 
 export interface ApproachControl {

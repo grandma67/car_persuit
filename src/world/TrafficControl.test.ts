@@ -129,7 +129,7 @@ describe('generateTrafficControl', () => {
   });
 });
 
-import { approachControls } from './TrafficControl';
+import { approachControls, fastStreets } from './TrafficControl';
 
 describe('approachControls', () => {
   it.each([1, 42])('seed %i: every stop sign and signal maps to a real road approach', (seed) => {
@@ -143,6 +143,22 @@ describe('approachControls', () => {
       const a = city.graph.nodes[from];
       const b = city.graph.nodes[to];
       expect(c.axis).toBe(Math.abs(b.x - a.x) > Math.abs(b.z - a.z) ? 'x' : 'z');
+    }
+  });
+});
+
+describe('fastStreets', () => {
+  // (A 90 sign the city had to drop, standing in a canal or on a tree, leaves that way at the usual speed.)
+  it.each([1, 42, 1234])('seed %i: 90 stretches, never into a stop sign or a light either way', (seed) => {
+    const city = generateCity(seed);
+    const fast = fastStreets(city.graph, city.streetProps);
+    const controls = approachControls(city.graph, city.streetProps);
+    expect(fast.size).toBeGreaterThan(20);
+    for (const key of fast) {
+      const [a, b] = key.split('>').map(Number);
+      expect(city.graph.nodes[a].neighbors).toContain(b);
+      expect(controls.has(key), key).toBe(false);
+      expect(controls.has(`${b}>${a}`), key).toBe(false);
     }
   });
 });

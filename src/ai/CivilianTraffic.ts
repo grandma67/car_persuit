@@ -71,7 +71,7 @@ export function asCivilian(base: VehicleSpec, color = base.color): VehicleSpec {
     color,
     livery: undefined,
     engineForce: Math.min(base.engineForce, 3200 * (base.mass / 1200)),
-    maxSpeed: Math.min(base.maxSpeed, 20),
+    maxSpeed: Math.min(base.maxSpeed, 28), // room for 90 km/h on a fast stretch
   };
 }
 
@@ -181,6 +181,7 @@ export class CivilianTraffic {
     private headlights: number,
     private ground: GroundHeight = FLAT,
     private keep: Keep = 1,
+    private fast: Set<string> = new Set(),
   ) {
     // Forward sensor: a ray from the front bumper that only sees moving bodies (cars), so
     // buildings at junction corners don't make drivers brake.
@@ -270,6 +271,6 @@ export class CivilianTraffic {
     vehicle.headlights = this.headlights;
     vehicle.beamEnabled = false;
     this.scene.add(vehicle.mesh.root);
-    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep, this.junctions) });
+    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep, this.junctions, this.fast) });
   }
 }

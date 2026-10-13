@@ -35,6 +35,7 @@ const SIGN_SHAPE: Record<SignVariant, SignShape> = {
   priority: 'diamond',
   speed30: 'round',
   speed50: 'round',
+  speed90: 'round',
   noParking: 'round',
   noSmoking: 'round',
   children: 'triangle',
@@ -321,8 +322,9 @@ function signTexture(variant: SignVariant): THREE.Texture {
       }
       case 'speed30':
       case 'speed50':
+      case 'speed90':
         ringSign(g, s);
-        text(g, variant === 'speed30' ? '30' : '50', c, c + 6, s * 0.42, '#111111');
+        text(g, variant.slice(5), c, c + 6, s * 0.42, '#111111');
         break;
       case 'noParking':
         ringSign(g, s, BLUE);

@@ -1,6 +1,6 @@
 // Civilian driver: wanders the road network in its lane (the right-hand one, or the left in an
 // English city: `keep` mirrors every side below), obeys traffic lights and
-// stop signs, keeps its distance from whatever is ahead, takes its turn at junctions with the other
+// stop signs, speeds up on main streets signed 90, keeps its distance from whatever is ahead, takes its turn at junctions with the other
 // civilians (junctions.ts), yields to the player and cops about to cross its path, and after a
 // crash backs off and drives round whatever it's wedged against.
 import * as THREE from 'three';
@@ -22,6 +22,12 @@ const CORNER_SPEED = 6;
 const GAP = 6; // metres kept to the vehicle ahead
 const FOLLOW_CLOSE = 1.5; // m/s per metre of room left, closing up behind the vehicle ahead
 const STOP_SIGN_WAIT = 1.2;
+// At a stop sign, pull out only with a gap: nothing on the way into the junction (beyond the
+// ground already claimed there) due within this many seconds. More for a slow-pulling heavy.
+const GAP_TIME = 3;
+const HEAVY_GAP_TIME = 5;
+const GAP_RANGE = 150; // metres out we look for it
+const FAST_CRUISE = [22, 25];
 const STOP_MARGIN = 1.5; // metres short of the stop line
 const YELLOW_MARGIN = 1; // metres to spare reaching the line before the red
 const HARD_STEER = 0.6; // fraction of full lock above which we hold cornering speed
@@ -55,7 +61,7 @@ const TURN_SETTLE = 14; // metres to ease back into the kerb lane after either
 const SENSE_EVERY = 3;
 const SWEEP_STEP = 0.5; // metres between poses when working out the ground we'll sweep through a junction
 const CORRIDOR_POINTS = 4; // lane points ahead the forward sensor follows
-const ASK_TIME = 3; // seconds out from the stop line we start asking for our turn at a junction
+const ASK_TIME = 3; // seconds out from the stop line we start asking for our turn at a junction (or further: see takeTurn)
 const ASK_DISTANCE = 10; // …or metres, whichever is further
 const COMMIT_AFTER = 0.1; // seconds after first asking before we commit to a junction
 const CLAIM_MARGIN = 0.5; // metres round our body we want clear of anyone crossing
@@ -127,6 +133,7 @@ export class CivilianController {
   private waitingSince = 0;
   private mayEnter = true;
   readonly cruise: number;
+  readonly fastCruise: number; // on a stretch signed 90
   /** Seconds spent unable to move for no traffic reason; the manager respawns stuck cars. */
   stuckFor = 0;
 
@@ -141,11 +148,15 @@ export class CivilianController {
     private awareness?: Awareness,
     private keep: Keep = 1,
     private junctions?: Junctions,
+    private fast: Set<string> = new Set(),
   ) {
     this.recovery = new CrashRecovery(keep);
     this.route = [from, to];
     // Buses and trucks cruise a little slower than cars.
     this.cruise = Math.min(rng.range(10, 13.5), vehicle.spec.maxSpeed - 3);
+    // The same temperament on a fast stretch (no extra roll: keeps every driver's route as it was).
+    const [lo, hi] = FAST_CRUISE;
+    this.fastCruise = Math.max(this.cruise, Math.min(lo + ((this.cruise - 10) / 3.5) * (hi - lo), vehicle.spec.maxSpeed - 3));
     this.style = drivingStyle(vehicle.spec);
     this.extend();
     this.rebuild();
@@ -200,7 +211,7 @@ export class CivilianController {
     // Aim behind us (knocked round, or overshot): full lock toward it.
     input.steer = Math.abs(alpha) > Math.PI / 2 ? Math.sign(alpha) : THREE.MathUtils.clamp(wheelAngle / steerLimit(v.spec, speed), -1, 1);
 
-    let desired = Math.min(this.cruise, cornerSpeedLimit(this.path, this.segment, pos, Math.abs(speed), cornerSpeed, decel));
+    let desired = Math.min(this.cruiseHere(pos, decel), cornerSpeedLimit(this.path, this.segment, pos, Math.abs(speed), cornerSpeed, decel));
     // Still winding the wheel on: no pulling away out of a turn until it's coming straight, or
     // the car runs wide over the centre line of the road it's turning into.
     if (Math.abs(input.steer) > HARD_STEER) desired = Math.min(desired, cornerSpeed);
@@ -289,6 +300,28 @@ export class CivilianController {
   }
 
   /**
+   * Cruising speed for where we are: faster on a stretch signed 90, easing back to the usual
+   * cruise by the stop line when the road after the junction isn't one. At 90 we'd only get our
+   * turn at the next junction inside braking distance, so we look ahead: someone already crossing
+   * it and we come in slow enough to stop for them.
+   */
+  private cruiseHere(pos: P, decel: number): number {
+    const [prev, next, after] = this.route;
+    if (!this.fast.has(`${prev}>${next}`)) return this.cruise;
+    const n = this.graph.nodes[next];
+    const toNext = Math.hypot(n.x - pos.x, n.z - pos.z);
+    let limit = this.fastCruise;
+    if (!this.fast.has(`${next}>${after}`)) limit = Math.min(limit, Math.sqrt(this.cruise * this.cruise + 2 * decel * Math.max(0, toNext - STOP_LINE)));
+    // The first junction ahead (past a bend), and how far to its stop line.
+    const [junction, from, toLine] =
+      n.neighbors.length >= 3 ? [next, prev, toNext - STOP_LINE] : [after, next, toNext + Math.hypot(this.graph.nodes[after].x - n.x, this.graph.nodes[after].z - n.z) - STOP_LINE];
+    const ours = this.claim?.committed && this.claimNode === junction; // on our way through already
+    const busy = !ours && toLine > 0 && this.junctions?.list(junction).some((c) => c.committed && c.entry !== from && c.owner !== this.vehicle.body.handle);
+    if (busy) limit = Math.min(limit, Math.max(this.cruise, Math.sqrt(2 * decel * Math.max(0, toLine - STOP_MARGIN))));
+    return limit;
+  }
+
+  /**
    * Our turn at the junction ahead (see junctions.ts): whether we may cross the stop line now.
    * We ask once we're close, the light or sign lets us go, nobody's queued in front of us and
    * there's room on the road out (we never stop in the middle of a junction waiting for it). We
@@ -332,11 +365,18 @@ export class CivilianController {
     const ahead = this.ahead;
     const firstInLine = !ahead || ahead.distance > toStop;
     const exitClear = !ahead || ahead.moving || ahead.distance > toStop + 2 * STOP_LINE + 2 * halfLength + GAP;
-    const near = toStop < Math.max(ASK_DISTANCE, Math.abs(speed) * ASK_TIME);
-    if (!past && (held || !near || !firstInLine || !exitClear)) {
+    // Early enough that a "wait" leaves room to stop comfortably (from 90, further out than ASK_TIME).
+    const near = toStop < Math.max(ASK_DISTANCE, Math.abs(speed) * ASK_TIME, (speed * speed) / (2 * this.style.decel) + Math.abs(speed));
+    // Waiting for a gap (never second thoughts once pulling away): at a stop sign, in the traffic
+    // crossing ours; turning across the oncoming lane of a fast stretch, in its traffic.
+    const [a0, b0, c0] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
+    const turnsAcross = turnAngle(a0, b0, c0) * this.keep < -0.5;
+    const atSign = control?.kind === 'stop' && toStop < STOP_MARGIN + 3 && Math.abs(speed) < 1;
+    const noGap = !this.claim?.committed && toStop > -1 && ((atSign && this.trafficDue(node, 'crossing')) || (turnsAcross && toStop > 0 && this.trafficDue(node, 'oncoming')));
+    if (!past && (held || noGap || !near || !firstInLine || !exitClear)) {
       if (this.claim) j.leave(node, owner);
       this.claim = null;
-      return near ? exitClear : true;
+      return !noGap && (near ? exitClear : true);
     }
     if (!this.claim) {
       if (this.waitingFor !== node) {
@@ -366,6 +406,48 @@ export class CivilianController {
     const asked = time - this.claimedAt > COMMIT_AFTER;
     if (go && asked && toStop < (speed * speed) / (2 * this.style.decel) + 2) this.claim.committed = true;
     return go || past;
+  }
+
+  /**
+   * Whether anything (another driver, the player, a cop) is heading into junction `node` on a road
+   * crossing ours that doesn't stop there, or oncoming along a fast stretch, due too soon to pull
+   * out in front of. Those already close enough to have put in a claim are left to the junction's
+   * own right of way.
+   */
+  private trafficDue(node: number, kind: 'crossing' | 'oncoming'): boolean {
+    if (!this.awareness) return false;
+    const n = this.graph.nodes[node];
+    const from = this.graph.nodes[this.route[0]];
+    const len = Math.hypot(n.x - from.x, n.z - from.z) || 1;
+    const [ux, uz] = [(n.x - from.x) / len, (n.z - from.z) / len]; // our way in
+    const gap = this.style.heavy ? HEAVY_GAP_TIME : GAP_TIME;
+    for (const m of this.awareness.movers()) {
+      if (m.handle === this.vehicle.body.handle) continue;
+      const speed = Math.hypot(m.vx, m.vz);
+      if (speed < 3) continue;
+      const [hx, hz] = [m.vx / speed, m.vz / speed];
+      const along = hx * ux + hz * uz;
+      if (kind === 'crossing' ? Math.abs(along) > 0.7 : along > -0.7) continue;
+      const dx = n.x - m.x;
+      const dz = n.z - m.z;
+      const ahead = dx * hx + dz * hz; // metres to go to the junction centre
+      const side = Math.abs(dx * -hz + dz * hx); // off its line through the centre
+      if (ahead < STOP_LINE + 4 || ahead > GAP_RANGE || side > LANE_OFFSET * 2) continue;
+      // The road it's on: the neighbour behind it. If that stops here too, it'll wait its turn.
+      const back = n.neighbors.find((id) => {
+        const b = this.graph.nodes[id];
+        const bl = Math.hypot(b.x - n.x, b.z - n.z) || 1;
+        return ((b.x - n.x) * -hx + (b.z - n.z) * -hz) / bl > 0.7;
+      });
+      if (back === undefined || this.controls.get(`${back}>${node}`)?.kind === 'stop') continue;
+      // Oncoming traffic on an ordinary road asks for the junction in good time: the claims sort it out.
+      if (kind === 'oncoming' && !this.fast.has(`${back}>${node}`)) continue;
+      // Due: soon past the point where it could still stop comfortably for us. On a fast stretch,
+      // reckoned at 90: one pulling away now will be doing that by the time it's here.
+      const v = this.fast.has(`${back}>${node}`) ? Math.max(speed, FAST_CRUISE[1]) : speed;
+      if ((ahead - (v * v) / (2 * COMFORT_DECEL)) / v < gap) return true;
+    }
+    return false;
   }
 
   /**

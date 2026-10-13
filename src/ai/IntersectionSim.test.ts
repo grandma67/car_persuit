@@ -99,6 +99,7 @@ interface Car {
   offRoad: number;
   dodged: boolean;
   hardBrake: number; // worst deceleration over half a second, m/s²
+  top: number; // top speed, m/s
   speeds: number[]; // the last half second
   through: number | null; // time it reached EXIT_AT
   wrongAt: string;
@@ -108,8 +109,12 @@ interface Car {
   brakeAt: string;
 }
 
-/** 'priority': the x road has priority (no stop), the z road stops for it. */
-type Mode = 'stop' | 'signal' | 'priority';
+/**
+ * 'priority': the x road has priority (no stop), the z road stops for it. 'fast': the same, with
+ * the x road signed 90 and its traffic arriving from twice as far out, up to speed.
+ */
+type Mode = 'stop' | 'signal' | 'priority' | 'fast';
+const FAST_SPAWN_AT = 130;
 
 /** Run the junction for SECONDS, a new arrival on each arm every `gap` seconds (min, max). */
 function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
@@ -120,9 +125,11 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
   const controls = new Map<string, ApproachControl>();
   const phase = rng.range(0, 22);
   ARMS.forEach((a, i) => {
-    if (mode === 'priority' && a.x !== 0) return; // the priority road: no control
+    if ((mode === 'priority' || mode === 'fast') && a.x !== 0) return; // the priority road: no control
     controls.set(`${1 + i}>0`, { kind: mode === 'signal' ? 'signal' : 'stop', axis: a.x !== 0 ? 'x' : 'z', phase });
   });
+  const fast = new Set<string>();
+  if (mode === 'fast') for (const i of [0, 2]) for (const k of [`${5 + i}>${1 + i}`, `${1 + i}>0`, `0>${1 + i}`, `${1 + i}>${5 + i}`]) fast.add(k);
   const poleColliders = poles(mode, keep).map((p) => world.createCollider(RAPIER.ColliderDesc.cuboid(p.half, 1.5, p.half).setTranslation(p.x, 1.5, p.z)));
 
   let movers: Mover[] = [];
@@ -149,18 +156,20 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
       if (t < nextSpawn[i] || t > SECONDS - DRAIN) return;
       const dx = -a.x;
       const dz = -a.z; // heading in toward the junction
-      const x = a.x * SPAWN_AT - dz * 3 * keep;
-      const z = a.z * SPAWN_AT + dx * 3 * keep;
+      const fastArm = mode === 'fast' && a.x !== 0;
+      const out = fastArm ? FAST_SPAWN_AT : SPAWN_AT;
+      const x = a.x * out - dz * 3 * keep;
+      const z = a.z * out + dx * 3 * keep;
       if (cars.some((c) => Math.hypot(c.vehicle.position.x - x, c.vehicle.position.z - z) < 16)) return;
       nextSpawn[i] = t + rng.range(gap[0], gap[1]);
       const spec = { ...pickSpec(rng), kerb: keep > 0 ? ('right' as const) : ('left' as const) };
       const vehicle = new Vehicle(world, spec, { x, y: 1.2 - (spec.wheelY ?? 0), z }, Math.atan2(dx, dz));
       vehicle.tractionAssist = 6;
       vehicle.mesh.root.visible = false;
-      const controller = new CivilianController(vehicle, graph, controls, () => Infinity, rng, 1 + i, 0, awareness, keep, junctions);
+      const controller = new CivilianController(vehicle, graph, controls, () => Infinity, rng, fastArm ? 5 + i : 1 + i, fastArm ? 1 + i : 0, awareness, keep, junctions, fast);
       handles.add(vehicle.body.handle);
       const route = (controller as unknown as { route: number[] }).route;
-      cars.push({ id: nextId++, vehicle, controller, entry: i, exit: route[2] - 1, spawned: t, crossedAt: null, minSpeedAtLine: Infinity, wrongLane: 0, offRoad: 0, dodged: false, hardBrake: 0, speeds: [], through: null, wrongAt: '', offTrack: 0, brakeAt: '', poleHits: 0, writtenOff: false });
+      cars.push({ id: nextId++, vehicle, controller, entry: i, exit: route[route.indexOf(0) + 1] - 1, spawned: t, crossedAt: null, minSpeedAtLine: Infinity, wrongLane: 0, offRoad: 0, dodged: false, hardBrake: 0, top: 0, speeds: [], through: null, wrongAt: '', offTrack: 0, brakeAt: '', poleHits: 0, writtenOff: false });
     });
 
     movers = cars.flatMap(({ vehicle: v }) => {
@@ -188,6 +197,7 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
         c.offTrack = Math.max(c.offTrack, d);
       }
       const speed = v.speed;
+      c.top = Math.max(c.top, speed);
       c.speeds.push(speed);
       if (c.speeds.length > 30) c.speeds.shift();
       // Braking from speed: the handbrake taking the last 1 m/s off at a stop isn't a lurch.
@@ -271,9 +281,9 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
     if (mode !== 'signal' || c.crossedAt === null) return false;
     return signalState(ARMS[c.entry].x !== 0 ? 'x' : 'z', c.crossedAt + phase) === 'red';
   });
-  const stopRuns = done.concat(cars).filter((c) => (mode === 'stop' || (mode === 'priority' && ARMS[c.entry].x === 0)) && c.crossedAt !== null && c.minSpeedAtLine > 0.6);
+  const stopRuns = done.concat(cars).filter((c) => (mode === 'stop' || (mode !== 'signal' && ARMS[c.entry].x === 0)) && c.crossedAt !== null && c.minSpeedAtLine > 0.6);
   // Still on the road a full DRAIN after the last arrival.
-  return { done, stuck: cars, collisions, redRuns, stopRuns };
+  return { done, stuck: cars, collisions, redRuns, stopRuns, fastRoad: mode === 'fast' };
 }
 
 const name = (c: Car) => `#${c.id} ${c.vehicle.spec.body ?? 'sports'} ${c.entry}→${c.exit}`;
@@ -294,7 +304,10 @@ function report(r: ReturnType<typeof simulate>) {
     // Nothing over the kerb: a car's tail may just brush the corner, clear of the poles.
     offRoad: all.filter((c) => c.offRoad > 0.1).map((c) => `${name(c)} ${c.offRoad.toFixed(2)}m`),
     dodged: all.filter((c) => c.dodged).length,
-    hardBrake: all.filter((c) => c.hardBrake > 6.5).map((c) => `${name(c)} ${c.hardBrake.toFixed(1)} ${c.brakeAt}`),
+    // Cars (not buses or trucks) in off the priority road, and the best they managed.
+    fastTops: all.filter((c) => ARMS[c.entry].x !== 0 && c.vehicle.spec.mass < 5000).map((c) => c.top),
+    // At 90 a car pulling out ahead can mean firm braking (short of an emergency stop).
+    hardBrake: all.filter((c) => c.hardBrake > (r.fastRoad && ARMS[c.entry].x !== 0 ? 8 : 6.5)).map((c) => `${name(c)} ${c.hardBrake.toFixed(1)} ${c.brakeAt}`),
   };
 }
 
@@ -316,20 +329,26 @@ describe('four-way junction simulation', () => {
 
   // An arrival on each arm every 15–25 s: a dozen vehicles a minute through one junction, several
   // times what one sees in a game. Keeping right and keeping left.
-  const CASES = (['stop', 'priority', 'signal'] as const).flatMap((mode) => ([1, -1] as const).flatMap((keep) => [1, 2, 3].map((seed) => ({ mode, keep, seed }))));
+  const CASES = (['stop', 'priority', 'fast', 'signal'] as const).flatMap((mode) => ([1, -1] as const).flatMap((keep) => (mode === 'fast' ? [1, 2, 3, 4, 5, 6, 7, 8] : [1, 2, 3]) /* the fast road: more seeds, it's the hardest */.map((seed) => ({ mode, keep, seed }))));
   it.each(CASES)('$mode, keep $keep, seed $seed: everyone through, safely and in their lane', ({ mode, keep, seed }) => {
     const r = report(simulate(mode, seed, keep, [15, 25]));
     expect(r.through).toBeGreaterThanOrEqual(20);
     expect(r.stuck).toEqual([]);
     // Behind a bus swinging wide through a turn, a queue can wait a while (at a light, a green or
-    // two; on the side road of a priority junction, for a gap in the main road's traffic).
-    expect(r.slowest).toBeLessThan(mode === 'stop' ? 60 : 80);
+    // two; on the side road of a priority junction, for a gap in the main road's traffic, which
+    // at 90, both ways, takes longer).
+    expect(r.slowest).toBeLessThan(mode === 'stop' ? 60 : mode === 'fast' ? 120 : 80);
     safe(r);
+    if (mode === 'fast') {
+      // Up to 90 on the run in (most of them; one stuck behind a bus may not get there), never over.
+      expect(r.fastTops.filter((v) => v > 21).length).toBeGreaterThan(r.fastTops.length / 2);
+      expect(Math.max(...r.fastTops)).toBeLessThan(25.5);
+    }
   }, 120_000);
 
   // Rush hour: more arrivals than a stop junction can take. Queues grow, but nobody pushes in,
   // cuts across or drives round the queue.
-  it.each(['stop', 'priority', 'signal'] as const)('%s, rush hour: queues, never a crash or a shortcut', (mode) => {
+  it.each(['stop', 'priority', 'fast', 'signal'] as const)('%s, rush hour: queues, never a crash or a shortcut', (mode) => {
     const r = report(simulate(mode, 7, 1, [4, 7]));
     expect(r.through).toBeGreaterThan(30);
     safe(r);
