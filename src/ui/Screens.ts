@@ -12,6 +12,8 @@ export interface EndScreenInfo {
   board?: { time: string; label: string; current: boolean }[];
   /** The run traced on the city map, its legend (HTML) and a stats line. */
   run?: { map: HTMLElement; legend: string; stats: string };
+  /** Share this result: the brag (the city's link is appended) and the run map as an image. */
+  share?: { text: string; image: Promise<Blob | null> };
 }
 
 export interface MenuInfo {
@@ -59,18 +61,25 @@ export class Screens {
     this.el.hidden = true;
   }
 
-  /** Share a link to this city: the native share sheet where there is one, else copy to the clipboard. */
-  private async share(seed: number): Promise<void> {
+  private seedLink(seed: number): string {
     const url = new URL(window.location.href);
     url.searchParams.set('seed', String(seed));
-    const link = url.toString();
-    const button = this.el.querySelector<HTMLButtonElement>('[data-action="share"]');
-    const flash = (text: string) => {
-      if (!button) return;
-      const original = button.innerHTML;
-      button.textContent = text;
-      setTimeout(() => (button.innerHTML = original), 1600);
-    };
+    return url.toString();
+  }
+
+  /** Briefly swap a button's label, e.g. to confirm a copy. */
+  private flash(action: string, text: string): void {
+    const button = this.el.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
+    if (!button) return;
+    const original = button.innerHTML;
+    button.textContent = text;
+    setTimeout(() => (button.innerHTML = original), 1600);
+  }
+
+  /** Share a link to this city: the native share sheet where there is one, else copy to the clipboard. */
+  private async share(seed: number): Promise<void> {
+    const link = this.seedLink(seed);
+    const flash = (text: string) => this.flash('share', text);
     if (navigator.share) {
       try {
         await navigator.share({ title: 'Car Pursuit', text: `Can you beat city #${seed} in Car Pursuit?`, url: link });
@@ -149,8 +158,44 @@ export class Screens {
     );
   }
 
+  /**
+   * Share the result with the map image: the native share sheet where it takes files, else save the
+   * image and copy the text. `image` is already rendered, so the share sheet opens within the click.
+   */
+  private async shareResult(seed: number, brag: string, image: Blob | null): Promise<void> {
+    const text = `${brag} ${this.seedLink(seed)}`;
+    const file = image && new File([image], `car-pursuit-${seed}.png`, { type: 'image/png' });
+    if (navigator.share && (!file || navigator.canShare?.({ files: [file] }))) {
+      try {
+        await navigator.share(file ? { files: [file], text } : { text });
+      } catch {
+        // Cancelled by the user: nothing to do.
+      }
+      return;
+    }
+    if (file) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(file);
+      a.download = file.name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      this.flash('share-result', file ? 'Image saved · text copied!' : 'Copied!');
+    } catch {
+      window.prompt('Copy this:', text);
+    }
+  }
+
   end(info: EndScreenInfo, onRetry: () => void, onNewCity: () => void): void {
-    const { run } = info;
+    const { run, share } = info;
+    const actions: Record<string, () => void> = { retry: onRetry, new: onNewCity };
+    if (share) {
+      let image: Blob | null = null;
+      void share.image.then((blob) => (image = blob));
+      actions['share-result'] = () => void this.shareResult(info.seed, share.text, image);
+    }
     this.show(
       `
       ${run ? `<div class="screen-run"><div data-slot="map"></div>${run.legend}</div><div class="screen-summary">` : ''}
@@ -168,11 +213,12 @@ export class Screens {
       <div class="screen-buttons">
         <button data-action="retry">Retry city <kbd>Enter</kbd></button>
         <button data-action="new" class="secondary">New city <kbd>N</kbd></button>
+        ${share ? '<button data-action="share-result" class="secondary">Share this result</button>' : ''}
       </div>
       <p class="screen-seed">City #${info.seed}</p>
       ${run ? '</div>' : ''}
     `,
-      { retry: onRetry, new: onNewCity },
+      actions,
       run ? 'with-run' : '',
     );
     if (run) this.el.querySelector('[data-slot="map"]')?.replaceWith(run.map);

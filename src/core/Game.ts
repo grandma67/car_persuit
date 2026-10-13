@@ -770,17 +770,25 @@ export class Game {
         current: r === run,
       }));
     }
+    const title = won ? 'YOU MADE IT!' : reason === 'destroyed' ? 'WRECKED' : reason === 'drowned' ? 'SLEEPING WITH THE FISHES' : "TIME'S UP";
+    const { map, ...run } = this.runSummary();
+    const time = formatTime(this.mission.elapsed);
+    const reached = `${this.mission.index} of ${this.mission.total} destinations`;
     this.screens.end(
       {
         won,
-        title: won ? 'YOU MADE IT!' : reason === 'destroyed' ? 'WRECKED' : reason === 'drowned' ? 'SLEEPING WITH THE FISHES' : "TIME'S UP",
+        title,
         detail: won
           ? `All ${this.mission.total} destinations in ${formatTime(this.mission.elapsed)}.`
           : `Reached ${this.mission.index} of ${this.mission.total} destinations.`,
         seed: this.city.seed,
         newBest,
         board,
-        run: this.runSummary(),
+        run: { map: map.el, ...run },
+        share: {
+          text: won ? `I beat this city in ${time}, can you?` : `I reached ${reached} in this city before it got me, can you beat it?`,
+          image: map.image(won ? `BEAT IT IN ${time}` : title, `City #${this.city.seed} · ${won ? this.difficulty.label : reached} · ${run.stats}`, won),
+        },
       },
       () => this.restart(this.city.seed),
       () => this.restart(Math.floor(Math.random() * 1_000_000)),
@@ -788,7 +796,7 @@ export class Game {
   }
 
   /** The run traced on the city map for the end screen. */
-  private runSummary(): { map: HTMLElement; legend: string; stats: string } {
+  private runSummary(): { map: RunMap; legend: string; stats: string } {
     const log = this.runLog;
     const map = new RunMap(this.minimap, {
       log,
@@ -797,7 +805,7 @@ export class Game {
       maxSpeed: this.player.spec.maxSpeed,
     });
     const stats = [`${(log.distance / 1000).toFixed(1)} km driven`, `top speed ${Math.round(log.topSpeed * 3.6)} km/h`];
-    return { map: map.el, legend: map.legend(), stats: stats.join(' · ') };
+    return { map, legend: map.legend(), stats: stats.join(' · ') };
   }
 
   private overviewCam?: THREE.PerspectiveCamera;

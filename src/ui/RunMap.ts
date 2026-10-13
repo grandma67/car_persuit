@@ -177,15 +177,54 @@ export class RunMap {
     this.tip.classList.toggle('below', best.y < SIZE * 0.15);
   }
 
-  /** Legend chips: an icon and a count for each kind of incident that happened, then the speed key. */
-  legend(): string {
+  /** How many of each kind of incident, biggest moments first; destinations and the ending left out. */
+  private tally(): [IncidentKind, number][] {
     const counts = new Map<IncidentKind, number>();
     for (const i of this.info.log.incidents) counts.set(i.kind, (counts.get(i.kind) ?? 0) + 1);
-    const chips = [...counts]
+    return [...counts]
       .filter(([kind]) => kind !== 'checkpoint' && INCIDENT_STYLE[kind].order !== 7)
-      .sort(([a], [b]) => INCIDENT_STYLE[b].order - INCIDENT_STYLE[a].order)
+      .sort(([a], [b]) => INCIDENT_STYLE[b].order - INCIDENT_STYLE[a].order);
+  }
+
+  /** Legend chips: an icon and a count for each kind of incident that happened. */
+  legend(): string {
+    const chips = this.tally()
       .map(([kind, n]) => `<span class="run-chip">${INCIDENT_STYLE[kind].icon} ${n} <small>${INCIDENT_STYLE[kind].label}</small></span>`)
       .join('');
     return `<div class="run-legend">${chips || '<span class="run-chip"><small>A clean run: not a scratch</small></span>'}</div>`;
+  }
+
+  /** A shareable card: the game's name and the result above the map, the incident tally below. */
+  image(headline: string, sub: string, won: boolean): Promise<Blob | null> {
+    const HEAD = 150;
+    const FOOT = 80;
+    const c = document.createElement('canvas');
+    c.width = SIZE;
+    c.height = HEAD + SIZE + FOOT;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#0b0e15';
+    g.fillRect(0, 0, c.width, c.height);
+    g.textAlign = 'center';
+    g.textBaseline = 'alphabetic';
+    g.fillStyle = '#ff3b1f';
+    g.font = 'italic 900 34px system-ui, sans-serif';
+    g.fillText('CAR PURSUIT', SIZE / 2, 48);
+    g.fillStyle = won ? '#4dff88' : '#ff4d4d';
+    g.font = 'italic 900 48px system-ui, sans-serif';
+    g.fillText(headline, SIZE / 2, 102);
+    g.fillStyle = 'rgb(230 237 243 / 0.7)';
+    g.font = '24px system-ui, sans-serif';
+    g.fillText(sub, SIZE / 2, 136);
+    g.drawImage(this.canvas, 0, HEAD);
+    const tally = this.tally();
+    g.fillStyle = '#e6edf3';
+    g.font = '700 30px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    g.textBaseline = 'middle';
+    g.fillText(
+      tally.length ? tally.map(([kind, n]) => `${INCIDENT_STYLE[kind].icon} ${n}`).join('    ') : 'A clean run: not a scratch',
+      SIZE / 2,
+      HEAD + SIZE + FOOT / 2,
+    );
+    return new Promise((resolve) => c.toBlob(resolve, 'image/png'));
   }
 }
