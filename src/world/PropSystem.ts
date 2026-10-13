@@ -10,6 +10,8 @@ import { signalState, type SignalLight } from './TrafficControl';
 import { groundBase, groundHeight, groundNormal } from './Terrain';
 
 const GRID_CELL = 10; // metres, spatial hash for vehicle-vs-prop checks
+/** Grid cell key: a number, not a "cx,cz" string — looked up for every car every physics step. */
+const cellKey = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096);
 const LAMP_HEAD = new THREE.Vector3(0, 5.8, 1.3); // bulb position in lamp space
 const LIGHT_POOL_RADIUS = 7;
 const SIGN_FACE_Y = 2.35;
@@ -375,7 +377,7 @@ function signTexture(variant: SignVariant): THREE.Texture {
 // like hitting a wall.
 export class PropSystem {
   private props: PropState[] = [];
-  private grid = new Map<string, number[]>();
+  private grid = new Map<number, number[]>();
   private meshes = {} as Record<ModelKey, THREE.InstancedMesh>;
   private bulbs: THREE.InstancedMesh;
   private pools: THREE.InstancedMesh;
@@ -505,7 +507,7 @@ export class PropSystem {
       const r = Math.max(spec.hx, spec.hz);
       for (let cx = Math.floor((def.x - r) / GRID_CELL); cx <= Math.floor((def.x + r) / GRID_CELL); cx++) {
         for (let cz = Math.floor((def.z - r) / GRID_CELL); cz <= Math.floor((def.z + r) / GRID_CELL); cz++) {
-          const cell = `${cx},${cz}`;
+          const cell = cellKey(cx, cz);
           const list = this.grid.get(cell);
           if (list) list.push(i);
           else this.grid.set(cell, [i]);
@@ -541,7 +543,7 @@ export class PropSystem {
   private near(x: number, z: number, radius: number, visit: (i: number) => void): void {
     for (let cx = Math.floor((x - radius) / GRID_CELL); cx <= Math.floor((x + radius) / GRID_CELL); cx++) {
       for (let cz = Math.floor((z - radius) / GRID_CELL); cz <= Math.floor((z + radius) / GRID_CELL); cz++) {
-        for (const i of this.grid.get(`${cx},${cz}`) ?? []) visit(i);
+        for (const i of this.grid.get(cellKey(cx, cz)) ?? []) visit(i);
       }
     }
   }
@@ -615,7 +617,7 @@ export class PropSystem {
     const reach = he.z + margin;
     for (let cx = Math.floor((pos.x - reach) / GRID_CELL); cx <= Math.floor((pos.x + reach) / GRID_CELL); cx++) {
       for (let cz = Math.floor((pos.z - reach) / GRID_CELL); cz <= Math.floor((pos.z + reach) / GRID_CELL); cz++) {
-        for (const i of this.grid.get(`${cx},${cz}`) ?? []) {
+        for (const i of this.grid.get(cellKey(cx, cz)) ?? []) {
           if (seen.has(i)) continue;
           seen.add(i);
           const p = this.props[i];
