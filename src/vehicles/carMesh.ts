@@ -29,6 +29,24 @@ export interface CarMesh {
   dispose(): void;
 }
 
+export const TYRE_WIDTH = 0.32;
+const ARCH_CLEARANCE = 0.08; // metres between a tyre and its wheel arch
+
+/**
+ * A front wheel arch (bus, box truck), in chassis space: the side is cut away up to `top`, for
+ * `halfLength` either side of the axle, leaving a wheel well `wellHalfWidth` either side of the
+ * centre line. Sized for the tyre at any lock: it turns about its centre, so it never reaches
+ * further than its radius from there along the body, nor further in than its radius.
+ */
+export function frontArch(spec: VehicleSpec): { top: number; halfLength: number; wellHalfWidth: number } {
+  const tyreTop = (spec.wheelY ?? 0) - spec.suspensionRestLength * 0.3 + spec.wheelRadius; // on the bump stop
+  return {
+    top: tyreTop + ARCH_CLEARANCE,
+    halfLength: Math.hypot(spec.wheelRadius, TYRE_WIDTH / 2) + ARCH_CLEARANCE,
+    wellHalfWidth: spec.wheelX - Math.hypot(spec.wheelRadius, TYRE_WIDTH / 2) - ARCH_CLEARANCE,
+  };
+}
+
 // Low-poly but sharp: wedge nose, faceted canopy, spoiler, emissive lights.
 // Built in chassis-local space: origin is the chassis collider centre, +Z is forward.
 export function buildCarMesh(spec: VehicleSpec): CarMesh {
@@ -58,13 +76,40 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     right: { lamp: indicatorLamp(), glows: [] },
   };
 
+  const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    root.add(m);
+    return m;
+  };
+  // Front wheel arches for the tall flat-sided bodies (bus, box truck), whose sides come down past
+  // the top of the tyres: at full lock a front tyre swings its edges out past the body side and in
+  // under it, so the lower sides are cut away round it, with a dark wheel well inside.
+  const { top: archTop, halfLength: archHalf, wellHalfWidth } = frontArch(spec);
+  /** A full-width box (centred on x = 0) spanning y0..y1, z0..z1, with the front arches cut out of it. */
+  const archedBox = (y0: number, y1: number, z0: number, z1: number, mat: THREE.Material) => {
+    const slab = (w: number, ya: number, yb: number, za: number, zb: number, m: THREE.Material) => {
+      if (yb - ya > 0.001 && zb - za > 0.001) box(w, yb - ya, zb - za, m, 0, (ya + yb) / 2, (za + zb) / 2);
+    };
+    const cut = Math.min(Math.max(archTop, y0), y1);
+    const a0 = Math.max(spec.wheelZ - archHalf, z0);
+    const a1 = Math.min(spec.wheelZ + archHalf, z1);
+    slab(hx * 2, cut, y1, z0, z1, mat); // above the arches
+    if (a1 <= a0) return slab(hx * 2, y0, cut, z0, z1, mat);
+    slab(hx * 2, y0, cut, z0, a0, mat);
+    slab(hx * 2, y0, cut, a1, z1, mat);
+    slab(wellHalfWidth * 2, y0, cut, a0, a1, trim); // the wheel well between the arches
+  };
+
   const body = spec.body ?? 'sports';
   // Body: a box with the front top edge pulled down — a sharp wedge for sports cars, a gentle
   // bonnet slope for sedans/SUVs, flat-fronted for trucks and buses.
   const noseDrop = { sports: 1.15, sedan: 0.7, suv: 0.3, truck: 0, van: 0.35, pickup: 0.3, bus: 0, boxtruck: 0, ramptruck: 0 }[body];
   const tall = body === 'bus' || body === 'boxtruck';
   // The box truck is drawn as a cab plus a cargo box instead (below).
-  if (body !== 'boxtruck') {
+  if (body === 'bus') {
+    archedBox(-hy, hy, -hz, hz, paint);
+  } else if (body !== 'boxtruck') {
     const bodyGeo = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
     const pos = bodyGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
@@ -73,12 +118,6 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     bodyGeo.computeVertexNormals();
     root.add(new THREE.Mesh(bodyGeo, body === 'ramptruck' ? trim : paint));
   }
-  const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z);
-    root.add(m);
-    return m;
-  };
 
   // Hangs 2 cm below the body: flush bottoms z-fight (seen on a car lying on its roof).
   const skirt = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 + 0.04, 0.12, hz * 2 - 0.3), trim);
@@ -109,13 +148,13 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     box(hx * 1.95, 0.08, hz * 1.95, new THREE.MeshStandardMaterial({ color: 0xe8e8e4, roughness: 0.6, flatShading: true }), 0, hy + 0.04, 0);
     // Door on the kerb side: right (-X), or left (+X) where traffic keeps left.
     const door = spec.kerb === 'left' ? 1 : -1;
-    box(0.05, hy * 1.5, 1.1, trim, door * (hx + 0.02), -hy * 0.2, hz * 0.72);
+    box(0.05, hy * 1.5, 1.1, trim, door * (hx + 0.02), -hy * 0.2, hz * 0.78); // ahead of the front wheel
     roof = hy + 0.08;
   } else if (body === 'boxtruck') {
     // Short cab with a windscreen, tall white cargo box behind it.
     const cabLen = 1.9;
     const cabTop = hy * 0.35;
-    box(hx * 2, cabTop + hy, cabLen, paint, 0, (cabTop - hy) / 2, hz - cabLen / 2);
+    archedBox(-hy, cabTop, hz - cabLen, hz, paint);
     box(hx * 1.7, (cabTop + hy) * 0.35, 0.04, glass, 0, cabTop - (cabTop + hy) * 0.22, hz + 0.01);
     for (const side of [-1, 1]) box(0.04, (cabTop + hy) * 0.3, cabLen * 0.5, glass, side * (hx + 0.01), cabTop - (cabTop + hy) * 0.22, hz - cabLen * 0.4);
     const cargo = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.7, flatShading: true });
@@ -223,7 +262,7 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     root.add(front, rear, repeater, fg, rg);
   }
 
-  const tireGeo = new THREE.CylinderGeometry(spec.wheelRadius, spec.wheelRadius, 0.32, 12);
+  const tireGeo = new THREE.CylinderGeometry(spec.wheelRadius, spec.wheelRadius, TYRE_WIDTH, 12);
   tireGeo.rotateZ(Math.PI / 2);
   const rimGeo = new THREE.CylinderGeometry(spec.wheelRadius * 0.6, spec.wheelRadius * 0.6, 0.34, 6);
   rimGeo.rotateZ(Math.PI / 2);
