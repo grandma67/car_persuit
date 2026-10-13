@@ -26,6 +26,7 @@ import { PropSystem, type PropBreak } from '../world/PropSystem';
 import { RoadworksSite } from '../world/RoadworksSite';
 import { Hud, formatTime } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
+import { toggleFullscreen } from '../ui/fullscreen';
 import { CarAudio } from '../audio/CarAudio';
 import { Effects } from '../render/Effects';
 import { Sirens } from '../render/Sirens';
@@ -772,12 +773,6 @@ export class Game {
     this.audio.impact(Math.max(playerCrash, crashSound));
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
   }
-}
-
-/** F: enter/leave fullscreen (still within the key press's user activation, so browsers allow it). */
-function toggleFullscreen(): void {
-  if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-  else void document.documentElement.requestFullscreen?.().catch(() => {});
 }
 
 /** Impact = velocity change (or closing speed) in m/s: ~3 is a scrape, 40+ is a full-speed hit. */

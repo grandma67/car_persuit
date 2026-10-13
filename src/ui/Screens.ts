@@ -1,5 +1,7 @@
 // Full-screen overlays: start menu, pause, win/lose. Keyboard shortcuts are handled by Game.
 
+import { fullscreenSupported, isFullscreen, onFullscreenChange, toggleFullscreen } from './fullscreen';
+
 export interface EndScreenInfo {
   won: boolean;
   title: string;
@@ -26,6 +28,16 @@ export class Screens {
     this.el.className = 'screen';
     this.el.hidden = true;
     parent.appendChild(this.el);
+    onFullscreenChange(() => this.syncFullscreenLabel());
+  }
+
+  private fullscreenLabel(): string {
+    return isFullscreen() ? 'Exit fullscreen' : 'Fullscreen';
+  }
+
+  private syncFullscreenLabel(): void {
+    const button = this.el.querySelector('[data-action="fullscreen"]');
+    if (button) button.textContent = this.fullscreenLabel();
   }
 
   private show(html: string, actions: Record<string, () => void>): void {
@@ -77,7 +89,11 @@ export class Screens {
     const choices = info.difficulties
       .map((d) => `<button data-action="diff-${d.id}" class="choice${d.id === info.difficulty ? ' selected' : ''}${d.police ? '' : ' practice'}">${d.label}</button>`)
       .join('');
-    const actions: Record<string, () => void> = { start: onStart, share: () => void this.share(info.seed) };
+    const actions: Record<string, () => void> = {
+      start: onStart,
+      share: () => void this.share(info.seed),
+      fullscreen: toggleFullscreen,
+    };
     for (const d of info.difficulties) actions[`diff-${d.id}`] = () => onDifficulty(d.id);
     this.show(
       `
@@ -93,6 +109,7 @@ export class Screens {
       <div class="screen-buttons">
         <button data-action="start">Start <kbd>Enter</kbd></button>
         <button data-action="share" class="secondary">Share this game</button>
+        ${fullscreenSupported() ? `<button data-action="fullscreen" class="secondary">${this.fullscreenLabel()}</button>` : ''}
       </div>
       <p class="screen-seed">City #${info.seed} · ${info.look}${info.best ? ` · Best ${info.best}` : ''}</p>
     `,
