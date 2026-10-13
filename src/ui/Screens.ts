@@ -117,15 +117,33 @@ export class Screens {
     );
   }
 
-  pause(seed: number, onResume: () => void, onRetry: () => void): void {
+  /** `touch`: on touch screens, also offer mute and fullscreen (no M/F keys there). */
+  pause(
+    seed: number,
+    onResume: () => void,
+    onRetry: () => void,
+    touch?: { muted: boolean; onMute: () => boolean } | null,
+  ): void {
+    const muteLabel = (muted: boolean) => (muted ? 'Unmute' : 'Mute');
+    const actions: Record<string, () => void> = { resume: onResume, retry: onRetry, share: () => void this.share(seed) };
+    if (touch) {
+      actions.mute = () => {
+        const button = this.el.querySelector('[data-action="mute"]');
+        const muted = touch.onMute();
+        if (button) button.textContent = muteLabel(muted);
+      };
+      actions.fullscreen = toggleFullscreen;
+    }
     this.show(
       `<h2>PAUSED</h2>
       <div class="screen-buttons">
         <button data-action="resume">Resume <kbd>P</kbd></button>
         <button data-action="retry" class="secondary">Retry <kbd>Enter</kbd></button>
         <button data-action="share" class="secondary">Share this game</button>
+        ${touch ? `<button data-action="mute" class="secondary">${muteLabel(touch.muted)}</button>` : ''}
+        ${touch && fullscreenSupported() ? `<button data-action="fullscreen" class="secondary">${this.fullscreenLabel()}</button>` : ''}
       </div>`,
-      { resume: onResume, retry: onRetry, share: () => void this.share(seed) },
+      actions,
     );
   }
 

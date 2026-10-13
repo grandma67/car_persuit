@@ -307,10 +307,22 @@ export class Game {
     this.renderer.compileAsync(this.scene, this.chase.camera).catch(() => {});
   }
 
+  /** M key or the pause menu's Mute button. Returns the new muted state. */
+  private toggleMute(): boolean {
+    const muted = this.audio.toggleMute();
+    this.hud.setMuted(muted);
+    return muted;
+  }
+
   private setPaused(paused: boolean): void {
     if (paused && this.state === 'playing') {
       this.state = 'paused';
-      this.screens.pause(this.city.seed, () => this.setPaused(false), () => this.restart(this.city.seed));
+      // Touch has no M/F keys, so the pause menu offers mute and fullscreen buttons instead.
+      const touchExtras = this.touch && {
+        muted: this.audio.isMuted,
+        onMute: () => this.toggleMute(),
+      };
+      this.screens.pause(this.city.seed, () => this.setPaused(false), () => this.restart(this.city.seed), touchExtras);
     } else if (!paused && this.state === 'paused') {
       this.state = 'playing';
       this.screens.hide();
@@ -331,7 +343,7 @@ export class Game {
   private handleKeys(): void {
     const pressed = (...codes: string[]) => codes.some((c) => this.input.wasPressed(c));
     if (pressed('KeyR') && this.state === 'playing') this.player.reset();
-    if (pressed('KeyM')) this.hud.setMuted(this.audio.toggleMute());
+    if (pressed('KeyM')) this.toggleMute();
     if (pressed('KeyF')) toggleFullscreen();
     if (pressed('KeyP', 'Escape')) this.setPaused(this.state === 'playing');
     if (pressed('Enter', 'NumpadEnter')) {
