@@ -229,7 +229,7 @@ export const RAMP_TRUCK_SPEC: VehicleSpec = {
   wheelX: 2.15,
   wheelZ: 3.0,
   wheelY: 0.05, // keeps the deck where it was with the bigger tyres
-  dualRear: false, // an inner twin would sit buried in the deck
+  dualRear: false, // its single tyres already stand outside the deck
   suspensionRestLength: 0.55,
   maxSpeed: 14,
   maxSteer: 0.6, // its wheels sit outside the deck: more lock would turn them into the hull
