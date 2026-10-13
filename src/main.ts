@@ -18,10 +18,15 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 const splash = document.getElementById('splash')!;
 const bar = splash.querySelector<HTMLElement>('.splash-bar-fill')!;
 const status = splash.querySelector<HTMLElement>('.splash-status')!;
+const stars = splash.querySelector<HTMLElement>('.splash-stars')!;
 
 function stage(text: string, progress: number): Promise<void> {
   status.textContent = text;
   bar.style.width = `${progress}%`;
+  // Wanted level climbs with the loading bar: five stars when ready.
+  const lit = Math.floor((progress / 100) * stars.children.length);
+  [...stars.children].forEach((star, i) => star.classList.toggle('on', i < lit));
+  stars.classList.toggle('full', lit === stars.children.length);
   // Two frames so the browser paints the update before the next blocking step.
   return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 }
