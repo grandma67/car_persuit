@@ -44,6 +44,8 @@ import { DIFFICULTIES, difficultyById, scaledCopCap, type Difficulty } from '../
 import { Records } from '../gameplay/Records';
 import { CopContact } from '../gameplay/CopContact';
 import { RunLog, type IncidentKind } from '../gameplay/RunLog';
+import { Airtime, type Takeoff } from '../gameplay/Airtime';
+import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { DAMAGE } from '../gameplay/balance';
@@ -98,6 +100,8 @@ export class Game {
   private walls: Set<number>; // collider handles of buildings, sea wall, landmarks
   private copContact: CopContact;
   private runLog = new RunLog(); // the route driven and what happened, for the end-screen map
+  private airtime = new Airtime(); // the player's jumps, for the run log
+  private rampJump = false; // the flight in progress left from a ramp
   private ramSound = 0; // a cop started ramming the player this frame: crash strength 0..1
   private landmarks: Landmarks;
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
@@ -345,7 +349,10 @@ export class Game {
 
   private handleKeys(): void {
     const pressed = (...codes: string[]) => codes.some((c) => this.input.wasPressed(c));
-    if (pressed('KeyR') && this.state === 'playing') this.player.reset();
+    if (pressed('KeyR') && this.state === 'playing') {
+      this.player.reset();
+      this.airtime.cancel();
+    }
     if (pressed('KeyM')) this.toggleMute();
     if (pressed('KeyF')) toggleFullscreen();
     if (pressed('KeyP', 'Escape')) this.setPaused(this.state === 'playing');
@@ -369,7 +376,10 @@ export class Game {
       }
       // T: jump to the current destination. Y: leave 3 seconds on the clock.
       const target = this.mission.current;
-      if (pressed('KeyT') && target && this.state === 'playing') this.player.teleport(target.x, this.ground(target.x, target.z) + 1.2, target.z, 0);
+      if (pressed('KeyT') && target && this.state === 'playing') {
+        this.player.teleport(target.x, this.ground(target.x, target.z) + 1.2, target.z, 0);
+        this.airtime.cancel();
+      }
       if (pressed('KeyY') && this.state === 'playing') this.mission.elapsed = MISSION.timeLimit - 3;
       if (pressed('KeyK') && this.state === 'playing') this.raiseStars(this.wanted.bump());
     }
@@ -433,7 +443,9 @@ export class Game {
           }
         }
       }
-      breaks.push(...this.scratchOnProps(this.player, this.props.checkVehicle(this.player, FIXED_DT)));
+      const smashed = this.scratchOnProps(this.player, this.props.checkVehicle(this.player, FIXED_DT));
+      if (this.state === 'playing') this.runLog.propsSmashed += smashed.length;
+      breaks.push(...smashed);
       for (const cop of this.director.cops) {
         cop.vehicle.snapshot();
         breaks.push(...this.scratchOnProps(cop.vehicle, this.props.checkVehicle(cop.vehicle, FIXED_DT)));
@@ -481,6 +493,7 @@ export class Game {
     this.sun.target.position.copy(carPos);
 
     if (this.state === 'playing') this.applyDamage(impact, ramDamage);
+    if (this.state === 'playing') this.logJumps();
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
     this.sea.update(frameDt);
@@ -706,6 +719,35 @@ export class Game {
   /** Note something that happened for the end-screen map: at the player, unless placed elsewhere. */
   private logIncident(kind: IncidentKind, detail: string, at: THREE.Vector3 = this.player.position): void {
     this.runLog.add(kind, this.mission.elapsed, at.x, at.z, detail);
+  }
+
+  /** Jumps off a ramp and their landings, for the run log. Other airtime (a kerb, a hilltop) isn't logged. */
+  private logJumps(): void {
+    const p = this.player.position;
+    const event = this.airtime.update(this.mission.elapsed, this.player.grounded, p.x, p.z, this.player.speed);
+    if (event?.type === 'takeoff') {
+      const ramp = this.rampAt(event);
+      this.rampJump = ramp !== null;
+      if (ramp) this.runLog.add('takeoff', event.t, event.x, event.z, `Jumped ${ramp} at ${Math.round(event.speed * 3.6)} km/h`);
+    } else if (event?.type === 'landing' && this.rampJump) {
+      this.rampJump = false;
+      this.logIncident('landing', `Landed ${Math.round(event.distance)} m on, after ${event.airtime.toFixed(1)} s in the air`);
+    }
+  }
+
+  /** The ramp the car took off from, described for the log, or null if it left the ground elsewhere. */
+  private rampAt(off: Takeoff): string | null {
+    const truck = this.traffic.rampTruck?.vehicle;
+    if (truck && Math.hypot(truck.position.x - off.x, truck.position.z - off.z) < 12) return 'off the ramp truck';
+    for (const l of this.city.landmarks) {
+      if (l.kind !== 'ramp') continue;
+      const s = rampShape(l);
+      // The lip, in world space: the deck runs along the ramp's local +Z.
+      const lx = l.x + Math.sin(l.yaw) * s.lip;
+      const lz = l.z + Math.cos(l.yaw) * s.lip;
+      if (Math.hypot(lx - off.x, lz - off.z) < s.width + 4) return l.crossing !== undefined ? 'the canal' : 'The Leap';
+    }
+    return null;
   }
 
   /** Announce a new wanted level. */

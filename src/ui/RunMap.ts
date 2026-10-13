@@ -10,6 +10,8 @@ const HIT_RADIUS = 14; // CSS px: how near the pointer must be to an icon for it
 
 export const INCIDENT_STYLE: Record<IncidentKind, { icon: string; label: string; order: number }> = {
   stars: { icon: '⭐', label: 'Heat up', order: 0 },
+  landing: { icon: '🛬', label: 'Landings', order: 1 },
+  takeoff: { icon: '🚀', label: 'Ramp jumps', order: 1 },
   civilian: { icon: '🚗', label: 'Civilians hit', order: 1 },
   wall: { icon: '💥', label: 'Wall hits', order: 2 },
   rammed: { icon: '🚓', label: 'Rammed by cops', order: 3 },
@@ -20,6 +22,9 @@ export const INCIDENT_STYLE: Record<IncidentKind, { icon: string; label: string;
   wrecked: { icon: '💀', label: 'Wrecked', order: 7 },
   drowned: { icon: '🌊', label: 'Drowned', order: 7 },
 };
+
+/** The tally chip for smashed street props (counted, not marked on the map). */
+const PROPS_STYLE = { icon: '🪧', label: 'Props smashed' };
 
 /** Speed → route colour: blue when crawling, through green and yellow, to red flat out. */
 function speedColor(ratio: number): string {
@@ -177,19 +182,25 @@ export class RunMap {
     this.tip.classList.toggle('below', best.y < SIZE * 0.15);
   }
 
-  /** How many of each kind of incident, biggest moments first; destinations and the ending left out. */
-  private tally(): [IncidentKind, number][] {
+  /**
+   * How many of each kind of incident, biggest moments first, then the props smashed; destinations,
+   * the ending and landings (one per jump) left out.
+   */
+  private tally(): { icon: string; label: string; n: number }[] {
     const counts = new Map<IncidentKind, number>();
     for (const i of this.info.log.incidents) counts.set(i.kind, (counts.get(i.kind) ?? 0) + 1);
-    return [...counts]
-      .filter(([kind]) => kind !== 'checkpoint' && INCIDENT_STYLE[kind].order !== 7)
-      .sort(([a], [b]) => INCIDENT_STYLE[b].order - INCIDENT_STYLE[a].order);
+    const chips = [...counts]
+      .filter(([kind]) => kind !== 'checkpoint' && kind !== 'landing' && INCIDENT_STYLE[kind].order !== 7)
+      .sort(([a], [b]) => INCIDENT_STYLE[b].order - INCIDENT_STYLE[a].order)
+      .map(([kind, n]) => ({ ...INCIDENT_STYLE[kind], n }));
+    const props = this.info.log.propsSmashed;
+    return props ? [...chips, { ...PROPS_STYLE, n: props }] : chips;
   }
 
   /** Legend chips: an icon and a count for each kind of incident that happened. */
   legend(): string {
     const chips = this.tally()
-      .map(([kind, n]) => `<span class="run-chip">${INCIDENT_STYLE[kind].icon} ${n} <small>${INCIDENT_STYLE[kind].label}</small></span>`)
+      .map(({ icon, label, n }) => `<span class="run-chip">${icon} ${n} <small>${label}</small></span>`)
       .join('');
     return `<div class="run-legend">${chips || '<span class="run-chip"><small>A clean run: not a scratch</small></span>'}</div>`;
   }
@@ -221,7 +232,7 @@ export class RunMap {
     g.font = '700 30px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
     g.textBaseline = 'middle';
     g.fillText(
-      tally.length ? tally.map(([kind, n]) => `${INCIDENT_STYLE[kind].icon} ${n}`).join('    ') : 'A clean run: not a scratch',
+      tally.length ? tally.map(({ icon, n }) => `${icon} ${n}`).join('    ') : 'A clean run: not a scratch',
       SIZE / 2,
       HEAD + SIZE + FOOT / 2,
     );

@@ -205,6 +205,11 @@ export class Vehicle {
     return v.x * tmpVec.x + v.y * tmpVec.y + v.z * tmpVec.z;
   }
 
+  /** Any wheel touching the ground (false only when the car is in the air). */
+  get grounded(): boolean {
+    return [0, 1, 2, 3].some((i) => this.controller.wheelIsInContact(i));
+  }
+
   /** World-space ground contact point of a wheel, or null if it is in the air. */
   wheelContact(i: number, out: THREE.Vector3): THREE.Vector3 | null {
     if (!this.controller.wheelIsInContact(i)) return null;
@@ -343,7 +348,7 @@ export class Vehicle {
     const along = ax * f.x + ay * f.y + az * f.z;
     const left = ax * f.z - az * f.x; // horizontal, toward the car's left (+X)
     const k = Math.min(1, ACCEL_SMOOTHING * dt);
-    const grounded = [0, 1, 2, 3].some((i) => this.controller.wheelIsInContact(i));
+    const grounded = this.grounded;
     // In the air nothing loads the springs: the body settles level.
     this.accelLong += ((grounded ? along : 0) - this.accelLong) * k;
     this.accelLat += ((grounded ? left : 0) - this.accelLat) * k;

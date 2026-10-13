@@ -9,6 +9,8 @@ export type IncidentKind =
   | 'copWrecked' // a cop blew up or went into the water
   | 'civilian' // crashed into a civilian car
   | 'stars' // the wanted level went up
+  | 'takeoff' // jumped off a ramp
+  | 'landing' // came back down from a ramp jump
   | 'wrecked' // the player's car blew up
   | 'drowned' // the player went into the water
   | 'timeout'; // the clock ran out
@@ -39,6 +41,8 @@ const ONE_OFF: IncidentKind[] = ['checkpoint', 'stars', 'wrecked', 'drowned', 't
 export class RunLog {
   readonly track: TrackPoint[] = [];
   readonly incidents: Incident[] = [];
+  /** Street props (lamps, hydrants, trees…) the player knocked down. Too many to mark on the map. */
+  propsSmashed = 0;
 
   /** Record the player's position; thinned to one point every SAMPLE_EVERY seconds. */
   sample(t: number, x: number, z: number, speed: number): void {
