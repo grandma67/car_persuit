@@ -9,7 +9,7 @@ import type { RoadGraph } from '../world/RoadGraph';
 import { signalState, type ApproachControl } from '../world/TrafficControl';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
-import { CrashRecovery, hazardSpeedLimit, type Awareness, type Self } from './awareness';
+import { CrashRecovery, hazardSpeedLimit, type Awareness, type Obstacle, type Self } from './awareness';
 import type { Keep } from '../world/driveSide';
 
 const LANE_OFFSET = 3; // metres to the kerb side of the road centre line
@@ -35,6 +35,9 @@ const TURN_SPEED = 3.5; // m/s a heavy rolls through a tight turn (sets its turn
 // CivilianTurns.test: 2m less and the front swings over the far kerb, 2m more and the rear wheels
 // cut over the near kerb corner.
 const RIGHT_TURN_SETBACK = 12.5;
+// Physics steps between looks around (rays ahead, crossing traffic): 20 a second is plenty to
+// react, and sensing every step for every car was the bulk of the traffic AI's cost.
+const SENSE_EVERY = 3;
 
 /**
  * How a vehicle drives for its size. Long vehicles can't follow a car's line through a right
@@ -93,6 +96,10 @@ export class CivilianController {
   private recovery: CrashRecovery;
   private rear = new THREE.Vector3();
   private style: DrivingStyle;
+  private senseIn = 0; // steps until the next look around
+  private ahead: Obstacle | null = null;
+  private free = Infinity;
+  private hazardLimit = Infinity;
   readonly cruise: number;
   /** Seconds spent unable to move for no traffic reason; the manager respawns stuck cars. */
   stuckFor = 0;
@@ -194,19 +201,25 @@ export class CivilianController {
     }
 
     // Keep a gap to whatever is ahead (cars, the player, cops), looking further the faster we go.
-    const range = Math.max(30, (speed * speed) / (2 * decel) + GAP + 10);
-    const ahead = this.awareness?.obstacle(v, range) ?? null;
-    const free = this.awareness ? (ahead?.distance ?? Infinity) : this.sense(v, range);
+    // Looking around (forward rays, then traffic about to cross us) runs every few steps.
+    if (--this.senseIn <= 0) {
+      this.senseIn = SENSE_EVERY;
+      const range = Math.max(30, (speed * speed) / (2 * decel) + GAP + 10);
+      this.ahead = this.awareness?.obstacle(v, range) ?? null;
+      this.free = this.awareness ? (this.ahead?.distance ?? Infinity) : this.sense(v, range);
+      // Yield to anything on a collision course: cross traffic, a light-runner, the player head-on.
+      this.hazardLimit = Infinity;
+      if (this.awareness) {
+        const lv = v.body.linvel();
+        const self: Self = { handle: v.body.handle, x: pos.x, z: pos.z, vx: lv.x, vz: lv.z, fx: fwd.x, fz: fwd.z, halfWidth: v.spec.halfExtents.x, halfLength: v.spec.halfExtents.z, turning: Math.abs(input.steer) > 0.3, nearTurn: this.nearTurn(pos) };
+        this.hazardLimit = hazardSpeedLimit(self, this.awareness.movers(), speed, this.keep);
+      }
+    }
+    const { ahead, free } = this;
     const gap = dodging ? DODGE_GAP : GAP;
     if (free < Infinity) desired = Math.min(desired, Math.max(0, (free - gap) * 0.8));
     if (dodging) desired = Math.min(desired, DODGE_SPEED);
-
-    // Yield to anything on a collision course: cross traffic, a light-runner, the player head-on.
-    if (this.awareness) {
-      const lv = v.body.linvel();
-      const self = { handle: v.body.handle, x: pos.x, z: pos.z, vx: lv.x, vz: lv.z, fx: fwd.x, fz: fwd.z, halfWidth: v.spec.halfExtents.x, halfLength: v.spec.halfExtents.z, turning: Math.abs(input.steer) > 0.3, nearTurn: this.nearTurn(pos) };
-      desired = Math.min(desired, hazardSpeedLimit(self, this.awareness.movers(), speed, this.keep));
-    }
+    desired = Math.min(desired, this.hazardLimit);
 
     if (this.panicFor > 0) {
       this.panicFor -= dt;

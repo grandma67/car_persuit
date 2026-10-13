@@ -33,7 +33,6 @@ export const TRAFFIC = {
   rampChance: 0.05, // per spawn, while no ramp truck is around
 };
 
-const MOVER_MIN_MASS = 400; // kg: cars and up, not knocked-over cones and bins
 const ALIGNED = 0.5; // heading dot product above which a blocker counts as queueing, not crashed
 
 // Traction assist (per second) for civilians: they hold their lane on any surface instead of
@@ -89,6 +88,8 @@ export function civilianSpecVariants(): VehicleSpec[] {
  * our lane is seen too. They only see moving bodies (cars), so buildings at junction corners
  * don't make drivers brake.
  */
+let sensorRay: RAPIER.Ray | null = null; // reused: three new rays per car per look was GC churn
+
 export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: number): Obstacle | null {
   const p = vehicle.position;
   const f = vehicle.forward();
@@ -103,7 +104,9 @@ export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: nu
     const ox = p.x + f.x * start - f.z * reach * side;
     const oz = p.z + f.z * start + f.x * reach * side;
     // Along the car's pitch, so on a hill it still sees the car ahead up (or down) the slope.
-    const ray = new RAPIER.Ray({ x: ox, y, z: oz }, { x: f.x, y: f.y, z: f.z });
+    const ray = (sensorRay ??= new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }));
+    ray.origin = { x: ox, y, z: oz };
+    ray.dir = { x: f.x, y: f.y, z: f.z };
     const hit = world.castRay(ray, best?.distance ?? range, true, RAPIER.QueryFilterFlags.EXCLUDE_FIXED, undefined, vehicle.collider, vehicle.body);
     if (!hit) continue;
     best = { distance: hit.timeOfImpact, aligned: true, moving: false, side };
@@ -134,6 +137,8 @@ export class CivilianTraffic {
   private sense: ForwardSensor;
   private awareness: Awareness;
   private moverList: Mover[] = [];
+  private spawnFrom = -1; // junction nearest the player when spawnNodes was worked out
+  private spawnNodes: RoadGraph['nodes'] = [];
 
   constructor(
     private world: RAPIER.World,
@@ -151,17 +156,22 @@ export class CivilianTraffic {
     this.sense = (vehicle, range) => forwardObstacle(this.world, vehicle, range)?.distance ?? Infinity;
   }
 
-  /** Snapshot every moving vehicle-sized body, for drivers checking what's about to cross them. */
-  private sampleMovers(): void {
+  /**
+   * Snapshot every moving vehicle, for drivers checking what's about to cross them: ours plus
+   * `others` (the player, cops). Only vehicles, not every body in the world — smashed props keep
+   * their bodies for good, so that list grows all game.
+   */
+  private sampleMovers(others: Vehicle[]): void {
     const list: Mover[] = [];
-    const civilians = new Set(this.cars.map((c) => c.vehicle.body.handle));
-    this.world.bodies.forEach((b) => {
-      if (!b.isDynamic() || b.mass() < MOVER_MIN_MASS) return;
+    const add = (vehicle: Vehicle, civilian: boolean) => {
+      const b = vehicle.body;
       const v = b.linvel();
       if (v.x * v.x + v.z * v.z < 4) return;
       const t = b.translation();
-      list.push({ handle: b.handle, x: t.x, z: t.z, vx: v.x, vz: v.z, civilian: civilians.has(b.handle) });
-    });
+      list.push({ handle: b.handle, x: t.x, z: t.z, vx: v.x, vz: v.z, civilian });
+    };
+    for (const car of this.cars) add(car.vehicle, true);
+    for (const vehicle of others) add(vehicle, false);
     this.moverList = list;
   }
 
@@ -171,8 +181,8 @@ export class CivilianTraffic {
   }
 
   /** Fill to the target count around the player, recycle far/stuck cars. Once per frame. */
-  update(playerPos: THREE.Vector3): void {
-    this.sampleMovers();
+  update(playerPos: THREE.Vector3, others: Vehicle[] = []): void {
+    this.sampleMovers(others);
     for (const car of [...this.cars]) {
       const p = car.vehicle.position;
       const far = Math.hypot(p.x - playerPos.x, p.z - playerPos.z) > TRAFFIC.despawnDistance;
@@ -190,8 +200,14 @@ export class CivilianTraffic {
   private spawn(playerPos: THREE.Vector3): void {
     const g = this.graph;
     const from = g.nearest(playerPos.x, playerPos.z);
-    const dist = g.distancesFrom(from.id);
-    const candidates = g.nodes.filter((n) => dist[n.id] >= TRAFFIC.spawnMin && dist[n.id] <= TRAFFIC.spawnMax);
+    // The road search only changes when the player reaches another junction; a spawn that's
+    // turned down (too close to a car) tries again next frame, so don't redo it each time.
+    if (this.spawnFrom !== from.id) {
+      const dist = g.distancesFrom(from.id);
+      this.spawnFrom = from.id;
+      this.spawnNodes = g.nodes.filter((n) => dist[n.id] >= TRAFFIC.spawnMin && dist[n.id] <= TRAFFIC.spawnMax);
+    }
+    const candidates = this.spawnNodes;
     if (!candidates.length) return;
     const node = this.rng.pick(candidates);
     const to = g.nodes[this.rng.pick(node.neighbors)];

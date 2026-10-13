@@ -429,7 +429,7 @@ export class Game {
     for (const cop of this.director.cops) cop.vehicle.syncMesh(alpha);
     for (const car of this.traffic.cars) car.vehicle.syncMesh(alpha);
     this.checkWater();
-    this.traffic.update(this.player.position);
+    this.traffic.update(this.player.position, [this.player, ...this.director.cops.map((c) => c.vehicle)]);
     if (this.state === 'playing') {
       this.raiseStars(this.wanted.update(frameDt));
       const level = this.wanted.level;
