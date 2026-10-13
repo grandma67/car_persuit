@@ -192,8 +192,10 @@ export const BUS_SPEC: VehicleSpec = {
   suspensionRestLength: 0.5,
   suspensionStiffness: 40,
   maxSpeed: 16,
-  maxSteer: 0.7,
-  minSteer: 0.35, // heavies never go fast; keep most of the lock for slow turns
+  // A city bus's lock: about 45°, so it turns inside an 11.8m outer circle like a real 12m bus
+  // (the EU limit is 12.5m). Less and it sweeps over the far kerb into the signal poles.
+  maxSteer: 0.78,
+  minSteer: 0.45, // heavies never go fast; keep most of the lock for slow turns
   frictionSlip: 2.6,
 };
 
@@ -205,7 +207,7 @@ export const BOX_TRUCK_SPEC: VehicleSpec = {
   halfExtents: { x: 1.2, y: 1.2, z: 3.8 },
   wheelZ: 2.5,
   wheelY: -0.8,
-  maxSteer: 0.6,
+  maxSteer: 0.75,
 };
 
 // The rare ramp truck: a long low-loader whose deck tilts up from just above the road behind
@@ -223,7 +225,7 @@ export const RAMP_TRUCK_SPEC: VehicleSpec = {
   wheelY: 0,
   suspensionRestLength: 0.55,
   maxSpeed: 14,
-  maxSteer: 0.6,
+  maxSteer: 0.6, // its wheels sit outside the deck: more lock would turn them into the hull
 };
 
 /** Ramp truck deck and cab in chassis-local space (+Z forward), shared by physics and mesh. */

@@ -34,11 +34,21 @@ const HEAVY_LATERAL = 1.8; // m/s² sideways in a corner: standing passengers, h
 const HEAVY_ACCEL = 1.5; // m/s² pulling away, about what a loaded bus manages
 const HEAVY_DECEL = 2.2; // m/s² for planned stops
 const TURN_SPEED = 3.5; // m/s a heavy rolls through a tight turn (sets its turning radius)
-// Where a heavy's near-side turn (right, or left keeping left) pivots, relative to its turning
-// radius (see rightTurnStart). Tuned in
-// CivilianTurns.test: 2m less and the front swings over the far kerb, 2m more and the rear wheels
-// cut over the near kerb corner.
-const RIGHT_TURN_SETBACK = 12.5;
+// A heavy's line through a turn, as bus drivers are taught (and tuned in CivilianTurns.test so no
+// part of the body crosses the kerb, where the signal poles, signs and hydrants stand):
+// - across the oncoming lane: carry on a little deeper, turn in a wide arc and come out just
+//   beside the centre line, then ease over to the kerb lane;
+const FAR_TURN_DEEP = -3; // metres along the approach from the junction centre where the turn starts
+const FAR_TURN_OUT = 12; // metres out along the new road where it comes out…
+const FAR_TURN_HUG = 1.8; // …this far from the centre line
+// - onto the kerb side: ease toward the centre line on the last of the approach and go well into
+//   the junction before steering, using the road it turns into (it has to: a 12m bus can't make
+//   that turn from lane to lane without its rear wheels climbing the kerb corner).
+const NEAR_TURN_EASE = STOP_LINE + 8; // metres before the centre the approach starts easing over
+const NEAR_TURN_DEEP = -4;
+const NEAR_TURN_IN = 1; // metres from the centre line at the turn
+const NEAR_TURN_OUT = 12;
+const TURN_SETTLE = 14; // metres to ease back into the kerb lane after either
 // Physics steps between looks around (rays ahead, crossing traffic): 20 a second is plenty to
 // react, and sensing every step for every car was the bulk of the traffic AI's cost.
 const SENSE_EVERY = 3;
@@ -62,8 +72,8 @@ interface DrivingStyle {
   cornerSpeed: number;
   decel: number;
   maxThrottle: number;
-  /** Heavies: where the right turn pivots, metres along the approach from the junction centre (null: a car's line). */
-  rightTurnStart: number | null;
+  /** Buses and trucks: their own line through turns (see FAR_TURN_*, NEAR_TURN_*). */
+  heavy: boolean;
 }
 
 function drivingStyle(spec: Vehicle['spec']): DrivingStyle {
@@ -80,9 +90,7 @@ function drivingStyle(spec: Vehicle['spec']): DrivingStyle {
     cornerSpeed,
     decel: heavy ? HEAVY_DECEL : COMFORT_DECEL,
     maxThrottle: heavy ? Math.min(1, HEAVY_ACCEL / accel) : 1,
-    // A car cuts the right-turn corner from 7m before the junction centre; a heavy can't turn that
-    // tight. It carries on deeper and pivots on a corner further in, so it sweeps a wider arc.
-    rightTurnStart: heavy ? turnRadius - RIGHT_TURN_SETBACK : null,
+    heavy,
   };
 }
 
@@ -359,9 +367,9 @@ export class CivilianController {
    */
   private sweep(a: P, b: P): Pick<JunctionClaim, 'cells' | 'track'> {
     const { spec } = this.vehicle;
-    const { wheelbase, cornerSpeed, rightTurnStart } = this.style;
+    const { wheelbase, cornerSpeed, heavy } = this.style;
     const { x: hw, z: hl } = spec.halfExtents;
-    const margin = rightTurnStart !== null ? HEAVY_CLAIM_MARGIN : CLAIM_MARGIN;
+    const margin = heavy ? HEAVY_CLAIM_MARGIN : CLAIM_MARGIN;
     const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     let fx = (b.x - a.x) / len;
     let fz = (b.z - a.z) / len;
@@ -416,7 +424,7 @@ export class CivilianController {
    * own corner (heavies swing out over the centre lines, so they get none).
    */
   private nearTurn(pos: P): Self['nearTurn'] {
-    if (this.style.rightTurnStart !== null) return null;
+    if (this.style.heavy) return null;
     const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
     if (turnAngle(a, b, c) * this.keep <= 0.5 || Math.abs(turnAngle(a, b, c)) > 2.8) return null;
     if (Math.hypot(b.x - pos.x, b.z - pos.z) > SIGNAL_DISTANCE) return null;
@@ -446,7 +454,7 @@ export class CivilianController {
       const cur = this.graph.nodes[this.route[this.route.length - 1]];
       const options = cur.neighbors.filter((n) => n !== prev);
       const from = this.graph.nodes[prev];
-      const easy = this.style.rightTurnStart === null ? options : options.filter((n) => turnAngle(from, cur, this.graph.nodes[n]) * this.keep <= 0.5);
+      const easy = !this.style.heavy ? options : options.filter((n) => turnAngle(from, cur, this.graph.nodes[n]) * this.keep <= 0.5);
       const pool = easy.length ? easy : options;
       this.route.push(pool.length ? this.rng.pick(pool) : prev);
     }
@@ -464,21 +472,26 @@ export class CivilianController {
     const k = this.keep;
     const lanePoint = (at: P, d: { dx: number; dz: number }, along: number, side = LANE_OFFSET) =>
       new THREE.Vector3(at.x + d.dx * along + -d.dz * side * k, 0, at.z + d.dz * along + d.dx * side * k);
-    const { rightTurnStart: start, turnRadius } = this.style;
+    const { heavy } = this.style;
     const pts: THREE.Vector3[] = [];
     const first = dir(n[0], n[1]);
     pts.push(lanePoint(n[0], first, JUNCTION_EDGE));
     for (let i = 1; i < n.length - 1; i++) {
       const dIn = dir(n[i - 1], n[i]);
       const dOut = dir(n[i], n[i + 1]);
-      pts.push(lanePoint(n[i], dIn, -JUNCTION_EDGE));
-      if (start !== null && turnAngle(n[i - 1], n[i], n[i + 1]) * k > 0.5) {
-        // Heavy turning near-side: carry on deeper into the junction before turning, swing a wide
-        // arc onto the new road, then ease back into the right lane.
-        pts.push(lanePoint(n[i], dIn, start));
-        pts.push(lanePoint(n[i], dOut, LANE_OFFSET + turnRadius, -start));
-        pts.push(lanePoint(n[i], dOut, LANE_OFFSET + turnRadius + 14));
+      const turn = turnAngle(n[i - 1], n[i], n[i + 1]) * k;
+      if (heavy && turn > 0.5) {
+        pts.push(lanePoint(n[i], dIn, -NEAR_TURN_EASE));
+        pts.push(lanePoint(n[i], dIn, NEAR_TURN_DEEP, NEAR_TURN_IN));
+        pts.push(lanePoint(n[i], dOut, NEAR_TURN_OUT));
+        pts.push(lanePoint(n[i], dOut, NEAR_TURN_OUT + TURN_SETTLE));
+      } else if (heavy && turn < -0.5 && turn > -2.8) {
+        pts.push(lanePoint(n[i], dIn, -JUNCTION_EDGE));
+        pts.push(lanePoint(n[i], dIn, FAR_TURN_DEEP));
+        pts.push(lanePoint(n[i], dOut, FAR_TURN_OUT, FAR_TURN_HUG));
+        pts.push(lanePoint(n[i], dOut, FAR_TURN_OUT + TURN_SETTLE));
       } else {
+        pts.push(lanePoint(n[i], dIn, -JUNCTION_EDGE));
         pts.push(lanePoint(n[i], dOut, JUNCTION_EDGE));
       }
     }

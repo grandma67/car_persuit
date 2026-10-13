@@ -42,6 +42,8 @@ function intoOncoming(x: number, z: number, to: number): number {
   return 0;
 }
 const distOffRoad = (x: number, z: number) => (onRoad(x, z) ? 0 : Math.min(Math.abs(z), Math.abs(x - 100)) - HALF_ROAD);
+/** Metres a point is inside the kerb (negative: over it, where the signal poles and signs stand). */
+const kerbGap = (x: number, z: number) => Math.max(HALF_ROAD - Math.abs(z), HALF_ROAD - Math.abs(x - 100));
 
 /**
  * Drive a civilian through the junction; report how far any wheel or body corner strayed off the
@@ -61,6 +63,10 @@ function driveThrough(spec: VehicleSpec, to: number, keep: 1 | -1 = 1) {
   const { wheelX, wheelZ, halfExtents: h } = spec;
   const wheels = [[wheelX, wheelZ], [-wheelX, wheelZ], [wheelX, -wheelZ], [-wheelX, -wheelZ]];
   const corners = [[h.x, h.z], [-h.x, h.z], [h.x, -h.z], [-h.x, -h.z]];
+  // The whole outline, not just the corners: a long side can cut over a kerb corner between them.
+  const outline: number[][] = [];
+  for (let k = 0; k <= 8; k++) for (const sx of [-1, 1]) outline.push([sx * h.x, -h.z + (2 * h.z * k) / 8]);
+  for (let k = 1; k < 4; k++) for (const sz of [-1, 1]) outline.push([-h.x + (2 * h.x * k) / 4, sz * h.z]);
   const exit = to === RIGHT ? { x: 100, z: 40 } : to === LEFT ? { x: 100, z: -40 } : { x: 160, z: 0 };
   const q = new THREE.Quaternion();
   const p = new THREE.Vector3();
@@ -71,6 +77,7 @@ function driveThrough(spec: VehicleSpec, to: number, keep: 1 | -1 = 1) {
   let bodyOff = 0;
   let lateral = 0;
   let oncoming = 0;
+  let clearance = Infinity;
   const signals = new Set<string | null>(); // indicator on the approach, 30m out to the junction
   let t = 0;
   for (; t < 40; t += DT) {
@@ -82,11 +89,12 @@ function driveThrough(spec: VehicleSpec, to: number, keep: 1 | -1 = 1) {
     q.set(r.x, r.y, r.z, r.w);
     wheelsOff = Math.max(wheelsOff, worst(wheels));
     bodyOff = Math.max(bodyOff, worst(corners));
+    clearance = Math.min(clearance, -worst(outline, (x, z) => -kerbGap(x, z)));
     oncoming = Math.max(oncoming, worst(corners, (x, z) => intoOncoming(x, z * keep, mirroredTo)));
     lateral = Math.max(lateral, Math.abs(v.body.angvel().y * v.speed));
     if (Math.hypot(v.position.x - exit.x, v.position.z - exit.z) < 5) break;
   }
-  return { arrived: t < 40, wheelsOff, bodyOff, lateral, oncoming, signals: [...signals] };
+  return { arrived: t < 40, wheelsOff, bodyOff, clearance, lateral, oncoming, signals: [...signals] };
 }
 
 const CARS = [{ ...PLAYER_SPEC, body: 'sedan' as const }, VAN_SPEC, PICKUP_SPEC].map((s) => asCivilian(s));
@@ -101,11 +109,10 @@ describe('civilian turns', () => {
     (_name, _turn, spec, to) => {
       const r = driveThrough(spec, to);
       expect(r.arrived).toBe(true);
-      // The ramp truck's wheels sit outside a deck two cars wide; it fills the lane.
-      expect(r.wheelsOff).toBeLessThan(spec.body === 'ramptruck' ? 0.5 : 0.3);
-      // The front overhang sweeps wider than the wheels (on a left turn too): like a real bus,
-      // it may swing out over the pavement, but not far.
-      expect(r.bodyOff).toBeLessThan(1);
+      expect(r.wheelsOff).toBe(0);
+      // No part of the body over the kerb: the signal poles, signs and hydrants stand just inside
+      // it, and a slow bus snagged on one is stuck for good.
+      expect(r.clearance).toBeGreaterThan(0.2);
       expect(r.lateral).toBeLessThan(2.5); // m/s²: a bus corners gently
     },
   );
@@ -147,6 +154,7 @@ describe('civilian turns', () => {
       const r = driveThrough(spec, to);
       expect(r.arrived).toBe(true);
       expect(r.wheelsOff).toBeLessThan(0.3);
+      expect(r.clearance).toBeGreaterThan(-0.1); // a car's tail may brush the kerb corner, clear of the poles
       // Indicates the whole approach: the side it turns to, nothing going straight on.
       expect(r.signals).toEqual([to === RIGHT ? 'right' : to === LEFT ? 'left' : null]);
     },

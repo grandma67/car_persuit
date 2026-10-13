@@ -1,7 +1,9 @@
 // A busy four-way junction, simulated: cars, vans, buses and trucks arrive from every arm, under
 // stop signs and under traffic lights, and must all get through without colliding, without
 // running a red or a stop sign, and without straying into the lane where the other direction's
-// traffic drives or queues.
+// traffic drives or queues. The kerbs carry what the city puts there (signal poles or stop signs,
+// hydrants, lamps), unbreakable here: a vehicle that snags one is a failure, as in the game, where
+// a bus stuck on a pole gets written off and vanishes.
 import { beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
@@ -12,7 +14,7 @@ import { RoadGraph } from '../world/RoadGraph';
 import { signalState, type ApproachControl } from '../world/TrafficControl';
 import type { Keep } from '../world/driveSide';
 import { CivilianController } from './CivilianController';
-import { asCivilian, forwardObstacle } from './CivilianTraffic';
+import { TRAFFIC, asCivilian, forwardObstacle } from './CivilianTraffic';
 import type { Awareness, Mover } from './awareness';
 import { Junctions } from './junctions';
 
@@ -22,8 +24,8 @@ const STOP_LINE = 10.4; // junction centre → stop line (CivilianController)
 const ARM = 72; // junction centre → next junction on each arm (a 60m block and a 12m road)
 const SPAWN_AT = 62; // metres out from the centre a new arrival starts
 const EXIT_AT = 45; // metres out along the exit arm: through
-const SECONDS = 180;
-const DRAIN = 60; // seconds at the end with no new arrivals: everyone should be through by then
+const SECONDS = 210;
+const DRAIN = 90; // seconds at the end with no new arrivals: everyone should be through by then
 
 // Arms: 0 east, 1 north, 2 west, 3 south. Node 0 is the junction, 1–4 the arm ends, 5–8 beyond.
 const ARMS = [
@@ -39,15 +41,43 @@ function crossroads(): RoadGraph {
   return new RoadGraph(nodes);
 }
 
-const MIX: VehicleSpec[] = [
-  asCivilian({ ...PLAYER_SPEC, body: 'sedan' }),
-  asCivilian({ ...COP_SUV_SPEC, livery: undefined, maxHealth: undefined, engineForce: 5000 }),
-  asCivilian({ ...PLAYER_SPEC, body: 'sports' }),
-  asCivilian(VAN_SPEC),
-  asCivilian(PICKUP_SPEC),
-  asCivilian(BUS_SPEC),
-  asCivilian(BOX_TRUCK_SPEC),
+// The game's traffic mix (CivilianTraffic MIX): mostly cars, about one in five a bus or truck.
+const MIX: { weight: number; spec: VehicleSpec }[] = [
+  { weight: 34, spec: asCivilian({ ...PLAYER_SPEC, body: 'sedan' }) },
+  { weight: 16, spec: asCivilian({ ...COP_SUV_SPEC, livery: undefined, maxHealth: undefined, engineForce: 5000 }) },
+  { weight: 10, spec: asCivilian({ ...PLAYER_SPEC, body: 'sports' }) },
+  { weight: 12, spec: asCivilian(VAN_SPEC) },
+  { weight: 10, spec: asCivilian(PICKUP_SPEC) },
+  { weight: 8, spec: asCivilian(BUS_SPEC) },
+  { weight: 10, spec: asCivilian(BOX_TRUCK_SPEC) },
 ];
+const MIX_TOTAL = MIX.reduce((s, m) => s + m.weight, 0);
+function pickSpec(rng: Rng): VehicleSpec {
+  let roll = rng.next() * MIX_TOTAL;
+  return (MIX.find((m) => (roll -= m.weight) < 0) ?? MIX[0]).spec;
+}
+
+/**
+ * Kerbside poles round the junction, where the city places them: per approach, the stop sign
+ * before the junction or the signal across it (2.5m from the junction edge, 0.7m in from the
+ * kerb, on the driver's side); a hydrant 6m and a lamp 12m along each kerb from every corner.
+ */
+function poles(mode: Mode, keep: Keep): { x: number; z: number; half: number }[] {
+  const out: { x: number; z: number; half: number }[] = [];
+  for (const a of ARMS) {
+    const dx = -a.x; // travel toward the junction from this arm
+    const dz = -a.z;
+    const rx = -dz * keep; // driver's kerb side
+    const rz = dx * keep;
+    const along = mode === 'stop' ? -(HALF_ROAD + 2.5) : HALF_ROAD + 2.5;
+    out.push({ x: dx * along + rx * (HALF_ROAD + 0.7), z: dz * along + rz * (HALF_ROAD + 0.7), half: 0.15 });
+    for (const side of [-1, 1]) {
+      out.push({ x: a.x * (HALF_ROAD + 6) - dz * side * (HALF_ROAD + 0.6), z: a.z * (HALF_ROAD + 6) + dx * side * (HALF_ROAD + 0.6), half: 0.22 });
+      out.push({ x: a.x * (HALF_ROAD + 12) - dz * side * (HALF_ROAD + 0.7), z: a.z * (HALF_ROAD + 12) + dx * side * (HALF_ROAD + 0.7), half: 0.15 });
+    }
+  }
+  return out;
+}
 
 /** Which arm a point is out on, and how far (null: inside the junction box). */
 function armOf(x: number, z: number): { arm: number; out: number } | null {
@@ -72,6 +102,8 @@ interface Car {
   speeds: number[]; // the last half second
   through: number | null; // time it reached EXIT_AT
   wrongAt: string;
+  poleHits: number;
+  writtenOff: boolean; // stuck long enough that the game's traffic manager would delete it
   offTrack: number; // worst metres between where it drove through the junction and where it said it would
   brakeAt: string;
 }
@@ -87,6 +119,7 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
   const controls = new Map<string, ApproachControl>();
   const phase = rng.range(0, 22);
   ARMS.forEach((a, i) => controls.set(`${1 + i}>0`, { kind: mode, axis: a.x !== 0 ? 'x' : 'z', phase }));
+  const poleColliders = poles(mode, keep).map((p) => world.createCollider(RAPIER.ColliderDesc.cuboid(p.half, 1.5, p.half).setTranslation(p.x, 1.5, p.z)));
 
   let movers: Mover[] = [];
   const handles = new Set<number>();
@@ -116,14 +149,14 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
       const z = a.z * SPAWN_AT + dx * 3 * keep;
       if (cars.some((c) => Math.hypot(c.vehicle.position.x - x, c.vehicle.position.z - z) < 16)) return;
       nextSpawn[i] = t + rng.range(gap[0], gap[1]);
-      const spec = { ...rng.pick(MIX), kerb: keep > 0 ? ('right' as const) : ('left' as const) };
+      const spec = { ...pickSpec(rng), kerb: keep > 0 ? ('right' as const) : ('left' as const) };
       const vehicle = new Vehicle(world, spec, { x, y: 1.2 - (spec.wheelY ?? 0), z }, Math.atan2(dx, dz));
       vehicle.tractionAssist = 6;
       vehicle.mesh.root.visible = false;
       const controller = new CivilianController(vehicle, graph, controls, () => Infinity, rng, 1 + i, 0, awareness, keep, junctions);
       handles.add(vehicle.body.handle);
       const route = (controller as unknown as { route: number[] }).route;
-      cars.push({ id: nextId++, vehicle, controller, entry: i, exit: route[2] - 1, spawned: t, crossedAt: null, minSpeedAtLine: Infinity, wrongLane: 0, offRoad: 0, dodged: false, hardBrake: 0, speeds: [], through: null, wrongAt: '', offTrack: 0, brakeAt: '' });
+      cars.push({ id: nextId++, vehicle, controller, entry: i, exit: route[2] - 1, spawned: t, crossedAt: null, minSpeedAtLine: Infinity, wrongLane: 0, offRoad: 0, dodged: false, hardBrake: 0, speeds: [], through: null, wrongAt: '', offTrack: 0, brakeAt: '', poleHits: 0, writtenOff: false });
     });
 
     movers = cars.flatMap(({ vehicle: v }) => {
@@ -139,6 +172,12 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
       const v = c.vehicle;
       v.snapshot();
       if (v.consumeImpact() > 3) c.controller.hit();
+      for (const pole of poleColliders) {
+        world.contactPair(v.collider, pole, (m) => {
+          if (m.numContacts() > 0 && m.contactDist(0) < 0.05) c.poleHits++;
+        });
+      }
+      if (c.controller.stuckFor > TRAFFIC.stuckLimit) c.writtenOff = true;
       const claim = (c.controller as unknown as { claim: { track: { x: number; z: number }[] } | null }).claim;
       if (claim && Math.max(Math.abs(v.position.x), Math.abs(v.position.z)) < STOP_LINE) {
         const d = Math.min(...claim.track.map((q) => Math.hypot(q.x - v.position.x, q.z - v.position.z)));
@@ -246,8 +285,10 @@ function report(r: ReturnType<typeof simulate>) {
     wrongLane: all.filter((c) => c.wrongLane > 0.3).map((c) => `${name(c)} ${c.wrongLane.toFixed(2)}m ${c.wrongAt}`),
     offTrack: all.filter((c) => c.offTrack > 1).map((c) => `${name(c)} ${c.offTrack.toFixed(2)}m`),
     slowest: r.done.reduce((m, c) => Math.max(m, c.through! - c.spawned), 0),
-    // A long vehicle's front overhang may swing over the kerb on a turn, like a real bus's.
-    offRoad: all.filter((c) => c.offRoad > (c.vehicle.spec.mass > 5000 ? 1 : 0.3)).map((c) => `${name(c)} ${c.offRoad.toFixed(2)}m`),
+    poleHits: all.filter((c) => c.poleHits > 0).map(name),
+    writtenOff: all.filter((c) => c.writtenOff).map(name),
+    // Nothing over the kerb: a car's tail may just brush the corner, clear of the poles.
+    offRoad: all.filter((c) => c.offRoad > 0.1).map((c) => `${name(c)} ${c.offRoad.toFixed(2)}m`),
     dodged: all.filter((c) => c.dodged).length,
     hardBrake: all.filter((c) => c.hardBrake > 6.5).map((c) => `${name(c)} ${c.hardBrake.toFixed(1)} ${c.brakeAt}`),
   };
@@ -262,6 +303,8 @@ describe('four-way junction simulation', () => {
     expect(r.stopRuns).toEqual([]);
     expect(r.wrongLane).toEqual([]);
     expect(r.offRoad).toEqual([]);
+    expect(r.poleHits).toEqual([]);
+    expect(r.writtenOff).toEqual([]);
     expect(r.dodged).toBe(0);
     expect(r.hardBrake).toEqual([]);
     expect(r.offTrack).toEqual([]); // the ground it claimed is the ground it drove over
@@ -274,8 +317,8 @@ describe('four-way junction simulation', () => {
     const r = report(simulate(mode, seed, keep, [15, 25]));
     expect(r.through).toBeGreaterThanOrEqual(20);
     expect(r.stuck).toEqual([]);
-    // Behind a bus turning across the oncoming lane, a queue at a light can miss a green or two.
-    expect(r.slowest).toBeLessThan(mode === 'stop' ? 45 : 70);
+    // Behind a bus swinging wide through a turn, a queue can wait a while (at a light, a green or two).
+    expect(r.slowest).toBeLessThan(mode === 'stop' ? 60 : 75);
     safe(r);
   }, 120_000);
 
