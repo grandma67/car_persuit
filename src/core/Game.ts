@@ -206,6 +206,7 @@ export class Game {
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
+    this.hud.setWantedVisible(this.difficulty.police);
     this.screens = new Screens(document.body, (kind) => this.audio.uiBlip(kind));
     const england = this.city.driveSide === 'left' ? 'England · drive on the left' : null;
     this.look = [england, climate.name === 'temperate' ? null : climate.label, theme.name, time.label, weatherLabel(weather) || null]
@@ -265,6 +266,7 @@ export class Game {
   private setDifficulty(id: string): void {
     this.difficulty = difficultyById(id);
     storageSet('cp-difficulty', this.difficulty.id);
+    this.hud.setWantedVisible(this.difficulty.police);
     // Rebuild the (not yet started) mission so the timer shows this difficulty's limit.
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
     this.showMenu();
@@ -277,6 +279,7 @@ export class Game {
     this.health = new Health({ ...DAMAGE, maxHealth: d.maxHealth, impactThreshold: d.armor, impactScale: DAMAGE.impactScale * d.damageScale });
     this.wanted.rate = d.heatRate;
     this.traffic.count = d.traffic;
+    this.hud.setWantedVisible(d.police);
     this.touch?.setVisible(true);
     this.audio.unlock();
     this.audio.menuMusic(false);

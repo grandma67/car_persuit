@@ -479,6 +479,10 @@ kbd {
   gap: 4px;
 }
 
+.hud-wanted[hidden] {
+  display: none;
+}
+
 .hud-stars {
   font-size: 22px;
   letter-spacing: 2px;

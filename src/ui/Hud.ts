@@ -28,6 +28,7 @@ export class Hud {
   private starEls: HTMLElement[];
   private starProgressEl: HTMLElement;
   private starsWrap: HTMLElement;
+  private wantedEl: HTMLElement;
   private toastTimer = 0;
   private flash = 0;
 
@@ -66,6 +67,7 @@ export class Hud {
     this.toastEl = root.querySelector('.hud-toast')!;
     this.healthFill = root.querySelector('.hud-health-fill')!;
     this.damageEl = root.querySelector('.hud-damage')!;
+    this.wantedEl = root.querySelector('.hud-wanted')!;
     this.starsWrap = root.querySelector('.hud-stars')!;
     this.starEls = Array.from(root.querySelectorAll('.hud-stars span'));
     this.starProgressEl = root.querySelector('.hud-star-progress div')!;
@@ -73,6 +75,11 @@ export class Hud {
 
   setMuted(muted: boolean): void {
     this.muteEl.hidden = !muted;
+  }
+
+  /** Show or hide the wanted stars (hidden with no police: there's no wanted level to show). */
+  setWantedVisible(visible: boolean): void {
+    this.wantedEl.hidden = !visible;
   }
 
   update(dt: number, speedMs: number, mission: MissionHudState): void {
