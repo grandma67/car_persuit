@@ -38,6 +38,13 @@ export function signalState(axis: 'x' | 'z', t: number): SignalLight {
   return c < 11 ? 'red' : c < 19 ? 'green' : c < 21 ? 'yellow' : 'red';
 }
 
+/** Seconds of yellow left for traffic along `axis` at time t (0 unless it's yellow). */
+export function yellowLeft(axis: 'x' | 'z', t: number): number {
+  const c = ((t % SIGNAL_CYCLE) + SIGNAL_CYCLE) % SIGNAL_CYCLE;
+  const end = axis === 'x' ? 10 : 21; // see signalState
+  return signalState(axis, t) === 'yellow' ? end - c : 0;
+}
+
 const CORNER_BACK = 2.5; // post distance from the junction edge
 const KERB_INSET = 0.7; // into the sidewalk
 const CROSSWALK_FROM = 0.5; // zebra band, measured back from the junction edge

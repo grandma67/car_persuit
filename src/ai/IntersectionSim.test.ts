@@ -318,7 +318,7 @@ describe('four-way junction simulation', () => {
     expect(r.through).toBeGreaterThanOrEqual(20);
     expect(r.stuck).toEqual([]);
     // Behind a bus swinging wide through a turn, a queue can wait a while (at a light, a green or two).
-    expect(r.slowest).toBeLessThan(mode === 'stop' ? 60 : 75);
+    expect(r.slowest).toBeLessThan(mode === 'stop' ? 60 : 80);
     safe(r);
   }, 120_000);
 

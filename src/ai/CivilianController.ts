@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { DriveInput } from '../core/Input';
 import type { Rng } from '../core/Rng';
 import type { RoadGraph } from '../world/RoadGraph';
-import { signalState, type ApproachControl } from '../world/TrafficControl';
+import { signalState, yellowLeft, type ApproachControl } from '../world/TrafficControl';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
 import { CrashRecovery, hazardSpeedLimit, type Awareness, type Obstacle, type Self } from './awareness';
@@ -23,6 +23,7 @@ const GAP = 6; // metres kept to the vehicle ahead
 const FOLLOW_CLOSE = 1.5; // m/s per metre of room left, closing up behind the vehicle ahead
 const STOP_SIGN_WAIT = 1.2;
 const STOP_MARGIN = 1.5; // metres short of the stop line
+const YELLOW_MARGIN = 1; // metres to spare reaching the line before the red
 const HARD_STEER = 0.6; // fraction of full lock above which we hold cornering speed
 const SIGNAL_DISTANCE = 40; // metres before a junction to start indicating a turn
 const PANIC_TIME = 1; // seconds stopped after a knock before carrying on
@@ -209,11 +210,16 @@ export class CivilianController {
     const toStop = Math.hypot(junction.x - pos.x, junction.z - pos.z) - STOP_LINE - v.spec.halfExtents.z;
     const control = this.controls.get(`${this.route[0]}>${this.route[1]}`);
     let mustStop = false;
+    let redLight = false;
     if (control && toStop > -1) {
       if (control.kind === 'signal') {
         const light = signalState(control.axis, time + control.phase);
-        // Stop for red; for yellow only if we can stop comfortably.
-        mustStop = light === 'red' || (light === 'yellow' && speed * speed > 0.01 && toStop > (speed * speed) / (2 * decel) * 0.6);
+        // Stop for red. On yellow: stop if we can do it comfortably; if not, carry on through only
+        // if we'll be over the line before it turns red, else stop anyway (harder).
+        const comfortable = toStop - STOP_MARGIN > (speed * speed) / (2 * decel);
+        const makeIt = toStop < speed * yellowLeft(control.axis, time + control.phase) - YELLOW_MARGIN;
+        mustStop = light === 'red' || (light === 'yellow' && (comfortable || !makeIt));
+        redLight = light === 'red';
       } else if (this.stoppedAt !== this.route[1]) {
         mustStop = true;
         if (toStop < STOP_MARGIN + 1.5 && Math.abs(speed) < 0.6) {
@@ -245,7 +251,7 @@ export class CivilianController {
         const self: Self = { handle: v.body.handle, x: pos.x, z: pos.z, vx: lv.x, vz: lv.z, fx: fwd.x, fz: fwd.z, halfWidth: v.spec.halfExtents.x, halfLength: v.spec.halfExtents.z, turning: Math.abs(input.steer) > 0.3, nearTurn: this.nearTurn(pos) };
         this.hazardLimit = hazardSpeedLimit(self, this.awareness.movers(), speed, this.keep, !this.junctions);
       }
-      if (this.junctions) this.mayEnter = this.takeTurn(time, toStop, mustStop, speed, control);
+      if (this.junctions) this.mayEnter = this.takeTurn(time, toStop, mustStop, redLight, speed, control);
     }
     // Not our turn at the junction yet: wait at the stop line.
     if (!this.mayEnter && toStop > -1) desired = Math.min(desired, toStop < STOP_MARGIN ? 0 : Math.sqrt(2 * decel * (toStop - STOP_MARGIN)));
@@ -289,7 +295,7 @@ export class CivilianController {
    * commit once we're inside comfortable braking distance, and keep the claim until our tail is
    * out of the junction.
    */
-  private takeTurn(time: number, toStop: number, held: boolean, speed: number, control: ApproachControl | undefined): boolean {
+  private takeTurn(time: number, toStop: number, held: boolean, red: boolean, speed: number, control: ApproachControl | undefined): boolean {
     const j = this.junctions!;
     const v = this.vehicle;
     const node = this.route[1];
@@ -312,7 +318,8 @@ export class CivilianController {
     }
     if (this.graph.nodes[node].neighbors.length < 3) return true; // a bend: nobody to meet
     // Caught by the light turning red before we reached the line: stand down, let the cross traffic go.
-    if (this.claim?.committed && held && toStop > 0) {
+    // (On yellow we're past stopping comfortably once committed: we carry on through.)
+    if (this.claim?.committed && red && toStop > 0) {
       j.leave(node, owner);
       this.claim = null;
     }
