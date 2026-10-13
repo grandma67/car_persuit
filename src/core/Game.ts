@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Input, type DriveInput } from './Input';
 import { Rng } from './Rng';
-import { safeStorage, storageGet, storageSet } from './storage';
+import { safeStorage } from './storage';
 import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { buildCarMesh } from '../vehicles/carMesh';
@@ -42,6 +42,7 @@ import { MISSION } from '../gameplay/balance';
 import { WantedSystem } from '../gameplay/WantedSystem';
 import { DIFFICULTIES, difficultyById, scaledCopCap, type Difficulty } from '../gameplay/difficulty';
 import { Records } from '../gameplay/Records';
+import { loadPrefs, savePrefs } from '../gameplay/Prefs';
 import { CopContact } from '../gameplay/CopContact';
 import { RunLog, type IncidentKind } from '../gameplay/RunLog';
 import { Airtime, type Takeoff } from '../gameplay/Airtime';
@@ -85,7 +86,8 @@ export class Game {
   private canalWater: CanalWater | null;
   private minimap: Minimap;
   private health = new Health();
-  private difficulty: Difficulty = difficultyById(storageGet('cp-difficulty'));
+  private prefs = loadPrefs(safeStorage()); // mute and difficulty, kept between sessions
+  private difficulty: Difficulty = difficultyById(this.prefs.difficulty);
   private records = new Records(safeStorage());
   private touch: TouchControls | null = null;
   private destinations: ReturnType<typeof pickDestinations>;
@@ -216,6 +218,8 @@ export class Game {
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
+    this.audio.setMuted(this.prefs.muted);
+    this.hud.setMuted(this.prefs.muted);
     this.hud.setWantedVisible(this.difficulty.police);
     this.screens = new Screens(document.body, (kind) => this.audio.uiBlip(kind));
     const england = this.city.driveSide === 'left' ? 'England · drive on the left' : null;
@@ -275,7 +279,8 @@ export class Game {
 
   private setDifficulty(id: string): void {
     this.difficulty = difficultyById(id);
-    storageSet('cp-difficulty', this.difficulty.id);
+    this.prefs.difficulty = this.difficulty.id;
+    savePrefs(safeStorage(), this.prefs);
     this.hud.setWantedVisible(this.difficulty.police);
     // Rebuild the (not yet started) mission so the timer shows this difficulty's limit.
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
@@ -318,6 +323,8 @@ export class Game {
   private toggleMute(): boolean {
     const muted = this.audio.toggleMute();
     this.hud.setMuted(muted);
+    this.prefs.muted = muted;
+    savePrefs(safeStorage(), this.prefs);
     return muted;
   }
 

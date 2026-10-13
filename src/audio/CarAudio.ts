@@ -220,9 +220,13 @@ export class CarAudio {
     return this.muted;
   }
 
-  toggleMute(): boolean {
-    this.muted = !this.muted;
+  setMuted(muted: boolean): void {
+    this.muted = muted;
     if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.6, this.ctx.currentTime, 0.05);
+  }
+
+  toggleMute(): boolean {
+    this.setMuted(!this.muted);
     return this.muted;
   }
 
