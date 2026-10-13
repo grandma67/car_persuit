@@ -533,6 +533,11 @@ kbd {
   font-size: 14px;
 }
 
+/* Practice modes (no police) sit apart from the regular difficulties. */
+.screen .screen-choices button.choice.practice {
+  border-right: 1px solid rgb(255 255 255 / 0.25);
+}
+
 .screen .screen-choices button.choice.selected {
   background: rgb(255 255 255 / 0.18);
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DAMAGE } from './balance';
 import { Health } from './Health';
-import { DIFFICULTIES } from './difficulty';
+import { difficultyById, type Difficulty } from './difficulty';
 
 describe('Health', () => {
   it('ignores scrapes', () => {
@@ -32,7 +32,7 @@ describe('Health', () => {
 });
 
 describe('Easy mode car', () => {
-  const [easy, normal] = DIFFICULTIES;
+  const [easy, normal] = ['easy', 'normal'].map(difficultyById);
   const make = (d: typeof easy) => new Health({ ...DAMAGE, maxHealth: d.maxHealth, impactThreshold: d.armor, impactScale: DAMAGE.impactScale * d.damageScale });
 
   it('shrugs off light rams that would hurt on Normal', () => {
@@ -55,10 +55,10 @@ describe('Easy mode car', () => {
 });
 
 describe('checkpoint repair', () => {
-  const make = (d: (typeof DIFFICULTIES)[number]) => new Health({ ...DAMAGE, maxHealth: d.maxHealth });
+  const make = (d: Difficulty) => new Health({ ...DAMAGE, maxHealth: d.maxHealth });
 
   it('restores less on harder difficulties', () => {
-    const restored = DIFFICULTIES.map((d) => {
+    const restored = ['easy', 'normal', 'hard'].map(difficultyById).map((d) => {
       const h = make(d);
       h.applyDamage(d.maxHealth / 2);
       return h.repair(d.checkpointRepair) / d.maxHealth;

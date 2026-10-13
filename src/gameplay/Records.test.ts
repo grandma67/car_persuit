@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Records, type RecordStore } from './Records';
-import { DIFFICULTIES, difficultyById, scaledCopCap } from './difficulty';
+import { difficultyById, scaledCopCap } from './difficulty';
 
 const memory = (): RecordStore & { data: Map<string, string> } => {
   const data = new Map<string, string>();
@@ -44,7 +44,7 @@ describe('Records', () => {
 
 describe('difficulty', () => {
   it('scales from easy to hard and defaults to normal', () => {
-    const [easy, normal, hard] = DIFFICULTIES;
+    const [easy, normal, hard] = ['easy', 'normal', 'hard'].map(difficultyById);
     expect(easy.timeLimit).toBeGreaterThan(normal.timeLimit);
     expect(hard.damageScale).toBeGreaterThan(normal.damageScale);
     expect(easy.maxHealth).toBeGreaterThan(normal.maxHealth);

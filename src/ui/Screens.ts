@@ -13,7 +13,7 @@ export interface EndScreenInfo {
 export interface MenuInfo {
   seed: number;
   look: string; // style · time of day
-  difficulties: { id: string; label: string }[];
+  difficulties: { id: string; label: string; police: boolean }[];
   difficulty: string;
   best: string | null; // best time on this city at this difficulty
 }
@@ -75,7 +75,7 @@ export class Screens {
 
   menu(info: MenuInfo, onStart: () => void, onDifficulty: (id: string) => void): void {
     const choices = info.difficulties
-      .map((d) => `<button data-action="diff-${d.id}" class="choice${d.id === info.difficulty ? ' selected' : ''}">${d.label}</button>`)
+      .map((d) => `<button data-action="diff-${d.id}" class="choice${d.id === info.difficulty ? ' selected' : ''}${d.police ? '' : ' practice'}">${d.label}</button>`)
       .join('');
     const actions: Record<string, () => void> = { start: onStart, share: () => void this.share(info.seed) };
     for (const d of info.difficulties) actions[`diff-${d.id}`] = () => onDifficulty(d.id);
