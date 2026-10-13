@@ -69,7 +69,7 @@ function poles(mode: Mode, keep: Keep): { x: number; z: number; half: number }[]
     const dz = -a.z;
     const rx = -dz * keep; // driver's kerb side
     const rz = dx * keep;
-    const along = mode === 'stop' ? -(HALF_ROAD + 2.5) : HALF_ROAD + 2.5;
+    const along = mode === 'signal' ? HALF_ROAD + 2.5 : -(HALF_ROAD + 2.5); // a priority sign stands where a stop sign would
     out.push({ x: dx * along + rx * (HALF_ROAD + 0.7), z: dz * along + rz * (HALF_ROAD + 0.7), half: 0.15 });
     for (const side of [-1, 1]) {
       out.push({ x: a.x * (HALF_ROAD + 6) - dz * side * (HALF_ROAD + 0.6), z: a.z * (HALF_ROAD + 6) + dx * side * (HALF_ROAD + 0.6), half: 0.22 });
@@ -108,7 +108,8 @@ interface Car {
   brakeAt: string;
 }
 
-type Mode = 'stop' | 'signal';
+/** 'priority': the x road has priority (no stop), the z road stops for it. */
+type Mode = 'stop' | 'signal' | 'priority';
 
 /** Run the junction for SECONDS, a new arrival on each arm every `gap` seconds (min, max). */
 function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
@@ -118,7 +119,10 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
   world.createCollider(RAPIER.ColliderDesc.cuboid(600, 0.5, 600).setTranslation(0, -0.5, 0));
   const controls = new Map<string, ApproachControl>();
   const phase = rng.range(0, 22);
-  ARMS.forEach((a, i) => controls.set(`${1 + i}>0`, { kind: mode, axis: a.x !== 0 ? 'x' : 'z', phase }));
+  ARMS.forEach((a, i) => {
+    if (mode === 'priority' && a.x !== 0) return; // the priority road: no control
+    controls.set(`${1 + i}>0`, { kind: mode === 'signal' ? 'signal' : 'stop', axis: a.x !== 0 ? 'x' : 'z', phase });
+  });
   const poleColliders = poles(mode, keep).map((p) => world.createCollider(RAPIER.ColliderDesc.cuboid(p.half, 1.5, p.half).setTranslation(p.x, 1.5, p.z)));
 
   let movers: Mover[] = [];
@@ -267,7 +271,7 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
     if (mode !== 'signal' || c.crossedAt === null) return false;
     return signalState(ARMS[c.entry].x !== 0 ? 'x' : 'z', c.crossedAt + phase) === 'red';
   });
-  const stopRuns = done.concat(cars).filter((c) => mode === 'stop' && c.crossedAt !== null && c.minSpeedAtLine > 0.6);
+  const stopRuns = done.concat(cars).filter((c) => (mode === 'stop' || (mode === 'priority' && ARMS[c.entry].x === 0)) && c.crossedAt !== null && c.minSpeedAtLine > 0.6);
   // Still on the road a full DRAIN after the last arrival.
   return { done, stuck: cars, collisions, redRuns, stopRuns };
 }
@@ -312,19 +316,20 @@ describe('four-way junction simulation', () => {
 
   // An arrival on each arm every 15–25 s: a dozen vehicles a minute through one junction, several
   // times what one sees in a game. Keeping right and keeping left.
-  const CASES = (['stop', 'signal'] as const).flatMap((mode) => ([1, -1] as const).flatMap((keep) => [1, 2, 3].map((seed) => ({ mode, keep, seed }))));
+  const CASES = (['stop', 'priority', 'signal'] as const).flatMap((mode) => ([1, -1] as const).flatMap((keep) => [1, 2, 3].map((seed) => ({ mode, keep, seed }))));
   it.each(CASES)('$mode, keep $keep, seed $seed: everyone through, safely and in their lane', ({ mode, keep, seed }) => {
     const r = report(simulate(mode, seed, keep, [15, 25]));
     expect(r.through).toBeGreaterThanOrEqual(20);
     expect(r.stuck).toEqual([]);
-    // Behind a bus swinging wide through a turn, a queue can wait a while (at a light, a green or two).
+    // Behind a bus swinging wide through a turn, a queue can wait a while (at a light, a green or
+    // two; on the side road of a priority junction, for a gap in the main road's traffic).
     expect(r.slowest).toBeLessThan(mode === 'stop' ? 60 : 80);
     safe(r);
   }, 120_000);
 
   // Rush hour: more arrivals than a stop junction can take. Queues grow, but nobody pushes in,
   // cuts across or drives round the queue.
-  it.each(['stop', 'signal'] as const)('%s, rush hour: queues, never a crash or a shortcut', (mode) => {
+  it.each(['stop', 'priority', 'signal'] as const)('%s, rush hour: queues, never a crash or a shortcut', (mode) => {
     const r = report(simulate(mode, 7, 1, [4, 7]));
     expect(r.through).toBeGreaterThan(30);
     safe(r);

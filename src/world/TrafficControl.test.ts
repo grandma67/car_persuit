@@ -68,6 +68,24 @@ describe('generateTrafficControl', () => {
     expect(central / signals.length).toBeGreaterThan(0.6);
   });
 
+  it.each([1, 42, 1234])('seed %i: an unsignalled junction has one priority road; only the road crossing it stops', (seed) => {
+    const city = generateCity(seed);
+    const signs = city.streetProps.filter((p) => p.variant === 'stop' || p.variant === 'priority');
+    const at = new Map<number, { stop: Set<string>; priority: Set<string> }>();
+    for (const p of signs) {
+      const node = city.graph.nearest(p.x, p.z);
+      const axis = Math.abs(Math.sin(p.yaw)) > 0.5 ? 'x' : 'z';
+      const e = at.get(node.id) ?? { stop: new Set(), priority: new Set() };
+      e[p.variant as 'stop' | 'priority'].add(axis);
+      at.set(node.id, e);
+    }
+    expect(at.size).toBeGreaterThan(50);
+    for (const [id, e] of at) {
+      expect(e.priority.size, `junction ${id}`).toBe(1);
+      for (const a of e.stop) expect(e.priority.has(a)).toBe(false);
+    }
+  });
+
   it.each([1, 42, 1234])('seed %i: every crossing and stop line is painted on road, not sidewalk', (seed) => {
     const city = generateCity(seed);
     const paved = [...city.roads.map((r) => r.rect), ...city.intersections];

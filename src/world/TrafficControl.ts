@@ -2,7 +2,10 @@
 // everything below mirrors to the driver's left).
 // - Traffic lights at busy crossroads, far-side: across the junction on the driver's kerb side,
 //   head hanging over the driver's lane, facing them (visible while waiting at the stop line).
-// - Stop signs elsewhere, near-side on the driver's kerb side before the junction.
+// - Elsewhere one road has priority: a priority-road sign (yellow diamond) for its traffic, and
+//   stop signs, near-side on the driver's kerb side before the junction, for the road crossing it.
+//   At a T the through road has priority; at a crossroads the more important street (the ring
+//   road, else a per-street roll, so a main street keeps priority all along its length).
 // - Zebra crossings + stop lines on every controlled approach, with a solid centre line leading up
 //   to the stop line; zebras too across a priority road where a side road meets it (the top of
 //   the T); some mid-block zebra crossings.
@@ -82,6 +85,13 @@ export function generateTrafficControl(
     blocks.find((b) => Math.abs(b.rect.x - x) <= half && Math.abs(b.rect.z - z) <= half);
   const props: StreetProp[] = [];
   const marks: RoadMark[] = [];
+  // How important each street is (keyed by axis and line coordinate): the ring road outranks all.
+  const rank = new Map<string, number>();
+  const streetRank = (alongX: boolean, x: number, z: number) => {
+    const key = alongX ? `x${Math.round(z)}` : `z${Math.round(x)}`;
+    if (!rank.has(key)) rank.set(key, onRing(alongX ? 0 : x, alongX ? z : 0) ? 2 : rng.next());
+    return rank.get(key)!;
+  };
 
   const zebra = (cx: number, cz: number, t: ReturnType<typeof travel>) => {
     for (let lat = -rw / 2 + 1; lat <= rw / 2 - 1 + 1e-6; lat += 1.1) {
@@ -118,6 +128,10 @@ export function generateTrafficControl(
     const busy = Math.hypot(node.x, node.z) < size * 0.3;
     const signals = degree === 4 && (busy || rng.next() < 0.15);
     const phase = rng.range(0, SIGNAL_CYCLE);
+    // Without signals, one axis has priority: the through road of a T, else the higher-ranked street.
+    const legs = node.neighbors.map((id) => graph.nodes[id]);
+    const xLegs = legs.filter((n) => n.z === node.z).length;
+    const priorityX = degree === 3 ? xLegs === 2 : streetRank(true, node.x, node.z) > streetRank(false, node.x, node.z);
 
     for (const nId of node.neighbors) {
       const from = graph.nodes[nId];
@@ -125,8 +139,11 @@ export function generateTrafficControl(
       const before = (m: number) => ({ x: node.x - t.dx * (rw / 2 + m), z: node.z - t.dz * (rw / 2 + m) });
       const band = before(CROSSWALK_FROM + CROSSWALK_DEPTH / 2);
       zebra(band.x, band.z, t);
-      // A side road meeting the ring road stops; the ring road itself has priority (crossings only).
-      if (!signals && onRing(node.x, node.z) && onRing(from.x, from.z)) continue;
+      // The priority road: a sign saying so, and no stop line.
+      if (!signals && t.alongX === priorityX) {
+        signBefore(node.x, node.z, t, rw / 2 + CORNER_BACK, 'priority');
+        continue;
+      }
 
       if (signals) {
         // Far side, driver's kerb side, facing back at the approaching driver.

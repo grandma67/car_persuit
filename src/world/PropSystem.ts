@@ -29,9 +29,10 @@ const ACTIVE_RADIUS = 22; // metres: give props within this of a vehicle a bodyâ
 const INACTIVE_RADIUS = 30; // â€¦and take it away once every vehicle is this far
 const ACTIVE_REFRESH = 0.15; // seconds between refreshes (a 70 m/s car covers ~10 m)
 
-type SignShape = 'octagon' | 'round' | 'triangle' | 'square';
+type SignShape = 'octagon' | 'round' | 'triangle' | 'square' | 'diamond';
 const SIGN_SHAPE: Record<SignVariant, SignShape> = {
   stop: 'octagon',
+  priority: 'diamond',
   speed30: 'round',
   speed50: 'round',
   noParking: 'round',
@@ -51,6 +52,8 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
       return new THREE.CircleGeometry(0.62 + grow, 3, Math.PI / 2); // point up
     case 'square':
       return new THREE.CircleGeometry(0.6 + grow, 4, Math.PI / 4);
+    case 'diamond':
+      return new THREE.CircleGeometry(0.55 + grow, 4); // point up
   }
 };
 
@@ -196,7 +199,7 @@ function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
     ...treeModels(look),
     umbrella,
     lamp, hydrant, bench, fence, signal, 'signal-right': signalModel(1), cone,
-    'sign-octagon': sign('octagon'), 'sign-round': sign('round'), 'sign-triangle': sign('triangle'), 'sign-square': sign('square'),
+    'sign-octagon': sign('octagon'), 'sign-round': sign('round'), 'sign-triangle': sign('triangle'), 'sign-square': sign('square'), 'sign-diamond': sign('diamond'),
   };
 }
 
@@ -303,6 +306,19 @@ function signTexture(variant: SignVariant): THREE.Texture {
         g.fill();
         text(g, 'STOP', c, c + 4, s * 0.27, '#ffffff');
         break;
+      case 'priority': {
+        // Priority road: yellow diamond in a white border, a thin black line between (matching the plate).
+        g.fillStyle = '#ffffff';
+        regular(g, c, c, 4, Math.PI / 2);
+        g.fill();
+        g.fillStyle = '#111111';
+        regular(g, c, c * 0.62, 4, Math.PI / 2);
+        g.fill();
+        g.fillStyle = '#f5c400';
+        regular(g, c, c * 0.56, 4, Math.PI / 2);
+        g.fill();
+        break;
+      }
       case 'speed30':
       case 'speed50':
         ringSign(g, s);
