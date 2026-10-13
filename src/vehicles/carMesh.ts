@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 
 export interface CarMesh {
@@ -24,6 +25,8 @@ export interface CarMesh {
   sirenLights?: { red: THREE.MeshStandardMaterial; blue: THREE.MeshStandardMaterial; redGlow: THREE.Sprite; blueGlow: THREE.Sprite };
   /** Body paint, darkened when wrecked. */
   paint: THREE.MeshStandardMaterial;
+  /** Free this car's own geometries and materials (on despawn). */
+  dispose(): void;
 }
 
 // Low-poly but sharp: wedge nose, faceted canopy, spoiler, emissive lights.
@@ -234,8 +237,10 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
     wheels.push({ pivot, spinner });
   }
 
+  // Lamps and rims sit flush in the body and tyres: their shadows would fall inside those anyway.
+  const noShadow = new Set<THREE.Material>([headlight, taillight, rim, indicators.left.lamp, indicators.right.lamp]);
   root.traverse((o) => {
-    if (o instanceof THREE.Mesh) o.castShadow = true;
+    if (o instanceof THREE.Mesh) o.castShadow = !noShadow.has(o.material as THREE.Material);
   });
   let sirenLights: CarMesh['sirenLights'];
   if (spec.livery === 'police') {
@@ -314,9 +319,70 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   const bodyGroup = new THREE.Group();
   const pivots = new Set<THREE.Object3D>(wheels.map((w) => w.pivot));
   for (const child of [...root.children]) if (!pivots.has(child)) bodyGroup.add(child);
+  mergeByMaterial(bodyGroup);
   root.add(bodyGroup);
 
-  return { root, body: bodyGroup, exhausts, wheels, taillight, headlight, headGlows, tailGlows, indicators, beams, paint, sirenLights };
+  // Only what this function built: other code hangs shared decals on the body (CarScratches).
+  const owned = new Set<THREE.Object3D>();
+  root.traverse((o) => owned.add(o));
+  const dispose = () => {
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    root.traverse((o) => {
+      if (!(o instanceof THREE.Mesh || o instanceof THREE.Sprite) || !owned.has(o)) return;
+      geometries.add(o.geometry);
+      materials.add(o.material as THREE.Material);
+    });
+    for (const g of geometries) g.dispose();
+    for (const m of materials) m.dispose(); // textures (glow, chevrons) are shared: left alone
+  };
+
+  return { root, body: bodyGroup, exhausts, wheels, taillight, headlight, headGlows, tailGlows, indicators, beams, paint, sirenLights, dispose };
+}
+
+/**
+ * Bake the body's fixed parts into one mesh per material (and shadow setting): a car is ~35
+ * separate parts, and every one cost a draw call, twice with shadows. Lamps keep their own
+ * materials, so they still light up independently.
+ */
+function mergeByMaterial(group: THREE.Group): void {
+  const buckets = new Map<string, THREE.Mesh[]>();
+  for (const child of group.children) {
+    if (!(child instanceof THREE.Mesh) || child.children.length) continue;
+    const material = child.material as THREE.Material;
+    const key = `${material.uuid}|${child.castShadow}|${child.receiveShadow}`;
+    const list = buckets.get(key);
+    if (list) list.push(child);
+    else buckets.set(key, [child]);
+  }
+  for (const meshes of buckets.values()) {
+    if (meshes.length < 2) continue;
+    const material = meshes[0].material as THREE.MeshStandardMaterial;
+    const keep = material.map ? ['position', 'normal', 'uv'] : ['position', 'normal'];
+    const parts = meshes.map((m) => {
+      m.updateMatrix();
+      let g = m.geometry.clone().applyMatrix4(m.matrix);
+      if (g.index) g = g.toNonIndexed();
+      for (const name of Object.keys(g.attributes)) if (!keep.includes(name)) g.deleteAttribute(name);
+      g.clearGroups();
+      return g;
+    });
+    const merged = new THREE.Mesh(mergeGeometries(parts)!, material);
+    merged.castShadow = meshes[0].castShadow;
+    merged.receiveShadow = meshes[0].receiveShadow;
+    for (const p of parts) p.dispose();
+    for (const m of meshes) {
+      m.removeFromParent();
+      m.geometry.dispose();
+    }
+    group.add(merged);
+  }
+}
+
+/** Fade a lamp glow; a fully faded one is hidden, so it costs no draw call (most of the day). */
+export function setGlow(sprite: THREE.Sprite, opacity: number): void {
+  (sprite.material as THREE.SpriteMaterial).opacity = opacity;
+  sprite.visible = opacity > 0;
 }
 
 let glowCache: THREE.Texture | null | undefined;

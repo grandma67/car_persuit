@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { DriveInput } from '../core/Input';
 import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
-import { buildCarMesh, type CarMesh } from './carMesh';
+import { buildCarMesh, setGlow, type CarMesh } from './carMesh';
 import { gearFor } from './gears';
 
 const FORWARD = new THREE.Vector3(0, 0, 1);
@@ -520,7 +520,7 @@ export class Vehicle {
     const m = this.mesh;
     const brake = this.lightsOff ? 0 : this.brakeLightTimer > 0 ? 1 : this.headlights * 0.3;
     m.taillight.emissiveIntensity = brake * 5;
-    for (const g of m.tailGlows) (g.material as THREE.SpriteMaterial).opacity = brake * (0.35 + this.headlights * 0.45);
+    for (const g of m.tailGlows) setGlow(g, brake * (0.35 + this.headlights * 0.45));
 
     const head = this.lightsOff ? 0 : this.headlights;
     m.headlight.emissiveIntensity = 1.2 + head * 3;
@@ -528,7 +528,7 @@ export class Vehicle {
       beam.intensity = head * 300; // two overlapping beams, a bit brighter overall than the old single one
       beam.visible = head > 0 && this.beamEnabled;
     }
-    for (const g of m.headGlows) (g.material as THREE.SpriteMaterial).opacity = head * 0.9;
+    for (const g of m.headGlows) setGlow(g, head * 0.9);
 
     // About 1.5 flashes a second (road rules allow 1–2), lit for the first half of each.
     const flash = !this.lightsOff && this.signal !== null && ((performance.now() - this.signalSince) / 1000) * INDICATOR_HZ % 1 < 0.5;
@@ -536,7 +536,7 @@ export class Vehicle {
       const on = flash && this.signal === side ? 1 : 0;
       const { lamp, glows } = m.indicators[side];
       lamp.emissiveIntensity = on * 2.5;
-      for (const g of glows) (g.material as THREE.SpriteMaterial).opacity = on * (0.55 + this.headlights * 0.35);
+      for (const g of glows) setGlow(g, on * (0.55 + this.headlights * 0.35));
     }
   }
 
@@ -544,5 +544,6 @@ export class Vehicle {
     this.world.removeVehicleController(this.controller);
     this.world.removeRigidBody(this.body);
     this.mesh.root.removeFromParent();
+    this.mesh.dispose();
   }
 }

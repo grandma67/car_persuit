@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Cop } from '../ai/CopDirector';
+import { setGlow } from '../vehicles/carMesh';
 
 const SIREN_LIGHTS = 2; // shared flashing lights, given to the nearest cops (fixed count avoids shader recompiles)
 
@@ -31,8 +32,8 @@ export class Sirens {
       const lit = cop.wreckedFor === null && on;
       bar.red.emissiveIntensity = lit && redOn ? 6 : 0.2;
       bar.blue.emissiveIntensity = lit && !redOn ? 6 : 0.2;
-      (bar.redGlow.material as THREE.SpriteMaterial).opacity = lit && redOn ? 0.5 + night * 0.5 : 0;
-      (bar.blueGlow.material as THREE.SpriteMaterial).opacity = lit && !redOn ? 0.5 + night * 0.5 : 0;
+      setGlow(bar.redGlow, lit && redOn ? 0.5 + night * 0.5 : 0);
+      setGlow(bar.blueGlow, lit && !redOn ? 0.5 + night * 0.5 : 0);
     }
     this.lights.forEach((light, i) => {
       const nearest = active[i];
