@@ -13,7 +13,7 @@ export interface VehicleSpec {
   wheelX: number; // lateral offset of wheels from centre
   wheelZ: number; // longitudinal offset of axles from centre
   wheelY?: number; // height of the wheel mounts relative to the chassis centre (tall bodies), default 0
-  dualRear?: boolean; // twin tyres on each rear hub, like a loaded truck or bus (drawn only: physics keeps 4 wheels)
+  tandemRear?: number; // two rear axles this far apart, like a loaded truck: drawn either side of the physics rear axle (still 4 wheels)
   suspensionRestLength: number;
   suspensionStiffness: number;
   engineForce: number; // N per driven wheel
@@ -192,7 +192,6 @@ export const BUS_SPEC: VehicleSpec = {
   wheelX: 1.2, // tyres a little proud of the body sides, so turning they don't cut through them
   wheelZ: 3.0, // 6m wheelbase, like a real 12m city bus
   wheelY: -0.65,
-  dualRear: true,
   suspensionRestLength: 0.5,
   suspensionStiffness: 40,
   maxSpeed: 16,
@@ -211,7 +210,8 @@ export const BOX_TRUCK_SPEC: VehicleSpec = {
   halfExtents: { x: 1.2, y: 1.2, z: 3.8 },
   wheelX: 1.2, // a little proud of the body, like the bus
   wheelZ: 2.5,
-  wheelY: -0.7, // the bus's big 22.5" tyres (inherited), and twin rears for the load
+  wheelY: -0.7, // the bus's big 22.5" tyres (inherited)
+  tandemRear: 1.35, // two rear axles for the load: 6 wheels
 
   maxSteer: 0.75,
 };
@@ -229,7 +229,7 @@ export const RAMP_TRUCK_SPEC: VehicleSpec = {
   wheelX: 2.15,
   wheelZ: 3.0,
   wheelY: 0.05, // keeps the deck where it was with the bigger tyres
-  dualRear: false, // its single tyres already stand outside the deck
+  tandemRear: 1.35, // a loaded truck: 6 wheels
   suspensionRestLength: 0.55,
   maxSpeed: 14,
   maxSteer: 0.6, // its wheels sit outside the deck: more lock would turn them into the hull

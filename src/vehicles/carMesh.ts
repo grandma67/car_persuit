@@ -9,8 +9,8 @@ export interface CarMesh {
   body: THREE.Group;
   /** Tailpipe tips, body-local, where exhaust smoke comes out. */
   exhausts: THREE.Vector3[];
-  /** Per wheel: pivot (positioned + steered) and spinner (rolls about X). Order: FL, FR, RL, RR. */
-  wheels: { pivot: THREE.Group; spinner: THREE.Mesh }[];
+  /** Per wheel: pivot (positioned + steered) and spinners (roll about X; two on a tandem rear). Order: FL, FR, RL, RR. */
+  wheels: { pivot: THREE.Group; spinners: THREE.Mesh[] }[];
   /** Brake lights: lit red when braking or not driving, dark while accelerating. */
   taillight: THREE.MeshStandardMaterial;
   headlight: THREE.MeshStandardMaterial;
@@ -230,19 +230,17 @@ export function buildCarMesh(spec: VehicleSpec): CarMesh {
   const wheels: CarMesh['wheels'] = [];
   for (let i = 0; i < 4; i++) {
     const pivot = new THREE.Group();
-    const spinner = new THREE.Mesh(tireGeo, tire);
-    spinner.add(new THREE.Mesh(rimGeo, rim));
-    if (spec.dualRear && i >= 2) {
-      // Second tyre on the same hub, outboard so it shows beside the body (+X is the left side,
-      // wheels 2 and 3 are RL, RR).
-      const twin = new THREE.Mesh(tireGeo, tire);
-      twin.add(new THREE.Mesh(rimGeo, rim));
-      twin.position.x = (i === 2 ? 1 : -1) * 0.38; // a small gap between the pair
-      spinner.add(twin);
-    }
-    pivot.add(spinner);
+    // A tandem rear: two wheels one behind the other, either side of the physics axle between them.
+    const offsets = spec.tandemRear && i >= 2 ? [spec.tandemRear / 2, -spec.tandemRear / 2] : [0];
+    const spinners = offsets.map((z) => {
+      const spinner = new THREE.Mesh(tireGeo, tire);
+      spinner.add(new THREE.Mesh(rimGeo, rim));
+      spinner.position.z = z;
+      pivot.add(spinner);
+      return spinner;
+    });
     root.add(pivot);
-    wheels.push({ pivot, spinner });
+    wheels.push({ pivot, spinners });
   }
 
   // Lamps and rims sit flush in the body and tyres: their shadows would fall inside those anyway.

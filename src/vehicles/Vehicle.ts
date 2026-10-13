@@ -488,12 +488,12 @@ export class Vehicle {
     this.mesh.root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha);
     this.mesh.body.rotation.set(this.pitch, 0, this.roll);
     const c = this.controller;
-    this.mesh.wheels.forEach(({ pivot, spinner }, i) => {
+    this.mesh.wheels.forEach(({ pivot, spinners }, i) => {
       const conn = c.wheelChassisConnectionPointCs(i)!;
       const len = c.wheelSuspensionLength(i) ?? this.spec.suspensionRestLength;
       pivot.position.set(conn.x, conn.y - len, conn.z);
       pivot.rotation.y = c.wheelSteering(i) ?? 0;
-      spinner.rotation.x = c.wheelRotation(i) ?? 0;
+      for (const spinner of spinners) spinner.rotation.x = c.wheelRotation(i) ?? 0;
     });
     this.updateLights();
   }
