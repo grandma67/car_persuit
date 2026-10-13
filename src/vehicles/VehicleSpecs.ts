@@ -186,7 +186,7 @@ export const BUS_SPEC: VehicleSpec = {
   ...heavy(11000),
   halfExtents: { x: 1.25, y: 1.15, z: 5.5 },
   wheelRadius: 0.5,
-  wheelX: 1.1,
+  wheelX: 1.2, // tyres a little proud of the body sides, so turning they don't cut through them
   wheelZ: 3.0, // 6m wheelbase, like a real 12m city bus
   wheelY: -0.75,
   suspensionRestLength: 0.5,
@@ -205,6 +205,7 @@ export const BOX_TRUCK_SPEC: VehicleSpec = {
   body: 'boxtruck',
   ...heavy(7000),
   halfExtents: { x: 1.2, y: 1.2, z: 3.8 },
+  wheelX: 1.2, // a little proud of the body, like the bus
   wheelZ: 2.5,
   wheelY: -0.8,
   maxSteer: 0.75,
