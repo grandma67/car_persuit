@@ -63,7 +63,20 @@ function civilianSpec(rng: Rng): VehicleSpec {
   return asCivilian(pick.spec, rng.pick(pick.colors));
 }
 
-/** A base spec detuned for civilian driving: no livery, gentler engine, capped top speed. */
+// Steering lock (radians, the bicycle-model angle) of the real thing, from turning circles and
+// wheelbases: a car about 37° (a 10.5m kerb-to-kerb circle on a 2.8m wheelbase), an SUV, van or
+// pickup about 35° (12–13m on 3–3.7m). The player's and cops' specs keep less, for the feel at
+// speed; a civilian rounding a corner at walking pace needs all of it, or it runs wide over the
+// centre line of the road it turns into. Buses and trucks already have theirs (VehicleSpecs).
+const CIVILIAN_LOCK: Partial<Record<NonNullable<VehicleSpec['body']>, number>> = {
+  sedan: 0.65,
+  sports: 0.65,
+  suv: 0.61,
+  van: 0.61,
+  pickup: 0.61,
+};
+
+/** A base spec detuned for civilian driving: no livery, gentler engine, capped top speed, a real car's lock. */
 export function asCivilian(base: VehicleSpec, color = base.color): VehicleSpec {
   return {
     ...base,
@@ -72,6 +85,7 @@ export function asCivilian(base: VehicleSpec, color = base.color): VehicleSpec {
     livery: undefined,
     engineForce: Math.min(base.engineForce, 3200 * (base.mass / 1200)),
     maxSpeed: Math.min(base.maxSpeed, 28), // room for 90 km/h on a fast stretch
+    maxSteer: Math.max(base.maxSteer, CIVILIAN_LOCK[base.body ?? 'sports'] ?? 0),
   };
 }
 

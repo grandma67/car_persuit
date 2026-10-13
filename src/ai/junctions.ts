@@ -5,6 +5,8 @@
 // - then, on the same footing, going straight or turning onto the kerb side before turning across
 //   the oncoming lane,
 // - then first come, first served (at a stop sign: whoever stopped first).
+// Someone ahead in that order who is held up by a driver already crossing doesn't hold us up too, if
+// our way is clear: we slip through first (unless they've waited a long while).
 // Turning across the oncoming lane only waits so long for a gap: after a while it takes its turn
 // first come, first served, and oncoming traffic still clear of the junction lets it go.
 // Once close enough that stopping would be a lurch, a driver commits and keeps its claim until
@@ -27,6 +29,9 @@ export interface JunctionClaim {
 }
 
 const STALE = 1; // seconds without a refresh before a claim is dropped
+// Someone ahead of us in the order who can't go anyway (someone crossing is in their way) doesn't
+// hold us up if our way is clear: we slip through first, unless they've waited this long already.
+const SLIP_PATIENCE = 10;
 const ACROSS_PATIENCE = 6; // seconds turning across the oncoming lane waits for a gap before it's first come, first served
 export const CELL = 0.5; // metres, grid the swept ground is kept on
 
@@ -120,10 +125,13 @@ export class Junctions {
     claim.seen = time;
     m.set(claim.owner, claim);
     if (claim.committed) return true;
+    const crossing = [...m.values()].filter((c) => c.committed && c !== claim);
     for (const other of m.values()) {
       if (other === claim) continue;
       const order = before(other.rank, claim.rank, time) || other.owner - claim.owner;
-      if ((other.committed || order < 0) && conflicts(claim, other)) return false;
+      if (!(other.committed || order < 0) || !conflicts(claim, other)) continue;
+      const stuck = !other.committed && time - other.rank[2] < SLIP_PATIENCE && crossing.some((c) => conflicts(other, c));
+      if (!stuck) return false;
     }
     return true;
   }

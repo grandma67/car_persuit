@@ -20,7 +20,9 @@ const STOP_LINE = 6 + 4.4; // junction centre → stop line
 const COMFORT_DECEL = 4; // m/s² for planned stops
 const CORNER_SPEED = 6;
 const TURN_DECEL = 2.5; // m/s² we plan to slow for a turn with
-const GAP = 6; // metres kept to the vehicle ahead
+const GAP = 2.5; // metres kept to the vehicle ahead at a standstill…
+const GAP_TIME = 0.4; // …plus this many seconds of our speed on the move
+const EXIT_ROOM = 6; // metres wanted past the car ahead on the road out before we enter a junction
 const FOLLOW_CLOSE = 1.5; // m/s per metre of room left, closing up behind the vehicle ahead
 // Brake lights ahead within this many seconds (or metres) of us: ease off toward its speed at
 // once, a little each step, rather than wait for the gap to close.
@@ -30,8 +32,8 @@ const REACT_EASE = 0.8; // m/s under our speed we aim for: a firm lift, light br
 const STOP_SIGN_WAIT = 1.2;
 // At a stop sign, pull out only with a gap: nothing on the way into the junction (beyond the
 // ground already claimed there) due within this many seconds. More for a slow-pulling heavy.
-const GAP_TIME = 3;
-const HEAVY_GAP_TIME = 5;
+const PULL_OUT_TIME = 3;
+const HEAVY_PULL_OUT_TIME = 5;
 const GAP_RANGE = 150; // metres out we look for it
 const FAST_CRUISE = [22, 25];
 const STOP_MARGIN = 1.5; // metres short of the stop line
@@ -267,7 +269,7 @@ export class CivilianController {
     // Looking around (forward rays, then traffic about to cross us) runs every few steps.
     if (--this.senseIn <= 0) {
       this.senseIn = SENSE_EVERY;
-      const range = Math.max(30, (speed * speed) / (2 * decel) + GAP + 10);
+      const range = Math.max(30, (speed * speed) / (2 * decel) + GAP + GAP_TIME * Math.abs(speed) + 10);
       // Along the lane ahead, so through a turn the sensor looks where we're going.
       const corridor = dodging ? undefined : this.path.slice(this.segment + 1, this.segment + 1 + CORRIDOR_POINTS);
       this.ahead = this.awareness?.obstacle(v, range, corridor) ?? null;
@@ -284,13 +286,15 @@ export class CivilianController {
     // Not our turn at the junction yet: wait at the stop line.
     if (!this.mayEnter && toStop > -1) desired = Math.min(desired, toStop < STOP_MARGIN ? 0 : Math.sqrt(2 * decel * (toStop - STOP_MARGIN)));
     const { ahead, free } = this;
-    const gap = dodging ? DODGE_GAP : GAP;
+    const gap = dodging ? DODGE_GAP : GAP + GAP_TIME * Math.max(0, speed);
     // Planned braking down to the gap (as for a stop line), tightening to a crawl in the last metres.
     if (free < Infinity) {
       const room = Math.max(0, free - gap);
       desired = Math.min(desired, Math.sqrt(2 * decel * room), FOLLOW_CLOSE * room);
     }
-    if (ahead?.braking && ahead.aligned && ahead.speed !== undefined && speed > ahead.speed && ahead.distance < Math.max(REACT_DISTANCE, speed * REACT_TIME)) {
+    // Only while closing on it: below that the planned braking above takes us up to the queue (easing
+    // off from a crawl behind a car standing on its brakes would leave us stopped well short of it).
+    if (ahead?.braking && ahead.aligned && ahead.speed !== undefined && speed > ahead.speed + REACT_EASE && ahead.distance < Math.max(REACT_DISTANCE, speed * REACT_TIME)) {
       desired = Math.min(desired, Math.max(ahead.speed, speed - REACT_EASE));
     }
     if (dodging) desired = Math.min(desired, DODGE_SPEED);
@@ -304,7 +308,9 @@ export class CivilianController {
     }
 
     const { maxThrottle } = this.style;
-    if (speed < desired - 0.3) input.throttle = (desired - speed > 2 ? 1 : 0.5) * maxThrottle;
+    // Heavies hold back to pull away gently, but take what they need to keep rolling through a
+    // tight turn, where the tyres scrub off more than half throttle gives.
+    if (speed < desired - 0.3) input.throttle = Math.min(1, (desired - speed > 1 ? 1 : 0.5) * maxThrottle * (Math.abs(input.steer) > HARD_STEER ? 3 : 1));
     else if (speed > desired + 0.5) input.brake = speed > 0.3 ? Math.min(1, (speed - desired) / 2) * (decel / COMFORT_DECEL) : 0;
     // Holding still: S below ~1 m/s means reverse, so hold the car on the handbrake instead.
     if (desired < 0.3 && Math.abs(speed) < 1) {
@@ -417,7 +423,7 @@ export class CivilianController {
     const past = toStop < 0;
     const ahead = this.ahead;
     const firstInLine = !ahead || ahead.distance > toStop;
-    const exitClear = !ahead || ahead.moving || ahead.distance > toStop + 2 * STOP_LINE + 2 * halfLength + GAP;
+    const exitClear = !ahead || ahead.moving || ahead.distance > toStop + 2 * STOP_LINE + 2 * halfLength + EXIT_ROOM;
     // Early enough that a "wait" leaves room to stop comfortably (from 90, further out than ASK_TIME).
     const near = toStop < Math.max(ASK_DISTANCE, Math.abs(speed) * ASK_TIME, (speed * speed) / (2 * this.style.decel) + Math.abs(speed));
     // Waiting for a gap (never second thoughts once pulling away): at a stop sign, in the traffic
@@ -473,7 +479,7 @@ export class CivilianController {
     const from = this.graph.nodes[this.route[0]];
     const len = Math.hypot(n.x - from.x, n.z - from.z) || 1;
     const [ux, uz] = [(n.x - from.x) / len, (n.z - from.z) / len]; // our way in
-    const gap = this.style.heavy ? HEAVY_GAP_TIME : GAP_TIME;
+    const gap = this.style.heavy ? HEAVY_PULL_OUT_TIME : PULL_OUT_TIME;
     for (const m of this.awareness.movers()) {
       if (m.handle === this.vehicle.body.handle) continue;
       const speed = Math.hypot(m.vx, m.vz);
