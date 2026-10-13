@@ -6,7 +6,7 @@ import { inRampLane, type Landmark } from './Landmarks';
 import type { TreeKind } from './Climate';
 
 export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone' | 'tree' | 'umbrella';
-export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian';
+export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
   kind: PropKind;

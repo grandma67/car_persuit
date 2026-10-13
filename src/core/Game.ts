@@ -16,7 +16,7 @@ import { Sky } from '../render/Sky';
 import { Precipitation } from '../render/Precipitation';
 import { CopDirector, DIRECTOR_TUNING, type Cop } from '../ai/CopDirector';
 import { CivilianTraffic, civilianSpecVariants } from '../ai/CivilianTraffic';
-import { approachControls, fastStreets } from '../world/TrafficControl';
+import { approachControls, busStops, fastStreets } from '../world/TrafficControl';
 import { CrashMarks } from '../render/CrashMarks';
 import { Landmarks } from '../render/Landmarks';
 import type { ChaseTarget } from '../ai/CopController';
@@ -199,6 +199,7 @@ export class Game {
       this.ground,
       keepOf(this.city.driveSide),
       fastStreets(this.city.graph, this.city.streetProps),
+      busStops(this.city.graph, this.city.streetProps),
     );
     this.scene.add(this.crashMarks.mesh);
     this.sirens = new Sirens(this.scene);

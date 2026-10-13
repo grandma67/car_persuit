@@ -14,8 +14,10 @@
 //   stretch signed 90 km/h, no zebras.
 // - Street signs where they make sense: speed limits, no parking, children, pedestrian crossing,
 //   no smoking at park entrances.
+// - Bus stops mid-block on plenty of ordinary streets (not the fast stretches, nor where a zebra
+//   crosses mid-block): buses call at each one (busStops).
 // Pure data — PropSystem/CityBuilder render it.
-import type { Rng } from '../core/Rng';
+import { Rng } from '../core/Rng';
 import type { Block, CityConfig, Rect } from './CityGenerator';
 import type { RoadGraph } from './RoadGraph';
 import type { SignVariant, StreetProp } from './StreetProps';
@@ -59,6 +61,8 @@ const STOPLINE_DEPTH = 0.45;
 const SOLID_CENTER = 12; // no-overtaking centre line back from the stop line
 const MAIN_STREET_ODDS = 0.3; // chance a street (a whole line of the grid) is a main street
 const EDGE_IN = 0.7; // edge line inset from the kerb (as CityBuilder paints it along the roads)
+const BUS_STOP_ODDS = 0.4; // per street and direction
+const BUS_STOP_PAST_MID = 4; // metres past the middle of the block, well clear of both junctions
 
 /** Unit travel direction d and the driver's kerb side r (right, or left when keep is -1) for travel from a to b. */
 function travel(a: { x: number; z: number }, b: { x: number; z: number }, keep: Keep) {
@@ -99,6 +103,8 @@ export function generateTrafficControl(
     }
     return rank.get(key)!;
   };
+  // Bus stops roll on their own stream, so adding them left every other sign where it was.
+  const busRng = new Rng(rng.seed ^ 0xb5570b);
   // Unsignalled junctions: whether the road along X has priority there.
   const priorityAt = new Map<number, boolean>();
 
@@ -233,6 +239,7 @@ export function generateTrafficControl(
 
       for (const [a, b] of [[node, other], [other, node]]) {
         const t = travel(a, b, keep);
+        if (busRng.next() < BUS_STOP_ODDS) signBefore(mid.x, mid.z, t, -BUS_STOP_PAST_MID, 'busStop');
         // The block on this direction's kerb side decides what the street is like.
         const side = blockAt(mid.x + t.rx * (rw / 2 + 10), mid.z + t.rz * (rw / 2 + 10));
         const homes = side?.district === 'residential' || side?.park === true;
@@ -284,6 +291,30 @@ export function fastStreets(graph: RoadGraph, props: StreetProp[]): Set<string> 
     }
   }
   return fast;
+}
+
+/**
+ * Where the bus stops are, keyed `${fromNode}>${toNode}` per direction: metres from fromNode along
+ * the street to the sign (it faces the traffic that calls there, on the driver's kerb side).
+ */
+export function busStops(graph: RoadGraph, props: StreetProp[]): Map<string, number> {
+  const stops = new Map<string, number>();
+  for (const p of props) {
+    if (p.kind !== 'sign' || p.variant !== 'busStop') continue;
+    const dx = -Math.sin(p.yaw);
+    const dz = -Math.cos(p.yaw);
+    for (const a of graph.nodes) {
+      for (const id of a.neighbors) {
+        const b = graph.nodes[id];
+        const len = Math.hypot(b.x - a.x, b.z - a.z);
+        if (((b.x - a.x) * dx + (b.z - a.z) * dz) / len < 0.99) continue;
+        const along = (p.x - a.x) * dx + (p.z - a.z) * dz;
+        const side = Math.abs((p.x - a.x) * dz - (p.z - a.z) * dx);
+        if (along > 0 && along < len && side < 12) stops.set(`${a.id}>${b.id}`, along);
+      }
+    }
+  }
+  return stops;
 }
 
 export interface ApproachControl {

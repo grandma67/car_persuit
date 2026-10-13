@@ -129,7 +129,7 @@ describe('generateTrafficControl', () => {
   });
 });
 
-import { approachControls, fastStreets } from './TrafficControl';
+import { approachControls, busStops, fastStreets } from './TrafficControl';
 
 describe('approachControls', () => {
   it.each([1, 42])('seed %i: every stop sign and signal maps to a real road approach', (seed) => {
@@ -216,3 +216,26 @@ describe('left-hand traffic (England)', () => {
   });
 });
 
+
+describe('bus stops', () => {
+  it.each([1, 42, 1234])('seed %i: plenty of them, mid-block on the kerb side, each known to the buses', (seed) => {
+    const city = generateCity(seed);
+    const rw = city.config.roadWidth;
+    const signs = city.streetProps.filter((p) => p.variant === 'busStop');
+    expect(signs.length).toBeGreaterThan(60);
+    for (const p of signs) {
+      // Well away from every junction (the nearest node is the street's middle at worst 36m off).
+      const node = city.graph.nearest(p.x, p.z);
+      expect(Math.hypot(node.x - p.x, node.z - p.z)).toBeGreaterThan(25);
+      // On the drivers' kerb side (right, or left in an English city).
+      const [dx, dz] = [-Math.sin(p.yaw), -Math.cos(p.yaw)];
+      const toNode = { x: node.x - p.x, z: node.z - p.z };
+      const right = -(toNode.x * -dz + toNode.z * dx) * (city.driveSide === 'left' ? -1 : 1);
+      expect(right).toBeGreaterThan(rw / 2);
+    }
+    const stops = busStops(city.graph, city.streetProps);
+    expect(stops.size).toBe(signs.length);
+    const fast = fastStreets(city.graph, city.streetProps);
+    for (const key of stops.keys()) expect(fast.has(key)).toBe(false);
+  });
+});

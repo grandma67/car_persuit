@@ -40,6 +40,7 @@ const SIGN_SHAPE: Record<SignVariant, SignShape> = {
   noSmoking: 'round',
   children: 'triangle',
   pedestrian: 'square',
+  busStop: 'square',
 };
 const SIGN_VARIANTS = Object.keys(SIGN_SHAPE) as SignVariant[];
 /** Plate geometry per shape. Circle-based so UVs map the square texture straight on. */
@@ -384,6 +385,35 @@ function signTexture(variant: SignVariant): THREE.Texture {
         g.fillStyle = '#111111';
         for (let i = 0; i < 4; i++) g.fillRect(c - h * 0.55 + i * h * 0.3, c + h * 0.5, h * 0.17, h * 0.12);
         runner(g, c - 4, c + h * 0.32, 0.72);
+        break;
+      }
+      case 'busStop': {
+        // Blue square (matching the plate) with a white bus side-on over the word BUS.
+        const h = c * Math.SQRT1_2;
+        g.fillStyle = '#ffffff';
+        g.fillRect(c - h, c - h, h * 2, h * 2);
+        g.fillStyle = BLUE;
+        g.fillRect(c - h + 5, c - h + 5, h * 2 - 10, h * 2 - 10);
+        const w = h * 1.3;
+        const top = c - h * 0.62;
+        const bh = h * 0.62;
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.roundRect(c - w / 2, top, w, bh, 8);
+        g.fill();
+        g.fillStyle = BLUE;
+        for (let i = 0; i < 4; i++) g.fillRect(c - w / 2 + 8 + i * (w - 16) * 0.25, top + 7, (w - 16) * 0.25 - 5, bh * 0.38);
+        for (const x of [c - w * 0.28, c + w * 0.28]) {
+          g.beginPath();
+          g.arc(x, top + bh, h * 0.11, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = '#ffffff';
+          g.beginPath();
+          g.arc(x, top + bh, h * 0.06, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = BLUE;
+        }
+        text(g, 'BUS', c, c + h * 0.55, h * 0.42, '#ffffff');
         break;
       }
     }

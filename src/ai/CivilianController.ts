@@ -2,7 +2,7 @@
 // English city: `keep` mirrors every side below), obeys traffic lights and
 // stop signs, speeds up on main streets signed 90, keeps its distance from whatever is ahead, takes its turn at junctions with the other
 // civilians (junctions.ts), yields to the player and cops about to cross its path, and after a
-// crash backs off and drives round whatever it's wedged against.
+// crash backs off and drives round whatever it's wedged against. Buses call at every bus stop.
 import * as THREE from 'three';
 import type { DriveInput } from '../core/Input';
 import type { Rng } from '../core/Rng';
@@ -72,6 +72,9 @@ const ASK_DISTANCE = 10; // …or metres, whichever is further
 const COMMIT_AFTER = 0.1; // seconds after first asking before we commit to a junction
 const CLAIM_MARGIN = 0.5; // metres round our body we want clear of anyone crossing
 const HEAVY_CLAIM_MARGIN = 0.8; // more round a heavy: it doesn't hold its line as closely
+const BUS_DWELL = 3; // seconds a bus stands at a stop
+const BUS_STOP_PAST = 1; // metres the bus's nose pulls up past the sign (front door by the pole)
+const BUS_STOP_REACH = 2; // metres either side of its mark a bus counts as at the stop
 
 /**
  * How a vehicle drives for its size. Long vehicles can't follow a car's line through a right
@@ -138,6 +141,8 @@ export class CivilianController {
   private waitingFor = -1; // junction we've been waiting at, and since when (kept through red lights)
   private waitingSince = 0;
   private mayEnter = true;
+  private servedStop: string | null = null; // street whose bus stop we've called at
+  private dwell = 0;
   readonly cruise: number;
   readonly fastCruise: number; // on a stretch signed 90
   /** Seconds spent unable to move for no traffic reason; the manager respawns stuck cars. */
@@ -155,6 +160,7 @@ export class CivilianController {
     private keep: Keep = 1,
     private junctions?: Junctions,
     private fast: Set<string> = new Set(),
+    private stops: Map<string, number> = new Map(),
   ) {
     this.recovery = new CrashRecovery(keep);
     this.route = [from, to];
@@ -197,6 +203,8 @@ export class CivilianController {
       this.extend();
       this.rebuild();
       this.stoppedAt = null;
+      this.servedStop = null;
+      this.dwell = 0;
       this.recovery.progress();
     }
 
@@ -253,6 +261,8 @@ export class CivilianController {
       if (mustStop) desired = Math.min(desired, toStop < STOP_MARGIN ? 0 : Math.sqrt(2 * decel * (toStop - STOP_MARGIN)));
     }
 
+    if (this.vehicle.spec.body === 'bus') desired = Math.min(desired, this.busStop(dt, pos, fwd, speed, decel));
+
     // Keep a gap to whatever is ahead (cars, the player, cops), looking further the faster we go.
     // Looking around (forward rays, then traffic about to cross us) runs every few steps.
     if (--this.senseIn <= 0) {
@@ -307,6 +317,39 @@ export class CivilianController {
     this.stuckFor = desired > 2 && Math.abs(speed) < 0.5 ? this.stuckFor + dt : 0;
     if (this.recovery.gaveUp) this.stuckFor = Infinity;
     return input;
+  }
+
+  /**
+   * A bus calls at the stop on this street, or the next one (it can be close past the junction):
+   * planned braking to pull up with its nose just past the sign, BUS_DWELL seconds standing
+   * there, then on its way. The speed it may do for that, Infinity if no stop is coming up.
+   */
+  private busStop(dt: number, pos: P, fwd: P, speed: number, decel: number): number {
+    const front = { x: pos.x + fwd.x * this.vehicle.spec.halfExtents.z, z: pos.z + fwd.z * this.vehicle.spec.halfExtents.z };
+    const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
+    let key = `${a.id}>${b.id}`;
+    let toStop: number;
+    const here = this.stops.get(key);
+    if (here !== undefined) {
+      const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+      toStop = here + BUS_STOP_PAST - ((front.x - a.x) * (b.x - a.x) + (front.z - a.z) * (b.z - a.z)) / len;
+    } else {
+      key = `${b.id}>${c.id}`;
+      const next = this.stops.get(key);
+      if (next === undefined) return Infinity;
+      toStop = Math.hypot(b.x - front.x, b.z - front.z) + next + BUS_STOP_PAST;
+    }
+    if (this.servedStop === key || toStop < -BUS_STOP_REACH) return Infinity;
+    if (toStop < BUS_STOP_REACH && Math.abs(speed) < 0.5) {
+      this.dwell += dt;
+      if (this.dwell >= BUS_DWELL) {
+        this.servedStop = key;
+        this.dwell = 0;
+        return Infinity;
+      }
+      return 0;
+    }
+    return toStop < 0 ? 0 : Math.sqrt(2 * decel * toStop);
   }
 
   /**

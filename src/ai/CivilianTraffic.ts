@@ -184,6 +184,7 @@ export class CivilianTraffic {
     private ground: GroundHeight = FLAT,
     private keep: Keep = 1,
     private fast: Set<string> = new Set(),
+    private stops: Map<string, number> = new Map(),
   ) {
     // Forward sensor: a ray from the front bumper that only sees moving bodies (cars), so
     // buildings at junction corners don't make drivers brake.
@@ -273,6 +274,6 @@ export class CivilianTraffic {
     vehicle.headlights = this.headlights;
     vehicle.beamEnabled = false;
     this.scene.add(vehicle.mesh.root);
-    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep, this.junctions, this.fast) });
+    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep, this.junctions, this.fast, this.stops) });
   }
 }
