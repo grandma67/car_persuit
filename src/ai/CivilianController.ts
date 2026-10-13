@@ -19,8 +19,14 @@ const JUNCTION_EDGE = 7; // lane points sit this far from the junction centre
 const STOP_LINE = 6 + 4.4; // junction centre → stop line
 const COMFORT_DECEL = 4; // m/s² for planned stops
 const CORNER_SPEED = 6;
+const TURN_DECEL = 2.5; // m/s² we plan to slow for a turn with
 const GAP = 6; // metres kept to the vehicle ahead
 const FOLLOW_CLOSE = 1.5; // m/s per metre of room left, closing up behind the vehicle ahead
+// Brake lights ahead within this many seconds (or metres) of us: ease off toward its speed at
+// once, a little each step, rather than wait for the gap to close.
+const REACT_TIME = 3;
+const REACT_DISTANCE = 20;
+const REACT_EASE = 0.8; // m/s under our speed we aim for: a firm lift, light braking
 const STOP_SIGN_WAIT = 1.2;
 // At a stop sign, pull out only with a gap: nothing on the way into the junction (beyond the
 // ground already claimed there) due within this many seconds. More for a slow-pulling heavy.
@@ -211,7 +217,8 @@ export class CivilianController {
     // Aim behind us (knocked round, or overshot): full lock toward it.
     input.steer = Math.abs(alpha) > Math.PI / 2 ? Math.sign(alpha) : THREE.MathUtils.clamp(wheelAngle / steerLimit(v.spec, speed), -1, 1);
 
-    let desired = Math.min(this.cruiseHere(pos, decel), cornerSpeedLimit(this.path, this.segment, pos, Math.abs(speed), cornerSpeed, decel));
+    // Slow for a turn early and gently, as a driver does once the indicator's on, not late and hard.
+    let desired = Math.min(this.cruiseHere(pos, decel), cornerSpeedLimit(this.path, this.segment, pos, Math.abs(speed), cornerSpeed, Math.min(decel, TURN_DECEL)));
     // Still winding the wheel on: no pulling away out of a turn until it's coming straight, or
     // the car runs wide over the centre line of the road it's turning into.
     if (Math.abs(input.steer) > HARD_STEER) desired = Math.min(desired, cornerSpeed);
@@ -272,6 +279,9 @@ export class CivilianController {
     if (free < Infinity) {
       const room = Math.max(0, free - gap);
       desired = Math.min(desired, Math.sqrt(2 * decel * room), FOLLOW_CLOSE * room);
+    }
+    if (ahead?.braking && ahead.aligned && ahead.speed !== undefined && speed > ahead.speed && ahead.distance < Math.max(REACT_DISTANCE, speed * REACT_TIME)) {
+      desired = Math.min(desired, Math.max(ahead.speed, speed - REACT_EASE));
     }
     if (dodging) desired = Math.min(desired, DODGE_SPEED);
     desired = Math.min(desired, this.hazardLimit);

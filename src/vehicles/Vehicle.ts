@@ -120,6 +120,7 @@ export class Vehicle {
         .setAngularDamping(0.8)
         .setLinearDamping(0.05),
     );
+    this.body.userData = this; // so whoever sees the body (a driver behind) can see its brake lights
     // Explicit mass properties: lowered centre of mass so the car resists rolling.
     const m = spec.mass;
     const [w, h, d] = [hx * 2, hy * 2, hz * 2];
@@ -538,6 +539,11 @@ export class Vehicle {
       lamp.emissiveIntensity = on * 2.5;
       for (const g of glows) setGlow(g, on * (0.55 + this.headlights * 0.35));
     }
+  }
+
+  /** Brake lights on (as the driver behind sees them). */
+  get brakeLit(): boolean {
+    return this.brakeLightTimer > 0 && !this.lightsOff;
   }
 
   dispose(): void {

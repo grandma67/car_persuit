@@ -23,6 +23,8 @@ export interface Obstacle {
   side: number;
   handle?: number; // the body it is
   civilian?: boolean; // one of the traffic: queueing like us, never parked for good
+  speed?: number; // m/s along our lane
+  braking?: boolean; // its brake lights are on
 }
 
 export interface Awareness {

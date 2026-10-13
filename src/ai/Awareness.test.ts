@@ -106,3 +106,46 @@ describe('crash recovery', () => {
     expect(Math.hypot(wreck.position.x - 45, wreck.position.z - 3)).toBeLessThan(0.3); // and without shunting it
   });
 });
+
+describe('brake lights', () => {
+  beforeAll(async () => {
+    await RAPIER.init();
+  });
+
+  /** A civilian 30m behind a car that slows from 12 to 5 m/s: how soon after the follower first brakes. */
+  function follow(lights: boolean) {
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+    world.createCollider(RAPIER.ColliderDesc.cuboid(500, 0.5, 500).setTranslation(0, -0.5, 0));
+    const graph = new RoadGraph([
+      { id: 0, x: 0, z: 0, neighbors: [1] },
+      { id: 1, x: 400, z: 0, neighbors: [0, 2] },
+      { id: 2, x: 800, z: 0, neighbors: [1] },
+    ]);
+    const car = new Vehicle(world, PLAYER_SPEC, { x: 20, y: 1.2, z: 3 }, Math.PI / 2);
+    const lead = new Vehicle(world, PLAYER_SPEC, { x: 55, y: 1.2, z: 3 }, Math.PI / 2);
+    lead.lightsOff = !lights;
+    const awareness = { obstacle: (v: Vehicle, range: number) => forwardObstacle(world, v, range), movers: () => [] };
+    const driver = new CivilianController(car, graph, new Map(), () => Infinity, new Rng(1), 0, 1, awareness);
+    const SLOW_AT = 12;
+    let firstBrake = Infinity;
+    for (let t = 0; t < 22; t += 1 / 60) {
+      const target = t < SLOW_AT ? 12 : 5;
+      const err = target - lead.speed;
+      lead.drive({ throttle: err > 0.3 ? 0.6 : 0, brake: err < -0.3 ? 0.35 : 0, steer: 0, handbrake: false }, 1 / 60);
+      const input = driver.update(1 / 60, t);
+      car.drive(input, 1 / 60);
+      world.step();
+      car.snapshot();
+      lead.snapshot();
+      if (t > SLOW_AT && input.brake > 0 && firstBrake === Infinity) firstBrake = t - SLOW_AT;
+    }
+    return { firstBrake };
+  }
+
+  it('a civilian brakes as soon as the brake lights ahead come on, not once the gap has closed', () => {
+    const seen = follow(true);
+    const unseen = follow(false);
+    expect(seen.firstBrake).toBeLessThan(0.5); // reacts within a look or two
+    expect(seen.firstBrake).toBeLessThan(unseen.firstBrake);
+  });
+});

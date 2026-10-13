@@ -304,8 +304,9 @@ function report(r: ReturnType<typeof simulate>) {
     // Nothing over the kerb: a car's tail may just brush the corner, clear of the poles.
     offRoad: all.filter((c) => c.offRoad > 0.1).map((c) => `${name(c)} ${c.offRoad.toFixed(2)}m`),
     dodged: all.filter((c) => c.dodged).length,
-    // Cars (not buses or trucks) in off the priority road, and the best they managed.
-    fastTops: all.filter((c) => ARMS[c.entry].x !== 0 && c.vehicle.spec.mass < 5000).map((c) => c.top),
+    // Cars (not buses or trucks) straight along the priority road (a turn they slow for well
+    // before), and the best they managed.
+    fastTops: all.filter((c) => ARMS[c.entry].x !== 0 && (c.exit + 2) % 4 === c.entry && c.vehicle.spec.mass < 5000).map((c) => c.top),
     // At 90 a car pulling out ahead can mean firm braking (short of an emergency stop).
     hardBrake: all.filter((c) => c.hardBrake > (r.fastRoad && ARMS[c.entry].x !== 0 ? 8 : 6.5)).map((c) => `${name(c)} ${c.hardBrake.toFixed(1)} ${c.brakeAt}`),
   };
@@ -341,6 +342,7 @@ describe('four-way junction simulation', () => {
     safe(r);
     if (mode === 'fast') {
       // Up to 90 on the run in (most of them; one stuck behind a bus may not get there), never over.
+      expect(r.fastTops.length).toBeGreaterThan(0);
       expect(r.fastTops.filter((v) => v > 21).length).toBeGreaterThan(r.fastTops.length / 2);
       expect(Math.max(...r.fastTops)).toBeLessThan(25.5);
     }

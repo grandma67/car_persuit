@@ -144,6 +144,8 @@ export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: nu
     const v = body.linvel();
     best.moving = Math.hypot(v.x, v.z) > 1;
     best.handle = body.handle;
+    best.speed = v.x * legDir.x + v.z * legDir.z;
+    best.braking = (body.userData as { brakeLit?: boolean } | undefined)?.brakeLit === true;
   }
   return best;
 }
