@@ -10,7 +10,7 @@ import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, type CityConfig, type CityData } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
-import { pickTheme, pickTimeOfDay, type TimeOfDay } from '../world/CityTheme';
+import { pickTheme, pickTimeOfDay } from '../world/CityTheme';
 import { applyClimate, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
 import { Sky } from '../render/Sky';
 import { Precipitation } from '../render/Precipitation';
@@ -58,6 +58,8 @@ const CIVILIAN_PROP_RANGE = 90; // metres: civilians nearer the player than this
 const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
 const SINK_DEPTH = 3; // metres under the surface a car in the water comes to rest
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+const SHADOW_HALF = 125; // metres: half the width of the sun's shadow map
+const SHADOW_LEAD = 60; // metres ahead of the car to centre the shadow map, towards what the camera sees
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
 
@@ -68,11 +70,14 @@ export class Game {
   private input = new Input();
   private chase: ChaseCamera;
   private sun: THREE.DirectionalLight;
+  private sunOffset = new THREE.Vector3(); // light position relative to the centre of the shadow map
+  private sunAxes = [new THREE.Vector3(), new THREE.Vector3()]; // the shadow map's x and y in the world
+  private sunTexel = 0; // metres per shadow map texel
+  private shadowCentre = new THREE.Vector3();
   private player: Vehicle;
   readonly city: CityData;
   private ground: GroundHeight = (x, z) => groundHeight(this.city.terrain, x, z);
   private fog: THREE.Fog;
-  private time: TimeOfDay;
   private precipitation: Precipitation | null = null;
   private sky: Sky;
   private overview = false; // ?debug only: top-down map view on C
@@ -133,7 +138,7 @@ export class Game {
     const params = new URLSearchParams(window.location.search);
     const climate = pickClimate(seed, this.debug ? params.get('city') : null);
     const weather = pickWeather(seed, climate, this.debug ? params.get('weather') : null);
-    const time = (this.time = applyClimate(pickTimeOfDay(seed, params.get('time')), climate, weather));
+    const time = applyClimate(pickTimeOfDay(seed, params.get('time')), climate, weather);
     const theme = pickTheme(seed, climate);
     this.renderer.toneMappingExposure = time.exposure;
     this.fog = new THREE.Fog(time.skyHorizon, time.fogNear, time.fogFar);
@@ -146,12 +151,13 @@ export class Game {
     // Shadow-casting sun follows the player so a small shadow frustum covers the visible area.
     this.sun = new THREE.DirectionalLight(time.sunColor, time.sunIntensity);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.setScalar(mobile ? 1024 : 2048);
+    const mapSize = mobile ? 2048 : 4096;
+    this.sun.shadow.mapSize.setScalar(mapSize);
     const s = this.sun.shadow.camera;
-    s.left = s.bottom = -50;
-    s.right = s.top = 50;
+    s.left = s.bottom = -SHADOW_HALF;
+    s.right = s.top = SHADOW_HALF;
     s.near = 1;
-    s.far = 150;
+    this.sunTexel = (2 * SHADOW_HALF) / mapSize;
     this.scene.add(this.sun, this.sun.target);
 
     this.world.timestep = FIXED_DT;
@@ -175,6 +181,16 @@ export class Game {
       trunk: theme.trunk,
       snowy: climate.snowRoofs,
     });
+    // Shadow casters behind the shadow camera are dropped, so it must sit up-sun of the tallest
+    // tower's top: a low golden-hour sun throws shadows ~3× a building's height, and towers well
+    // outside the map's footprint shade the streets in it. Only the depth range grows, not the map.
+    const tallest = Math.max(0, ...this.city.buildings.map((b) => b.h)) + (this.city.terrain.hill?.height ?? 0);
+    const sunDir = new THREE.Vector3(...time.sunOffset).normalize();
+    const sunDist = Math.max(100, (tallest + 10) / sunDir.y);
+    this.sunOffset.copy(sunDir).multiplyScalar(sunDist);
+    s.far = sunDist + 100;
+    // The shadow camera looks down -sunDir with world up, as Object3D.lookAt orients it.
+    new THREE.Matrix4().lookAt(sunDir, new THREE.Vector3(), new THREE.Object3D().up).extractBasis(this.sunAxes[0], this.sunAxes[1], new THREE.Vector3());
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
 
     const { spawn } = this.city;
@@ -392,6 +408,22 @@ export class Game {
     }
   }
 
+  /**
+   * Centre the shadow map ahead of the car, where the camera looks, and move it in whole texels:
+   * sliding it smoothly re-samples every static shadow each frame, which made their edges crawl.
+   */
+  private updateSun(carPos: THREE.Vector3): void {
+    const look = this.chase.camera.getWorldDirection(this.shadowCentre);
+    look.y = 0;
+    const centre = look.normalize().multiplyScalar(SHADOW_LEAD).add(carPos);
+    for (const axis of this.sunAxes) {
+      const d = centre.dot(axis);
+      centre.addScaledVector(axis, Math.floor(d / this.sunTexel) * this.sunTexel - d);
+    }
+    this.sun.position.addVectors(centre, this.sunOffset);
+    this.sun.target.position.copy(centre);
+  }
+
   private frame(): void {
     const frameDt = Math.min(this.clock.getDelta(), 0.1);
     this.handleKeys();
@@ -495,9 +527,7 @@ export class Game {
     this.props.updateSignals(this.clock.elapsedTime);
     for (const works of this.roadworks) works.update(frameDt, this.clock.elapsedTime);
     const carPos = this.player.mesh.root.position;
-    const [sx, sy, sz] = this.time.sunOffset;
-    this.sun.position.set(carPos.x + sx, carPos.y + sy, carPos.z + sz);
-    this.sun.target.position.copy(carPos);
+    this.updateSun(carPos);
 
     if (this.state === 'playing') this.applyDamage(impact, ramDamage);
     if (this.state === 'playing') this.logJumps();
