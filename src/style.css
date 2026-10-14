@@ -790,6 +790,33 @@ kbd {
   }
 }
 
+/* Landscape phones: the full layout is ~490px tall and would clip the loading bar off the bottom. */
+@media (max-height: 520px) {
+  .splash-title {
+    font-size: clamp(30px, 11vh, 56px);
+  }
+
+  .splash-tagline {
+    margin-top: 6px;
+  }
+
+  .splash-scene {
+    margin: 8px 0 6px;
+  }
+
+  .splash-stars {
+    margin-bottom: 6px;
+  }
+
+  .splash-status {
+    margin-top: 8px;
+  }
+
+  .splash-continue {
+    margin-top: 10px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .splash-siren,
   .splash-beam,
