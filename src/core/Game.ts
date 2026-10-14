@@ -147,7 +147,7 @@ export class Game {
     const weather = pickWeather(seed, climate, this.debug ? params.get('weather') : null);
     const time = applyClimate(pickTimeOfDay(seed, params.get('time')), climate, weather);
     const theme = pickTheme(seed, climate);
-    // The sky and sun as reflected by car paint, glass and windows.
+    // The sky and sun as reflected by car paint, glass and rims.
     const environment = createEnvironment(this.renderer, time);
     setCarEnvironment(environment);
     this.renderer.toneMappingExposure = time.exposure;
@@ -181,7 +181,7 @@ export class Game {
     if (this.debug && canals >= 0 && canals <= 2) config.canalOdds = [canals === 0 ? 1 : 0, canals === 1 ? 1 : 0, canals === 2 ? 1 : 0];
     if (this.debug && params.has('hill')) config.hillChance = params.get('hill') === '0' ? 0 : 1;
     this.city = generateCity(seed, config);
-    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow, environment });
+    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
     this.canalWater = built.canalWater;
     this.walls = built.walls;
     this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls);

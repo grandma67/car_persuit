@@ -186,7 +186,6 @@ export interface CityLook {
   wet: boolean; // rain: glossy, darker roads and pavements
   sea: number; // deep water colour, for the canals
   shallow: number; // the sea's colour at the shore, where the canals open into it
-  environment?: THREE.Texture; // sky reflection for the windows
 }
 
 /**
@@ -377,8 +376,6 @@ export function buildCity(
         metalnessMap: tex.surface,
         roughness: 1, // both scaled by the surface map
         metalness: 1,
-        envMap: look.environment ?? null,
-        envMapIntensity: 0.8,
       }),
     );
   });

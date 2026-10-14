@@ -1,4 +1,4 @@
-// Reflection map for shiny surfaces (car paint, glass, building windows): the time of day's sky
+// Reflection map for the cars' shiny surfaces (paint, glass, rims): the time of day's sky
 // gradient over the ground colour, with a bright disc where the sun is. Rendered and prefiltered
 // once per city; nothing per frame. Only materials that are given it reflect it.
 import * as THREE from 'three';
