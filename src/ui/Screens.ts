@@ -35,13 +35,28 @@ export class Screens {
     onFullscreenChange(() => this.syncFullscreenLabel());
   }
 
+  /** Corner-arrows icon: pointing out to enter fullscreen, in to leave it. */
+  private fullscreenIcon(): string {
+    const path = isFullscreen() ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5';
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+  }
+
   private fullscreenLabel(): string {
     return isFullscreen() ? 'Exit fullscreen' : 'Fullscreen';
   }
 
+  private fullscreenButton(): string {
+    if (!fullscreenSupported()) return '';
+    const label = this.fullscreenLabel();
+    return `<button data-action="fullscreen" class="secondary icon" aria-label="${label}" title="${label}">${this.fullscreenIcon()}</button>`;
+  }
+
   private syncFullscreenLabel(): void {
     const button = this.el.querySelector('[data-action="fullscreen"]');
-    if (button) button.textContent = this.fullscreenLabel();
+    if (!button) return;
+    button.innerHTML = this.fullscreenIcon();
+    button.setAttribute('aria-label', this.fullscreenLabel());
+    button.setAttribute('title', this.fullscreenLabel());
   }
 
   private show(html: string, actions: Record<string, () => void>, cardClass = ''): void {
@@ -120,7 +135,7 @@ export class Screens {
       <div class="screen-buttons">
         <button data-action="start">Start <kbd>Enter</kbd></button>
         <button data-action="share" class="secondary">Share this game</button>
-        ${fullscreenSupported() ? `<button data-action="fullscreen" class="secondary">${this.fullscreenLabel()}</button>` : ''}
+        ${this.fullscreenButton()}
       </div>
       <p class="screen-seed">City #${info.seed} · ${info.look}${info.best ? ` · Best ${info.best}` : ''}</p>
     `,
@@ -152,7 +167,7 @@ export class Screens {
         <button data-action="retry" class="secondary">Retry <kbd>Enter</kbd></button>
         <button data-action="share" class="secondary">Share this game</button>
         ${touch ? `<button data-action="mute" class="secondary">${muteLabel(touch.muted)}</button>` : ''}
-        ${touch && fullscreenSupported() ? `<button data-action="fullscreen" class="secondary">${this.fullscreenLabel()}</button>` : ''}
+        ${touch ? this.fullscreenButton() : ''}
       </div>`,
       actions,
     );
