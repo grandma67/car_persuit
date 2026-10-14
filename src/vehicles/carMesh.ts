@@ -23,11 +23,16 @@ export interface CarMesh {
   beams: THREE.SpotLight[];
   /** Police light bar halves (red, blue), flashed by the cop code. */
   sirenLights?: { red: THREE.MeshStandardMaterial; blue: THREE.MeshStandardMaterial; redGlow: THREE.Sprite; blueGlow: THREE.Sprite };
+  /** Every glow sprite above, for GlowBatch, which draws them (the camera skips GLOW_LAYER). */
+  glows: THREE.Sprite[];
   /** Body paint, darkened when wrecked. */
   paint: THREE.MeshStandardMaterial;
   /** Free this car's own geometries and materials (on despawn). */
   dispose(): void;
 }
+
+/** Car glow sprites live here: the camera never draws them one by one, GlowBatch does all at once. */
+export const GLOW_LAYER = 1;
 
 /** One built car per shape (body, size, wheels, livery, kerb side): new cars are clones of it. */
 const templates = new Map<string, CarMesh>();
@@ -97,6 +102,7 @@ function cloneCarMesh(t: CarMesh, color: number): CarMesh {
     headlight: mat(t.headlight),
     headGlows: t.headGlows.map(copy),
     tailGlows: t.tailGlows.map(copy),
+    glows: t.glows.map(copy),
     indicators: {
       left: { lamp: mat(t.indicators.left.lamp), glows: t.indicators.left.glows.map(copy) },
       right: { lamp: mat(t.indicators.right.lamp), glows: t.indicators.right.glows.map(copy) },
@@ -132,6 +138,7 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
       new THREE.SpriteMaterial({ map: glowTexture, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }),
     );
     s.scale.setScalar(size);
+    s.layers.set(GLOW_LAYER);
     return s;
   };
   const headGlows: THREE.Sprite[] = [];
@@ -429,7 +436,11 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
     for (const m of materials) m.dispose(); // textures (glow, chevrons) are shared: left alone
   };
 
-  return { root, body: bodyGroup, exhausts, wheels, taillight, headlight, headGlows, tailGlows, indicators, beams, paint, sirenLights, dispose };
+  const glows: THREE.Sprite[] = [];
+  root.traverse((o) => {
+    if (o instanceof THREE.Sprite) glows.push(o);
+  });
+  return { root, body: bodyGroup, exhausts, wheels, taillight, headlight, headGlows, tailGlows, glows, indicators, beams, paint, sirenLights, dispose };
 }
 
 /**
@@ -496,7 +507,7 @@ export function setGlow(sprite: THREE.Sprite, opacity: number): void {
 
 let glowCache: THREE.Texture | null | undefined;
 /** One glow texture shared by every car; none in headless tests (no DOM). */
-function sharedGlowTexture(): THREE.Texture | null {
+export function sharedGlowTexture(): THREE.Texture | null {
   if (glowCache === undefined) glowCache = typeof document === 'undefined' ? null : glowSpriteTexture();
   return glowCache;
 }

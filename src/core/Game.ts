@@ -5,7 +5,7 @@ import { Rng } from './Rng';
 import { safeStorage } from './storage';
 import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
-import { buildCarMesh, setCarShadow } from '../vehicles/carMesh';
+import { buildCarMesh, setCarShadow, type CarMesh } from '../vehicles/carMesh';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, type CityConfig, type CityData } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
@@ -50,6 +50,7 @@ import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { DAMAGE } from '../gameplay/balance';
+import { GlowBatch } from '../render/GlowBatch';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 3; // more only snowballs on a slow phone: each catch-up step makes the frame slower still
@@ -115,6 +116,8 @@ export class Game {
   private landmarks: Landmarks;
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
   private sirens: Sirens;
+  private glows: GlowBatch;
+  private glowCars: CarMesh[] = []; // reused each frame
   private mission: MissionSystem;
   private route: Route | null = null;
   private routeTimer = 0;
@@ -232,6 +235,7 @@ export class Game {
     );
     this.scene.add(this.crashMarks.mesh);
     this.sirens = new Sirens(this.scene);
+    this.glows = new GlowBatch(this.scene);
     this.copContact = new CopContact(this.world, this.player);
 
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
@@ -573,7 +577,14 @@ export class Game {
     );
 
     this.sky.follow(this.chase.camera);
-    this.renderer.render(this.scene, this.overview ? this.overviewCamera() : this.chase.camera);
+    const camera = this.overview ? this.overviewCamera() : this.chase.camera;
+    const cars = this.glowCars;
+    cars.length = 0;
+    cars.push(this.player.mesh);
+    for (const cop of this.director.cops) cars.push(cop.vehicle.mesh);
+    for (const car of this.traffic.cars) cars.push(car.vehicle.mesh);
+    this.glows.update(cars, camera);
+    this.renderer.render(this.scene, camera);
     this.input.endFrame();
   }
 
