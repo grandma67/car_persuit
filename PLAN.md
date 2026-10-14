@@ -1,137 +1,74 @@
-# Car Pursuit — Game Plan
+# Car Pursuit — Design Notes
 
-A browser 3D car-chase game (GTA-style wanted system) on a random city map, deployed to GitHub Pages.
+A browser 3D car-chase game (GTA-style wanted stars) on a seeded island city, deployed to GitHub Pages as an installable PWA. All milestones (M0–M7) are done; work now is polish and features.
+
+## Versions
+
+No git tags; versions are grouped by day of work.
+
+- **v0.1 (2026-10-10):** milestones M0–M7 — Vite/Three.js/Rapier scaffold, drivable car, seeded city, 5-destination mission, cops with wanted stars and roadblocks, civilian traffic, traffic lights and signs, breakable props, minimap, health and explosions, touch controls, difficulty, leaderboard.
+- **v0.2 (2026-10-11):** buses, trucks and a ramp truck; climates (snow, beach, desert) and rain; roadworks; "The Leap" jump ramp; cops spawn hidden around corners; share link; more health, with repairs at destinations.
+- **v0.3 (2026-10-12):** installable offline PWA; seeded hill and canals with bridges and canal ramps; falling into water ends the run; handbrake drifts; turn signals; car scratches and dents; body dive/squat and gears.
+- **v0.4 (2026-10-13):** No Police mode; left-hand traffic on rare seeds; junction priority, bus stops, 90 km/h main streets, smarter civilians; cops chase off-road; exhaust fumes; splash chase scene; end-screen run map shareable as an image; mute and difficulty remembered between sessions.
+- **v0.5 (2026-10-14):** performance work (long runs, spawns, shader warm-up, phone shadows), Node 24 and updated dependencies, turn-aware cop routing, FPS counter, wanted-level sound, fullscreen icon with landscape lock.
 
 ## Rules
 
-- **Win:** reach all 5 destinations (sequential, one shown at a time) within 10:00.
-- **Lose:** your car's health reaches 0, or the timer runs out.
-- Wanted level (stars) rises over time; ramming/wrecking cops adds extra heat.
-- City is generated from a seed (`?seed=1234` replays a map).
+- **Win:** reach 5 destinations (one shown at a time, 700–1100 m apart by road) before the clock runs out.
+- **Lose:** car wrecked (health 0), fall into the sea or a canal, or time runs out.
+- Wanted level rises with time and heat (ramming or wrecking cops, smashing props, hitting civilians); each checkpoint speeds it up and repairs the car a little.
+- Difficulty: No Police (Hard without cops), Easy, Normal, Hard — time limit, health, damage, wanted rate, cop cap and traffic density (`gameplay/difficulty.ts`).
 
-## Decisions
+## Tech
 
-| Topic | Decision |
-|---|---|
-| Art style | Low-poly, but sharp, cool-looking cars (clean silhouettes, strong colors, emissive lights) |
-| Destinations | Sequential, one visible at a time, GPS arrow + minimap |
-| Mobile | Later (M7). Desktop keyboard first |
-| Civilian traffic | Added in M6. Sparse, so it is something to weave through, not a wall that blocks escape |
+TypeScript + Vite, Three.js, Rapier (`@dimforge/rapier3d-compat`, raycast vehicles), HTML/CSS HUD, procedural Web Audio. No server: records and prefs live in localStorage under the game's own keys (the github.io origin is shared).
 
-## Tech stack
-
-- TypeScript + Vite (static build → GitHub Pages)
-- Three.js (rendering, InstancedMesh for the city)
-- Rapier (`@dimforge/rapier3d-compat`): physics + raycast vehicle controller; WASM embedded, no MIME issues
-- HTML/CSS overlay for HUD; Howler.js for audio (M6)
-
-## Architecture
+## Code layout
 
 ```
 src/
-  main.ts                 bootstrap, game state machine (Menu → Playing → Won/Lost)
-  core/      Game (fixed 60Hz physics, render interpolation), Input, Rng (seeded), Events
-  world/     CityGenerator (pure data), RoadGraph (A*), CityBuilder (meshes + colliders)
-  vehicles/  Vehicle, VehicleSpecs, PlayerController
-  ai/        CopController (Navigate → Chase → Ram → Recover), CopDirector (spawn/despawn)
-  gameplay/  WantedSystem, MissionSystem, DamageSystem, balance.ts (all tuning numbers)
-  render/    ChaseCamera, Minimap, Effects
-  ui/        Hud, Menus
+  core/      Game (fixed 60 Hz physics, state machine), Input, seeded Rng, storage
+  world/     CityGenerator, RoadGraph, Terrain, Climate, CityTheme, TrafficControl,
+             Landmarks, Roadworks, StreetProps/PropSystem, CityBuilder (meshes + colliders)
+  vehicles/  Vehicle, VehicleSpecs, carMesh, gears
+  ai/        CopController, CopDirector, NavGrid, pursuit, lineOfSight,
+             CivilianTraffic/CivilianController, junctions
+  gameplay/  Mission, Wanted, Health, CopContact, Records, RunLog, Prefs, difficulty, balance.ts
+  render/    camera, sky, sea/canals, weather, skid marks, smoke, crash marks, scratches, glows
+  audio/     car engine, sound effects, menu music
+  ui/        Hud, Minimap, RunMap, Screens, TouchControls, fullscreen
 ```
 
-Generation and gameplay logic are pure data/logic (no Three.js) so they can be unit-tested.
+Generation and gameplay logic are pure data (no Three.js) and unit-tested with Vitest. All tuning numbers live in `gameplay/balance.ts`.
 
-## City generation
+## World
 
-- Grid 12×12 blocks (60m blocks, 12m roads, ~876m city), generated in 1–5ms.
-- ~10% of inner road segments become **plazas**: paved, drivable shortcuts with planters, not in the road graph (cops path by roads, so plazas are escape routes). Outer ring road always kept; network stays connected with **no dead ends**.
-- Districts: downtown towers (centre), midtown, then residential/industrial split by smooth value noise; ~8% parks with trees (drivable).
-- Buildings: merged wall/roof meshes with lit-window textures, one static collider each; invisible boundary walls.
-- Road graph (intersections = nodes) drives AI pathing, spawn points and destination placement.
-- Destinations: road nodes with A* distance ≥ ~400m between consecutive ones.
-- `?seed=N` reproduces a city; `?debug` + C toggles a top-down overview. `npm test` covers generator invariants.
-- Not done: wide avenues (deferred; uniform roads for now).
+- 12×12 block grid on a seeded hill, ringed by a quay and an animated sea; 0–2 canals (12–100 m wide) with bridges every few blocks.
+- Districts (downtown towers → residential/industrial), parks, drivable plazas (shortcuts cops don't path through), town squares with fountains, statues and the occasional jump ramp ("The Leap", canal ramps).
+- Seed picks style, time of day, climate (temperate, snow, beach, desert), weather (rain/snow) and, rarely, left-hand traffic.
+- Traffic lights, priority junctions with stop signs, crossings, bus stops, roadworks sites; lamps, hydrants, signs, fences, trees and more are breakable.
 
-## Mission (M3)
+## Police
 
-- 5 sequential destinations, 400–800m by road apart (Dijkstra), own RNG stream so they're fixed per seed.
-- Light beam + pulsing ring marks the target (green for the final one); GPS chevron above the car follows the road route.
-- States: menu → playing ⇄ paused → won/lost. Retry reloads the same seed; New city picks a random one.
-- Debug (`?debug`): C overview, T teleport to destination, Y leave 3s on the clock, `window.__game` for browser tests.
-
-## Island, minimap, health (added after M3)
-
-- City sits on an island: 10m promenade, concrete quay, low sea wall (+ tall invisible collider); animated flat-shaded sea around it.
-- Round heading-up minimap (top right) with road route, destination (pinned to rim when off-map) and player arrow; replaces the 3D GPS arrow.
-- Health (gameplay/Health.ts): crash damage from impact Δv (5 m/s free, 1.8 HP per m/s above); smoke <50%, fire <20%, wrecked at 0 → lose. Health bar under the minimap, red flash on hits.
-
-## World dressing (added after M3)
-
-- Breakable street props (lamps with light pools, hydrants with geysers, benches, picket fences): solid when nudged, knocked loose above a break speed (`world/StreetProps.ts`, `world/PropSystem.ts`).
-- Seed picks a realistic city style (Modern American, Old Brick, Mediterranean, Nordic, Desert Southwest; colours jittered per seed) and a time of day (day / golden hour / night). `?time=` overrides. Sky dome, fog, lights, lamps, windows and sea follow the time of day.
-- Wreck = explosion (fireball, flash, shake, engine cut), then end screen after 2s.
-- Destinations 700–1100m apart by road.
-- Landmarks (`world/Landmarks.ts`, `render/Landmarks.ts`): ~4 town squares per city (paved, tree ring, benches facing a centrepiece) and centrepieces in half the parks — fountains with spray, bronze statues, obelisks, steel ring sculptures. Solid, take crash marks, shown on the minimap.
-- Traffic control (`world/TrafficControl.ts`, right-hand traffic): far-side traffic lights at busy 4-way junctions (head over the driver's lane), near-side stop signs elsewhere (side roads stop at the ring road); zebra crossings and right-lane stop lines; mid-block crossings with pedestrian signs; speed 30/50, no parking, children, no smoking (park entrances). Facing/placement unit-tested. Signs and signals are breakable.
-
-## Wanted escalation
-
-| Stars | At ~ | Max cops | New threat |
+| Stars | At | Max cops | Adds |
 |---|---|---|---|
-| 1 | 0:00 | 2 | Patrol car (your speed, light) |
-| 2 | 1:30 | 4 | More patrols, faster reactions |
-| 3 | 3:00 | 6 | Interceptor (faster than you, fragile) |
-| 4 | 5:00 | 8 | SUV rammer (heavy) + roadblocks |
-| 5 | 7:00 | 10 | Armored truck (very heavy) |
+| 1 | 0:00 | 2 | Patrol cars |
+| 2 | 1:30 | 4 | Faster spawns |
+| 3 | 3:00 | 6 | Interceptors |
+| 4 | 5:00 | 8 | SUV rammers + roadblocks |
+| 5 | 7:00 | 10 | Armored trucks |
 
-## Cop AI
+- Director spawns cops hidden around corners, often ahead on the player's route; leashes far or flipped cops back.
+- Cops follow turn-aware, speed-aware road routes, switch to lead pursuit with line of sight, ram, back off when pinned, and steer off-road around obstacles.
 
-- Navigate: A* on road graph, pure-pursuit steering along waypoints.
-- Chase: line of sight → steer at predicted player position.
-- Ram: close range, full throttle.
-- Recover: stuck >1.5s → reverse + turn.
-- Director: spawn 150–250m away off-screen, despawn >400m behind, mild rubber-banding.
+## Civilians
 
-## Wanted & escalation (M5, as built)
+Cars, vans, pickups, buses, box trucks and a rare ramp truck. They keep lane, obey lights and priority, signal, queue, react to brake lights, stop at bus stops and drive on after crashes. Checked by headless junction sims.
 
-- `gameplay/WantedSystem.ts`: stars from elapsed time + heat (cop wrecked +25s, prop smashed +0.6s); thresholds and per-star caps/mix/aggression in `balance.ts` (WANTED).
-- Cop types (`VehicleSpecs.ts`, distinct body meshes): patrol sedan, interceptor (fast, 70 HP), SUV rammer (2300kg, 160 HP), armored truck (5000kg, 400 HP). Heavier cops hurt more via impact Δv.
-- Director: spawns to the star cap at the star's interval with weighted types; 4★+ roadblocks (2 SUVs across the road 140–260m ahead on the GPS route, holding until the player is within 35m).
-- HUD stars + progress bar, toast per level; `?debug` K = +1 star. 10 cops at 60fps (cops have lamp glow, no spotlights).
+## Presentation
 
-## Mobile, difficulty, records (M7, as built)
+Damage (smoke, fire, explosion, scratches/dents), skid marks and tyre smoke, body dive/squat, lights and indicators, minimap, end-screen run map (route by speed plus incidents, shareable as an image), splash scene, local leaderboard, touch controls, fullscreen.
 
-- Touch controls on coarse-pointer devices (steer, gas/brake, handbrake, pause, reset), compact HUD, lower pixel ratio / shadow map on phones.
-- Difficulty Easy/Normal/Hard (`gameplay/difficulty.ts`): time limit, damage, wanted rate, cop cap; remembered in localStorage.
-- Local leaderboard (`gameplay/Records.ts`): best per city+difficulty, top-10, NEW RECORD banner (no server on GitHub Pages).
+## Debug (`?debug`)
 
-## Polish (M6, as built)
-
-- Civilian traffic (`ai/CivilianTraffic.ts`, `ai/CivilianController.ts`): ~10 cars recycled around the player, right-hand lane, realistic turns, obey lights and stop signs (headless sim: 0 red-light runs, 0 crashes, 0% off-road), forward sensor keeps gaps; hitting one adds heat.
-- Pursuit tuning: 60% of cop spawns on the player's GPS route 120–260m ahead (cut-off), leash 260m, sharper aggression per star, each checkpoint ×1.3 wanted-clock rate.
-- Crash marks on building/sea walls at the impact point, tinted with the car's paint.
-- Splash screen with loading stages, menu music, engine silent until Start, car lights (brake/headlights).
-
-## Cop AI (M4, as built)
-
-- `ai/CopController.ts`: navigate (pure pursuit along the A* road route, lookahead clamped at sharp bends, brakes for every bend within braking distance), chase (lead pursuit when two-ray line of sight within 90m and roughly ahead), ram (<18m), recover (reverse with opposite lock until pointing the right way). Rubber-band speed when far.
-- `ai/CopDirector.ts`: spawns 150–300m by road away, preferring behind the player; leash back if >450m or flipped; wrecked cops burn 5s then are removed; respawn delay 8s.
-- Cops share Vehicle physics, Health/impact damage, prop smashing. Light bar + 2 shared flashing PointLights on the nearest cops; siren wail/yelp by distance; minimap dots.
-- Headless sim (scratchpad): 15/15 stationary catches in ~10–15s with no recoveries; sustained close pursuit of a moving target.
-
-## Damage
-
-Collision contact force above a threshold × opponent mass factor → health loss. Smoke at 50%, fire at 20%, explosion at 0. Cops have health too.
-
-## Milestones
-
-| # | Milestone | Done when |
-|---|---|---|
-| M0 ✅ | Scaffold + deploy pipeline | Scene with Rapier physics live on GitHub Pages |
-| M1 ✅ | Drivable car, chase camera | Driving feels fun |
-| M2 ✅ | City generator + colliders | Seeded city, can't drive through walls |
-| M3 ✅ | Mission system + HUD | Full loop playable without cops |
-| M4 ✅ | One patrol cop AI | Convincing single chase |
-| M5 ✅ | Director, stars, all cop types, damage | Complete game |
-| M6 ✅ | Polish: audio, particles, minimap, menus, car models, sparse civilian traffic | Showable |
-| M7 ✅ | Mobile touch controls, difficulty, leaderboard | — |
+FPS counter; C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`, `?weather=`, `?hill=0|1`. Without debug: `?seed=`, `?time=`, `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?touch`.

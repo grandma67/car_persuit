@@ -1,46 +1,37 @@
 # Car Pursuit
 
-A low-poly 3D car-chase game for the browser. Reach 5 destinations across a randomly generated
-island city before the clock runs out, while an escalating police force (GTA-style wanted stars)
-tries to wreck you.
+A low-poly 3D car-chase game for the browser. Reach 5 destinations across a randomly generated island city before the clock runs out, while an escalating police force (wanted stars 1–5) tries to wreck you.
 
-**Play:** `npm install && npm run dev`, then open the printed URL. Every city comes from a seed —
-add `?seed=1234` to replay one, `?time=day|afternoon|night` to force the time of day. The seed
-also decides the climate and weather.
+## Play
 
-## Controls
+```bash
+npm install && npm run dev
+```
+
+Add `?seed=1234` to replay a city, `?time=day|afternoon|night` to force the time of day. Installable as an offline PWA.
 
 | | Keyboard | Touch |
 |---|---|---|
-| Drive / brake & reverse | W / S (or arrows) | GAS / BRAKE |
+| Gas / brake & reverse | W / S (or arrows) | GAS / BRAKE |
 | Steer | A / D | ◀ ▶ |
 | Handbrake (drift) | Space | HB |
 | Reset car | R | ⟲ |
-| Pause / mute | P or Esc / M | II |
-| Fullscreen | F | — |
-| Difficulty (menu) | ← → | tap |
+| Pause / mute / fullscreen | P or Esc / M / F | pause menu |
 
 ## Features
 
-- Seeded island city: districts, parks, plazas, six real-world styles, day / golden hour / night.
-- City climates: classic, snow (snowy roofs and pines, falling snow, icy grip), beach (palms, sand
-  promenade with umbrellas, turquoise water) and desert (sand, cacti, hazy sky); random rain with
-  wet, slippery roads.
-- Raycast-vehicle physics (Rapier), drifting with smoke and skid marks, crash damage and explosions.
-- Wanted level 1–5 stars: patrol cars, interceptors, SUV rammers, armored trucks and roadblocks.
-- Cop AI that navigates the road network, cuts you off ahead on your route and rams.
-- Civilian traffic that obeys traffic lights and stop signs; breakable lamps, hydrants, signs, fences.
-- Procedural audio (engine, siren, crashes, menu music), minimap, local leaderboard, touch controls.
+- Seeded island city on a hill with canals, bridges, parks, plazas, town squares and jump ramps; climates (temperate, snow, beach, desert), rain and snow, day to night.
+- Rapier vehicle physics, drifting, crash damage, scratches and explosions.
+- Cops that route, cut you off, ram and set roadblocks; patrol cars, interceptors, SUVs and armored trucks.
+- Civilian traffic that obeys lights and right of way, including buses and trucks; breakable street props.
+- Four difficulties (incl. No Police), local leaderboard, end-screen run map, procedural audio, touch controls.
 
 ## Development
 
 ```bash
 npm run dev     # dev server
-npm test        # unit tests (Vitest): generator, mission, wanted, traffic rules, records…
-npm run build   # type-check + production build into dist/
+npm test        # unit tests (Vitest)
+npm run build   # type-check + build into dist/
 ```
 
-`?debug` enables `?city=temperate|snow|beach|desert` and `?weather=clear|rain|snow` overrides, and: C overview camera, T teleport to destination, Y 3 s left, K +1 star.
-
-Deployment: pushing to `main` runs `.github/workflows/deploy.yml`, which builds and publishes to
-GitHub Pages (set *Settings → Pages → Source* to “GitHub Actions”). See `PLAN.md` for the design.
+Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`. Design notes and debug flags: [PLAN.md](PLAN.md).
