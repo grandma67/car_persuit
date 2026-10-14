@@ -286,6 +286,11 @@ export class CarAudio {
     this.sfx?.jingle(kind, delay);
   }
 
+  /** Wanted level went up to `stars`. */
+  wantedUp(stars: number): void {
+    this.sfx?.wantedUp(stars);
+  }
+
   /** Car explosion. volume 0..1 (distance). */
   explosion(volume = 1): void {
     this.sfx?.explosion(volume);

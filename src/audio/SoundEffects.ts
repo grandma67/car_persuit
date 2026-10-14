@@ -73,6 +73,42 @@ export class SoundEffects {
     }
   }
 
+  /**
+   * Wanted level up: a tense brassy "dun-DUN" stab, a tritone apart, unlike the bright bell cues.
+   * Each star pitches it a semitone higher, so the heat audibly climbs.
+   */
+  wantedUp(stars: number): void {
+    const ctx = this.ctx;
+    const start = ctx.currentTime;
+    const root = 110 * Math.pow(2, Math.max(0, stars - 1) / 12);
+    // [frequency, start offset, duration]: a short low hit, then the higher held one.
+    for (const [freq, offset, duration] of [[root, 0, 0.16], [root * Math.SQRT2, 0.14, 0.55]]) {
+      const t = start + offset;
+      // Sawtooth through a lowpass that opens then closes: a muted brass swell.
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.Q.value = 4;
+      filter.frequency.setValueAtTime(300, t);
+      filter.frequency.exponentialRampToValueAtTime(2200, t + 0.05);
+      filter.frequency.exponentialRampToValueAtTime(400, t + duration);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.16, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      filter.connect(gain).connect(this.jingleBus);
+      // Two slightly detuned saws an octave apart thicken it.
+      for (const [mult, detune] of [[1, -8], [2, 7]] as const) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq * mult, t);
+        osc.detune.value = detune;
+        osc.connect(filter);
+        osc.start(t);
+        osc.stop(t + duration + 0.05);
+      }
+    }
+  }
+
   /** Car explosion: deep boom with a falling sub and a crackling tail. volume 0..1 (distance). */
   explosion(volume = 1): void {
     if (volume <= 0) return;

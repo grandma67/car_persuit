@@ -826,7 +826,7 @@ export class Game {
     const news = ['', '', 'MORE UNITS RESPONDING', 'INTERCEPTORS INBOUND', 'SUVs AND ROADBLOCKS', 'ARMORED UNITS DEPLOYED'][stars];
     this.hud.toast(`${'★'.repeat(stars)}  ${news}`, 2.5);
     this.hud.flashStars();
-    this.audio.jingle('reached');
+    this.audio.wantedUp(stars);
   }
 
   /** A cop car wrecked: smaller blast, launched, burns until the director clears it. */
