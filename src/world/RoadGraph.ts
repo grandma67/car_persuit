@@ -8,6 +8,77 @@ export interface RoadNode {
   neighbors: number[];
 }
 
+type Dir = { x: number; z: number };
+
+/** Extra metres a route is charged for the time a turn takes (slowing for it, or turning round). */
+export interface TurnCosts {
+  turn: number; // a 90° turn; sharper or gentler turns scale with the angle
+  uTurn: number; // doubling back
+}
+
+export interface Route {
+  ids: number[];
+  cost: number; // metres of road plus turn costs
+}
+
+const STRAIGHT = 0.35; // radians: gentler than this is driving straight on, free
+const U_TURN = 2.6; // radians (~150°): sharper than this is turning round
+
+/** Cost of leaving a junction along `out` (length `outLen`) having arrived along `in`. */
+export function turnCost(inX: number, inZ: number, outX: number, outZ: number, outLen: number, costs: TurnCosts): number {
+  const inLen = Math.hypot(inX, inZ);
+  if (inLen < 1e-6 || outLen < 1e-6) return 0;
+  const angle = Math.acos(Math.max(-1, Math.min(1, (inX * outX + inZ * outZ) / (inLen * outLen))));
+  if (angle < STRAIGHT) return 0;
+  if (angle > U_TURN) return costs.uTurn;
+  return (costs.turn * angle) / (Math.PI / 2);
+}
+
+/** Binary min-heap of (item, priority), for A*. */
+class MinHeap {
+  private items: number[] = [];
+  private keys: number[] = [];
+
+  push(item: number, key: number): void {
+    let i = this.items.length;
+    this.items.push(item);
+    this.keys.push(key);
+    while (i > 0) {
+      const up = (i - 1) >> 1;
+      if (this.keys[up] <= key) break;
+      this.items[i] = this.items[up];
+      this.keys[i] = this.keys[up];
+      i = up;
+    }
+    this.items[i] = item;
+    this.keys[i] = key;
+  }
+
+  /** The item with the lowest priority, or -1 when empty. */
+  pop(): number {
+    if (!this.items.length) return -1;
+    const top = this.items[0];
+    const item = this.items.pop()!;
+    const key = this.keys.pop()!;
+    const size = this.items.length;
+    if (size) {
+      let i = 0;
+      for (;;) {
+        let child = 2 * i + 1;
+        if (child >= size) break;
+        if (child + 1 < size && this.keys[child + 1] < this.keys[child]) child++;
+        if (this.keys[child] >= key) break;
+        this.items[i] = this.items[child];
+        this.keys[i] = this.keys[child];
+        i = child;
+      }
+      this.items[i] = item;
+      this.keys[i] = key;
+    }
+    return top;
+  }
+}
+
 export class RoadGraph {
   constructor(readonly nodes: RoadNode[]) {}
 
@@ -136,6 +207,66 @@ export class RoadGraph {
           g.set(n, tentative);
           f.set(n, tentative + this.distance(n, to));
           open.add(n);
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Cheapest route for a car, counting the time turns take as extra metres: a turn costs `turn`
+   * (scaled by how sharp it is, so 90° costs `turn`; near-straight is free) and doubling back
+   * costs `uTurn`. Searches (node, came-from) states, as the cost of leaving a junction depends on
+   * the way in. `arrive`: direction we reach `from` in (null: free to leave in any direction).
+   * `noUTurnFrom`: the first step may not go to this node, unless there is no other way.
+   */
+  route(from: number, to: number, costs: TurnCosts, arrive: Dir | null = null, noUTurnFrom?: number): Route | null {
+    if (noUTurnFrom !== undefined && from !== to) {
+      const banned = this.routeAvoiding(from, to, costs, arrive, noUTurnFrom);
+      if (banned) return banned;
+    }
+    return this.routeAvoiding(from, to, costs, arrive);
+  }
+
+  private routeAvoiding(from: number, to: number, costs: TurnCosts, arrive: Dir | null, notFirst?: number): Route | null {
+    const n = this.nodes.length;
+    const start = n * n + from; // state = cameFrom * n + node; the start state has no cameFrom
+    const goal = this.nodes[to];
+    const h = (id: number) => Math.hypot(this.nodes[id].x - goal.x, this.nodes[id].z - goal.z);
+    const cost = new Map<number, number>([[start, 0]]);
+    const parent = new Map<number, number>();
+    const open = new MinHeap();
+    const closed = new Set<number>();
+    open.push(start, h(from));
+    for (let state = open.pop(); state >= 0; state = open.pop()) {
+      if (closed.has(state)) continue; // a stale, costlier entry for a state already expanded
+      closed.add(state);
+      const node = state % n;
+      const g = cost.get(state)!;
+      if (node === to) {
+        const ids = [node];
+        for (let s = state; parent.has(s); ) {
+          s = parent.get(s)!;
+          ids.unshift(s % n);
+        }
+        return { ids, cost: g };
+      }
+      const here = this.nodes[node];
+      const prev = state === start ? -1 : Math.floor(state / n);
+      const inX = prev >= 0 ? here.x - this.nodes[prev].x : (arrive?.x ?? 0);
+      const inZ = prev >= 0 ? here.z - this.nodes[prev].z : (arrive?.z ?? 0);
+      for (const next of here.neighbors) {
+        if (state === start && next === notFirst) continue;
+        const there = this.nodes[next];
+        const outX = there.x - here.x;
+        const outZ = there.z - here.z;
+        const len = Math.hypot(outX, outZ);
+        const tentative = g + len + turnCost(inX, inZ, outX, outZ, len, costs);
+        const key = node * n + next;
+        if (tentative < (cost.get(key) ?? Infinity)) {
+          cost.set(key, tentative);
+          parent.set(key, state);
+          open.push(key, tentative + h(next));
         }
       }
     }

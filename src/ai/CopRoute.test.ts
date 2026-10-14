@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RoadGraph, type RoadNode } from '../world/RoadGraph';
-import { COP_TUNING, planRoute } from './CopController';
+import { COP_TUNING, planRoute, planRouteIds } from './CopController';
 
 // 4×3 grid of junctions 100m apart: x = 0..300, z = 0..200. Node id = row * 4 + col.
 function grid(): RoadGraph {
@@ -56,5 +56,18 @@ describe('planRoute', () => {
     const route = planRoute(g, { x: 300, z: 190 }, { x: 0, z: -1 }, 3, { x: 290, z: 0 }, COP_TUNING);
     expect(at(route[route.length - 1])).toBe('290,0');
     expect(at(route[route.length - 2])).toBe('300,0');
+  });
+
+  it('prefers the way with fewer turns when the distance is the same', () => {
+    // Heading east at (110,0) to (300,100): along the bottom row then up turns once;
+    // up at (200,0) then east turns twice.
+    const route = planRoute(g, { x: 110, z: 0 }, EAST, 15, { x: 300, z: 100 }, COP_TUNING);
+    expect(route.slice(1, -1).map(at)).toEqual(['200,0', '300,0']);
+  });
+
+  it('slow but facing away from the target: turns round, and the route is charged for it', () => {
+    const { ids, cost } = planRouteIds(g, { x: 150, z: 100 }, EAST, 0, { x: 50, z: 100 }, COP_TUNING);
+    expect(ids[0]).toBe(5); // (100,100): turn round and go back
+    expect(cost).toBeCloseTo(50 + COP_TUNING.uTurnCost + 50);
   });
 });

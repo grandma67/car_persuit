@@ -9,7 +9,7 @@ import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS } from '../vehicles/VehicleSpecs';
 import { Health } from '../gameplay/Health';
 import { DAMAGE, ROADBLOCK_INTERVAL, type CopType, type StarLevel } from '../gameplay/balance';
-import { COP_TUNING, CopController, type ChaseTarget, type CopTuning, type LineOfSight } from './CopController';
+import { COP_TUNING, CopController, planRouteIds, type ChaseTarget, type CopTuning, type LineOfSight } from './CopController';
 import type { Keep } from '../world/driveSide';
 import type { NavGrid } from './NavGrid';
 import { obstacleProbe } from './lineOfSight';
@@ -267,33 +267,46 @@ export class CopDirector {
 
   /**
    * Hidden spawn at a junction: a little way down a side street (not the road leading to the
-   * player), in its lane, rolling toward the corner — out of the player's line of
-   * sight, never near the destination. Null if every side street is visible, taken or too close.
+   * player), in its lane and already rolling — out of the player's line of sight, never near the
+   * destination. Of every side street and both ways along it, the one whose route to the player
+   * (turns and turning round included) is quickest: usually rolling toward the corner, but facing
+   * away when the way to the player lies further down that street. Null if every side street is
+   * visible, taken or too close.
    */
   private aroundCorner(nodeId: number, towardId: number, player: ChaseTarget): Spot | null {
     const g = this.graph;
     const node = g.nodes[nodeId];
     if (this.nearCheckpoint(node)) return null;
-    const sides = node.neighbors.filter((id) => id !== towardId);
-    for (const sideId of this.shuffle(sides)) {
+    let best: Spot | null = null;
+    let bestCost = Infinity;
+    for (const sideId of node.neighbors) {
+      if (sideId === towardId) continue;
       const side = g.nodes[sideId];
       const len = Math.hypot(side.x - node.x, side.z - node.z);
       const back = this.tuning.cornerSetback;
       if (len < back * 2) continue; // short street: would start inside the next junction
-      // Drive from the side street toward the junction.
-      const fx = (node.x - side.x) / len;
-      const fz = (node.z - side.z) / len;
-      const spot = {
-        x: node.x - fx * back + -fz * LANE_OFFSET * this.keep,
-        z: node.z - fz * back + fx * LANE_OFFSET * this.keep,
-        yaw: Math.atan2(fx, fz),
-        speed: this.tuning.startSpeed,
-      };
-      if (this.nearCheckpoint(spot) || this.occupied(spot)) continue;
-      if (this.canSee(player.position, new THREE.Vector3(spot.x, 0, spot.z))) continue;
-      return spot;
+      const ux = (node.x - side.x) / len; // along the side street, toward the junction
+      const uz = (node.z - side.z) / len;
+      for (const dir of [1, -1]) {
+        // Driving along (fx, fz): toward the junction, or away from it down the side street.
+        const fx = ux * dir;
+        const fz = uz * dir;
+        const spot = {
+          x: node.x - ux * back + -fz * LANE_OFFSET * this.keep,
+          z: node.z - uz * back + fx * LANE_OFFSET * this.keep,
+          yaw: Math.atan2(fx, fz),
+          speed: this.tuning.startSpeed,
+        };
+        if (this.nearCheckpoint(spot) || this.occupied(spot)) continue;
+        if (this.canSee(player.position, new THREE.Vector3(spot.x, 0, spot.z))) continue;
+        const cost = planRouteIds(g, spot, { x: fx, z: fz }, spot.speed, player.position, COP_TUNING).cost;
+        if (cost < bestCost) {
+          best = spot;
+          bestCost = cost;
+        }
+      }
     }
-    return null;
+    return best;
   }
 
   private shuffle<T>(list: T[]): T[] {
@@ -335,11 +348,25 @@ export class CopDirector {
         return;
       }
     }
-    // Nowhere hidden: a free junction in range, away from the destination, facing the player.
+    // Nowhere hidden: a free junction in range, away from the destination, facing down the road
+    // that is the quickest way to the player.
     const ok = (n: (typeof g.nodes)[number]) => !this.occupied(n) && !this.nearCheckpoint(n);
     const pool = [behind.filter(ok), inRange.filter(ok), inRange, g.nodes.filter((n) => n.neighbors.length)].find((l) => l.length)!;
     const node = this.rng.pick(pool);
-    const next = g.nodes[towardPlayer(node.id)];
-    vehicle.teleport(node.x, this.ground(node.x, node.z) + 1.2, node.z, Math.atan2(next.x - node.x, next.z - node.z));
+    let yaw = 0;
+    let bestCost = Infinity;
+    for (const id of node.neighbors) {
+      const next = g.nodes[id];
+      const len = Math.hypot(next.x - node.x, next.z - node.z) || 1;
+      const heading = { x: (next.x - node.x) / len, z: (next.z - node.z) / len };
+      // Planned from just into that road, so the route knows which road we're on.
+      const start = { x: node.x + heading.x * 2, z: node.z + heading.z * 2 };
+      const cost = planRouteIds(g, start, heading, this.tuning.startSpeed, player.position, COP_TUNING).cost;
+      if (cost < bestCost) {
+        bestCost = cost;
+        yaw = Math.atan2(heading.x, heading.z);
+      }
+    }
+    vehicle.teleport(node.x, this.ground(node.x, node.z) + 1.2, node.z, yaw);
   }
 }

@@ -87,4 +87,35 @@ describe('RoadGraph', () => {
     expect(e.u).toBeCloseTo(0.3);
     expect(e.off).toBeCloseTo(4);
   });
+
+  describe('route (turns cost time)', () => {
+    const costs = { turn: 20, uTurn: 80 };
+    const EAST = { x: 1, z: 0 };
+
+    it('of equally long ways, takes the one with fewest turns, and counts them in the cost', () => {
+      // 0 → 5 (200, 100): every way is 300 m; east-east-north turns once, zig-zags turn three times.
+      const r = new RoadGraph(grid()).route(0, 5, costs, EAST)!;
+      expect(r.ids).toEqual([0, 1, 2, 5]);
+      expect(r.cost).toBeCloseTo(300 + 20);
+    });
+
+    it('turns round when going round the block costs more, and goes round when turning round does', () => {
+      // Arrived at 1 heading east; 0 is straight back. Turning round: 100 + 80. Round the block: 300 + 3 turns.
+      const g = new RoadGraph(grid());
+      expect(g.route(1, 0, costs, EAST)!).toEqual({ ids: [1, 0], cost: 180 });
+      expect(g.route(1, 0, { turn: 20, uTurn: 400 }, EAST)!.ids).toEqual([1, 4, 3, 0]);
+    });
+
+    it('with no way in to account for, the first road is free to take', () => {
+      expect(new RoadGraph(grid()).route(1, 0, costs)!).toEqual({ ids: [1, 0], cost: 100 });
+    });
+
+    it('keeps the no-U-turn rule, but turns round on a dead end', () => {
+      const nodes = grid();
+      cut(nodes, 2, 5);
+      const g = new RoadGraph(nodes);
+      expect(g.route(1, 0, costs, EAST, 0)!.ids[1]).not.toBe(0);
+      expect(g.route(2, 0, costs, EAST, 1)!.ids).toEqual([2, 1, 0]);
+    });
+  });
 });

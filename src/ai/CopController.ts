@@ -10,7 +10,7 @@
 // round whatever is in the way right now (civilians, other cops, props).
 import * as THREE from 'three';
 import type { DriveInput } from '../core/Input';
-import type { RoadGraph } from '../world/RoadGraph';
+import type { RoadGraph, Route } from '../world/RoadGraph';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
 import type { NavGrid } from './NavGrid';
@@ -47,6 +47,10 @@ export interface CopTuning {
   catchUp: number;
   /** Above this speed (m/s) the route never doubles back: we carry on to the next junction. */
   uTurnSpeed: number;
+  /** Route cost, in extra metres, of a 90° turn (time lost slowing for it; scales with the angle)… */
+  turnCost: number;
+  /** …and of turning round (stop, turn, pull away again). */
+  uTurnCost: number;
   /** Plan on the NavGrid when the suspect is within this many metres and either of us is off the road… */
   navRange: number;
   /** …or this close regardless (out of sight but near: behind planters, round a corner). */
@@ -73,6 +77,8 @@ export const COP_TUNING: CopTuning = {
   runUpTime: 1.0,
   catchUp: 1.15,
   uTurnSpeed: 8,
+  turnCost: 20,
+  uTurnCost: 80,
   navRange: 220,
   navAlways: 60,
   probeInterval: 0.1,
@@ -320,68 +326,75 @@ export class CopController {
 
 type P = { x: number; z: number };
 
+type RouteTuning = Pick<CopTuning, 'cornerSpeed' | 'brakeDecel' | 'uTurnSpeed' | 'turnCost' | 'uTurnCost'>;
+
 /**
  * Road route from `pos` to `target` (start, junctions, target) for a car heading along `heading`
  * at `speed`. A fast car can't double back or make a turn it's too close to brake for, so then
  * the route starts at the junction ahead, never heads back the way we came, and if the first
  * turn can't be made it carries straight on through that junction and turns at the next.
+ * Turns cost time, so the route prefers fewer and gentler ones, and turning round costs most.
  */
-export function planRoute(
-  g: RoadGraph,
-  pos: P,
-  heading: P,
-  speed: number,
-  target: P,
-  t: Pick<CopTuning, 'cornerSpeed' | 'brakeDecel' | 'uTurnSpeed'>,
-): THREE.Vector3[] {
-  const dist = (p: P, q: P) => Math.hypot(p.x - q.x, p.z - q.z);
-  // Finish at whichever end of the suspect's road gives the shorter way in.
-  const there = g.nearestEdge(target.x, target.z);
-  const goals = there.off < 15 ? [there.a, there.b] : [g.nearest(target.x, target.z)];
-  /** Cheapest node sequence starting with `lead`, then on (no U-turn back to `noUTurnFrom`) to the suspect. */
-  const route = (lead: number[], noUTurnFrom?: number): { ids: number[]; cost: number } => {
-    let best = { ids: [...lead], cost: Infinity };
-    for (const goal of goals) {
-      const rest = g.path(lead[lead.length - 1], goal.id, noUTurnFrom);
-      if (!rest) continue;
-      const ids = [...lead, ...rest.slice(1)];
-      const cost = dist(pos, g.nodes[ids[0]]) + g.pathLength(ids) + dist(goal, target);
-      if (cost < best.cost) best = { ids, cost };
-    }
-    return best;
-  };
-
-  const here = g.nearestEdge(pos.x, pos.z);
-  let ids: number[];
-  if (here.off > 10) {
-    ids = route([g.nearest(pos.x, pos.z).id]).ids; // off the road grid (plaza, park): nearest junction
-  } else if (speed <= t.uTurnSpeed) {
-    // Slow enough to turn round: start from whichever end of our road is the better way.
-    const viaA = route([here.a.id]);
-    const viaB = route([here.b.id]);
-    ids = (viaA.cost <= viaB.cost ? viaA : viaB).ids;
-  } else {
-    const forwardIsB = (here.b.x - here.a.x) * heading.x + (here.b.z - here.a.z) * heading.z >= 0;
-    const ahead = forwardIsB ? here.b : here.a;
-    const behind = forwardIsB ? here.a : here.b;
-    ids = route([ahead.id], behind.id).ids;
-    // Too fast to make the first turn (onto the next road, or toward the suspect if they're on
-    // it)? Go straight through and turn at the next junction.
-    const next = ids.length > 1 ? g.nodes[ids[1]] : target;
-    if (dist(ahead, next) > 1) {
-      const turn = Math.abs(turnAngle(pos, ahead, next));
-      const brakeDistance = (speed * speed - t.cornerSpeed * t.cornerSpeed) / (2 * t.brakeDecel);
-      if (turn > 0.5 && brakeDistance > dist(pos, ahead) + 4) {
-        const straight = ahead.neighbors
-          .map((id) => g.nodes[id])
-          .find((n) => Math.abs(turnAngle(pos, ahead, n)) < 0.35);
-        if (straight) ids = route([ahead.id, straight.id], ahead.id).ids;
-      }
-    }
-  }
+export function planRoute(g: RoadGraph, pos: P, heading: P, speed: number, target: P, t: RouteTuning): THREE.Vector3[] {
+  const { ids } = planRouteIds(g, pos, heading, speed, target, t);
   return [
     new THREE.Vector3(pos.x, 0, pos.z),
     ...ids.map((id) => new THREE.Vector3(g.nodes[id].x, 0, g.nodes[id].z)),
     new THREE.Vector3(target.x, 0, target.z),
   ];
+}
+
+/** planRoute's junctions, and the route's cost in metres (turns included); Infinity if unreachable. */
+export function planRouteIds(g: RoadGraph, pos: P, heading: P, speed: number, target: P, t: RouteTuning): Route {
+  const dist = (p: P, q: P) => Math.hypot(p.x - q.x, p.z - q.z);
+  const costs = { turn: t.turnCost, uTurn: t.uTurnCost };
+  // Finish at whichever end of the suspect's road gives the shorter way in.
+  const there = g.nearestEdge(target.x, target.z);
+  const goals = there.off < 15 ? [there.a, there.b] : [g.nearest(target.x, target.z)];
+  /**
+   * Cheapest node sequence starting with `lead`, then on to the suspect: no U-turn back to
+   * `noUTurnFrom`, and turns counted from the way we drive through the lead. `extra`: cost to add.
+   */
+  const route = (lead: number[], noUTurnFrom?: number, extra = 0): Route => {
+    const last = g.nodes[lead[lead.length - 1]];
+    const before = lead.length > 1 ? g.nodes[lead[lead.length - 2]] : pos;
+    // The way into the last lead junction; when we're right on it, the way we're facing.
+    const arrive = dist(before, last) > 1 ? { x: last.x - before.x, z: last.z - before.z } : heading;
+    const leadCost = extra + dist(pos, g.nodes[lead[0]]) + g.pathLength(lead);
+    let best: Route = { ids: [...lead], cost: Infinity };
+    for (const goal of goals) {
+      const rest = g.route(last.id, goal.id, costs, arrive, noUTurnFrom);
+      if (!rest) continue;
+      const cost = leadCost + rest.cost + dist(goal, target);
+      if (cost < best.cost) best = { ids: [...lead, ...rest.ids.slice(1)], cost };
+    }
+    return best;
+  };
+
+  const here = g.nearestEdge(pos.x, pos.z);
+  if (here.off > 10) return route([g.nearest(pos.x, pos.z).id]); // off the road grid (plaza, park): nearest junction
+  const forwardIsB = (here.b.x - here.a.x) * heading.x + (here.b.z - here.a.z) * heading.z >= 0;
+  const ahead = forwardIsB ? here.b : here.a;
+  const behind = forwardIsB ? here.a : here.b;
+  if (speed <= t.uTurnSpeed) {
+    // Slow enough to turn round: carry on, or turn round (at a cost) and head for the other end.
+    const viaAhead = route([ahead.id]);
+    const viaBehind = route([behind.id], undefined, t.uTurnCost);
+    return viaAhead.cost <= viaBehind.cost ? viaAhead : viaBehind;
+  }
+  let best = route([ahead.id], behind.id);
+  // Too fast to make the first turn (onto the next road, or toward the suspect if they're on
+  // it)? Go straight through and turn at the next junction.
+  const next = best.ids.length > 1 ? g.nodes[best.ids[1]] : target;
+  if (dist(ahead, next) > 1) {
+    const turn = Math.abs(turnAngle(pos, ahead, next));
+    const brakeDistance = (speed * speed - t.cornerSpeed * t.cornerSpeed) / (2 * t.brakeDecel);
+    if (turn > 0.5 && brakeDistance > dist(pos, ahead) + 4) {
+      const straight = ahead.neighbors
+        .map((id) => g.nodes[id])
+        .find((n) => Math.abs(turnAngle(pos, ahead, n)) < 0.35);
+      if (straight) best = route([ahead.id, straight.id], ahead.id);
+    }
+  }
+  return best;
 }

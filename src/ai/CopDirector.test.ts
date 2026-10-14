@@ -6,6 +6,7 @@ import { ROADBLOCK_INTERVAL, WANTED, type CopType } from '../gameplay/balance';
 import { DIFFICULTIES, scaledCopCap } from '../gameplay/difficulty';
 import { RoadGraph, type RoadNode } from '../world/RoadGraph';
 import { CopDirector, DIRECTOR_TUNING } from './CopDirector';
+import { COP_TUNING, planRouteIds } from './CopController';
 import { SUNK_BELOW } from '../render/Sea';
 
 // 11×3 grid of junctions 100m apart: x = 0..1000, z = 0..200. Node id = row * 11 + col.
@@ -44,6 +45,24 @@ describe('CopDirector', () => {
     const level = { ...WANTED[2], maxCops: 3, spawnInterval: 0, roadblocks: false };
     for (let i = 0; i < 50; i++) director.update(0.1, player, EAST, level, ROUTE, null);
     expect(director.cops).toHaveLength(3);
+  });
+
+  it('spawns each cop facing the quicker way to the player (turning round counted)', () => {
+    const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+    const g = grid();
+    const director = new CopDirector(world, new THREE.Scene(), g, hidden, new Rng(9), 0, { ...DIRECTOR_TUNING, firstSpawnDelay: 0 });
+    const player = { position: new THREE.Vector3(500, 0.5, 100), velocity: new THREE.Vector3() };
+    const level = { ...WANTED[2], maxCops: 12, spawnInterval: 0, roadblocks: false };
+    for (let i = 0; i < 12; i++) director.update(0.1, player, EAST, level, null, null);
+    expect(director.cops.length).toBeGreaterThan(5);
+    const speed = DIRECTOR_TUNING.startSpeed;
+    for (const cop of director.cops) {
+      const p = cop.vehicle.position;
+      const f = cop.vehicle.forward(new THREE.Vector3());
+      const facing = planRouteIds(g, p, f, speed, player.position, COP_TUNING).cost;
+      const reversed = planRouteIds(g, p, { x: -f.x, z: -f.z }, speed, player.position, COP_TUNING).cost;
+      expect(facing).toBeLessThanOrEqual(reversed + 1e-6);
+    }
   });
 
   it('respects the spawn interval', () => {
@@ -154,7 +173,7 @@ describe('cops per star level match the WANTED config', () => {
 
   it.each(STARS)('$stars★: spawns only the configured cop types, in the configured proportions', ({ level }) => {
     const { director, player } = setup();
-    const N = 300;
+    const N = 1000; // enough that sampling noise stays well inside the ±0.05 tolerance
     const big = { ...level, maxCops: N, spawnInterval: 0 };
     for (let i = 0; i < N; i++) director.update(0.01, player, EAST, big, null, null);
     expect(director.cops).toHaveLength(N);
