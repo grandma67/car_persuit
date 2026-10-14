@@ -177,7 +177,10 @@ export class RunMap {
     const { incident } = best;
     this.tip.textContent = `${INCIDENT_STYLE[incident.kind].icon} ${formatTime(incident.t)} · ${incident.detail}`;
     this.tip.hidden = false;
-    this.tip.style.left = `${(best.x / SIZE) * 100}%`;
+    // Centred over the icon, but slid sideways to stay inside the map (which clips overflow).
+    const pad = 4;
+    const left = (best.x / SIZE) * rect.width - this.tip.offsetWidth / 2;
+    this.tip.style.left = `${Math.max(pad, Math.min(left, rect.width - this.tip.offsetWidth - pad))}px`;
     this.tip.style.top = `${(best.y / SIZE) * 100}%`;
     this.tip.classList.toggle('below', best.y < SIZE * 0.15);
   }
