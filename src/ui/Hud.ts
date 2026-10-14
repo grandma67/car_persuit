@@ -31,6 +31,9 @@ export class Hud {
   private wantedEl: HTMLElement;
   private toastTimer = 0;
   private flash = 0;
+  private fpsEl: HTMLElement;
+  private fpsFrames = 0;
+  private fpsSince = 0; // performance.now() when the current FPS sample started
 
   constructor(root: HTMLElement, minimap: HTMLCanvasElement) {
     root.innerHTML = `
@@ -54,6 +57,7 @@ export class Hud {
         </div>
         <div class="hud-muted" hidden>🔇 Muted</div>
       </div>
+      <div class="hud-fps" hidden></div>
       <div class="hud-toast"></div>
       <div class="hud-speed"><span id="hud-speed-value">0</span><small>km/h</small></div>
       <div class="hud-help">W/↑ drive · S/↓ brake/reverse · A/D steer · Space handbrake · R reset · P pause · M mute · F fullscreen</div>
@@ -71,6 +75,13 @@ export class Hud {
     this.starsWrap = root.querySelector('.hud-stars')!;
     this.starEls = Array.from(root.querySelectorAll('.hud-stars span'));
     this.starProgressEl = root.querySelector('.hud-star-progress div')!;
+    this.fpsEl = root.querySelector('.hud-fps')!;
+  }
+
+  /** ?debug only: frames per second, averaged over half a second. */
+  showFps(): void {
+    this.fpsEl.hidden = false;
+    this.fpsSince = performance.now();
   }
 
   setMuted(muted: boolean): void {
@@ -101,6 +112,16 @@ export class Hud {
 
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.damageEl.style.opacity = String(this.flash);
+
+    if (!this.fpsEl.hidden) {
+      this.fpsFrames++;
+      const now = performance.now();
+      if (now - this.fpsSince >= 500) {
+        this.fpsEl.textContent = `${Math.round((this.fpsFrames * 1000) / (now - this.fpsSince))} FPS`;
+        this.fpsFrames = 0;
+        this.fpsSince = now;
+      }
+    }
 
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;

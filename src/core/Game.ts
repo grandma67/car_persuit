@@ -240,6 +240,7 @@ export class Game {
     this.audio.setMuted(this.prefs.muted);
     this.hud.setMuted(this.prefs.muted);
     this.hud.setWantedVisible(this.difficulty.police);
+    if (this.debug) this.hud.showFps();
     this.screens = new Screens(document.body, (kind) => this.audio.uiBlip(kind));
     const england = this.city.driveSide === 'left' ? 'England · drive on the left' : null;
     this.look = [england, climate.name === 'temperate' ? null : climate.label, theme.name, time.label, weatherLabel(weather) || null]
