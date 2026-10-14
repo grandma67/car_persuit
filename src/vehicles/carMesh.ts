@@ -276,7 +276,8 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   }
 
   for (const x of [-0.65, 0.65]) {
-    const lampY = body === 'truck' ? -hy * 0.3 : tall ? -hy * 0.6 : body === 'van' ? -hy * 0.2 : 0;
+    // The sports wedge drops the nose below the body's middle: its lamps sit lower, on the face.
+    const lampY = body === 'truck' ? -hy * 0.3 : tall ? -hy * 0.6 : body === 'van' ? -hy * 0.2 : body === 'sports' ? -hy * 0.45 : 0;
     // Tail lamps low on tall bodies; the ramp truck's sit at the deck's tail lip.
     const tailY = body === 'ramptruck' ? RAMP.tail.y + 0.1 : tall ? -hy * 0.45 : hy - 0.08;
     const tailZ = body === 'ramptruck' ? RAMP.tail.z : -hz;
