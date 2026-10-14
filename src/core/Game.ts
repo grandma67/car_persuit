@@ -118,7 +118,7 @@ export class Game {
   private routeTimer = 0;
   private state: GameState = 'menu';
   private accumulator = 0;
-  private clock = new THREE.Clock();
+  private timer = new THREE.Timer(); // ticked at the top of every frame, paused or not
 
   constructor(container: HTMLElement, hudRoot: HTMLElement, seed: number) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -128,7 +128,7 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap; // three r186 dropped PCFSoftShadowMap for this
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.appendChild(this.renderer.domElement);
 
@@ -268,7 +268,8 @@ export class Game {
   }
 
   start(): void {
-    this.clock.start();
+    this.timer.connect(document); // no huge first frame back from a hidden tab
+    this.timer.reset();
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
@@ -356,7 +357,6 @@ export class Game {
     } else if (!paused && this.state === 'paused') {
       this.state = 'playing';
       this.screens.hide();
-      this.clock.getDelta(); // don't count the paused time as one huge frame
     } else {
       return;
     }
@@ -425,7 +425,8 @@ export class Game {
   }
 
   private frame(): void {
-    const frameDt = Math.min(this.clock.getDelta(), 0.1);
+    // Ticked while paused too, so the frame after a pause doesn't count the paused time.
+    const frameDt = Math.min(this.timer.update().getDelta(), 0.1);
     this.handleKeys();
     if (this.state === 'paused') {
       this.input.endFrame();
@@ -448,7 +449,7 @@ export class Game {
     const copsChase = this.state === 'playing';
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.player.drive(driveInput, FIXED_DT);
-      const now = this.clock.elapsedTime;
+      const now = this.timer.getElapsed();
       for (const car of this.traffic.cars) car.vehicle.drive(car.controller.update(FIXED_DT, now), FIXED_DT);
       for (const cop of this.director.cops) {
         const active = copsChase && cop.wreckedFor === null;
@@ -521,11 +522,11 @@ export class Game {
         this.mission.current,
       );
     }
-    const nearestCop = this.sirens.update(this.clock.elapsedTime, this.director.cops, this.player.position, this.player.headlights, this.state !== 'won');
+    const nearestCop = this.sirens.update(this.timer.getElapsed(), this.director.cops, this.player.position, this.player.headlights, this.state !== 'won');
     this.audio.setSiren(this.state === 'playing' ? nearestCop : null);
     this.props.sync();
-    this.props.updateSignals(this.clock.elapsedTime);
-    for (const works of this.roadworks) works.update(frameDt, this.clock.elapsedTime);
+    this.props.updateSignals(this.timer.getElapsed());
+    for (const works of this.roadworks) works.update(frameDt, this.timer.getElapsed());
     const carPos = this.player.mesh.root.position;
     this.updateSun(carPos);
 

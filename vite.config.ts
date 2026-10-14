@@ -6,8 +6,8 @@ export default defineConfig({
   base: './',
   build: {
     target: 'es2022',
-    // Rapier embeds its WASM in the JS bundle (~2.5MB raw / ~0.9MB gzip) — expected.
-    chunkSizeWarningLimit: 3000,
+    // Rapier embeds its WASM in the JS bundle (~3.1MB raw / ~1.1MB gzip) — expected.
+    chunkSizeWarningLimit: 3500,
   },
   test: {
     // Several tests generate whole cities; the 5s default is too tight on slow or busy machines.
