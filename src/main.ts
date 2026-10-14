@@ -22,7 +22,7 @@ const stars = splash.querySelector<HTMLElement>('.splash-stars')!;
 
 function stage(text: string, progress: number): Promise<void> {
   status.textContent = text;
-  bar.style.width = `${progress}%`;
+  bar.style.transform = `translateX(${progress - 100}%)`;
   // Wanted level climbs with the loading bar: five stars when ready.
   const lit = Math.floor((progress / 100) * stars.children.length);
   [...stars.children].forEach((star, i) => star.classList.toggle('on', i < lit));

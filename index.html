@@ -21,39 +21,50 @@
       <div class="splash-siren splash-siren-blue"></div>
       <div class="splash-beam"></div>
       <div class="splash-inner">
-        <h1 class="splash-title">CAR <span>PURSUIT</span></h1>
+        <!-- One element per letter: the shine sweeps by fading each letter's highlight copy in turn,
+             an opacity animation that keeps running while the game loads (see style.css). -->
+        <h1 class="splash-title" data-text="CAR PURSUIT" aria-label="Car Pursuit">
+          <span><i data-ch="C" style="--i: 0">C</i><i data-ch="A" style="--i: 1">A</i><i data-ch="R" style="--i: 2">R</i></span>
+          <span class="splash-title-red"><i data-ch="P" style="--i: 3">P</i><i data-ch="U" style="--i: 4">U</i><i data-ch="R" style="--i: 5">R</i><i data-ch="S" style="--i: 6">S</i><i data-ch="U" style="--i: 7">U</i><i data-ch="I" style="--i: 8">I</i><i data-ch="T" style="--i: 9">T</i></span>
+        </h1>
         <p class="splash-tagline">Lose the cops. Survive the city.</p>
         <div class="splash-scene" aria-hidden="true">
           <div class="splash-skyline splash-skyline-far"></div>
           <div class="splash-skyline splash-skyline-near"></div>
           <div class="splash-road"><div class="splash-dashes"></div></div>
           <div class="splash-lamps"></div>
-          <svg class="splash-cop" viewBox="0 0 120 44">
-            <g class="splash-body">
-              <path d="M4 36 L6 26 L28 22 L42 13 L76 13 L92 22 L114 26 L116 36 Z" fill="#e9eef5" />
-              <path d="M4 36 L5 31 L116 31 L116 36 Z" fill="#141a24" />
-              <path d="M45 15 L74 15 L86 22 L34 22 Z" fill="#111822" />
-              <rect x="48" y="8" width="11" height="5" rx="1" class="splash-lb-red" />
-              <rect x="59" y="8" width="11" height="5" rx="1" class="splash-lb-blue" />
-              <rect x="111" y="26" width="5" height="3" fill="#fff2cc" />
-              <circle cx="27" cy="36" r="6" fill="#151515" /><circle cx="27" cy="36" r="3" fill="#9aa4b2" />
-              <circle cx="93" cy="36" r="6" fill="#151515" /><circle cx="93" cy="36" r="3" fill="#9aa4b2" />
-            </g>
-          </svg>
-          <svg class="splash-car" viewBox="0 0 180 40">
-            <defs>
-              <linearGradient id="splash-headlight" x1="0" x2="1">
-                <stop offset="0" stop-color="#fff2cc" stop-opacity="0.55" />
-                <stop offset="1" stop-color="#fff2cc" stop-opacity="0" />
-              </linearGradient>
-            </defs>
-            <polygon points="116,22 180,12 180,36 116,26" fill="url(#splash-headlight)" />
-            <g class="splash-speedlines">
+          <div class="splash-cop">
+            <div class="splash-cop-glow splash-cop-glow-red"></div>
+            <div class="splash-cop-glow splash-cop-glow-blue"></div>
+            <div class="splash-body">
+              <svg viewBox="0 0 120 44">
+                <path d="M4 36 L6 26 L28 22 L42 13 L76 13 L92 22 L114 26 L116 36 Z" fill="#e9eef5" />
+                <path d="M4 36 L5 31 L116 31 L116 36 Z" fill="#141a24" />
+                <path d="M45 15 L74 15 L86 22 L34 22 Z" fill="#111822" />
+                <rect x="111" y="26" width="5" height="3" fill="#fff2cc" />
+                <circle cx="27" cy="36" r="6" fill="#151515" /><circle cx="27" cy="36" r="3" fill="#9aa4b2" />
+                <circle cx="93" cy="36" r="6" fill="#151515" /><circle cx="93" cy="36" r="3" fill="#9aa4b2" />
+              </svg>
+              <div class="splash-lb splash-lb-red"></div>
+              <div class="splash-lb splash-lb-blue"></div>
+            </div>
+          </div>
+          <div class="splash-car">
+            <svg viewBox="0 0 180 40">
+              <defs>
+                <linearGradient id="splash-headlight" x1="0" x2="1">
+                  <stop offset="0" stop-color="#fff2cc" stop-opacity="0.55" />
+                  <stop offset="1" stop-color="#fff2cc" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <polygon points="116,22 180,12 180,36 116,26" fill="url(#splash-headlight)" />
+            </svg>
+            <svg class="splash-speedlines" viewBox="0 0 180 40">
               <rect x="0" y="12" width="26" height="2" rx="1" />
               <rect x="6" y="20" width="18" height="2" rx="1" />
               <rect x="2" y="28" width="22" height="2" rx="1" />
-            </g>
-            <g class="splash-body">
+            </svg>
+            <svg class="splash-body" viewBox="0 0 180 40">
               <path d="M30 30 L34 20 L58 15 L80 8 L102 14 L116 22 L116 30 Z" fill="#ff3b1f" />
               <path d="M58 15 L80 8 L92 12 L66 17 Z" fill="#111822" />
               <rect x="31" y="15" width="10" height="3" fill="#ff3b1f" />
@@ -61,8 +72,8 @@
               <rect x="112" y="22" width="5" height="3" fill="#fff2cc" />
               <circle cx="46" cy="31" r="6" fill="#151515" /><circle cx="46" cy="31" r="3" fill="#9aa4b2" />
               <circle cx="100" cy="31" r="6" fill="#151515" /><circle cx="100" cy="31" r="3" fill="#9aa4b2" />
-            </g>
-          </svg>
+            </svg>
+          </div>
         </div>
         <div class="splash-stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
         <div class="splash-bar"><div class="splash-bar-fill"></div></div>

@@ -348,25 +348,28 @@ kbd {
   pointer-events: none;
 }
 
+/* Every splash animation moves only transform or opacity. The browser runs those on the compositor,
+   so they stay smooth while the game builds the city and compiles shaders on the main thread;
+   animating background-position, filter, width or anything inside an SVG would stall with it. */
 .splash-siren {
   position: absolute;
   top: -30vmax;
   width: 70vmax;
   height: 70vmax;
   border-radius: 50%;
-  filter: blur(40px);
   opacity: 0;
   animation: siren 0.9s steps(1) infinite;
 }
 
+/* Softened in the gradient itself: a blur filter this large is costly to redraw every frame. */
 .splash-siren-red {
   left: -25vmax;
-  background: radial-gradient(circle, rgb(255 30 30 / 0.55), transparent 65%);
+  background: radial-gradient(circle, rgb(255 30 30 / 0.5), rgb(255 30 30 / 0.2) 35%, transparent 70%);
 }
 
 .splash-siren-blue {
   right: -25vmax;
-  background: radial-gradient(circle, rgb(40 90 255 / 0.55), transparent 65%);
+  background: radial-gradient(circle, rgb(40 90 255 / 0.5), rgb(40 90 255 / 0.2) 35%, transparent 70%);
   animation-delay: 0.45s;
 }
 
@@ -379,19 +382,23 @@ kbd {
   }
 }
 
-/* Helicopter searchlight sweeping across the screen from above. */
+/* Helicopter searchlight sweeping across the screen from above: a soft-edged cone fading downward. */
 .splash-beam {
   position: absolute;
   top: -10vh;
   left: 50%;
-  width: 46vmax;
+  width: 120vh;
   height: 130vh;
-  margin-left: -23vmax;
+  margin-left: -60vh;
   transform-origin: 50% 0;
-  background: linear-gradient(rgb(200 225 255 / 0.22), rgb(200 225 255 / 0.03) 85%, transparent);
-  clip-path: polygon(48% 0, 52% 0, 100% 100%, 0 100%);
-  filter: blur(6px);
-  mix-blend-mode: screen;
+  background: conic-gradient(
+    from 162deg at 50% 0,
+    transparent,
+    rgb(200 225 255 / 0.22) 8deg 28deg,
+    transparent 36deg
+  );
+  -webkit-mask-image: linear-gradient(#000, rgb(0 0 0 / 0.15) 85%, transparent);
+  mask-image: linear-gradient(#000, rgb(0 0 0 / 0.15) 85%, transparent);
   animation: beam-sweep 7s ease-in-out infinite alternate;
 }
 
@@ -411,30 +418,65 @@ kbd {
 }
 
 .splash-title {
+  position: relative;
+  isolation: isolate;
   margin: 0;
-  /* Room for the italic overhang, which background-clip: text would otherwise cut off. */
   padding: 0 0.15em;
   font-size: clamp(44px, 11vw, 88px);
   font-weight: 900;
   font-style: italic;
   line-height: 0.95;
   letter-spacing: 0.01em;
-  /* Chrome text with a highlight that sweeps across every few seconds. */
-  background: linear-gradient(105deg, #b8c3d1 0 42%, #fff 47% 53%, #b8c3d1 58% 100%) 120% 0 / 300% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation:
-    title-in 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2) both,
-    title-shine 3.2s ease-in-out 0.8s infinite,
-    title-glow 0.9s steps(1) infinite;
+  color: #b8c3d1;
+  animation: title-in 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
 
+/* Words stay whole: the per-letter elements would otherwise let a word break between letters. */
 .splash-title span {
-  background: linear-gradient(105deg, #ff3b1f 0 42%, #ffd0a0 47% 53%, #ff3b1f 58% 100%) 120% 0 / 300% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: title-shine 3.2s ease-in-out 0.95s infinite;
+  white-space: nowrap;
+}
+
+.splash-title-red {
+  color: #ff3b1f;
+}
+
+/* The glow flips red/blue in time with the sirens: two shadow-only copies of the title, cross-faded. */
+.splash-title::before,
+.splash-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  padding: inherit;
+  color: transparent;
+  text-shadow: 0 4px 22px rgb(255 40 40 / 0.6);
+  animation: siren 0.9s steps(1) infinite;
+}
+
+.splash-title::after {
+  text-shadow: 0 4px 22px rgb(50 110 255 / 0.6);
+  opacity: 0;
+  animation-delay: -0.45s;
+}
+
+.splash-title i {
+  position: relative;
+  display: inline-block;
+  font-style: inherit;
+}
+
+/* Chrome shine: each letter's bright copy fades in and out, staggered so it sweeps left to right. */
+.splash-title i::after {
+  content: attr(data-ch);
+  position: absolute;
+  inset: 0;
+  color: #fff;
+  opacity: 0;
+  animation: title-shine 3.2s ease-in-out calc(0.8s + var(--i) * 0.09s) infinite;
+}
+
+.splash-title-red i::after {
+  color: #ffd0a0;
 }
 
 @keyframes title-in {
@@ -445,22 +487,13 @@ kbd {
 }
 
 @keyframes title-shine {
-  0% {
-    background-position: 120% 0;
-  }
-  45%,
+  0%,
+  11%,
   100% {
-    background-position: -20% 0;
+    opacity: 0;
   }
-}
-
-/* The title's glow flips red/blue in time with the sirens. */
-@keyframes title-glow {
-  0% {
-    filter: drop-shadow(0 4px 22px rgb(255 40 40 / 0.6));
-  }
-  50% {
-    filter: drop-shadow(0 4px 22px rgb(50 110 255 / 0.6));
+  4% {
+    opacity: 1;
   }
 }
 
@@ -492,16 +525,17 @@ kbd {
   animation: fade-up 0.6s ease 0.2s both;
 }
 
+/* Scrolling layers are one tile wider than the scene and slide left by one tile, then loop. */
 .splash-skyline {
   position: absolute;
   left: 0;
-  right: 0;
   bottom: 56px;
   background-repeat: repeat-x;
-  background-position-y: bottom;
+  background-position: left bottom;
 }
 
 .splash-skyline-far {
+  width: calc(100% + 400px);
   height: 90px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='90'%3E%3Cg fill='%23182032'%3E%3Crect x='0' y='40' width='40' height='50'/%3E%3Crect x='40' y='20' width='30' height='70'/%3E%3Crect x='53' y='8' width='3' height='12'/%3E%3Crect x='70' y='50' width='50' height='40'/%3E%3Crect x='120' y='10' width='25' height='80'/%3E%3Crect x='145' y='35' width='45' height='55'/%3E%3Crect x='190' y='25' width='35' height='65'/%3E%3Crect x='225' y='55' width='60' height='35'/%3E%3Crect x='285' y='15' width='30' height='75'/%3E%3Crect x='315' y='45' width='40' height='45'/%3E%3Crect x='355' y='30' width='45' height='60'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 400px 90px;
@@ -509,6 +543,7 @@ kbd {
 }
 
 .splash-skyline-near {
+  width: calc(100% + 320px);
   height: 70px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='70'%3E%3Cdefs%3E%3Cpattern id='w' width='8' height='10' patternUnits='userSpaceOnUse'%3E%3Crect x='2' y='3' width='3' height='4' fill='%23ffcf6b'/%3E%3C/pattern%3E%3C/defs%3E%3Cg fill='%230e121a'%3E%3Crect x='0' y='30' width='50' height='40'/%3E%3Crect x='56' y='12' width='34' height='58'/%3E%3Crect x='96' y='38' width='60' height='32'/%3E%3Crect x='162' y='20' width='40' height='50'/%3E%3Crect x='208' y='44' width='44' height='26'/%3E%3Crect x='258' y='6' width='36' height='64'/%3E%3C/g%3E%3Cg fill='url(%23w)'%3E%3Crect x='4' y='34' width='42' height='30' opacity='.35'/%3E%3Crect x='60' y='16' width='26' height='48' opacity='.55'/%3E%3Crect x='100' y='42' width='52' height='22' opacity='.25'/%3E%3Crect x='166' y='24' width='32' height='40' opacity='.45'/%3E%3Crect x='212' y='48' width='36' height='16' opacity='.3'/%3E%3Crect x='262' y='10' width='28' height='54' opacity='.6'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 320px 70px;
@@ -517,13 +552,13 @@ kbd {
 
 @keyframes scroll-far {
   to {
-    background-position-x: -400px;
+    transform: translateX(-400px);
   }
 }
 
 @keyframes scroll-near {
   to {
-    background-position-x: -320px;
+    transform: translateX(-320px);
   }
 }
 
@@ -557,7 +592,7 @@ kbd {
 /* Street lamps whizzing past, each throwing a cone of light onto the road. */
 .splash-lamps {
   position: absolute;
-  inset: 0;
+  inset: 0 -220px 0 0;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='150'%3E%3Cdefs%3E%3ClinearGradient id='c' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23ffd58a' stop-opacity='.35'/%3E%3Cstop offset='1' stop-color='%23ffd58a' stop-opacity='0'/%3E%3C/linearGradient%3E%3CradialGradient id='p'%3E%3Cstop offset='0' stop-color='%23ffd58a' stop-opacity='.25'/%3E%3Cstop offset='1' stop-color='%23ffd58a' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpolygon points='46,44 58,44 92,150 12,150' fill='url(%23c)'/%3E%3Cellipse cx='52' cy='122' rx='46' ry='14' fill='url(%23p)'/%3E%3Crect x='28' y='40' width='3' height='56' fill='%233a404c'/%3E%3Crect x='28' y='40' width='26' height='3' fill='%233a404c'/%3E%3Crect x='46' y='41' width='12' height='4' rx='2' fill='%23fff1c9'/%3E%3C/svg%3E");
   background-size: 220px 150px;
   background-repeat: repeat-x;
@@ -566,14 +601,23 @@ kbd {
 
 @keyframes scroll-lamps {
   to {
-    background-position-x: -220px;
+    transform: translateX(-220px);
   }
 }
 
+/* Each vehicle is a wrapper (weave/chase) around a body (bob); the moving parts are their own
+   elements, since an animation on a shape inside an SVG would run on the main thread. */
 .splash-car,
 .splash-cop {
   position: absolute;
   bottom: 6px;
+}
+
+.splash-car svg,
+.splash-cop svg {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 .splash-car {
@@ -583,20 +627,26 @@ kbd {
   animation: car-weave 2.3s ease-in-out infinite alternate;
 }
 
+.splash-car .splash-speedlines,
+.splash-car .splash-body {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
 .splash-cop {
   left: 6%;
   width: min(128px, 27%);
-  animation:
-    cop-chase 3.1s ease-in-out infinite alternate,
-    cop-glow 0.3s steps(1) infinite;
+  animation: cop-chase 3.1s ease-in-out infinite alternate;
+}
+
+.splash-cop .splash-body {
+  position: relative;
+  animation-duration: 0.22s;
 }
 
 .splash-body {
   animation: car-bob 0.25s ease-in-out infinite alternate;
-}
-
-.splash-cop .splash-body {
-  animation-duration: 0.22s;
 }
 
 @keyframes car-bob {
@@ -623,26 +673,43 @@ kbd {
   }
 }
 
-@keyframes cop-glow {
-  0% {
-    filter: drop-shadow(0 -4px 10px rgb(255 40 40 / 0.9));
-  }
-  50% {
-    filter: drop-shadow(0 -4px 10px rgb(50 110 255 / 0.9));
-  }
+/* Red/blue light thrown up from the lightbar, flashing with it. */
+.splash-cop-glow {
+  position: absolute;
+  left: 10%;
+  top: -45%;
+  width: 80%;
+  height: 120%;
+  background: radial-gradient(closest-side, rgb(255 40 40 / 0.55), transparent);
+  animation: siren 0.3s steps(1) infinite;
 }
 
-.splash-lb-red,
-.splash-lb-blue {
+.splash-cop-glow-blue {
+  background: radial-gradient(closest-side, rgb(50 110 255 / 0.55), transparent);
+  opacity: 0;
+  animation-delay: -0.15s;
+}
+
+/* Lightbar halves, placed over the roof in the SVG's 120×44 viewBox units. */
+.splash-lb {
+  position: absolute;
+  top: calc(8 / 44 * 100%);
+  width: calc(11 / 120 * 100%);
+  height: calc(5 / 44 * 100%);
+  border-radius: 1px;
   animation: lightbar 0.3s steps(1) infinite;
 }
 
 .splash-lb-red {
-  fill: #ff2a2a;
+  left: calc(48 / 120 * 100%);
+  background: #ff2a2a;
+  box-shadow: 0 0 4px #ff2a2a;
 }
 
 .splash-lb-blue {
-  fill: #3a7bff;
+  left: calc(59 / 120 * 100%);
+  background: #3a7bff;
+  box-shadow: 0 0 4px #3a7bff;
   animation-delay: 0.15s;
 }
 
@@ -674,7 +741,7 @@ kbd {
   }
 }
 
-/* Wanted stars light up one by one as loading progresses (main.ts adds .on). */
+/* Wanted stars light up one by one as loading progresses (main.ts adds .on): a lit copy fades in. */
 .splash-stars {
   margin-bottom: 10px;
   font-size: 22px;
@@ -683,17 +750,27 @@ kbd {
 }
 
 .splash-stars span {
+  position: relative;
   display: inline-block;
-  transition:
-    color 0.3s ease,
-    transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.6),
-    text-shadow 0.3s ease;
+  transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.6);
+}
+
+.splash-stars span::after {
+  content: '★';
+  position: absolute;
+  inset: 0;
+  color: #ffd23f;
+  text-shadow: 0 0 12px rgb(255 210 63 / 0.7);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .splash-stars span.on {
-  color: #ffd23f;
   transform: scale(1.2);
-  text-shadow: 0 0 12px rgb(255 210 63 / 0.7);
+}
+
+.splash-stars span.on::after {
+  opacity: 1;
 }
 
 .splash-stars.full span {
@@ -714,9 +791,11 @@ kbd {
 }
 
 @keyframes star-flash {
+  from {
+    transform: scale(1.2);
+  }
   to {
-    transform: scale(1.35);
-    filter: brightness(1.5);
+    transform: scale(1.4);
   }
 }
 
@@ -727,22 +806,29 @@ kbd {
   overflow: hidden;
 }
 
+/* Full width, slid in from the left by main.ts (translateX), so the fill moves on the compositor. */
 .splash-bar-fill {
-  width: 4%;
+  position: relative;
   height: 100%;
-  background:
-    repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.25) 0 6px, transparent 6px 12px) 0 0 / 17px 100%,
-    linear-gradient(90deg, #ff3b1f, #ffb020);
+  overflow: hidden;
+  background: linear-gradient(90deg, #ff3b1f, #ffb020);
   box-shadow: 0 0 12px rgb(255 120 40 / 0.7);
-  transition: width 0.4s ease;
+  transform: translateX(-96%);
+  transition: transform 0.4s ease;
+}
+
+/* Stripes on their own layer, one tile wider, sliding by one tile (12px stripe period at 45° ≈ 17px). */
+.splash-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 -17px;
+  background: repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.25) 0 6px, transparent 6px 12px) 0 0 / 17px 100%;
   animation: bar-stripes 0.5s linear infinite;
 }
 
 @keyframes bar-stripes {
   to {
-    background-position:
-      17px 0,
-      0 0;
+    transform: translateX(17px);
   }
 }
 
@@ -821,10 +907,12 @@ kbd {
   .splash-siren,
   .splash-beam,
   .splash-title,
-  .splash-title span,
+  .splash-title::before,
+  .splash-title::after,
+  .splash-title i::after,
   .splash-scene *,
   .splash-stars span,
-  .splash-bar-fill,
+  .splash-bar-fill::after,
   .splash-continue,
   .splash-continue::before,
   .splash-continue::after {
