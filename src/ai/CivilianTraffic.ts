@@ -6,7 +6,8 @@ import type { Rng } from '../core/Rng';
 import type { RoadGraph } from '../world/RoadGraph';
 import type { ApproachControl } from '../world/TrafficControl';
 import { FLAT, type GroundHeight } from '../world/Terrain';
-import { SEA_LEVEL } from '../render/Sea';
+import { SUNK_BELOW } from '../render/Sea';
+
 import { Vehicle } from '../vehicles/Vehicle';
 import {
   PLAYER_SPEC,
@@ -23,13 +24,15 @@ import type { Awareness, Mover, Obstacle } from './awareness';
 import { Junctions } from './junctions';
 import type { Keep } from '../world/driveSide';
 
+const UP = new THREE.Vector3(0, 1, 0);
+const tmpUp = new THREE.Vector3(); // scratch, for reading a car's up axis
+
 export const TRAFFIC = {
   count: 20, // default (menu); each difficulty sets its own
   spawnMin: 170, // metres by road from the player — far enough to drive into view, not pop in
   spawnMax: 340,
   despawnDistance: 420, // straight-line
   stuckLimit: 6, // seconds
-  sunkDepth: 2.5, // metres under the water: gone in, out of sight, recycle it
   spacing: 18, // metres between spawn points and existing traffic
   rampChance: 0.05, // per spawn, while no ramp truck is around
 };
@@ -247,8 +250,8 @@ export class CivilianTraffic {
     for (const car of [...this.cars]) {
       const p = car.vehicle.position;
       const far = Math.hypot(p.x - playerPos.x, p.z - playerPos.z) > TRAFFIC.despawnDistance;
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(car.vehicle.quaternion).y;
-      const sunk = p.y < SEA_LEVEL - TRAFFIC.sunkDepth;
+      const up = tmpUp.copy(UP).applyQuaternion(car.vehicle.quaternion).y;
+      const sunk = p.y < SUNK_BELOW;
       if (far || sunk || car.controller.stuckFor > TRAFFIC.stuckLimit || up < 0.2) {
         car.vehicle.dispose();
         this.cars.splice(this.cars.indexOf(car), 1);

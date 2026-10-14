@@ -6,6 +6,7 @@ import { ROADBLOCK_INTERVAL, WANTED, type CopType } from '../gameplay/balance';
 import { DIFFICULTIES, scaledCopCap } from '../gameplay/difficulty';
 import { RoadGraph, type RoadNode } from '../world/RoadGraph';
 import { CopDirector, DIRECTOR_TUNING } from './CopDirector';
+import { SUNK_BELOW } from '../render/Sea';
 
 // 11×3 grid of junctions 100m apart: x = 0..1000, z = 0..200. Node id = row * 11 + col.
 function grid(): RoadGraph {
@@ -66,6 +67,19 @@ describe('CopDirector', () => {
     expect(director.cops).toHaveLength(2);
   });
 
+  it('removes a cop that sank into the water at once, wrecked or not, and sends a replacement', () => {
+    const { director, player } = setup();
+    const level = { ...WANTED[2], maxCops: 2, spawnInterval: 0, roadblocks: false };
+    for (let i = 0; i < 5; i++) director.update(0.1, player, EAST, level, ROUTE, null);
+    const [sunk, wreck] = director.cops;
+    director.wreck(wreck); // a wreck that then went in: no burning out under water
+    for (const cop of [sunk, wreck]) cop.vehicle.teleport(500, SUNK_BELOW - 1, 300, 0);
+    director.update(0.1, player, EAST, level, ROUTE, null);
+    expect(director.cops).not.toContain(sunk);
+    expect(director.cops).not.toContain(wreck);
+    expect(director.activeCops).toHaveLength(1); // replacements come one per spawn tick
+  });
+
   it('sets up a two-SUV roadblock across the road ahead on the player route at 4+ stars', () => {
     const { director, player } = setup();
     const level = { ...WANTED[3], maxCops: 0, roadblocks: true };
@@ -86,6 +100,19 @@ describe('CopDirector', () => {
     expect(director.cops).toHaveLength(2);
     director.update(1.1, player, EAST, level, ROUTE, null);
     expect(director.cops).toHaveLength(4);
+  });
+
+  it('retires roadblock cops over the cap once they fall behind, but brings back cops within it', () => {
+    const { director, player } = setup();
+    const level = { ...WANTED[3], maxCops: 1, spawnInterval: 0, roadblocks: true };
+    director.update(10.1, player, EAST, level, ROUTE, null); // the roadblock, plus one regular cop
+    expect(director.activeCops).toHaveLength(3);
+    // The player drives on far past all three of them.
+    const far = { ...player, position: player.position.clone().setX(DIRECTOR_TUNING.leashDistance * 3) };
+    director.update(0.1, far, EAST, { ...level, roadblocks: false }, null, null);
+    expect(director.activeCops).toHaveLength(1); // the two over the cap are gone…
+    const kept = director.activeCops[0].vehicle.position;
+    expect(Math.hypot(kept.x - far.position.x, kept.z - far.position.z)).toBeLessThan(DIRECTOR_TUNING.leashDistance); // …the other was moved back into play
   });
 
   it('no roadblock next to the destination', () => {

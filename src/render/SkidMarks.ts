@@ -10,6 +10,8 @@ export class SkidMarks {
   readonly mesh: THREE.Mesh;
   private positions = new Float32Array(MAX_SEGMENTS * 4 * 3);
   private alphas = new Float32Array(MAX_SEGMENTS * 4);
+  private positionAttr = new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage);
+  private alphaAttr = new THREE.BufferAttribute(this.alphas, 1).setUsage(THREE.DynamicDrawUsage);
   private next = 0;
   /** Last point laid by each tracked wheel; null when its mark is broken. */
   private lastPoints = new Map<number, THREE.Vector3 | null>();
@@ -24,8 +26,8 @@ export class SkidMarks {
       index.set([v, v + 1, v + 2, v + 2, v + 1, v + 3], s * 6);
     }
     geo.setIndex(new THREE.BufferAttribute(index, 1));
-    geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
-    geo.setAttribute('alpha', new THREE.BufferAttribute(this.alphas, 1).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('position', this.positionAttr);
+    geo.setAttribute('alpha', this.alphaAttr);
     const material = new THREE.ShaderMaterial({
       vertexShader: /* glsl */ `
         attribute float alpha;
@@ -87,8 +89,10 @@ export class SkidMarks {
     this.alphas.fill(a, s * 4, s * 4 + 4);
     last.copy(point);
 
-    const geo = this.mesh.geometry;
-    geo.attributes.position.needsUpdate = true;
-    geo.attributes.alpha.needsUpdate = true;
+    // Upload just this quad: re-sending the whole ring buffer each frame of a drift is ~190 KB.
+    this.positionAttr.addUpdateRange(o, 12);
+    this.positionAttr.needsUpdate = true;
+    this.alphaAttr.addUpdateRange(s * 4, 4);
+    this.alphaAttr.needsUpdate = true;
   }
 }

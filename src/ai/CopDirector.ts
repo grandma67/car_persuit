@@ -9,10 +9,14 @@ import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS } from '../vehicles/VehicleSpecs';
 import { Health } from '../gameplay/Health';
 import { DAMAGE, ROADBLOCK_INTERVAL, type CopType, type StarLevel } from '../gameplay/balance';
-import { COP_TUNING, CopController, type ChaseTarget, type LineOfSight } from './CopController';
+import { COP_TUNING, CopController, type ChaseTarget, type CopTuning, type LineOfSight } from './CopController';
 import type { Keep } from '../world/driveSide';
 import type { NavGrid } from './NavGrid';
 import { obstacleProbe } from './lineOfSight';
+import { SUNK_BELOW } from '../render/Sea';
+
+const UP = new THREE.Vector3(0, 1, 0);
+const tmpUp = new THREE.Vector3(); // scratch, for reading a car's up axis
 
 /** Off-road routing and feelers for the cops; without it they keep to the roads and drive blind. */
 export interface CopSteering {
@@ -79,6 +83,7 @@ export class CopDirector {
   private spawnTimer: number;
   private roadblockTimer = 10;
   private checkpoint: Point | null = null;
+  private levelTuning: CopTuning | null = null;
 
   constructor(
     private world: RAPIER.World,
@@ -112,25 +117,37 @@ export class CopDirector {
     checkpoint: Point | null,
   ): void {
     this.checkpoint = checkpoint;
+    // Roadblocks add cops over the cap; once one falls behind, retire it rather than bring it back,
+    // or every roadblock of a long run stays in play for good (and each cop costs physics and AI).
+    let excess = this.activeCops.length - level.maxCops;
+    const retired: Cop[] = [];
     for (const cop of this.cops) {
+      if (cop.vehicle.position.y < SUNK_BELOW) {
+        retired.push(cop); // gone into the water, for good
+        if (cop.wreckedFor === null) excess--;
+        continue;
+      }
       if (cop.wreckedFor !== null) {
         cop.wreckedFor += dt;
         continue;
       }
       // Aggression follows the wanted level.
-      cop.controller.tuning = { ...COP_TUNING, chaseRange: level.chaseRange, catchUp: level.catchUp };
+      cop.controller.tuning = this.tuningFor(level);
       // Lost the plot (far away, or on its roof): bring it back into play nearby.
       const p = cop.vehicle.position;
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cop.vehicle.quaternion).y;
+      const up = tmpUp.copy(UP).applyQuaternion(cop.vehicle.quaternion).y;
       cop.flippedFor = up < 0.3 ? cop.flippedFor + dt : 0;
       const far = Math.hypot(p.x - player.position.x, p.z - player.position.z) > this.tuning.leashDistance;
-      if (far || cop.flippedFor > 3) {
+      if (far && excess > 0) {
+        retired.push(cop);
+        excess--;
+      } else if (far || cop.flippedFor > 3) {
         this.place(cop.vehicle, player, playerForward, route, true);
         cop.controller.holdUntilClose = false;
       }
     }
-    // Remove burnt-out wrecks.
-    for (const cop of this.cops.filter((c) => c.wreckedFor !== null && c.wreckedFor > this.tuning.wreckClearTime)) {
+    // Remove burnt-out wrecks, sunk cops and retired ones.
+    for (const cop of new Set([...retired, ...this.cops.filter((c) => c.wreckedFor !== null && c.wreckedFor > this.tuning.wreckClearTime)])) {
       cop.vehicle.dispose();
       this.cops.splice(this.cops.indexOf(cop), 1);
     }
@@ -148,6 +165,15 @@ export class CopDirector {
       // A roadblock may briefly exceed the cap by its two SUVs.
       if (this.roadblockTimer <= 0 && this.roadblock(player, route)) this.roadblockTimer = ROADBLOCK_INTERVAL;
     }
+  }
+
+  /** Cop tuning for a star level, made once per level rather than per cop every frame. */
+  private tuningFor(level: StarLevel): CopTuning {
+    const t = this.levelTuning;
+    if (t?.chaseRange !== level.chaseRange || t.catchUp !== level.catchUp) {
+      this.levelTuning = { ...COP_TUNING, chaseRange: level.chaseRange, catchUp: level.catchUp };
+    }
+    return this.levelTuning!;
   }
 
   wreck(cop: Cop): void {

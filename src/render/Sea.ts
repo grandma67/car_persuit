@@ -3,6 +3,11 @@ import type { Canal } from '../world/Terrain';
 
 const SIZE = 3000;
 export const SEA_LEVEL = -1.6; // below the island top so waves never poke through the streets
+/**
+ * Anything that sinks this low has gone into the sea or a canal (the ground never dips below 0, and
+ * there's no bed under the water): out of sight, so it's removed for good rather than left to fall.
+ */
+export const SUNK_BELOW = SEA_LEVEL - 2.5;
 const NEAR_STEP = 4; // grid spacing (m) in the surf zone, fine enough for the shore swell
 const SURF_ZONE = 140; // metres of sea around the island meshed at NEAR_STEP
 const FAR_GROWTH = 1.18; // beyond that, each grid step is this much wider than the last

@@ -29,9 +29,93 @@ export interface CarMesh {
   dispose(): void;
 }
 
+/** One built car per shape (body, size, wheels, livery, kerb side): new cars are clones of it. */
+const templates = new Map<string, CarMesh>();
+
+/**
+ * A car for this spec, cloned from a cached template of its shape and given its own paint colour.
+ * Building one from scratch (geometry, merging the body parts) took a frame-sized stall each
+ * time a cop or civilian spawned. Clones share geometry and the materials nothing changes at run
+ * time; the paint, lamps, glows and siren halves are their own, so each car still lights, flashes
+ * and darkens on its own.
+ */
+export function buildCarMesh(spec: VehicleSpec): CarMesh {
+  const { body, halfExtents, wheelRadius, tandemRear, livery, kerb } = spec;
+  const door = body === 'bus' ? (kerb === 'left' ? 'left' : 'right') : null; // the kerb side only places a bus's door
+  const key = JSON.stringify({ body, halfExtents, wheelRadius, tandemRear, livery, door });
+  let template = templates.get(key);
+  if (!template) templates.set(key, (template = createCarMesh(spec)));
+  return cloneCarMesh(template, spec.color);
+}
+
+function cloneCarMesh(t: CarMesh, color: number): CarMesh {
+  const root = t.root.clone();
+  // The clone has the template's tree shape, so the two traversals pair each part with its copy.
+  const from: THREE.Object3D[] = [];
+  const to: THREE.Object3D[] = [];
+  t.root.traverse((o) => from.push(o));
+  root.traverse((o) => to.push(o));
+  const copies = new Map(from.map((o, i) => [o, to[i]]));
+  const copy = <T extends THREE.Object3D>(o: T) => copies.get(o) as T;
+
+  const lamps: THREE.Material[] = [t.paint, t.headlight, t.taillight, t.indicators.left.lamp, t.indicators.right.lamp];
+  if (t.sirenLights) lamps.push(t.sirenLights.red, t.sirenLights.blue);
+  const own = new Map<THREE.Material, THREE.Material>(lamps.map((m) => [m, m.clone()]));
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh || o instanceof THREE.Sprite)) return;
+    const m = o.material as THREE.Material;
+    if (!own.has(m) && !(o instanceof THREE.Sprite)) return; // shared: glass, trim, tyres…
+    if (!own.has(m)) own.set(m, m.clone()); // each glow fades on its own
+    o.material = own.get(m)!;
+  });
+  const mat = <T extends THREE.Material>(m: T) => own.get(m) as T;
+  const paint = mat(t.paint);
+  paint.color.setHex(color);
+
+  // A cloned spotlight aims at a fresh copy of its target, not the one cloned into the tree.
+  const beams = t.beams.map((b) => {
+    const beam = copy(b);
+    beam.target = copy(b.target);
+    return beam;
+  });
+
+  const owned = new Set(to);
+  const dispose = () => {
+    // Others' layers (scratch decals) share geometry and material: free only their instance data.
+    root.traverse((o) => {
+      if (o instanceof THREE.InstancedMesh && !owned.has(o)) o.dispose();
+    });
+    for (const m of own.values()) m.dispose(); // geometry and the rest belong to the template
+  };
+
+  return {
+    root,
+    body: copy(t.body),
+    exhausts: t.exhausts.map((v) => v.clone()),
+    wheels: t.wheels.map((w) => ({ pivot: copy(w.pivot), spinners: w.spinners.map(copy) })),
+    taillight: mat(t.taillight),
+    headlight: mat(t.headlight),
+    headGlows: t.headGlows.map(copy),
+    tailGlows: t.tailGlows.map(copy),
+    indicators: {
+      left: { lamp: mat(t.indicators.left.lamp), glows: t.indicators.left.glows.map(copy) },
+      right: { lamp: mat(t.indicators.right.lamp), glows: t.indicators.right.glows.map(copy) },
+    },
+    beams,
+    sirenLights: t.sirenLights && {
+      red: mat(t.sirenLights.red),
+      blue: mat(t.sirenLights.blue),
+      redGlow: copy(t.sirenLights.redGlow),
+      blueGlow: copy(t.sirenLights.blueGlow),
+    },
+    paint,
+    dispose,
+  };
+}
+
 // Low-poly but sharp: wedge nose, faceted canopy, spoiler, emissive lights.
 // Built in chassis-local space: origin is the chassis collider centre, +Z is forward.
-export function buildCarMesh(spec: VehicleSpec): CarMesh {
+function createCarMesh(spec: VehicleSpec): CarMesh {
   const root = new THREE.Group();
   const { x: hx, y: hy, z: hz } = spec.halfExtents;
 

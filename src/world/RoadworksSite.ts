@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from '../render/geometry';
+import { SUNK_BELOW } from '../render/Sea';
 import type { Roadworks, WorksItem, WorksItemKind } from './Roadworks';
 import { groundBase, groundHeight, groundNormal, groundTop, type Terrain } from './Terrain';
 
@@ -200,7 +201,7 @@ export class RoadworksSite {
   private v = new THREE.Vector3();
 
   /** Adds the site to the scene and the world; collider handles go into `walls`. */
-  constructor(site: Roadworks, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, walls: Set<number>) {
+  constructor(site: Roadworks, terrain: Terrain, scene: THREE.Scene, private world: RAPIER.World, walls: Set<number>) {
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.6, metalness: 0.15 });
     const up = new THREE.Vector3(0, 1, 0);
     const beaconAt: { mesh: THREE.Mesh; local: THREE.Vector3 }[] = [];
@@ -333,11 +334,29 @@ export class RoadworksSite {
     }
   }
 
+  /** A loose item knocked into the water: gone for good, with the lights riding on it. */
+  private sink(l: Loose): void {
+    this.world.removeRigidBody(l.body);
+    l.mesh.removeFromParent();
+    l.mesh.traverse((o) => (o as THREE.Mesh).geometry?.dispose()); // with a mixer's drum
+    this.drums = this.drums.filter((d) => d.parent !== l.mesh);
+    this.m4.makeScale(0, 0, 0);
+    for (const b of l.beacons) this.beacons!.setMatrixAt(b.index, this.m4);
+    for (const b of l.lamps) this.lamps!.setMatrixAt(b.index, this.m4);
+    if (l.beacons.length) this.beacons!.instanceMatrix.needsUpdate = true;
+    if (l.lamps.length) this.lamps!.instanceMatrix.needsUpdate = true;
+    this.loose.splice(this.loose.indexOf(l), 1);
+  }
+
   /** Move loose items to their bodies, turn the drums and flash the beacons, alternating. `time` in seconds. */
   update(dt: number, time: number): void {
-    for (const l of this.loose) {
+    for (const l of [...this.loose]) {
       if (l.body.isSleeping()) continue;
       const t = l.body.translation();
+      if (t.y < SUNK_BELOW) {
+        this.sink(l);
+        continue;
+      }
       const r = l.body.rotation();
       l.mesh.position.set(t.x, t.y, t.z);
       l.mesh.quaternion.set(r.x, r.y, r.z, r.w);

@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { DriveInput } from '../core/Input';
 import type { Rng } from '../core/Rng';
-import type { RoadGraph } from '../world/RoadGraph';
+import type { RoadGraph, RoadNode } from '../world/RoadGraph';
 import { signalState, yellowLeft, type ApproachControl } from '../world/TrafficControl';
 import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
@@ -132,6 +132,10 @@ export class CivilianController {
   private stopWait = 0;
   private recovery: CrashRecovery;
   private rear = new THREE.Vector3();
+  private fwd = new THREE.Vector3();
+  /** The junction control on the leg we're driving, looked up once per leg rather than every step. */
+  private next3: RoadNode[] = []; // nextNodes' result, reused
+  private leg: { from: number; to: number; control: ApproachControl | undefined } = { from: -1, to: -1, control: undefined };
   private style: DrivingStyle;
   private senseIn = 0; // steps until the next look around
   private ahead: Obstacle | null = null;
@@ -213,7 +217,7 @@ export class CivilianController {
     // Pure pursuit from the rear axle (bicycle model): steer onto the arc through the aim point.
     // Measuring from the rear axle is what makes a long vehicle start its turn late enough.
     const { wheelbase, cornerSpeed, decel } = this.style;
-    const fwd = v.forward();
+    const fwd = v.forward(this.fwd);
     const rear = this.rear.copy(pos).addScaledVector(fwd, -wheelbase / 2);
     const lookahead = wheelbase / 2 + 4 + 0.4 * Math.abs(speed);
     this.segment = purePursuit(this.path, this.segment, rear, lookahead, this.aim).segment;
@@ -236,7 +240,7 @@ export class CivilianController {
     // Junction control on our approach to the next node.
     const junction = this.graph.nodes[this.route[1]];
     const toStop = Math.hypot(junction.x - pos.x, junction.z - pos.z) - STOP_LINE - v.spec.halfExtents.z;
-    const control = this.controls.get(`${this.route[0]}>${this.route[1]}`);
+    const control = this.legControl();
     let mustStop = false;
     let redLight = false;
     if (control && toStop > -1) {
@@ -553,13 +557,32 @@ export class CivilianController {
     return { cells, track };
   }
 
+  private legControl(): ApproachControl | undefined {
+    const [from, to] = this.route;
+    const leg = this.leg;
+    if (leg.from !== from || leg.to !== to) {
+      leg.from = from;
+      leg.to = to;
+      leg.control = this.controls.get(`${from}>${to}`);
+    }
+    return leg.control;
+  }
+
+  /** The junction we left, the one we're heading for and the one after it. Reused: read it at once. */
+  private nextNodes(): RoadNode[] {
+    const n = this.graph.nodes;
+    const out = this.next3;
+    for (let i = 0; i < 3; i++) out[i] = n[this.route[i]];
+    return out;
+  }
+
   /**
    * Turn signal: the side we're pulling out to round an obstacle, else the turn at the next
    * junction from SIGNAL_DISTANCE out until we've left it (straight on: none).
    */
   private signal(pos: P, dodging: boolean): 'left' | 'right' | null {
     if (dodging) return this.recovery.dodgeSide > 0 ? 'right' : 'left';
-    const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
+    const [a, b, c] = this.nextNodes();
     if (Math.hypot(b.x - pos.x, b.z - pos.z) > SIGNAL_DISTANCE) return null;
     const turn = turnAngle(a, b, c);
     // Positive turn angle is a right turn; a U-turn swings across the road, away from the kerb.
@@ -573,7 +596,7 @@ export class CivilianController {
    */
   private nearTurn(pos: P): Self['nearTurn'] {
     if (this.style.heavy) return null;
-    const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
+    const [a, b, c] = this.nextNodes();
     if (turnAngle(a, b, c) * this.keep <= 0.5 || Math.abs(turnAngle(a, b, c)) > 2.8) return null;
     if (Math.hypot(b.x - pos.x, b.z - pos.z) > SIGNAL_DISTANCE) return null;
     const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;

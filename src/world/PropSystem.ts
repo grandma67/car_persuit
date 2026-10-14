@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from '../render/geometry';
+import { SUNK_BELOW } from '../render/Sea';
 import type { Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
 import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
@@ -27,6 +28,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 // so an intact prop only exists in physics while a vehicle is near it.
 const ACTIVE_RADIUS = 22; // metres: give props within this of a vehicle a body…
 const INACTIVE_RADIUS = 30; // …and take it away once every vehicle is this far
+const NO_BREAKS: readonly PropBreak[] = Object.freeze([]);
 const ACTIVE_REFRESH = 0.15; // seconds between refreshes (a 70 m/s car covers ~10 m)
 
 type SignShape = 'octagon' | 'round' | 'triangle' | 'square' | 'diamond';
@@ -90,8 +92,10 @@ interface Attachment {
 interface PropState {
   def: StreetProp;
   y: number; // ground under it
-  body: RAPIER.RigidBody | null; // null while no vehicle is near (intact props only)
+  body: RAPIER.RigidBody | null; // null while no vehicle is near
   broken: boolean;
+  /** Debris at rest whose body was taken away (no vehicle near): where it lies. null: sunk, gone. */
+  rest?: { t: RAPIER.Vector; r: RAPIER.Rotation } | null;
   key: ModelKey;
   instance: number; // index within its model's instanced mesh
   attachments: Attachment[];
@@ -433,7 +437,10 @@ export class PropSystem {
   private signals: number[] = []; // prop indices of traffic signals
   private moving = new Set<number>(); // broken props whose body is still awake
   private active = new Set<number>(); // intact props that currently have a physics body
+  private debris = new Set<number>(); // broken props that currently have a physics body
+  private resting = new Set<number>(); // broken props lying still with their body taken away
   private activeTimer = 0;
+  private seen = new Set<number>(); // checkVehicle's, reused
   private world: RAPIER.World;
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -572,19 +579,23 @@ export class PropSystem {
   private activate(i: number): RAPIER.RigidBody {
     const p = this.props[i];
     if (p.body) return p.body;
-    const spec = propSpec(p.def);
     this.q.setFromAxisAngle(UP, p.def.yaw);
     p.body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.fixed()
         .setTranslation(p.def.x, p.y, p.def.z)
         .setRotation({ x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w }),
     );
-    this.world.createCollider(
-      RAPIER.ColliderDesc.cuboid(spec.hx, spec.height / 2, spec.hz).setTranslation(0, spec.height / 2, 0).setMass(spec.mass).setFriction(0.6),
-      p.body,
-    );
+    this.addCollider(p);
     this.active.add(i);
     return p.body;
+  }
+
+  private addCollider(p: PropState): void {
+    const spec = propSpec(p.def);
+    this.world.createCollider(
+      RAPIER.ColliderDesc.cuboid(spec.hx, spec.height / 2, spec.hz).setTranslation(0, spec.height / 2, 0).setMass(spec.mass).setFriction(0.6),
+      p.body!,
+    );
   }
 
   /** Visit each prop index in the grid cells within `radius` of a point. */
@@ -620,6 +631,51 @@ export class PropSystem {
       p.body = null;
       this.active.delete(i);
     }
+    // Debris at rest with nobody near gives its body up too: over a long run hundreds of smashed
+    // props would otherwise stay in the physics world for good. Measured from where it lies, which
+    // can be well away from where the prop stood.
+    const near = (x: number, z: number, r: number) => vehicles.some((v) => Math.hypot(v.x - x, v.z - z) < r);
+    for (const i of this.debris) {
+      const p = this.props[i];
+      if (this.moving.has(i) || !p.body) continue;
+      const t = p.body.translation();
+      if (near(t.x, t.z, INACTIVE_RADIUS)) continue;
+      p.rest = { t, r: p.body.rotation() };
+      this.world.removeRigidBody(p.body);
+      p.body = null;
+      this.debris.delete(i);
+      this.resting.add(i);
+    }
+    for (const i of this.resting) {
+      const { t } = this.props[i].rest!;
+      if (near(t.x, t.z, ACTIVE_RADIUS)) this.restoreDebris(i);
+    }
+  }
+
+  /** Put a body back on resting debris a vehicle has come near, asleep where it lay. */
+  private restoreDebris(i: number): void {
+    const p = this.props[i];
+    const { t, r } = p.rest!;
+    p.rest = undefined;
+    this.resting.delete(i);
+    p.body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(t.x, t.y, t.z).setRotation(r).setSleeping(true));
+    this.addCollider(p);
+    this.debris.add(i);
+  }
+
+  /** Debris gone into the water: no body, no mesh, for good. */
+  private sink(i: number): void {
+    const p = this.props[i];
+    if (p.body) this.world.removeRigidBody(p.body);
+    p.body = null;
+    p.rest = null;
+    this.debris.delete(i);
+    this.moving.delete(i);
+    const touched = new Set<THREE.InstancedMesh>();
+    this.m4.makeScale(0, 0, 0);
+    this.setMatrix(this.meshes[p.key], p.instance, this.m4, touched);
+    for (const a of p.attachments) this.setMatrix(a.mesh, a.index, this.m4, touched);
+    for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true;
   }
 
   get brokenCount(): number {
@@ -649,10 +705,10 @@ export class PropSystem {
    * Call after each physics step for each vehicle. Knocks loose any intact prop the vehicle is
    * about to hit fast enough, and takes a little speed off the vehicle.
    */
-  checkVehicle(vehicle: Vehicle, dt: number): PropBreak[] {
+  checkVehicle(vehicle: Vehicle, dt: number): readonly PropBreak[] {
     const lv = vehicle.body.linvel();
     const speed = Math.hypot(lv.x, lv.z);
-    if (speed < 2) return [];
+    if (speed < 2) return NO_BREAKS;
 
     const fwd = vehicle.forward(this.v);
     const pos = vehicle.position;
@@ -660,8 +716,10 @@ export class PropSystem {
     const he = vehicle.spec.halfExtents;
     const car: Footprint = { x: pos.x, z: pos.z, hx: he.x + margin, hz: he.z + margin, yaw: Math.atan2(fwd.x, fwd.z) };
 
-    const events: PropBreak[] = [];
-    const seen = new Set<number>();
+    // Runs every physics step for every vehicle: no fresh set or array unless something breaks.
+    let events: PropBreak[] | null = null;
+    const seen = this.seen;
+    seen.clear();
     const reach = he.z + margin;
     for (let cx = Math.floor((pos.x - reach) / GRID_CELL); cx <= Math.floor((pos.x + reach) / GRID_CELL); cx++) {
       for (let cz = Math.floor((pos.z - reach) / GRID_CELL); cz <= Math.floor((pos.z + reach) / GRID_CELL); cz++) {
@@ -671,11 +729,11 @@ export class PropSystem {
           const p = this.props[i];
           const spec = propSpec(p.def);
           if (p.broken || speed < spec.breakSpeed || !footprintsOverlap(car, propFootprint(p.def))) continue;
-          events.push(this.knockLoose(i, vehicle, speed));
+          (events ??= []).push(this.knockLoose(i, vehicle, speed));
         }
       }
     }
-    return events;
+    return events ?? NO_BREAKS;
   }
 
   private knockLoose(i: number, vehicle: Vehicle, speed: number): PropBreak {
@@ -683,7 +741,8 @@ export class PropSystem {
     const spec = propSpec(p.def);
     p.broken = true;
     const body = this.activate(i);
-    this.active.delete(i); // broken debris keeps its body for good
+    this.active.delete(i);
+    this.debris.add(i); // debris keeps its body while a vehicle is near
     body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
 
     // Thrown ahead of the car, slightly up, tumbling over the axis across the car's path.
@@ -716,6 +775,16 @@ export class PropSystem {
     return { kind: p.def.kind, tree: p.def.tree, position: new THREE.Vector3(t.x, y, t.z), strength: Math.min(1, speed / 30) };
   }
 
+  /**
+   * Move one instance and queue just its 16 floats for upload: a prop type can have thousands of
+   * instances, and re-sending all of them every frame a piece of debris moves adds up.
+   */
+  private setMatrix(mesh: THREE.InstancedMesh, index: number, m: THREE.Matrix4, touched: Set<THREE.InstancedMesh>): void {
+    mesh.setMatrixAt(index, m);
+    mesh.instanceMatrix.addUpdateRange(index * 16, 16);
+    touched.add(mesh);
+  }
+
   /** Move debris meshes to their physics bodies. Call once per rendered frame. */
   sync(): void {
     const touched = new Set<THREE.InstancedMesh>();
@@ -726,15 +795,11 @@ export class PropSystem {
       const r = p.body.rotation();
       this.q.set(r.x, r.y, r.z, r.w);
       this.m4.compose(this.v.set(t.x, t.y, t.z), this.q, this.scale(p.def));
-      const mesh = this.meshes[p.key];
-      mesh.setMatrixAt(p.instance, this.m4);
-      touched.add(mesh);
-      for (const a of p.attachments) {
-        a.mesh.setMatrixAt(a.index, this.m4.clone().multiply(a.local));
-        touched.add(a.mesh);
-      }
-      // Debris at rest (or lost in the sea) no longer needs updating.
-      if (p.body.isSleeping() || t.y < -20) this.moving.delete(i);
+      this.setMatrix(this.meshes[p.key], p.instance, this.m4, touched);
+      for (const a of p.attachments) this.setMatrix(a.mesh, a.index, this.m4.clone().multiply(a.local), touched);
+      // Debris at rest no longer needs updating; debris lost in the sea is gone.
+      if (t.y < SUNK_BELOW) this.sink(i);
+      else if (p.body.isSleeping()) this.moving.delete(i);
     }
     for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true;
   }

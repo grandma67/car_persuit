@@ -151,7 +151,7 @@ export class Game {
     // Shadow-casting sun follows the player so a small shadow frustum covers the visible area.
     this.sun = new THREE.DirectionalLight(time.sunColor, time.sunIntensity);
     this.sun.castShadow = true;
-    const mapSize = mobile ? 2048 : 4096;
+    const mapSize = mobile ? 1024 : 2048; // reading a bigger map costs the main pass more GPU than drawing it
     this.sun.shadow.mapSize.setScalar(mapSize);
     const s = this.sun.shadow.camera;
     s.left = s.bottom = -SHADOW_HALF;
@@ -721,7 +721,7 @@ export class Game {
   }
 
   /** Smashing through street furniture scuffs the front (or whichever way the car was going). */
-  private scratchOnProps(vehicle: Vehicle, hits: PropBreak[]): PropBreak[] {
+  private scratchOnProps(vehicle: Vehicle, hits: readonly PropBreak[]): readonly PropBreak[] {
     if (hits.length) {
       const v = vehicle.body.linvel();
       scratchCar(vehicle, new THREE.Vector3(v.x, 0, v.z), 0.15 * hits.length);

@@ -532,7 +532,9 @@ export class Vehicle {
     m.headlight.emissiveIntensity = 1.2 + head * 3;
     for (const beam of m.beams) {
       beam.intensity = head * 300; // two overlapping beams, a bit brighter overall than the old single one
-      beam.visible = head > 0 && this.beamEnabled;
+      // Wrecked, a beam just goes dark: hiding it changes the scene's light count, which recompiles
+      // every lit material — a hitch right as the car blows up.
+      beam.visible = this.headlights > 0 && this.beamEnabled;
     }
     for (const g of m.headGlows) setGlow(g, head * 0.9);
 
