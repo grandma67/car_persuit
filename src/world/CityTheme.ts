@@ -5,10 +5,13 @@ import * as THREE from 'three';
 import { Rng } from '../core/Rng';
 import type { District } from './CityGenerator';
 import { pickClimate, type Climate } from './Climate';
+import type { FacadeStyle } from '../render/Facades';
 
 export interface CityTheme {
   name: string;
   buildings: Record<District, number[]>;
+  facades: Record<District, FacadeStyle>;
+  gables: boolean; // residential houses get pitched roofs
   asphalt: number;
   sidewalk: number;
   plaza: number;
@@ -47,6 +50,8 @@ export interface TimeOfDay {
 const THEMES: CityTheme[] = [
   {
     name: 'Modern American',
+    facades: { downtown: 'curtain', midtown: 'office', residential: 'siding', industrial: 'industrial' },
+    gables: true,
     buildings: {
       downtown: [0x8fa6c4, 0x6f87a8, 0xa9b8cc, 0x7d8fa3, 0x5f7390],
       midtown: [0xb8a99a, 0x9aa2ad, 0xc4b59e, 0x8f8a85, 0xa39488],
@@ -59,6 +64,8 @@ const THEMES: CityTheme[] = [
   },
   {
     name: 'Old Brick',
+    facades: { downtown: 'office', midtown: 'brick', residential: 'brick', industrial: 'brick' },
+    gables: true,
     buildings: {
       downtown: [0x5d6b78, 0x707b85, 0x8c8478, 0x4f5a66, 0x9a8f80],
       midtown: [0x8e4a3a, 0x7a3e30, 0xa0583f, 0xb89a74, 0x6e3a2e],
@@ -71,6 +78,8 @@ const THEMES: CityTheme[] = [
   },
   {
     name: 'Mediterranean',
+    facades: { downtown: 'office', midtown: 'shutters', residential: 'shutters', industrial: 'industrial' },
+    gables: false,
     buildings: {
       downtown: [0xbfc6cc, 0xd8d2c4, 0x9fb0bd, 0xc9bfae, 0xa8b4bc],
       midtown: [0xe8e2d4, 0xd9a95b, 0xe0b8a8, 0xcf9a6a, 0xeae0c8],
@@ -83,6 +92,8 @@ const THEMES: CityTheme[] = [
   },
   {
     name: 'Nordic',
+    facades: { downtown: 'curtain', midtown: 'stucco', residential: 'siding', industrial: 'industrial' },
+    gables: true,
     buildings: {
       downtown: [0x4e5b66, 0x66717a, 0x3f4a54, 0x7a848c, 0x55606a],
       midtown: [0xe3c46a, 0x9fb59a, 0xa8524a, 0x8fa9bf, 0xe6e3dc],
@@ -95,6 +106,8 @@ const THEMES: CityTheme[] = [
   },
   {
     name: 'Desert Southwest',
+    facades: { downtown: 'office', midtown: 'adobe', residential: 'adobe', industrial: 'industrial' },
+    gables: false,
     buildings: {
       downtown: [0x9c8f7d, 0x7a6a55, 0xb0a28c, 0x8c7b66, 0x6f7a80],
       midtown: [0xc79a6b, 0xd8c09a, 0xb5653c, 0xa9846a, 0xc4a57e],
@@ -107,6 +120,8 @@ const THEMES: CityTheme[] = [
   },
   {
     name: 'Beach Pastel',
+    facades: { downtown: 'curtain', midtown: 'stucco', residential: 'shutters', industrial: 'industrial' },
+    gables: false,
     buildings: {
       downtown: [0xa8c8d8, 0xd8e4ea, 0x9fbcc8, 0xc8d8d0, 0xb4c4d4],
       midtown: [0xf2c6c2, 0xa8dcd0, 0xf4e2b0, 0xc8b8e0, 0xf0d8c8],

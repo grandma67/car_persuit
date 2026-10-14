@@ -8,8 +8,8 @@ import type { StreetProp } from './StreetProps';
 import { clipRect, groundBase, groundHeight, groundNormal, isFlat, type Terrain } from './Terrain';
 import { SEA_LEVEL } from '../render/Sea';
 import { CanalWater } from '../render/CanalWater';
+import { createFacadeTextures, WINDOW_CELLS, type FacadeStyle } from '../render/Facades';
 
-const WINDOW_CELLS = 8; // window texture is an 8×8 grid of window cells
 const FLOOR_HEIGHT = 3.5;
 const WINDOW_WIDTH = 4;
 export const SNOW = 0xeef2f6;
@@ -179,43 +179,6 @@ class GeometryBuilder {
   }
 }
 
-/** Window grid: diffuse map (wall + dark glass) and emissive map (randomly lit windows). */
-function createWindowTextures(rng: Rng): { map: THREE.Texture; emissive: THREE.Texture } {
-  const px = 64;
-  const size = px * WINDOW_CELLS;
-  const make = () => {
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    return [c, c.getContext('2d')!] as const;
-  };
-  const [diffuseCanvas, d] = make();
-  const [emissiveCanvas, e] = make();
-  d.fillStyle = '#ffffff';
-  d.fillRect(0, 0, size, size);
-  e.fillStyle = '#000000';
-  e.fillRect(0, 0, size, size);
-  for (let cy = 0; cy < WINDOW_CELLS; cy++) {
-    for (let cx = 0; cx < WINDOW_CELLS; cx++) {
-      const x = cx * px + px * 0.18, y = cy * px + px * 0.2, w = px * 0.64, h = px * 0.5;
-      d.fillStyle = '#26303d';
-      d.fillRect(x, y, w, h);
-      const roll = rng.next();
-      if (roll < 0.22) e.fillStyle = '#ffd59a';
-      else if (roll < 0.28) e.fillStyle = '#bcd6ff';
-      else continue;
-      e.fillRect(x, y, w, h);
-    }
-  }
-  const toTexture = (canvas: HTMLCanvasElement, srgb: boolean) => {
-    const t = new THREE.CanvasTexture(canvas);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
-    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  };
-  return { map: toTexture(diffuseCanvas, true), emissive: toTexture(emissiveCanvas, true) };
-}
-
 export interface CityLook {
   theme: CityTheme;
   climate: Climate;
@@ -223,6 +186,7 @@ export interface CityLook {
   wet: boolean; // rain: glossy, darker roads and pavements
   sea: number; // deep water colour, for the canals
   shallow: number; // the sea's colour at the shore, where the canals open into it
+  environment?: THREE.Texture; // sky reflection for the windows
 }
 
 /**
@@ -388,27 +352,38 @@ export function buildCity(
   scene.add(new THREE.Mesh(paint.build(), new THREE.MeshBasicMaterial({ vertexColors: true })));
   const m4 = new THREE.Matrix4();
 
-  // --- Buildings: merged walls (windowed) + merged roofs, one collider each ---
-  const walls = new GeometryBuilder();
+  // --- Buildings: merged walls per facade style (windowed) + merged roofs, one collider each ---
+  const walls = new Map<FacadeStyle, GeometryBuilder>();
   const roofs = new GeometryBuilder();
   // On a slope a building stands on its lowest corner; the uphill side sinks into the ground.
   const footings = city.buildings.map((b) => groundBase(terrain, b.x, b.z, Math.max(b.w, b.d) / 2) - 0.3);
-  city.buildings.forEach((b, i) => addBuilding(b, footings[i], theme.buildings[b.district], walls, roofs, rng, climate.snowRoofs, terrain));
-  const tex = createWindowTextures(rng);
-  const wallMesh = new THREE.Mesh(
-    walls.build(true),
-    new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      map: tex.map,
-      emissiveMap: tex.emissive,
-      emissive: 0xffffff,
-      emissiveIntensity: windowGlow,
-      roughness: 0.75,
-      metalness: 0.1,
-    }),
-  );
-  const roofMesh = new THREE.Mesh(roofs.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
-  for (const mesh of [wallMesh, roofMesh]) {
+  city.buildings.forEach((b, i) => {
+    const facade = theme.facades[b.district];
+    if (!walls.has(facade)) walls.set(facade, new GeometryBuilder());
+    const gable = theme.gables && b.district === 'residential';
+    addBuilding(b, footings[i], theme.buildings[b.district], walls.get(facade)!, roofs, rng, { facade, gable, snowy: climate.snowRoofs }, terrain);
+  });
+  const meshes = [...walls].map(([facade, builder]) => {
+    const tex = createFacadeTextures(facade, rng);
+    return new THREE.Mesh(
+      builder.build(true),
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        map: tex.map,
+        emissiveMap: tex.emissive,
+        emissive: 0xffffff,
+        emissiveIntensity: windowGlow,
+        roughnessMap: tex.surface,
+        metalnessMap: tex.surface,
+        roughness: 1, // both scaled by the surface map
+        metalness: 1,
+        envMap: look.environment ?? null,
+        envMapIntensity: 0.8,
+      }),
+    );
+  });
+  meshes.push(new THREE.Mesh(roofs.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })));
+  for (const mesh of meshes) {
     mesh.castShadow = mesh.receiveShadow = true;
     scene.add(mesh);
   }
@@ -466,9 +441,29 @@ export function buildCity(
   return { walls: wallColliders, props, canalWater };
 }
 
-function addBuilding(b: Building, y0: number, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng, snowy: boolean, terrain: Terrain): void {
+interface BuildingStyle {
+  facade: FacadeStyle;
+  gable: boolean; // pitched roof instead of a flat one
+  snowy: boolean;
+}
+
+/** Flat-roof cap per facade: overhang past the walls, height above the roof line, depth below it. */
+const CAPS: Record<FacadeStyle, { over: number; up: number; down: number; stone: boolean }> = {
+  curtain: { over: 0.08, up: 0.6, down: 0.3, stone: false },
+  office: { over: 0.45, up: 0.35, down: 0.5, stone: true },
+  brick: { over: 0.4, up: 0.5, down: 0.6, stone: true },
+  stucco: { over: 0.15, up: 0.5, down: 0.25, stone: false },
+  shutters: { over: 0.15, up: 0.5, down: 0.25, stone: false },
+  siding: { over: 0.3, up: 0.3, down: 0.3, stone: false },
+  adobe: { over: 0.1, up: 0.7, down: 0.1, stone: false },
+  industrial: { over: 0.05, up: 0.4, down: 0.2, stone: false },
+};
+const ROOF_TILES = [0x6e3a2e, 0x45484d, 0x5a4e44, 0x7a4a36];
+const WHITE = new THREE.Color(0xffffff);
+
+function addBuilding(b: Building, y0: number, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng, style: BuildingStyle, terrain: Terrain): void {
   const wallColor = new THREE.Color(palette[Math.floor(b.variant * palette.length)]);
-  const roofColor = snowy ? new THREE.Color(SNOW) : wallColor.clone().multiplyScalar(0.55);
+  const roofColor = style.snowy ? new THREE.Color(SNOW) : wallColor.clone().multiplyScalar(0.55);
   // Per-building window pattern offset, snapped to whole cells so windows line up with floors.
   const uOff = Math.floor(b.variant * 97) % WINDOW_CELLS / WINDOW_CELLS;
   const vOff = Math.floor(b.variant * 389) % WINDOW_CELLS / WINDOW_CELLS;
@@ -477,41 +472,99 @@ function addBuilding(b: Building, y0: number, palette: number[], walls: Geometry
   // is a plain base course instead (untextured, with the roofs), and the windows begin above it.
   const floors = Math.max(1, Math.round(b.h / FLOOR_HEIGHT));
   const floor = b.h / floors;
-  const sill = 0.3; // window bottoms sit this far up their floor (see createWindowTextures)
+  const sill = 0.3; // window bottoms sit about this far up their floor (see Facades)
   const baseColor = wallColor.clone().multiplyScalar(0.72);
-  const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2, y1 = y0 + b.h;
-  const faces: [number[], number[], number[]][] = [
-    [[x0, z1], [x1, z1], [0, 0, 1]],
-    [[x1, z0], [x0, z0], [0, 0, -1]],
-    [[x1, z1], [x1, z0], [1, 0, 0]],
-    [[x0, z0], [x0, z1], [-1, 0, 0]],
-  ];
-  for (const [[ax, az], [bx, bz], normal] of faces) {
-    let ground = -Infinity;
-    for (let k = 0; k <= 4; k++) ground = Math.max(ground, groundHeight(terrain, ax + ((bx - ax) * k) / 4, az + ((bz - az) * k) / 4));
-    const blank = Math.min(floors, Math.max(0, Math.ceil((ground - y0) / floor - sill + 0.02)));
-    const yw = y0 + blank * floor;
-    if (blank > 0) roofs.quad([[ax, y0, az], [bx, y0, bz], [bx, yw, bz], [ax, yw, az]], normal, baseColor);
-    if (blank === floors) continue;
-    const u = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / WINDOW_WIDTH)) / WINDOW_CELLS;
-    const v0 = vOff + blank / WINDOW_CELLS;
-    const v1 = vOff + floors / WINDOW_CELLS;
-    walls.quad([[ax, yw, az], [bx, yw, bz], [bx, y1, bz], [ax, y1, az]], normal, wallColor, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
+  const y1 = y0 + b.h;
+  // Tall towers step back for their top floors (visual only: the collider stays the full box).
+  const glassy = style.facade === 'curtain' || style.facade === 'office';
+  const split = glassy && b.h > 50 ? Math.round(floors * (0.65 + b.variant * 0.15)) : floors;
+  const ySplit = y0 + split * floor;
+  const inset = Math.min(b.w, b.d) * 0.14;
+  const top: Rect = split < floors ? { x: b.x, z: b.z, w: b.w - inset * 2, d: b.d - inset * 2 } : b;
+
+  const wallFaces = (r: Rect, ya: number, yb: number, fa: number, fb: number, onGround: boolean) => {
+    const x0 = r.x - r.w / 2, x1 = r.x + r.w / 2, z0 = r.z - r.d / 2, z1 = r.z + r.d / 2;
+    const faces: [number[], number[], number[]][] = [
+      [[x0, z1], [x1, z1], [0, 0, 1]],
+      [[x1, z0], [x0, z0], [0, 0, -1]],
+      [[x1, z1], [x1, z0], [1, 0, 0]],
+      [[x0, z0], [x0, z1], [-1, 0, 0]],
+    ];
+    for (const [[ax, az], [bx, bz], normal] of faces) {
+      let blank = 0;
+      if (onGround) {
+        let ground = -Infinity;
+        for (let k = 0; k <= 4; k++) ground = Math.max(ground, groundHeight(terrain, ax + ((bx - ax) * k) / 4, az + ((bz - az) * k) / 4));
+        blank = Math.min(fb, Math.max(0, Math.ceil((ground - ya) / floor - sill + 0.02)));
+      }
+      const yw = ya + blank * floor;
+      if (blank > 0) roofs.quad([[ax, ya, az], [bx, ya, bz], [bx, yw, bz], [ax, yw, az]], normal, baseColor);
+      if (fa + blank >= fb) continue;
+      const u = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / WINDOW_WIDTH)) / WINDOW_CELLS;
+      const v0 = vOff + (fa + blank) / WINDOW_CELLS;
+      const v1 = vOff + fb / WINDOW_CELLS;
+      walls.quad([[ax, yw, az], [bx, yw, bz], [bx, yb, bz], [ax, yb, az]], normal, wallColor, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
+    }
+  };
+  wallFaces(b, y0, ySplit, 0, split, true);
+  if (split < floors) wallFaces(top, ySplit, y1, split, floors, false);
+
+  // A cornice or parapet slab with a soffit under its overhang.
+  const cap = CAPS[style.facade];
+  const capColor = cap.stone ? wallColor.clone().lerp(WHITE, 0.45) : wallColor.clone().multiplyScalar(0.9);
+  const slab = (r: Rect, y: number) => {
+    const o = cap.over;
+    const outer = { x: r.x, z: r.z, w: r.w + o * 2, d: r.d + o * 2 };
+    roofs.box(outer, y - cap.down, cap.down + cap.up, capColor, null, roofColor);
+    if (o > 0.05) {
+      const x0 = outer.x - outer.w / 2, x1 = outer.x + outer.w / 2, z0 = outer.z - outer.d / 2, z1 = outer.z + outer.d / 2, yb = y - cap.down;
+      roofs.quad([[x0, yb, z0], [x1, yb, z0], [x1, yb, z1], [x0, yb, z1]], [0, -1, 0], capColor.clone().multiplyScalar(0.7));
+    }
+  };
+
+  if (style.gable) {
+    addGable(b, y1, roofs, wallColor, style.snowy ? new THREE.Color(SNOW) : new THREE.Color(ROOF_TILES[Math.floor(b.variant * 31) % ROOF_TILES.length]));
+    return;
   }
-  roofs.quad([[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]], [0, 1, 0], roofColor);
+  if (split < floors) slab(b, ySplit);
+  slab(top, y1);
 
   // Rooftop details on taller buildings: AC units, stair housings.
   if (b.h > 14) {
     const count = rng.int(1, 3);
     for (let k = 0; k < count; k++) {
-      const w = rng.range(2, Math.min(6, b.w * 0.4));
-      const d = rng.range(2, Math.min(6, b.d * 0.4));
-      const x = b.x + rng.range(-(b.w - w) / 2 + 0.5, (b.w - w) / 2 - 0.5);
-      const z = b.z + rng.range(-(b.d - d) / 2 + 0.5, (b.d - d) / 2 - 0.5);
-      const unitColor = snowy ? wallColor.clone().multiplyScalar(0.7) : roofColor.clone().multiplyScalar(1.4);
-      roofs.box({ x, z, w, d }, y0 + b.h, rng.range(1.2, 3.5), unitColor, null, roofColor);
+      const w = rng.range(2, Math.min(6, top.w * 0.4));
+      const d = rng.range(2, Math.min(6, top.d * 0.4));
+      const x = top.x + rng.range(-(top.w - w) / 2 + 0.5, (top.w - w) / 2 - 0.5);
+      const z = top.z + rng.range(-(top.d - d) / 2 + 0.5, (top.d - d) / 2 - 0.5);
+      const unitColor = style.snowy ? wallColor.clone().multiplyScalar(0.7) : roofColor.clone().multiplyScalar(1.4);
+      roofs.box({ x, z, w, d }, y1 + cap.up, rng.range(1.2, 3.5), unitColor, null, roofColor);
     }
   }
+}
+
+/** Pitched roof with overhanging eaves, ridge along the longer side, gable ends in the wall colour. */
+function addGable(b: Building, y: number, roofs: GeometryBuilder, wallColor: THREE.Color, tileColor: THREE.Color): void {
+  const o = 0.35;
+  const alongX = b.w >= b.d;
+  const len = (alongX ? b.w : b.d) / 2 + o; // half-length along the ridge
+  const run = (alongX ? b.d : b.w) / 2 + o; // eave to ridge, horizontally
+  const rise = Math.min(3.5, (run - o) * 0.75); // ridge height above the wall tops
+  // Local (a along the ridge, c across it) to world; swapping axes mirrors, so flip the winding.
+  const P = (a: number, h: number, c: number) => (alongX ? [b.x + a, h, b.z + c] : [b.x + c, h, b.z + a]);
+  const N = (a: number, h: number, c: number) => (alongX ? [a, h, c] : [c, h, a]);
+  const quad = (corners: number[][], normal: number[], color: THREE.Color) =>
+    roofs.quad(alongX ? corners : [...corners].reverse(), normal, color);
+  const ea = len - o; // gable ends sit in the wall planes
+  const ec = run - o;
+  const yr = y + rise;
+  const ye = y - (rise * o) / ec; // eaves dip below the wall top, so the gables are exact triangles
+  const k = Math.hypot(run, yr - ye);
+  quad([P(-len, ye, run), P(len, ye, run), P(len, yr, 0), P(-len, yr, 0)], N(0, run / k, (yr - ye) / k), tileColor);
+  quad([P(len, ye, -run), P(-len, ye, -run), P(-len, yr, 0), P(len, yr, 0)], N(0, run / k, -(yr - ye) / k), tileColor);
+  quad([P(-len, ye, -run), P(len, ye, -run), P(len, ye, run), P(-len, ye, run)], [0, -1, 0], tileColor.clone().multiplyScalar(0.6));
+  quad([P(ea, y, ec), P(ea, y, -ec), P(ea, yr, 0), P(ea, yr, 0)], N(1, 0, 0), wallColor);
+  quad([P(-ea, y, -ec), P(-ea, y, ec), P(-ea, yr, 0), P(-ea, yr, 0)], N(-1, 0, 0), wallColor);
 }
 
 function pickTree(climate: Climate, rng: Rng): TreeKind {

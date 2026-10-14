@@ -5,7 +5,8 @@ import { Rng } from './Rng';
 import { safeStorage } from './storage';
 import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
-import { buildCarMesh, setCarShadow, type CarMesh } from '../vehicles/carMesh';
+import { buildCarMesh, setCarEnvironment, setCarShadow, type CarMesh } from '../vehicles/carMesh';
+import { createEnvironment } from '../render/Environment';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, type CityConfig, type CityData } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
@@ -146,6 +147,9 @@ export class Game {
     const weather = pickWeather(seed, climate, this.debug ? params.get('weather') : null);
     const time = applyClimate(pickTimeOfDay(seed, params.get('time')), climate, weather);
     const theme = pickTheme(seed, climate);
+    // The sky and sun as reflected by car paint, glass and windows.
+    const environment = createEnvironment(this.renderer, time);
+    setCarEnvironment(environment);
     this.renderer.toneMappingExposure = time.exposure;
     this.fog = new THREE.Fog(time.skyHorizon, time.fogNear, time.fogFar);
     this.scene.background = new THREE.Color(time.skyHorizon);
@@ -177,7 +181,7 @@ export class Game {
     if (this.debug && canals >= 0 && canals <= 2) config.canalOdds = [canals === 0 ? 1 : 0, canals === 1 ? 1 : 0, canals === 2 ? 1 : 0];
     if (this.debug && params.has('hill')) config.hillChance = params.get('hill') === '0' ? 0 : 1;
     this.city = generateCity(seed, config);
-    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
+    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow, environment });
     this.canalWater = built.canalWater;
     this.walls = built.walls;
     this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls);

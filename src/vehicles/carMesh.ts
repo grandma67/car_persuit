@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 
 export interface CarMesh {
@@ -33,6 +34,62 @@ export interface CarMesh {
 
 /** Car glow sprites live here: the camera never draws them one by one, GlowBatch does all at once. */
 export const GLOW_LAYER = 1;
+
+/** Sky reflection for paint, glass and rims (see Environment); set once per city, before any car is built. */
+let environment: THREE.Texture | null = null;
+export function setCarEnvironment(env: THREE.Texture): void {
+  environment = env;
+}
+
+/** Metallic flake: a fine tiled normal map of tiny random tilts, sparkling under the clear coat. */
+let flakes: THREE.Texture | null = null;
+function flakeTexture(): THREE.Texture {
+  if (flakes) return flakes;
+  const size = 128;
+  const data = new Uint8Array(size * size * 4);
+  for (let i = 0; i < data.length; i += 4) {
+    const x = Math.random() - 0.5, y = Math.random() - 0.5;
+    data[i] = 128 + x * 120;
+    data[i + 1] = 128 + y * 120;
+    data[i + 2] = 255;
+    data[i + 3] = 255;
+  }
+  flakes = new THREE.DataTexture(data, size, size);
+  flakes.wrapS = flakes.wrapT = THREE.RepeatWrapping;
+  flakes.repeat.setScalar(4); // UVs are in metres: a tile every 25 cm
+  flakes.generateMipmaps = true;
+  flakes.minFilter = THREE.LinearMipmapLinearFilter;
+  flakes.needsUpdate = true;
+  return flakes;
+}
+
+/**
+ * Body shell: a box with rounded edges (so the sun runs along them in a highlight) and its front
+ * top edge pulled down by `noseDrop` of the half-height. Smooth normals; UVs box-projected in metres.
+ */
+function bodyGeometry(hx: number, hy: number, hz: number, noseDrop: number): THREE.BufferGeometry {
+  const radius = Math.min(0.12, hy * 0.35);
+  let geo: THREE.BufferGeometry = new RoundedBoxGeometry(hx * 2, hy * 2, hz * 2, 2, radius);
+  geo.deleteAttribute('normal');
+  geo.deleteAttribute('uv');
+  geo = mergeVertices(geo);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    // Bilinear, so the corners land where the old box's did: front top fully down, back and bottom not.
+    const y = pos.getY(i), z = pos.getZ(i);
+    pos.setY(i, y - hy * noseDrop * ((z + hz) / (2 * hz)) * ((y + hy) / (2 * hy)));
+  }
+  geo.computeVertexNormals();
+  const n = geo.attributes.normal;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i)), az = Math.abs(n.getZ(i));
+    const [u, v] = ax >= ay && ax >= az ? [pos.getZ(i), pos.getY(i)] : ay >= az ? [pos.getX(i), pos.getZ(i)] : [pos.getX(i), pos.getY(i)];
+    uv.set([u, v], i * 2);
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return geo;
+}
 
 /** One built car per shape (body, size, wheels, livery, kerb side): new cars are clones of it. */
 const templates = new Map<string, CarMesh>();
@@ -125,11 +182,21 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   const root = new THREE.Group();
   const { x: hx, y: hy, z: hz } = spec.halfExtents;
 
-  const paint = new THREE.MeshStandardMaterial({ color: spec.color, metalness: 0.6, roughness: 0.35, flatShading: true });
+  // Metallic base under a glossy clear coat: the coat throws a sharp sun glint, the flakes sparkle.
+  const paint = new THREE.MeshPhysicalMaterial({
+    color: spec.color,
+    metalness: 0.75,
+    roughness: 0.4,
+    normalMap: flakeTexture(),
+    normalScale: new THREE.Vector2(0.25, 0.25),
+    clearcoat: 1,
+    clearcoatRoughness: 0.06,
+    envMap: environment,
+  });
   const trim = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6, flatShading: true });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x111822, metalness: 0.9, roughness: 0.1, flatShading: true });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x111822, metalness: 0.9, roughness: 0.08, flatShading: true, envMap: environment });
   const tire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.9, flatShading: true });
-  const rim = new THREE.MeshStandardMaterial({ color: 0x9aa4b2, metalness: 0.8, roughness: 0.3, flatShading: true });
+  const rim = new THREE.MeshStandardMaterial({ color: 0x9aa4b2, metalness: 0.9, roughness: 0.25, flatShading: true, envMap: environment });
   const headlight = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2cc, emissiveIntensity: 2 });
   const taillight = new THREE.MeshStandardMaterial({ color: 0x5a0a10, emissive: 0xff1a28, emissiveIntensity: 0 });
   const glowTexture = sharedGlowTexture();
@@ -156,12 +223,7 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   const tall = body === 'bus' || body === 'boxtruck';
   // The box truck is drawn as a cab plus a cargo box instead (below).
   if (body !== 'boxtruck') {
-    const bodyGeo = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
-    const pos = bodyGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      if (pos.getZ(i) > 0 && pos.getY(i) > 0) pos.setY(i, pos.getY(i) - hy * noseDrop);
-    }
-    bodyGeo.computeVertexNormals();
+    const bodyGeo = bodyGeometry(hx, hy, hz, noseDrop);
     root.add(new THREE.Mesh(bodyGeo, body === 'ramptruck' ? trim : paint));
   }
   const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => {
@@ -462,7 +524,7 @@ function mergeByMaterial(group: THREE.Group): void {
   for (const meshes of buckets.values()) {
     if (meshes.length < 2) continue;
     const material = meshes[0].material as THREE.MeshStandardMaterial;
-    const keep = material.map ? ['position', 'normal', 'uv'] : ['position', 'normal'];
+    const keep = material.map || material.normalMap ? ['position', 'normal', 'uv'] : ['position', 'normal'];
     const parts = meshes.map((m) => {
       m.updateMatrix();
       let g = m.geometry.clone().applyMatrix4(m.matrix);
