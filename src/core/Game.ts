@@ -5,7 +5,7 @@ import { Rng } from './Rng';
 import { safeStorage } from './storage';
 import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
-import { buildCarMesh } from '../vehicles/carMesh';
+import { buildCarMesh, setCarShadow } from '../vehicles/carMesh';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, type CityConfig, type CityData } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
@@ -60,6 +60,8 @@ const SINK_DEPTH = 3; // metres under the surface a car in the water comes to re
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 const SHADOW_HALF = 125; // metres: half the width of the sun's shadow map
 const SHADOW_LEAD = 60; // metres ahead of the car to centre the shadow map, towards what the camera sees
+/** On phones, other cars further than this cast no shadow (switched back on 10 m nearer, so it doesn't flicker). */
+const CAR_SHADOW_RANGE = 65;
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
 
@@ -118,6 +120,7 @@ export class Game {
   private routeTimer = 0;
   private state: GameState = 'menu';
   private accumulator = 0;
+  private carShadowCull = isTouchDevice(); // measured: −10% render submission on a 4× slower CPU
   private timer = new THREE.Timer(); // ticked at the top of every frame, paused or not
 
   constructor(container: HTMLElement, hudRoot: HTMLElement, seed: number) {
@@ -508,6 +511,7 @@ export class Game {
     this.player.syncMesh(alpha);
     for (const cop of this.director.cops) cop.vehicle.syncMesh(alpha);
     for (const car of this.traffic.cars) car.vehicle.syncMesh(alpha);
+    if (this.carShadowCull) this.cullCarShadows();
     this.checkWater();
     this.traffic.update(this.player.position, [this.player, ...this.director.cops.map((c) => c.vehicle)]);
     if (this.state === 'playing' && this.difficulty.police) {
@@ -570,6 +574,17 @@ export class Game {
     this.sky.follow(this.chase.camera);
     this.renderer.render(this.scene, this.overview ? this.overviewCamera() : this.chase.camera);
     this.input.endFrame();
+  }
+
+  private cullCarShadows(): void {
+    const p = this.player.position;
+    const cull = (v: Vehicle) => {
+      const d = Math.hypot(v.position.x - p.x, v.position.z - p.z);
+      if (d < CAR_SHADOW_RANGE - 10) setCarShadow(v.mesh, true);
+      else if (d > CAR_SHADOW_RANGE) setCarShadow(v.mesh, false);
+    };
+    for (const cop of this.director.cops) cull(cop.vehicle);
+    for (const car of this.traffic.cars) cull(car.vehicle);
   }
 
   /** Vehicles whose surroundings need solid props: the player, cops, and civilians in view of the player. */

@@ -471,6 +471,23 @@ function mergeByMaterial(group: THREE.Group): void {
   }
 }
 
+const shadowState = new WeakMap<CarMesh, { casters: THREE.Object3D[]; on: boolean }>();
+/**
+ * Switch a car's shadow on or off (its parts that cast one). Every part is a draw call in the
+ * shadow pass, and a car far off casts a shadow a few pixels big.
+ */
+export function setCarShadow(car: CarMesh, on: boolean): void {
+  let state = shadowState.get(car);
+  if (!state) {
+    const casters: THREE.Object3D[] = [];
+    car.root.traverse((o) => o.castShadow && casters.push(o));
+    shadowState.set(car, (state = { casters, on: true }));
+  }
+  if (state.on === on) return;
+  state.on = on;
+  for (const o of state.casters) o.castShadow = on;
+}
+
 /** Fade a lamp glow; a fully faded one is hidden, so it costs no draw call (most of the day). */
 export function setGlow(sprite: THREE.Sprite, opacity: number): void {
   (sprite.material as THREE.SpriteMaterial).opacity = opacity;
