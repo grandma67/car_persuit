@@ -61,6 +61,15 @@ function sharedLook(): typeof shared {
   return shared;
 }
 
+/**
+ * A decal layer like the ones cars get, for compiling its shader ahead of time: the material is
+ * otherwise first drawn on the first knock, stalling that frame. Null in headless tests.
+ */
+export function scratchPrewarmMesh(): THREE.Object3D | null {
+  const look = sharedLook();
+  return look ? new THREE.InstancedMesh(look.geometry, look.material, MAX_PER_CAR) : null;
+}
+
 const layers = new WeakMap<Vehicle, { mesh: THREE.InstancedMesh; next: number }>();
 const local = new THREE.Vector3();
 const inverse = new THREE.Quaternion();

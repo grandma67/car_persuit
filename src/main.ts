@@ -72,6 +72,9 @@ async function start(): Promise<void> {
   const game = new Game(document.getElementById('app')!, document.getElementById('hud')!, seed);
   await stage('Placing street furniture', 90);
   game.start();
+  // After start(): the stage's two frames render the scene first, settling its lights.
+  await stage('Warming up the engine', 95);
+  await game.prewarmShaders();
   await stage('Ready', 100);
   dismissSplash(game);
 }

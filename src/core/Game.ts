@@ -32,7 +32,7 @@ import { Effects } from '../render/Effects';
 import { Sirens } from '../render/Sirens';
 import { Sea, SEA_LEVEL } from '../render/Sea';
 import { keepOf } from '../world/driveSide';
-import { scratchCar } from '../render/CarScratches';
+import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
 import { Minimap } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
@@ -328,20 +328,24 @@ export class Game {
     this.screens.hide();
     this.showDestination();
     this.hud.toast(this.city.driveSide === 'left' ? 'GO!  ·  ENGLAND: KEEP LEFT' : 'GO!', this.city.driveSide === 'left' ? 2.5 : 1.2);
-    this.prewarmShaders();
   }
 
   /**
-   * Compile in the background now every shader the chase can need — each cop and civilian
-   * vehicle, plus effects not drawn yet (smoke, fire) — rather than stalling a frame mid-chase
-   * the first time one appears. Uses the live scene's lights, settled by now (the menu has been
-   * rendering).
+   * Compile every shader the chase can need — each cop and civilian vehicle, crash scratches,
+   * plus effects not drawn yet (smoke, fire) — while the splash is up, rather than stalling a
+   * frame mid-chase the first time one appears. Call after start(), once a frame has rendered:
+   * shaders are built for the scene's lights, and the headlight beams only settle on the first
+   * frame.
    */
-  private prewarmShaders(): void {
+  async prewarmShaders(): Promise<void> {
     const staging = new THREE.Scene();
     for (const spec of [...Object.values(COP_SPECS), ...civilianSpecVariants()]) staging.add(buildCarMesh(spec).root);
-    this.renderer.compileAsync(staging, this.chase.camera, this.scene).catch(() => {});
-    this.renderer.compileAsync(this.scene, this.chase.camera).catch(() => {});
+    const scratches = scratchPrewarmMesh();
+    if (scratches) staging.add(scratches);
+    await Promise.all([
+      this.renderer.compileAsync(staging, this.chase.camera, this.scene),
+      this.renderer.compileAsync(this.scene, this.chase.camera),
+    ]).catch(() => {});
   }
 
   /** M key or the pause menu's Mute button. Returns the new muted state. */
