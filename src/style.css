@@ -110,6 +110,8 @@ body {
   inset: 0;
   opacity: 0;
   box-shadow: inset 0 0 120px 30px rgb(255 30 30 / 0.75);
+  /* Its own layer: the blur is painted once and only faded, not repainted every frame of a hit. */
+  will-change: opacity;
 }
 
 @media (max-width: 600px) {
