@@ -39,16 +39,22 @@ export const DAMAGE: DamageConfig = {
 };
 
 /**
- * Cop contact damage to the player, on top of normal crash damage and ignoring armor, so a cop
- * that keeps ramming always wears the car down. Scaled by the cop's mass (per 1350 kg patrol car)
- * and the difficulty's damage multiplier.
+ * Cop contact damage to the player, from the kinematics of the hit: the delta-V the cop's push
+ * gave the player's car (the contact impulse over its mass, which already carries the cop's mass,
+ * the closing speed along the contact normal and the bounce). Crash damage grows with crush energy,
+ * faster than delta-V, so a bump or a glancing bounce barely marks the car while a square ram at
+ * medium speed hurts. Replaces normal crash damage for that hit and ignores armor, so a cop that
+ * keeps ramming always wears the car down; scaled by the difficulty's damage multiplier.
  */
 export const COP_RAM = {
-  /** Health per m/s of closing speed when a cop slams into the player. */
-  bangPerMs: 1.5,
-  /** Health per second while a cop is touching (pushing, pinning) the player. */
-  grindPerSec: 4,
-  referenceMass: 1350,
+  /** Seconds after contact begins that count as the crash itself (real crash pulses: 0.07–0.15 s). */
+  pulse: 0.15,
+  /** Delta-V (m/s) a hit can give without damage: bumper-to-bumper nudges. */
+  bump: 1.5,
+  /** Health per (m/s of delta-V above the bump)^1.5: ~25 for a patrol car ramming at 54 km/h. */
+  bangPerDv: 1.35,
+  /** After the pulse, while pushing or pinning the player: health per m/s of delta-V it adds. */
+  grindPerDv: 0.5,
 };
 
 export type CopType = 'patrol' | 'interceptor' | 'suv' | 'armored';

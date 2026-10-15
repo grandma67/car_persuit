@@ -11,9 +11,11 @@ const DT = 1 / 60;
 
 /**
  * One car rolls into the other on flat ground. `copMoving`: the cop rams a parked player;
- * otherwise the player drives into a parked cop. Returns every contact result.
+ * otherwise the player drives into a parked cop. `from`: where the mover starts (the parked car is
+ * at the origin facing +z), `yaw`: the mover's heading off straight (rad), for glancing hits.
+ * `throttle`: the mover keeps driving (pushing) after contact. Returns every contact result.
  */
-function collide(copSpec: VehicleSpec, copMoving: boolean, speed = 15): ContactResult[] {
+function collide(copSpec: VehicleSpec, copMoving: boolean, speed = 15, from = { x: 0, z: -12 }, yaw = 0, throttle = 0): ContactResult[] {
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.createCollider(RAPIER.ColliderDesc.cuboid(500, 0.5, 500).setTranslation(0, -0.5, 0));
   const player = new Vehicle(world, PLAYER_SPEC, { x: 0, y: 1, z: 0 });
@@ -21,7 +23,7 @@ function collide(copSpec: VehicleSpec, copMoving: boolean, speed = 15): ContactR
   const mover = copMoving ? copCar : player;
   const parked = copMoving ? player : copCar;
   parked.teleport(0, 1, 0, 0);
-  mover.teleport(0, 1, -12, 0, speed); // heading +z, straight at the parked car
+  mover.teleport(from.x, 1, from.z, yaw, speed); // heading (about) +z, at the parked car
   const contact = new CopContact(world, player);
   const cop = { vehicle: copCar } as Cop;
   const out: ContactResult[] = [];
@@ -29,8 +31,8 @@ function collide(copSpec: VehicleSpec, copMoving: boolean, speed = 15): ContactR
   for (let i = 0; i < 3 / DT; i++) {
     const pv = player.body.linvel();
     const playerVelocity = new THREE.Vector3(pv.x, 0, pv.z);
-    player.drive(idle, DT);
-    copCar.drive(idle, DT);
+    player.drive(copMoving ? idle : { ...idle, throttle }, DT);
+    copCar.drive(copMoving ? { ...idle, throttle } : idle, DT);
     world.step();
     player.snapshot();
     copCar.snapshot();
@@ -39,22 +41,43 @@ function collide(copSpec: VehicleSpec, copMoving: boolean, speed = 15): ContactR
   return out;
 }
 
+/** Damage from the bang: the contact's first COP_RAM.pulse seconds. */
+function bangDamage(r: ContactResult[]): number {
+  const start = r.findIndex((c) => c.started);
+  return r.slice(start, start + Math.round(COP_RAM.pulse / DT)).reduce((sum, c) => sum + c.damage, 0);
+}
+
 describe('cop contact damage', () => {
   beforeAll(() => RAPIER.init());
 
-  it('a ram is one bang scaled by closing speed, then a steady grind', () => {
+  it('a medium-speed ram is one hard bang from the delta-V it gives the player', () => {
     const r = collide(COP_SPECS.patrol, true);
-    const starts = r.filter((c) => c.started);
-    expect(starts).toHaveLength(1);
-    const bang = starts[0];
-    expect(bang.closing).toBeGreaterThan(8);
-    const massRatio = COP_SPECS.patrol.mass / COP_RAM.referenceMass;
-    expect(bang.damage).toBeCloseTo((COP_RAM.grindPerSec * DT + COP_RAM.bangPerMs * bang.closing) * massRatio);
+    expect(r.filter((c) => c.started)).toHaveLength(1);
+    const dv = r.reduce((sum, c) => sum + c.dv, 0);
+    expect(dv).toBeGreaterThan(6); // ~half the 15 m/s closing speed: two similar cars
+    expect(dv).toBeLessThan(11);
+    const damage = bangDamage(r);
+    expect(damage).toBeGreaterThan(15);
+    expect(damage).toBeLessThan(40);
     // The cop rammed us: we weren't driving into it.
-    expect(bang.whack).toBeLessThan(1);
-    for (const grind of r.filter((c) => c.damage > 0 && !c.started)) {
-      expect(grind.damage).toBeCloseTo(COP_RAM.grindPerSec * DT * massRatio);
-    }
+    expect(r.find((c) => c.started)!.whack).toBeLessThan(1);
+  });
+
+  it('a bump or a glancing scrape barely marks the car', () => {
+    expect(bangDamage(collide(COP_SPECS.patrol, true, 3))).toBeLessThan(1.5);
+    // Same 15 m/s, but swerving into the player's side from alongside instead of square on.
+    const glancing = collide(COP_SPECS.patrol, true, 15, { x: -2.6, z: -3 }, 0.25);
+    expect(glancing.some((c) => c.started)).toBe(true);
+    expect(glancing.reduce((sum, c) => sum + c.damage, 0)).toBeLessThan(bangDamage(collide(COP_SPECS.patrol, true)) / 10);
+  });
+
+  it('a cop pinning the player grinds slowly', () => {
+    const r = collide(COP_SPECS.patrol, true, 3, undefined, 0, 1);
+    const start = r.findIndex((c) => c.started);
+    const grind = r.slice(start + Math.round(COP_RAM.pulse / DT)).reduce((sum, c) => sum + c.damage, 0);
+    const seconds = (r.length - start) * DT - COP_RAM.pulse;
+    expect(grind / seconds).toBeGreaterThan(0.5);
+    expect(grind / seconds).toBeLessThan(8);
   });
 
   it('no contact, no damage', () => {
@@ -62,11 +85,8 @@ describe('cop contact damage', () => {
     expect(r.every((c) => c.damage === 0 && !c.started)).toBe(true);
   });
 
-  it('heavier cops hit harder', () => {
-    const bang = (spec: VehicleSpec) => collide(spec, true).find((c) => c.started)!;
-    const patrol = bang(COP_SPECS.patrol);
-    const armored = bang(COP_SPECS.armored);
-    expect(armored.damage / armored.closing).toBeGreaterThan(patrol.damage / patrol.closing);
+  it('heavier cops hit harder at the same speed', () => {
+    expect(bangDamage(collide(COP_SPECS.armored, true))).toBeGreaterThan(bangDamage(collide(COP_SPECS.patrol, true)) * 1.5);
   });
 
   it('reports when the player drives into a cop (for wanted heat)', () => {

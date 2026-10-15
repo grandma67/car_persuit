@@ -52,7 +52,7 @@ import { Airtime, type Takeoff } from '../gameplay/Airtime';
 import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
-import { DAMAGE } from '../gameplay/balance';
+import { COP_RAM, DAMAGE } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
 
 const FIXED_DT = 1 / 60;
@@ -458,7 +458,8 @@ export class Game {
     this.props.updateActive(frameDt, this.propToucherPositions());
     this.accumulator += frameDt;
     let steps = 0;
-    let impact = 0;
+    let impact = 0; // strongest jolt the player felt this frame (crunch, shake)
+    let crashImpact = 0; // the same, less what a cop's push gave: cop contact charges that itself
     let ramDamage = 0;
     let crashSound = 0; // loudest car-on-car/wall crash heard this frame, 0..1 (strength × distance)
     const breaks: PropBreak[] = [];
@@ -483,6 +484,7 @@ export class Game {
       }
       this.scratch(this.player, playerHit);
       impact = Math.max(impact, playerHit);
+      let copDv = 0;
       for (const car of this.traffic.cars) {
         car.vehicle.snapshot();
         const hit = car.vehicle.consumeImpact();
@@ -508,7 +510,11 @@ export class Game {
       for (const cop of this.director.cops) {
         cop.vehicle.snapshot();
         breaks.push(...this.scratchOnProps(cop.vehicle, this.props.checkVehicle(cop.vehicle, FIXED_DT)));
-        if (copsChase && cop.wreckedFor === null) ramDamage += this.copContactDamage(cop, FIXED_DT);
+        if (copsChase && cop.wreckedFor === null) {
+          const contact = this.copContactDamage(cop, FIXED_DT);
+          ramDamage += contact.damage;
+          copDv += contact.dv;
+        }
         const hit = cop.vehicle.consumeImpact();
         if (hit > 0) this.markWall(cop.vehicle, hit);
         this.scratch(cop.vehicle, hit);
@@ -518,6 +524,7 @@ export class Game {
           if (cop.health.destroyed) this.explodeCop(cop);
         }
       }
+      crashImpact = Math.max(crashImpact, playerHit - copDv);
       this.accumulator -= FIXED_DT;
       steps++;
     }
@@ -550,7 +557,7 @@ export class Game {
     const carPos = this.player.mesh.root.position;
     this.updateSun(carPos);
 
-    if (this.state === 'playing') this.applyDamage(impact, ramDamage);
+    if (this.state === 'playing') this.applyDamage(crashImpact, ramDamage);
     if (this.state === 'playing') this.logJumps();
     if (this.state === 'playing') this.updateMission(frameDt, carPos);
     this.marker.update(frameDt);
@@ -657,21 +664,21 @@ export class Game {
   }
 
   /** Damage from a cop touching the player this step; a fresh ram also bangs, and may raise the heat. */
-  private copContactDamage(cop: Cop, dt: number): number {
+  private copContactDamage(cop: Cop, dt: number): { damage: number; dv: number } {
     const contact = this.copContact.check(cop, this.chaseTarget.velocity, dt);
     if (contact.started) {
-      // A ram can shove the player without a sharp velocity jump, so it gets its own bang.
-      this.ramSound = Math.max(this.ramSound, impactStrength(contact.closing));
+      // As loud as the shove it gave: a square ram booms, a sideswipe at the same speed scrapes.
+      this.ramSound = Math.max(this.ramSound, impactStrength(contact.dv));
       const kmh = Math.round(contact.closing * 3.6);
       // The player drove into the cop (not just got rammed): assaulting an officer raises the heat.
       if (contact.whack > WHACK_SPEED && this.state === 'playing') {
         this.logIncident('whack', `Rammed a ${cop.vehicle.spec.name.toLowerCase()} cop at ${kmh} km/h`, cop.vehicle.position);
         this.raiseStars(this.wanted.copWhacked(contact.whack));
-      } else if (contact.closing > WHACK_SPEED && this.state === 'playing') {
+      } else if (contact.dv > COP_RAM.bump && this.state === 'playing') {
         this.logIncident('rammed', `Rammed by a ${cop.vehicle.spec.name.toLowerCase()} at ${kmh} km/h`);
       }
     }
-    return contact.damage * this.difficulty.damageScale;
+    return { damage: contact.damage * this.difficulty.damageScale, dv: contact.dv };
   }
   /**
    * Cars that go into the sea or a canal: a splash and a blast on the way in, then they come to rest
