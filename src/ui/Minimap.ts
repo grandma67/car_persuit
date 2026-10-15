@@ -3,6 +3,8 @@
 import type { CityData } from '../world/CityGenerator';
 import { rampShape } from '../world/Landmarks';
 import { groundHeight } from '../world/Terrain';
+import { DISTRICT_DEFS } from '../world/districts/index';
+import { perimeterWall } from '../world/districts/apply';
 
 const SIZE_CSS = 180; // on-screen diameter
 const VIEW_RADIUS = 230; // metres from the player to the map edge
@@ -109,6 +111,22 @@ export class Minimap {
     for (const r of this.city.roads) rect(r.rect.x, r.rect.z, r.rect.w, r.rect.d, COLORS.road);
     for (const i of this.city.intersections) rect(i.x, i.z, i.w, i.d, COLORS.road);
     for (const b of terrain.bridges) rect(b.x, b.z, b.w, b.d, COLORS.road);
+    // Districts: a tint in the district's colour and its perimeter drawn thick, open at the gates.
+    for (const q of this.city.districts) {
+      const color = `#${(DISTRICT_DEFS.find((d) => d.kind === q.kind)?.mapColor ?? 0xffffff).toString(16).padStart(6, '0')}`;
+      g.globalAlpha = 0.18;
+      rect(q.bounds.x, q.bounds.z, q.bounds.w, q.bounds.d, color);
+      g.globalAlpha = 1;
+      g.strokeStyle = color;
+      g.lineWidth = 3 * BASE_SCALE;
+      g.lineCap = 'square';
+      for (const w of perimeterWall(q, this.city).segments) {
+        g.beginPath();
+        g.moveTo(...this.toMap(w.ax, w.az));
+        g.lineTo(...this.toMap(w.bx, w.bz));
+        g.stroke();
+      }
+    }
     // Roadworks: the closed junction, or the closed road between its two junctions, in orange.
     const { roadWidth } = this.city.config;
     const nodes = this.city.graph.nodes;

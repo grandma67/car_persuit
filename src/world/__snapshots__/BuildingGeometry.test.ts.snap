@@ -1,0 +1,244 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`building geometry > seed 1: walls per facade and roofs are unchanged 1`] = `
+{
+  "Beach Pastel/snow": {
+    "curtain": "304v 456i #-90334055",
+    "industrial": "1488v 2232i #-349048804",
+    "roofs": "19884v 29826i #892349959",
+    "shutters": "6192v 9288i #809453563",
+    "stucco": "1808v 2712i #125618841",
+  },
+  "Beach Pastel/temperate": {
+    "curtain": "304v 456i #-90334055",
+    "industrial": "1488v 2232i #-349048804",
+    "roofs": "19884v 29826i #596554771",
+    "shutters": "6192v 9288i #809453563",
+    "stucco": "1808v 2712i #125618841",
+  },
+  "Desert Southwest/snow": {
+    "adobe": "8000v 12000i #693006412",
+    "industrial": "1488v 2232i #-390218337",
+    "office": "304v 456i #-869318440",
+    "roofs": "19884v 29826i #806411629",
+  },
+  "Desert Southwest/temperate": {
+    "adobe": "8000v 12000i #693006412",
+    "industrial": "1488v 2232i #-390218337",
+    "office": "304v 456i #-869318440",
+    "roofs": "19884v 29826i #887808013",
+  },
+  "Mediterranean/snow": {
+    "industrial": "1488v 2232i #-888458263",
+    "office": "304v 456i #-64102519",
+    "roofs": "19884v 29826i #814809098",
+    "shutters": "8000v 12000i #805677933",
+  },
+  "Mediterranean/temperate": {
+    "industrial": "1488v 2232i #-888458263",
+    "office": "304v 456i #-64102519",
+    "roofs": "19884v 29826i #647002338",
+    "shutters": "8000v 12000i #805677933",
+  },
+  "Modern American/snow": {
+    "curtain": "304v 456i #-636415246",
+    "industrial": "1488v 2232i #-907103606",
+    "office": "1808v 2712i #775476550",
+    "roofs": "18336v 27504i #777949218",
+    "siding": "6192v 9288i #117637623",
+  },
+  "Modern American/temperate": {
+    "curtain": "304v 456i #-636415246",
+    "industrial": "1488v 2232i #-907103606",
+    "office": "1808v 2712i #775476550",
+    "roofs": "18336v 27504i #478775018",
+    "siding": "6192v 9288i #117637623",
+  },
+  "Nordic/snow": {
+    "curtain": "304v 456i #-629740272",
+    "industrial": "1488v 2232i #-179139777",
+    "roofs": "18336v 27504i #707234696",
+    "siding": "6192v 9288i #751301280",
+    "stucco": "1808v 2712i #393385003",
+  },
+  "Nordic/temperate": {
+    "curtain": "304v 456i #-629740272",
+    "industrial": "1488v 2232i #-179139777",
+    "roofs": "18336v 27504i #167375036",
+    "siding": "6192v 9288i #751301280",
+    "stucco": "1808v 2712i #393385003",
+  },
+  "Old Brick/snow": {
+    "brick": "9488v 14232i #408716789",
+    "office": "304v 456i #-143884324",
+    "roofs": "18708v 28062i #6583538",
+  },
+  "Old Brick/temperate": {
+    "brick": "9488v 14232i #408716789",
+    "office": "304v 456i #-143884324",
+    "roofs": "18708v 28062i #525766384",
+  },
+}
+`;
+
+exports[`building geometry > seed 42: walls per facade and roofs are unchanged 1`] = `
+{
+  "Beach Pastel/snow": {
+    "curtain": "544v 816i #-895129894",
+    "industrial": "640v 960i #-815071062",
+    "roofs": "25324v 37986i #110397931",
+    "shutters": "9088v 13632i #521964195",
+    "stucco": "2096v 3144i #-97934215",
+  },
+  "Beach Pastel/temperate": {
+    "curtain": "544v 816i #-895129894",
+    "industrial": "640v 960i #-815071062",
+    "roofs": "25324v 37986i #145520577",
+    "shutters": "9088v 13632i #521964195",
+    "stucco": "2096v 3144i #-97934215",
+  },
+  "Desert Southwest/snow": {
+    "adobe": "11184v 16776i #-757326691",
+    "industrial": "640v 960i #-542367028",
+    "office": "544v 816i #-392870848",
+    "roofs": "25324v 37986i #245115687",
+  },
+  "Desert Southwest/temperate": {
+    "adobe": "11184v 16776i #-757326691",
+    "industrial": "640v 960i #-542367028",
+    "office": "544v 816i #-392870848",
+    "roofs": "25324v 37986i #392498320",
+  },
+  "Mediterranean/snow": {
+    "industrial": "640v 960i #-261440824",
+    "office": "544v 816i #-922976732",
+    "roofs": "25324v 37986i #288110952",
+    "shutters": "11184v 16776i #990830340",
+  },
+  "Mediterranean/temperate": {
+    "industrial": "640v 960i #-261440824",
+    "office": "544v 816i #-922976732",
+    "roofs": "25324v 37986i #878300617",
+    "shutters": "11184v 16776i #990830340",
+  },
+  "Modern American/snow": {
+    "curtain": "544v 816i #-858734368",
+    "industrial": "640v 960i #-230920168",
+    "office": "2096v 3144i #-413484941",
+    "roofs": "23052v 34578i #968949759",
+    "siding": "9088v 13632i #582110232",
+  },
+  "Modern American/temperate": {
+    "curtain": "544v 816i #-858734368",
+    "industrial": "640v 960i #-230920168",
+    "office": "2096v 3144i #-413484941",
+    "roofs": "23052v 34578i #221805291",
+    "siding": "9088v 13632i #582110232",
+  },
+  "Nordic/snow": {
+    "curtain": "544v 816i #-684358902",
+    "industrial": "640v 960i #-523013210",
+    "roofs": "23052v 34578i #92697203",
+    "siding": "9088v 13632i #94083108",
+    "stucco": "2096v 3144i #-843267987",
+  },
+  "Nordic/temperate": {
+    "curtain": "544v 816i #-684358902",
+    "industrial": "640v 960i #-523013210",
+    "roofs": "23052v 34578i #263566830",
+    "siding": "9088v 13632i #94083108",
+    "stucco": "2096v 3144i #-843267987",
+  },
+  "Old Brick/snow": {
+    "brick": "11824v 17736i #185766211",
+    "office": "544v 816i #-46624512",
+    "roofs": "23212v 34818i #443541819",
+  },
+  "Old Brick/temperate": {
+    "brick": "11824v 17736i #185766211",
+    "office": "544v 816i #-46624512",
+    "roofs": "23212v 34818i #301104139",
+  },
+}
+`;
+
+exports[`building geometry > seed 1234: walls per facade and roofs are unchanged 1`] = `
+{
+  "Beach Pastel/snow": {
+    "curtain": "672v 1008i #-207590511",
+    "industrial": "1504v 2256i #-568469368",
+    "roofs": "24800v 37200i #258511497",
+    "shutters": "7328v 10992i #649382492",
+    "stucco": "2560v 3840i #-449103555",
+  },
+  "Beach Pastel/temperate": {
+    "curtain": "672v 1008i #-207590511",
+    "industrial": "1504v 2256i #-568469368",
+    "roofs": "24800v 37200i #612014717",
+    "shutters": "7328v 10992i #649382492",
+    "stucco": "2560v 3840i #-449103555",
+  },
+  "Desert Southwest/snow": {
+    "adobe": "9888v 14832i #638076753",
+    "industrial": "1504v 2256i #-814208761",
+    "office": "672v 1008i #-722210776",
+    "roofs": "24800v 37200i #145807900",
+  },
+  "Desert Southwest/temperate": {
+    "adobe": "9888v 14832i #638076753",
+    "industrial": "1504v 2256i #-814208761",
+    "office": "672v 1008i #-722210776",
+    "roofs": "24800v 37200i #85477773",
+  },
+  "Mediterranean/snow": {
+    "industrial": "1504v 2256i #-436006940",
+    "office": "672v 1008i #-747749298",
+    "roofs": "24800v 37200i #660747078",
+    "shutters": "9888v 14832i #522483691",
+  },
+  "Mediterranean/temperate": {
+    "industrial": "1504v 2256i #-436006940",
+    "office": "672v 1008i #-747749298",
+    "roofs": "24800v 37200i #894355403",
+    "shutters": "9888v 14832i #522483691",
+  },
+  "Modern American/snow": {
+    "curtain": "672v 1008i #-173777413",
+    "industrial": "1504v 2256i #-872036434",
+    "office": "2560v 3840i #-827082961",
+    "roofs": "22968v 34452i #46340225",
+    "siding": "7328v 10992i #142733230",
+  },
+  "Modern American/temperate": {
+    "curtain": "672v 1008i #-173777413",
+    "industrial": "1504v 2256i #-872036434",
+    "office": "2560v 3840i #-827082961",
+    "roofs": "22968v 34452i #330182612",
+    "siding": "7328v 10992i #142733230",
+  },
+  "Nordic/snow": {
+    "curtain": "672v 1008i #-596874731",
+    "industrial": "1504v 2256i #-62776186",
+    "roofs": "22968v 34452i #487570074",
+    "siding": "7328v 10992i #254043238",
+    "stucco": "2560v 3840i #-97925177",
+  },
+  "Nordic/temperate": {
+    "curtain": "672v 1008i #-596874731",
+    "industrial": "1504v 2256i #-62776186",
+    "roofs": "22968v 34452i #906963503",
+    "siding": "7328v 10992i #254043238",
+    "stucco": "2560v 3840i #-97925177",
+  },
+  "Old Brick/snow": {
+    "brick": "11392v 17088i #418969073",
+    "office": "672v 1008i #-946020422",
+    "roofs": "23344v 35016i #800839741",
+  },
+  "Old Brick/temperate": {
+    "brick": "11392v 17088i #418969073",
+    "office": "672v 1008i #-946020422",
+    "roofs": "23344v 35016i #966986053",
+  },
+}
+`;

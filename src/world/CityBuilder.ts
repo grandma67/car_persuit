@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Rng } from '../core/Rng';
 import type { Building, CityData, Rect } from './CityGenerator';
-import type { CityTheme } from './CityTheme';
+import { ROOF_TILES, zoneLook, type CityTheme } from './CityTheme';
+import { DISTRICT_DEFS } from './districts/index';
+import type { LotLook, TrimKind } from './districts/District';
 import type { Climate, TreeKind } from './Climate';
 import type { StreetProp } from './StreetProps';
 import { clipRect, groundBase, groundHeight, groundNormal, isFlat, type Terrain } from './Terrain';
@@ -25,9 +27,10 @@ const PARAPET = { thick: 0.5, height: 0.9 }; // low walls along the canals and b
 // with the walls below (which z-fight along the ground line).
 const PARAPET_INSET = 0.04;
 const CANAL_RAMP_GAP = 6; // half-width of the parapet gaps at a canal ramp
+const SOLID_HEIGHT = 10; // district solids' colliders: tall enough that nothing jumps them
 
 /** Accumulates flat-shaded quads into one BufferGeometry. */
-class GeometryBuilder {
+export class GeometryBuilder {
   positions: number[] = [];
   normals: number[] = [];
   colors: number[] = [];
@@ -352,16 +355,7 @@ export function buildCity(
   const m4 = new THREE.Matrix4();
 
   // --- Buildings: merged walls per facade style (windowed) + merged roofs, one collider each ---
-  const walls = new Map<FacadeStyle, GeometryBuilder>();
-  const roofs = new GeometryBuilder();
-  // On a slope a building stands on its lowest corner; the uphill side sinks into the ground.
-  const footings = city.buildings.map((b) => groundBase(terrain, b.x, b.z, Math.max(b.w, b.d) / 2) - 0.3);
-  city.buildings.forEach((b, i) => {
-    const facade = theme.facades[b.district];
-    if (!walls.has(facade)) walls.set(facade, new GeometryBuilder());
-    const gable = theme.gables && b.district === 'residential';
-    addBuilding(b, footings[i], theme.buildings[b.district], walls.get(facade)!, roofs, rng, { facade, gable, snowy: climate.snowRoofs }, terrain);
-  });
+  const { walls, roofs, footings } = buildingGeometry(city, theme, climate, rng);
   const meshes = [...walls].map(([facade, builder]) => {
     const tex = createFacadeTextures(facade, rng);
     return new THREE.Mesh(
@@ -387,6 +381,17 @@ export function buildCity(
   city.buildings.forEach((b, i) => {
     wallColliders.add(world.createCollider(RAPIER.ColliderDesc.cuboid(b.w / 2, b.h / 2, b.d / 2).setTranslation(b.x, footings[i] + b.h / 2, b.z)).handle);
   });
+
+  // --- District solids (walls, towers, stacks, crane legs …): unbreakable, and they take crash marks ---
+  for (const q of city.districts) {
+    for (const fp of q.dressing.solids) {
+      const y = groundBase(terrain, fp.x, fp.z, Math.hypot(fp.hx, fp.hz)) - 1;
+      const desc = RAPIER.ColliderDesc.cuboid(fp.hx, SOLID_HEIGHT / 2, fp.hz)
+        .setTranslation(fp.x, y + SOLID_HEIGHT / 2, fp.z)
+        .setRotation({ x: 0, y: Math.sin(fp.yaw / 2), z: 0, w: Math.cos(fp.yaw / 2) });
+      wallColliders.add(world.createCollider(desc).handle);
+    }
+  }
 
   // --- Plaza planters ---
   const planterGeo = new THREE.BoxGeometry(1, 0.9, 1).translate(0, 0.45, 0);
@@ -438,10 +443,26 @@ export function buildCity(
   return { walls: wallColliders, props, canalWater };
 }
 
-interface BuildingStyle {
-  facade: FacadeStyle;
-  gable: boolean; // pitched roof instead of a flat one
-  snowy: boolean;
+/**
+ * Every building's geometry: walls merged per facade style (windowed, UV-mapped to the facade
+ * texture) and roofs, caps and base courses merged into one more. Also each building's footing.
+ * `rng` is the city's visual stream (rooftop details), shared with the facade textures after.
+ */
+export function buildingGeometry(city: CityData, theme: CityTheme, climate: Climate, rng: Rng): { walls: Map<FacadeStyle, GeometryBuilder>; roofs: GeometryBuilder; footings: number[] } {
+  const terrain = city.terrain;
+  const walls = new Map<FacadeStyle, GeometryBuilder>();
+  const roofs = new GeometryBuilder();
+  // On a slope a building stands on its lowest corner; the uphill side sinks into the ground.
+  const footings = city.buildings.map((b) => groundBase(terrain, b.x, b.z, Math.max(b.w, b.d) / 2) - 0.3);
+  city.buildings.forEach((b, i) => addBuilding(b, footings[i], lookFor(b, theme), walls, roofs, rng, climate.snowRoofs, terrain));
+  return { walls, roofs, footings };
+}
+
+/** A building's look: its district lot's, else its zone's. */
+export function lookFor(b: Building, theme: CityTheme): LotLook {
+  const def = b.district && b.lot ? DISTRICT_DEFS.find((d) => d.kind === b.district) : undefined;
+  const look = def && b.lot ? def.looks[b.lot] : undefined;
+  return look ? { ...look, ...theme.districts?.[b.district!]?.[b.lot!] } : zoneLook(theme, b.zone);
 }
 
 /** Flat-roof cap per facade: overhang past the walls, height above the roof line, depth below it. */
@@ -455,12 +476,27 @@ const CAPS: Record<FacadeStyle, { over: number; up: number; down: number; stone:
   adobe: { over: 0.1, up: 0.7, down: 0.1, stone: false },
   industrial: { over: 0.05, up: 0.4, down: 0.2, stone: false },
 };
-const ROOF_TILES = [0x6e3a2e, 0x45484d, 0x5a4e44, 0x7a4a36];
 const WHITE = new THREE.Color(0xffffff);
 
-function addBuilding(b: Building, y0: number, palette: number[], walls: GeometryBuilder, roofs: GeometryBuilder, rng: Rng, style: BuildingStyle, terrain: Terrain): void {
+/** The builder for a facade style's merged walls (made on first use). */
+function wallsFor(walls: Map<FacadeStyle, GeometryBuilder>, facade: FacadeStyle): GeometryBuilder {
+  let g = walls.get(facade);
+  if (!g) walls.set(facade, (g = new GeometryBuilder()));
+  return g;
+}
+
+/**
+ * One building on the facade pipeline: windowed walls merged per facade style (floor 0 into the
+ * look's ground style, when it has one), and its roof, caps and trims into the shared roof mesh.
+ */
+function addBuilding(
+  b: Building, y0: number, look: LotLook, walls: Map<FacadeStyle, GeometryBuilder>, roofs: GeometryBuilder, rng: Rng, snowy: boolean, terrain: Terrain,
+): void {
+  const upper = wallsFor(walls, look.facade);
+  const ground = look.ground && look.ground !== look.facade ? wallsFor(walls, look.ground) : null;
+  const palette = look.palette;
   const wallColor = new THREE.Color(palette[Math.floor(b.variant * palette.length)]);
-  const roofColor = style.snowy ? new THREE.Color(SNOW) : wallColor.clone().multiplyScalar(0.55);
+  const roofColor = snowy ? new THREE.Color(SNOW) : wallColor.clone().multiplyScalar(0.55);
   // Per-building window pattern offset, snapped to whole cells so windows line up with floors.
   const uOff = Math.floor(b.variant * 97) % WINDOW_CELLS / WINDOW_CELLS;
   const vOff = Math.floor(b.variant * 389) % WINDOW_CELLS / WINDOW_CELLS;
@@ -473,7 +509,7 @@ function addBuilding(b: Building, y0: number, palette: number[], walls: Geometry
   const baseColor = wallColor.clone().multiplyScalar(0.72);
   const y1 = y0 + b.h;
   // Tall towers step back for their top floors (visual only: the collider stays the full box).
-  const glassy = style.facade === 'curtain' || style.facade === 'office';
+  const glassy = look.facade === 'curtain' || look.facade === 'office';
   const split = glassy && b.h > 50 ? Math.round(floors * (0.65 + b.variant * 0.15)) : floors;
   const ySplit = y0 + split * floor;
   const inset = Math.min(b.w, b.d) * 0.14;
@@ -490,24 +526,70 @@ function addBuilding(b: Building, y0: number, palette: number[], walls: Geometry
     for (const [[ax, az], [bx, bz], normal] of faces) {
       let blank = 0;
       if (onGround) {
-        let ground = -Infinity;
-        for (let k = 0; k <= 4; k++) ground = Math.max(ground, groundHeight(terrain, ax + ((bx - ax) * k) / 4, az + ((bz - az) * k) / 4));
-        blank = Math.min(fb, Math.max(0, Math.ceil((ground - ya) / floor - sill + 0.02)));
+        let groundY = -Infinity;
+        for (let k = 0; k <= 4; k++) groundY = Math.max(groundY, groundHeight(terrain, ax + ((bx - ax) * k) / 4, az + ((bz - az) * k) / 4));
+        blank = Math.min(fb, Math.max(0, Math.ceil((groundY - ya) / floor - sill + 0.02)));
       }
-      const yw = ya + blank * floor;
+      let yw = ya + blank * floor;
       if (blank > 0) roofs.quad([[ax, ya, az], [bx, ya, bz], [bx, yw, bz], [ax, yw, az]], normal, baseColor);
-      if (fa + blank >= fb) continue;
+      let f = fa + blank;
+      if (f >= fb) continue;
       const u = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / WINDOW_WIDTH)) / WINDOW_CELLS;
-      const v0 = vOff + (fa + blank) / WINDOW_CELLS;
-      const v1 = vOff + fb / WINDOW_CELLS;
-      walls.quad([[ax, yw, az], [bx, yw, bz], [bx, yb, bz], [ax, yb, az]], normal, wallColor, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
+      const band = (to: GeometryBuilder, f0: number, f1: number, yA: number, yB: number) => {
+        const v0 = vOff + f0 / WINDOW_CELLS;
+        const v1 = vOff + f1 / WINDOW_CELLS;
+        to.quad([[ax, yA, az], [bx, yA, bz], [bx, yB, bz], [ax, yB, az]], normal, wallColor, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
+      };
+      // The ground floor in its own style (shopfronts, roller doors), when it's at street level.
+      if (ground && f === 0) {
+        band(ground, 0, 1, yw, yw + floor);
+        f = 1;
+        yw += floor;
+        if (f >= fb) continue;
+      }
+      band(upper, f, fb, yw, yb);
     }
   };
   wallFaces(b, y0, ySplit, 0, split, true);
   if (split < floors) wallFaces(top, ySplit, y1, split, floors, false);
 
+  addRoof(look, b, { y1, ySplit, split, floors, top }, roofs, rng, wallColor, roofColor, snowy);
+  addTrims(look.trims ?? [], b, y0, roofs, wallColor);
+}
+
+interface RoofFrame {
+  y1: number; // wall tops
+  ySplit: number; // where a tower steps back
+  split: number;
+  floors: number;
+  top: Rect; // the top floors' footprint
+}
+
+/** The roof for a look's shape, into the shared roof mesh. Shapes still to come stand in as gable or flat. */
+function addRoof(look: LotLook, b: Building, f: RoofFrame, roofs: GeometryBuilder, rng: Rng, wallColor: THREE.Color, roofColor: THREE.Color, snowy: boolean): void {
+  const tiles = look.roofTiles ?? ROOF_TILES;
+  const tile = () => (snowy ? new THREE.Color(SNOW) : new THREE.Color(tiles[Math.floor(b.variant * 31) % tiles.length]));
+  switch (look.roof) {
+    case 'gable':
+    case 'steepGable': // stub
+    case 'hip': // stub
+    case 'gambrel': // stub
+    case 'monopitch': // stub
+      addGable(b, f.y1, roofs, wallColor, tile());
+      return;
+    case 'flat':
+    case 'sawtooth': // stub
+    case 'barrel': // stub
+    case 'pagoda': // stub
+      addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy);
+  }
+}
+
+/** A cornice or parapet slab (at the step-back too), and rooftop details on taller buildings. */
+function addFlatRoof(facade: FacadeStyle, b: Building, f: RoofFrame, roofs: GeometryBuilder, rng: Rng, wallColor: THREE.Color, roofColor: THREE.Color, snowy: boolean): void {
+  const { top, y1 } = f;
   // A cornice or parapet slab with a soffit under its overhang.
-  const cap = CAPS[style.facade];
+  const cap = CAPS[facade];
   const capColor = cap.stone ? wallColor.clone().lerp(WHITE, 0.45) : wallColor.clone().multiplyScalar(0.9);
   const slab = (r: Rect, y: number) => {
     const o = cap.over;
@@ -518,12 +600,7 @@ function addBuilding(b: Building, y0: number, palette: number[], walls: Geometry
       roofs.quad([[x0, yb, z0], [x1, yb, z0], [x1, yb, z1], [x0, yb, z1]], [0, -1, 0], capColor.clone().multiplyScalar(0.7));
     }
   };
-
-  if (style.gable) {
-    addGable(b, y1, roofs, wallColor, style.snowy ? new THREE.Color(SNOW) : new THREE.Color(ROOF_TILES[Math.floor(b.variant * 31) % ROOF_TILES.length]));
-    return;
-  }
-  if (split < floors) slab(b, ySplit);
+  if (f.split < f.floors) slab(b, f.ySplit);
   slab(top, y1);
 
   // Rooftop details on taller buildings: AC units, stair housings.
@@ -534,8 +611,30 @@ function addBuilding(b: Building, y0: number, palette: number[], walls: Geometry
       const d = rng.range(2, Math.min(6, top.d * 0.4));
       const x = top.x + rng.range(-(top.w - w) / 2 + 0.5, (top.w - w) / 2 - 0.5);
       const z = top.z + rng.range(-(top.d - d) / 2 + 0.5, (top.d - d) / 2 - 0.5);
-      const unitColor = style.snowy ? wallColor.clone().multiplyScalar(0.7) : roofColor.clone().multiplyScalar(1.4);
+      const unitColor = snowy ? wallColor.clone().multiplyScalar(0.7) : roofColor.clone().multiplyScalar(1.4);
       roofs.box({ x, z, w, d }, y1 + cap.up, rng.range(1.2, 3.5), unitColor, null, roofColor);
+    }
+  }
+}
+
+/**
+ * Trims: a few merged boxes and quads in the roof mesh (no new draw calls). The collider stays the
+ * lot box. Each district milestone fills in its own.
+ */
+function addTrims(trims: TrimKind[], b: Building, y0: number, roofs: GeometryBuilder, wallColor: THREE.Color): void {
+  for (const trim of trims) {
+    switch (trim) {
+      case 'jetty':
+      case 'colonnade':
+      case 'balcony':
+      case 'loadingDock':
+      case 'porch':
+      case 'chimney':
+      case 'hoist':
+      case 'clockTower':
+      case 'radarMast':
+        void b; void y0; void roofs; void wallColor;
+        break;
     }
   }
 }

@@ -7,15 +7,21 @@ export type MissionStatus = 'playing' | 'won' | 'lost';
 export type LoseReason = 'time' | 'destroyed' | 'drowned';
 export type MissionEvent = 'reached' | 'won' | 'lost';
 
-/** Pick sequential destinations, each min..max metres by road from the previous one. */
-export function pickDestinations(graph: RoadGraph, rng: Rng, startId: number, cfg: MissionConfig = MISSION): RoadNode[] {
+/**
+ * Pick sequential destinations, each min..max metres by road from the previous one. `districtOf`:
+ * the district a junction lies in, if any; at most one destination falls in each.
+ */
+export function pickDestinations(
+  graph: RoadGraph, rng: Rng, startId: number, cfg: MissionConfig = MISSION, districtOf?: (id: number) => string | undefined,
+): RoadNode[] {
   const out: RoadNode[] = [];
   const used = new Set([startId]);
+  const visited = new Set<string>();
   let from = startId;
   for (let k = 0; k < cfg.destinations; k++) {
     const dist = graph.distancesFrom(from);
     const within = (min: number, max: number) =>
-      graph.nodes.filter((n) => !used.has(n.id) && dist[n.id] >= min && dist[n.id] <= max);
+      graph.nodes.filter((n) => !used.has(n.id) && dist[n.id] >= min && dist[n.id] <= max && !visited.has(districtOf?.(n.id) ?? ''));
     // Relax the range rather than fail on an unusual map.
     let candidates = within(cfg.minRouteDistance, cfg.maxRouteDistance);
     if (!candidates.length) candidates = within(cfg.minRouteDistance, Infinity);
@@ -23,6 +29,8 @@ export function pickDestinations(graph: RoadGraph, rng: Rng, startId: number, cf
     const next = rng.pick(candidates);
     out.push(next);
     used.add(next.id);
+    const d = districtOf?.(next.id);
+    if (d) visited.add(d);
     from = next.id;
   }
   return out;

@@ -102,9 +102,9 @@ const templates = new Map<string, CarMesh>();
  * and darkens on its own.
  */
 export function buildCarMesh(spec: VehicleSpec): CarMesh {
-  const { body, halfExtents, wheelRadius, tandemRear, livery, kerb } = spec;
+  const { body, halfExtents, wheelRadius, tandemRear, livery, kerb, paint } = spec;
   const door = body === 'bus' ? (kerb === 'left' ? 'left' : 'right') : null; // the kerb side only places a bus's door
-  const key = JSON.stringify({ body, halfExtents, wheelRadius, tandemRear, livery, door });
+  const key = JSON.stringify({ body, halfExtents, wheelRadius, tandemRear, livery, door, paint });
   let template = templates.get(key);
   if (!template) templates.set(key, (template = createCarMesh(spec)));
   return cloneCarMesh(template, spec.color);
@@ -183,14 +183,16 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   const { x: hx, y: hy, z: hz } = spec.halfExtents;
 
   // Metallic base under a glossy clear coat: the coat throws a sharp sun glint, the flakes sparkle.
+  // Work vehicles (tractors, truck chassis) get a dull, rough coat with no flakes.
+  const work = spec.paint === 'work';
   const paint = new THREE.MeshPhysicalMaterial({
     color: spec.color,
-    metalness: 0.75,
-    roughness: 0.4,
-    normalMap: flakeTexture(),
+    metalness: work ? 0.15 : 0.75,
+    roughness: work ? 0.65 : 0.4,
+    normalMap: work ? null : flakeTexture(),
     normalScale: new THREE.Vector2(0.25, 0.25),
-    clearcoat: 1,
-    clearcoatRoughness: 0.06,
+    clearcoat: work ? 0.25 : 1,
+    clearcoatRoughness: work ? 0.5 : 0.06,
     envMap: environment,
   });
   const trim = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6, flatShading: true });

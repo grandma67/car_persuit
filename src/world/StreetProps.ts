@@ -155,12 +155,12 @@ export function generateStreetProps(
         props.push({ kind: 'hydrant', ...at(block, side, HYDRANT_INSET, t), yaw: rng.range(0, Math.PI * 2) });
       }
 
-      if (!block.park && (block.district === 'downtown' || block.district === 'midtown') && rng.next() < 0.4) {
+      if (!block.park && (block.zone === 'downtown' || block.zone === 'midtown') && rng.next() < 0.4) {
         props.push({ kind: 'bench', ...at(block, side, BENCH_INSET, rng.range(-5, 5)), yaw: yawFacing(side.nx, side.nz) });
       }
 
       // Picket fences: around parks (entrance gap mid-side) and along some residential blocks.
-      const fenced = block.park || (block.district === 'residential' && rng.next() < 0.6);
+      const fenced = block.park || (block.zone === 'residential' && rng.next() < 0.6);
       if (fenced) {
         const length = config.blockSize - FENCE_INSET * 2;
         const count = Math.floor(length / FENCE_LENGTH);

@@ -70,6 +70,8 @@ async function start(): Promise<void> {
   await RAPIER.init();
   await stage(`Building city #${seed}`, 55);
   const game = new Game(document.getElementById('app')!, document.getElementById('hud')!, seed);
+  // For browser checks: the game's renderer and city, from the console.
+  if (new URLSearchParams(window.location.search).has('debug')) (window as unknown as { game: Game }).game = game;
   await stage('Placing street furniture', 90);
   game.start();
   // After start(): the stage's two frames render the scene first, settling its lights.

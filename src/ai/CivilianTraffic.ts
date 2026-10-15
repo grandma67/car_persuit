@@ -23,6 +23,8 @@ import { CivilianController, type ForwardSensor } from './CivilianController';
 import type { Awareness, Mover, Obstacle } from './awareness';
 import { Junctions } from './junctions';
 import type { Keep } from '../world/driveSide';
+import type { DistrictTraffic } from '../world/districts/District';
+import type { DistrictTrafficRules } from '../world/districts/runtime';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpUp = new THREE.Vector3(); // scratch, for reading a car's up axis
@@ -60,9 +62,15 @@ const MIX: { weight: number; spec: VehicleSpec; colors: number[] }[] = [
 ];
 const MIX_TOTAL = MIX.reduce((s, m) => s + m.weight, 0);
 
-function civilianSpec(rng: Rng): VehicleSpec {
-  let roll = rng.next() * MIX_TOTAL;
-  const pick = MIX.find((m) => (roll -= m.weight) < 0) ?? MIX[0];
+const isHeavy = (spec: VehicleSpec) => spec.body === 'bus' || spec.body === 'boxtruck' || spec.body === 'ramptruck';
+
+/** A civilian from the mix; inside a district, its weights (and no buses or trucks where it bans them). */
+function civilianSpec(rng: Rng, district?: DistrictTraffic): VehicleSpec {
+  const weight = (m: (typeof MIX)[number]) =>
+    !district ? m.weight : !district.heavy && isHeavy(m.spec) ? 0 : m.weight * (district.weights?.[m.spec.name] ?? 1);
+  const total = district ? MIX.reduce((sum, m) => sum + weight(m), 0) : MIX_TOTAL;
+  let roll = rng.next() * total;
+  const pick = MIX.find((m) => (roll -= weight(m)) < 0) ?? MIX[0];
   return asCivilian(pick.spec, rng.pick(pick.colors));
 }
 
@@ -202,6 +210,7 @@ export class CivilianTraffic {
     private keep: Keep = 1,
     private fast: Set<string> = new Set(),
     private stops: Map<string, number> = new Map(),
+    private districts: DistrictTrafficRules | null = null,
   ) {
     // Forward sensor: a ray from the front bumper that only sees moving bodies (cars), so
     // buildings at junction corners don't make drivers brake.
@@ -261,6 +270,13 @@ export class CivilianTraffic {
     if (this.cars.length < this.count) this.spawn(playerPos);
   }
 
+  /** Pick by weight (spawn density per district). */
+  private weightedPick<T>(items: T[], weight: (t: T) => number): T {
+    const total = items.reduce((sum, t) => sum + weight(t), 0);
+    let roll = this.rng.next() * total;
+    return items.find((t) => (roll -= weight(t)) < 0) ?? items[items.length - 1];
+  }
+
   private spawn(playerPos: THREE.Vector3): void {
     const g = this.graph;
     const from = g.nearest(playerPos.x, playerPos.z);
@@ -273,8 +289,11 @@ export class CivilianTraffic {
     }
     const candidates = this.spawnNodes;
     if (!candidates.length) return;
-    const node = this.rng.pick(candidates);
+    const zones = this.districts?.nodes;
+    const node = zones?.size ? this.weightedPick(candidates, (n) => zones.get(n.id)?.density ?? 1) : this.rng.pick(candidates);
     const to = g.nodes[this.rng.pick(node.neighbors)];
+    // Inside a district (or turning into one), its own mix.
+    const district = zones?.get(node.id) ?? zones?.get(to.id);
     // Start in our lane (right, or left in an English city) just past the junction, heading along the road.
     const len = Math.hypot(to.x - node.x, to.z - node.z);
     const dx = (to.x - node.x) / len;
@@ -282,8 +301,8 @@ export class CivilianTraffic {
     const x = node.x + dx * 12 - dz * 3 * this.keep;
     const z = node.z + dz * 12 + dx * 3 * this.keep;
     if (this.cars.some((c) => Math.hypot(c.vehicle.position.x - x, c.vehicle.position.z - z) < TRAFFIC.spacing)) return;
-    const ramp = !this.rampTruck && this.rng.next() < TRAFFIC.rampChance;
-    const spec: VehicleSpec = { ...(ramp ? rampTruckSpec() : civilianSpec(this.rng)), kerb: this.keep > 0 ? 'right' : 'left' };
+    const ramp = !this.rampTruck && this.rng.next() < TRAFFIC.rampChance && (district?.heavy ?? true);
+    const spec: VehicleSpec = { ...(ramp ? rampTruckSpec() : civilianSpec(this.rng, district)), kerb: this.keep > 0 ? 'right' : 'left' };
     // Drop tall bodies in from a little higher so their wheels land rather than spawn in the road.
     const y = this.ground(x, z) + 1.2 - (spec.wheelY ?? 0);
     const vehicle = new Vehicle(this.world, spec, { x, y, z }, Math.atan2(dx, dz));
@@ -291,6 +310,6 @@ export class CivilianTraffic {
     vehicle.headlights = this.headlights;
     vehicle.beamEnabled = false;
     this.scene.add(vehicle.mesh.root);
-    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep, this.junctions, this.fast, this.stops) });
+    this.cars.push({ vehicle, controller: new CivilianController(vehicle, g, this.controls, this.sense, this.rng, node.id, to.id, this.awareness, this.keep, this.junctions, this.fast, this.stops, this.districts) });
   }
 }

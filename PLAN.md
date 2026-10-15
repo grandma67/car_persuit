@@ -44,7 +44,7 @@ Generation and gameplay logic are pure data (no Three.js) and unit-tested with V
 ## World
 
 - 12×12 block grid on a seeded hill, ringed by a quay and an animated sea; 0–2 canals (12–100 m wide) with bridges every few blocks.
-- Districts (downtown towers → residential/industrial), parks, drivable plazas (shortcuts cops don't path through), town squares with fountains, statues and the occasional jump ramp ("The Leap", canal ramps).
+- Zones (downtown towers → residential/industrial), parks, drivable plazas (shortcuts cops don't path through), town squares with fountains, statues and the occasional jump ramp ("The Leap", canal ramps).
 - Seed picks style, time of day, climate (temperate, snow, beach, desert), weather (rain/snow) and, rarely, left-hand traffic.
 - Traffic lights, priority junctions with stop signs, crossings, bus stops, roadworks sites; lamps, hydrants, signs, fences, trees and more are breakable.
 
@@ -71,4 +71,4 @@ Damage (smoke, fire, explosion, scratches/dents), skid marks and tyre smoke, bod
 
 ## Debug (`?debug`)
 
-FPS counter; C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`, `?weather=`, `?hill=0|1`. Without debug: `?seed=`, `?time=`, `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?touch`.
+FPS counter; C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`, `?weather=`, `?hill=0|1`; `window.game` in the console (used by `npm run check:browser`). Without debug: `?seed=`, `?time=`, `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?touch`.

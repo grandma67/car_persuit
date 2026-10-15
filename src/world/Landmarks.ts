@@ -154,6 +154,28 @@ const SQUARE_RING_TREES = 10;
 const SQUARE_TREE_RADIUS = 21;
 
 /**
+ * Turn a block into a town square around its centrepiece: paved (block.square), its buildings and
+ * trees cleared, and (with `ring`) a ring of trees round the edge, leaving a ramp's lane clear.
+ * Returns the buildings and trees left.
+ */
+export function makeSquare(
+  block: Block, centrepiece: Landmark, buildings: Building[], trees: { x: number; z: number }[], config: CityConfig, ring = true,
+): { buildings: Building[]; trees: { x: number; z: number }[] } {
+  const half = config.blockSize / 2;
+  const inBlock = (p: { x: number; z: number }) => Math.abs(p.x - block.rect.x) < half && Math.abs(p.z - block.rect.z) < half;
+  block.square = true;
+  buildings = buildings.filter((bd) => !inBlock(bd));
+  trees = trees.filter((t) => !inBlock(t));
+  for (let k = 0; ring && k < SQUARE_RING_TREES; k++) {
+    const a = (k / SQUARE_RING_TREES) * Math.PI * 2 + Math.PI / SQUARE_RING_TREES;
+    const t = { x: block.rect.x + Math.cos(a) * SQUARE_TREE_RADIUS, z: block.rect.z + Math.sin(a) * SQUARE_TREE_RADIUS };
+    if (centrepiece.kind === 'ramp' && inRampLane(centrepiece, t)) continue; // keep the run-up and landing clear
+    trees.push(t);
+  }
+  return { buildings, trees };
+}
+
+/**
  * Turn a few busy blocks into town squares (removing their buildings) and give some parks a
  * centrepiece. Mutates blocks (square flag), buildings and trees; returns the landmarks.
  */
@@ -166,11 +188,9 @@ export function planLandmarks(
   rampSpots: { x: number; z: number; yaw: number }[] = [],
 ): { landmarks: Landmark[]; buildings: Building[]; trees: { x: number; z: number }[] } {
   const landmarks: Landmark[] = [];
-  const half = config.blockSize / 2;
-  const inBlock = (b: Block, p: { x: number; z: number }) => Math.abs(p.x - b.rect.x) < half && Math.abs(p.z - b.rect.z) < half;
 
   // Town squares: ~4 of the busy blocks.
-  const busy = blocks.filter((b) => !b.park && (b.district === 'downtown' || b.district === 'midtown'));
+  const busy = blocks.filter((b) => !b.park && (b.zone === 'downtown' || b.zone === 'midtown'));
   const squares: Block[] = [];
   const target = Math.min(4, busy.length);
   for (let tries = 0; squares.length < target && tries < 50; tries++) {
@@ -185,7 +205,6 @@ export function planLandmarks(
   const pitch = config.blockSize + config.roadWidth;
   const streetRamps: Landmark[] = [];
   for (const b of squares) {
-    b.square = true;
     let kind = rng.pick(LANDMARK_KINDS);
     if (kind === 'ramp') {
       // Never two on one street, nor one's run-up or landing on another's street.
@@ -197,18 +216,7 @@ export function planLandmarks(
     }
     landmarks.push({ kind, x: b.rect.x, z: b.rect.z, yaw: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), radius: LANDMARK_RADIUS[kind] });
   }
-  buildings = buildings.filter((bd) => !squares.some((s) => inBlock(s, bd)));
-  trees = trees.filter((t) => !squares.some((s) => inBlock(s, t)));
-  // A ring of trees around each square.
-  squares.forEach((s, i) => {
-    const centre = landmarks[i];
-    for (let k = 0; k < SQUARE_RING_TREES; k++) {
-      const a = (k / SQUARE_RING_TREES) * Math.PI * 2 + Math.PI / SQUARE_RING_TREES;
-      const t = { x: s.rect.x + Math.cos(a) * SQUARE_TREE_RADIUS, z: s.rect.z + Math.sin(a) * SQUARE_TREE_RADIUS };
-      if (centre.kind === 'ramp' && inRampLane(centre, t)) continue; // keep the run-up and landing clear
-      trees.push(t);
-    }
-  });
+  squares.forEach((s, i) => ({ buildings, trees } = makeSquare(s, landmarks[i], buildings, trees, config)));
 
   landmarks.push(...streetRamps);
 

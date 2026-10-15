@@ -13,6 +13,7 @@ import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
 import { CrashRecovery, hazardSpeedLimit, type Awareness, type Obstacle, type Self } from './awareness';
 import type { Keep } from '../world/driveSide';
 import { addFootprint, alongTrack, type JunctionClaim, type Junctions } from './junctions';
+import type { DistrictTrafficRules } from '../world/districts/runtime';
 
 const LANE_OFFSET = 3; // metres to the kerb side of the road centre line
 const JUNCTION_EDGE = 7; // lane points sit this far from the junction centre
@@ -167,6 +168,7 @@ export class CivilianController {
     private junctions?: Junctions,
     private fast: Set<string> = new Set(),
     private stops: Map<string, number> = new Map(),
+    private districts: DistrictTrafficRules | null = null,
   ) {
     this.recovery = new CrashRecovery(keep);
     this.route = [from, to];
@@ -369,6 +371,28 @@ export class CivilianController {
    * it and we come in slow enough to stop for them.
    */
   private cruiseHere(pos: P, decel: number): number {
+    return Math.min(this.cruiseFor(pos, decel), this.districtLimit(pos, decel));
+  }
+
+  /**
+   * A district's speed cap on this street, and easing down for the next one before the junction,
+   * as for the end of a fast stretch.
+   */
+  private districtLimit(pos: P, decel: number): number {
+    const limits = this.districts?.limits;
+    if (!limits?.size) return Infinity;
+    const [prev, next, after] = this.route;
+    let cap = limits.get(`${prev}>${next}`) ?? Infinity;
+    const ahead = limits.get(`${next}>${after}`);
+    if (ahead !== undefined && ahead < cap) {
+      const n = this.graph.nodes[next];
+      const toNext = Math.hypot(n.x - pos.x, n.z - pos.z);
+      cap = Math.min(cap, Math.sqrt(ahead * ahead + 2 * decel * Math.max(0, toNext - STOP_LINE)));
+    }
+    return cap;
+  }
+
+  private cruiseFor(pos: P, decel: number): number {
     const [prev, next, after] = this.route;
     if (!this.fast.has(`${prev}>${next}`)) return this.cruise;
     const n = this.graph.nodes[next];
@@ -623,7 +647,13 @@ export class CivilianController {
     while (this.route.length < 4) {
       const prev = this.route[this.route.length - 2];
       const cur = this.graph.nodes[this.route[this.route.length - 1]];
-      const options = cur.neighbors.filter((n) => n !== prev);
+      let options = cur.neighbors.filter((n) => n !== prev);
+      // Buses and trucks keep out of districts that ban them, unless there's no other way on.
+      const noHeavy = this.districts?.noHeavy;
+      if (this.style.heavy && noHeavy?.size) {
+        const allowed = options.filter((n) => !noHeavy.has(`${cur.id}>${n}`));
+        if (allowed.length) options = allowed;
+      }
       const from = this.graph.nodes[prev];
       const easy = !this.style.heavy ? options : options.filter((n) => turnAngle(from, cur, this.graph.nodes[n]) * this.keep <= 0.5);
       const pool = easy.length ? easy : options;
