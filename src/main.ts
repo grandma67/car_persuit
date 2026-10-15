@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Game } from './core/Game';
+import { debugTools } from './core/debugTools';
 import { seedFromUrl } from './core/Rng';
 import { isTouchDevice } from './ui/TouchControls';
 
@@ -70,8 +71,8 @@ async function start(): Promise<void> {
   await RAPIER.init();
   await stage(`Building city #${seed}`, 55);
   const game = new Game(document.getElementById('app')!, document.getElementById('hud')!, seed);
-  // For browser checks: the game's renderer and city, from the console.
-  if (new URLSearchParams(window.location.search).has('debug')) (window as unknown as { game: Game }).game = game;
+  // For browser checks: the game's renderer and city, and helpers to frame and measure (debugTools).
+  if (new URLSearchParams(window.location.search).has('debug')) Object.assign(window, { game, dbg: debugTools(game) });
   await stage('Placing street furniture', 90);
   game.start();
   // After start(): the stage's two frames render the scene first, settling its lights.

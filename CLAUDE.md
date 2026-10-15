@@ -10,23 +10,39 @@ districts work in progress.
 | What | Command |
 |---|---|
 | Type check | `npx tsc --noEmit` |
-| All tests | `npx vitest run` (~20 s) |
-| One area | `npx vitest run src/world/districts` or `-t "name"` |
+| Tests, quiet | `npm run t` (~20 s): only failures (same-shaped seed failures collapsed) and the summary; killed after 300 s (`T_LIMIT=`) instead of hanging. Area: `npm run t -- src/world/districts`, `-t "name"` |
+| District numbers | `npm run stats -- oldtown [seeds=100]` (~2 s): placement rate forced/natural, shapes, gates, average lots/landmarks/props/structures, generation ms on vs off |
+| One-off TS script | `node scripts/run-ts.mjs <file.ts> [args]` (Vite SSR, 0.3 s start; default export gets the args). Use instead of throwaway tests |
 | Build | `npm run build` |
-| Browser check | `npm run check:browser -- --query "seed=42&debug" --out <png> --eval "<js>" [--start 5000] [--size 390x844]` |
+| Browser check | `npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-dir <dir> --no-final --eval-file <file.js>` |
 
-`scripts/browser-check.mjs` starts Vite, opens headless Chrome **muted** (always mute: the user hears
-it otherwise), waits for the splash, optionally presses Start, evaluates a JS expression and saves a
-screenshot. It prints JSON with the value and every console error, warning and exception. With
-`?debug` the page exposes `window.game` (renderer, city, traffic, director …), so checks look like:
+**Browser checks** (`scripts/browser-check.mjs`): headless Chrome, always **muted** (the user hears it
+otherwise). It reuses a Vite server already on the port, so start one once per session in the
+background (`npx vite --port 5199`) and each run takes ~10 s. With `?debug` the page has
+`window.game` and `window.dbg` (`src/core/debugTools.ts`); the expression can call
+`await shot('name')` any number of times, so **put every view of a milestone in one run**:
 
+```js
+(async () => {
+  await dbg.gate(0);                                  // 30 m outside gate 0, facing in
+  await shot('gate');
+  await dbg.view(dbg.find('well'));                   // car on a road with a clear view of it
+  await shot('square');
+  await dbg.gate(1, { back: 45, speed: 36 }); await dbg.sleep(1500);
+  const run = dbg.car();                              // drove through at full speed?
+  await dbg.stars(5); await dbg.hold('KeyW', 8000);   // 5★ chase
+  return { run, stats: dbg.stats(), fps: await dbg.fps(2000) };
+})()
 ```
---eval "JSON.stringify({programs: game.renderer.info.programs.length, calls: game.renderer.info.render.calls, districts: game.city.districts.map(d => d.kind)})"
-```
 
-The Rapier "deprecated parameters" warning is pre-existing and harmless. Read the screenshot with
-the Read tool to look at it. To compare against main, `git worktree add <scratch>/mainwt main`,
-symlink `node_modules`, and run the script there with `--port 5299`.
+`dbg`: `district(kind?)`, `place(x, z, yaw, speed)`, `view(point, {dist})` (picks a road spot whose car
+and camera lines are clear of buildings and walls; never place the car by hand: it lands in walls or
+looks the wrong way), `gate(i, {back, speed, lateral})`, `find(kind)` (landmark, structure, prop or
+lot kind), `hold(code, ms)`, `stars(n)`, `fps(ms)`, `stats()` (programs, calls, triangles, static
+triangles), `car()`. Write the expression to a file in the scratchpad and pass `--eval-file`.
+Output is JSON: `val`, `shots`, and console errors/warnings (Rapier's harmless deprecation warning
+is filtered). Read only the screenshots you need. To compare against main,
+`git worktree add <scratch>/mainwt main`, symlink `node_modules`, and run with `--port 5299`.
 
 ## Working rules (from the user)
 
@@ -93,9 +109,8 @@ To add a district (each milestone in `TASKS.md` is a small step of this):
 Pitfalls already met:
 
 - The grid is 12×12; midtown is a thin ring, and canals and town squares take many blocks. Placement
-  rules that sound harmless can make a district almost never appear. **Measure the placement rate
-  over ~40 seeds** whenever you add a rule (a quick test that counts `city.districts`), and look at
-  rejection reasons if it's low. Roadworks only reject a cluster when they're inside it.
+  rules that sound harmless can make a district almost never appear. **Measure the placement rate**
+  whenever you add a rule (`npm run stats -- <kind>`), and look at rejection reasons if it's low. Roadworks only reject a cluster when they're inside it.
 - Interior streets may be plaza (removed) edges: they're not streets and never gates.
 - `perimeterWall` opens at *every* street crossing the wall line, not only gates; a
   `'mainStreet'` district has crossings without a gate.
@@ -125,18 +140,34 @@ Pitfalls already met:
 - `world/BuildingGeometry.test.ts` snapshots building geometry for every theme with no districts.
   If it fails, an ordinary building changed: that's a bug unless intended (then
   `npx vitest run -u` and say why in the commit).
-- Before a refactor that must change nothing, record a fingerprint first (a throwaway test that
-  hashes `generateCity` output for ~60 seeds into the scratchpad), refactor, then compare. Delete the
-  throwaway test before committing.
-- Browser check per milestone: the district forced on and off for the same seed, the screenshot,
-  `renderer.info.programs` (must not grow), draw calls, console logs empty. Use `--size 390x844` for
-  the phone viewport and read the HUD's FPS (`?debug` shows it).
+- Before a refactor that must change nothing, record a fingerprint first (a `run-ts.mjs` script in
+  the scratchpad that hashes `generateCity` output for ~60 seeds), refactor, then compare.
+- Browser check per milestone, one run each for on and off (`?<kind>=1` / `=0`, same seed): the
+  views (`shot()`), `dbg.stats()` (programs must not grow), console logs empty; for performance add
+  `--size 390x844` and `dbg.fps()` (headless Chrome caps at 60, so it only shows a drop).
+- Traffic and cops on a real city: see `world/districts/OldCityTraffic.test.ts` (a civilian sim and a
+  spawn count); copy it for a new district rather than extending the synthetic junction sims.
 
 ## Working efficiently
 
 - Read only the slice of a big file you need (`grep -n` first); `CityBuilder.ts`,
-  `CivilianController.ts`, `CopDirector.ts` and `Game.ts` are long.
+  `CivilianController.ts`, `CopDirector.ts`, `PropSystem.ts` and `Game.ts` are long.
 - Wire new hooks behind optional constructor parameters that default to "no district", so
   existing tests and seeds don't move.
 - Commit per milestone, and keep `TASKS.md` ticked as you go (it's how the next session knows where
   things stand).
+- While editing, run the area's tests (`npm run t -- src/world/districts`); the full suite once per
+  milestone, before the commit. Never pipe vitest through `grep`/`tail` without a time limit: use
+  `npm run t`.
+- Numbers (placement rate, counts, timing): `npm run stats` or a `run-ts.mjs` script, not a scratch
+  test (`console.log` in vitest is swallowed and scratch tests must be cleaned up).
+- Browser checks: one run per milestone with all its views (`shot()`), framed by `dbg.view` /
+  `dbg.gate`. A still can't show flicker or feel: check the geometry instead (below) and leave the
+  feel to the user.
+- Static geometry: never let two boxes overlap with faces in the same plane (z-fighting flickers).
+  Butt-join pieces exactly, make one part stand 2–3 cm proud of the other, and keep flat layers on
+  the ground ≥ 2 cm apart or give the lower one `polygonOffset` (the asphalt has 1/1, street
+  cobbles 0.5/0.5, markings none).
+- A new prop, landmark or look: check `renderer.info.programs` stays the same in the browser run
+  (same material settings as an existing mesh, `InstancedMesh` only with an existing instanced
+  material) rather than reasoning about it.
