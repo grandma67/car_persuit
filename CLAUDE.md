@@ -13,6 +13,7 @@ districts work in progress.
 | Tests, quiet | `npm run t` (~20 s): only failures (same-shaped seed failures collapsed) and the summary; killed after 300 s (`T_LIMIT=`) instead of hanging. Area: `npm run t -- src/world/districts`, `-t "name"` |
 | District numbers | `npm run stats -- oldtown [seeds=100]` (~2 s): placement rate forced/natural, shapes, gates, average lots/landmarks/props/structures, generation ms on vs off |
 | One-off TS script | `node scripts/run-ts.mjs <file.ts> [args]` (Vite SSR, 0.3 s start; default export gets the args). Use instead of throwaway tests |
+| Rapier versions | `node scripts/rapier-bench.mjs 0.18.2 <new>`: step cost on our city per version; findings and upgrade risks in `RAPIER.md` (verdict: stay on 0.18.2) |
 | Build | `npm run build` |
 | Browser check | `npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-dir <dir> --no-final --eval-file <file.js>` |
 
