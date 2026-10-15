@@ -136,8 +136,10 @@ export interface WallSegment {
 }
 
 /**
- * The district's perimeter wall line, on the block side of the sidewalk all round: segments split at
- * the gates (each opening `gate.opening` wide), the four outer corners, and the gates themselves.
+ * The district's perimeter wall line, on the block side of the sidewalk all round: segments split
+ * wherever an interior street crosses it (a gate, or a street left without one in a 'mainStreet'
+ * district: the opening is the same, so no wall ever stands across a road), the four outer corners,
+ * and the gates.
  */
 export function perimeterWall(q: District, city: CityData): { segments: WallSegment[]; corners: { x: number; z: number }[]; gates: Gate[] } {
   const s = city.config.sidewalk;
@@ -149,16 +151,28 @@ export function perimeterWall(q: District, city: CityData): { segments: WallSegm
     { ax: x1, az: z1, bx: x0, bz: z1, nx: 0, nz: 1 },
     { ax: x0, az: z1, bx: x0, bz: z0, nx: -1, nz: 0 },
   ];
+  // Every interior street with one end on the perimeter crosses the wall line, at the wall's
+  // distance in from its perimeter junction.
+  const { roadWidth: rw } = city.config;
+  const opening = rw + 2 * s;
+  const perimeter = new Set(q.perimeter);
+  const crossings = [...q.streets].flatMap((key) => {
+    const [a, b] = key.split('>').map(Number);
+    if (!perimeter.has(a) || perimeter.has(b)) return [];
+    const A = city.graph.nodes[a], B = city.graph.nodes[b];
+    const len = Math.hypot(B.x - A.x, B.z - A.z);
+    return [{ x: A.x + ((B.x - A.x) / len) * (rw / 2 + s), z: A.z + ((B.z - A.z) / len) * (rw / 2 + s) }];
+  });
   const segments: WallSegment[] = [];
   for (const side of sides) {
     const alongX = side.az === side.bz;
     const lo = alongX ? Math.min(side.ax, side.bx) : Math.min(side.az, side.bz);
     const hi = alongX ? Math.max(side.ax, side.bx) : Math.max(side.az, side.bz);
     const fixed = alongX ? side.az : side.ax;
-    // Gates on this side: their wall-line point lies on it.
-    const gaps = q.gates
-      .filter((g) => Math.abs((alongX ? g.z : g.x) - fixed) < 0.5)
-      .map((g) => [(alongX ? g.x : g.z) - g.opening / 2, (alongX ? g.x : g.z) + g.opening / 2] as [number, number])
+    // Streets crossing this side: their wall-line point lies on it.
+    const gaps = crossings
+      .filter((c) => Math.abs((alongX ? c.z : c.x) - fixed) < 0.5)
+      .map((c) => [(alongX ? c.x : c.z) - opening / 2, (alongX ? c.x : c.z) + opening / 2] as [number, number])
       .sort((u, v) => u[0] - v[0]);
     let at = lo;
     const spans: [number, number][] = [];

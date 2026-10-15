@@ -71,4 +71,4 @@ Damage (smoke, fire, explosion, scratches/dents), skid marks and tyre smoke, bod
 
 ## Debug (`?debug`)
 
-FPS counter; C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`, `?weather=`, `?hill=0|1`. Without debug: `?seed=`, `?time=`, `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?touch`.
+FPS counter; C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`, `?weather=`, `?hill=0|1`; `window.game` in the console (used by `npm run check:browser`). Without debug: `?seed=`, `?time=`, `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?touch`.

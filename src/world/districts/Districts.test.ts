@@ -6,7 +6,7 @@ import { pickDestinations } from '../../gameplay/MissionSystem';
 import { Rng } from '../../core/Rng';
 import { DISTRICTS } from '../../gameplay/balance';
 import { emptyDressing, type District, type DistrictDef } from './District';
-import { inDistrict, isJunctionControl, kerbClutter } from './apply';
+import { inDistrict, isJunctionControl, kerbClutter, perimeterWall } from './apply';
 import { rollDistricts } from './place';
 import { copSpawnSkips, districtNames, districtOfNode, districtTraffic, roadblockGates } from './runtime';
 
@@ -243,5 +243,139 @@ describe('district placement', () => {
 
   it('with no definitions the city has no districts', () => {
     expect(generateCity(42).districts).toEqual([]);
+  });
+});
+
+describe('district generation logic', () => {
+  const blockOf = (city: CityData, k: number) => ({ i: k % city.config.blocks, j: Math.floor(k / city.config.blocks) });
+
+  it.each(SEEDS)('seed %i: interior streets are exactly the roads between two district blocks', (seed) => {
+    const city = withDistricts(seed);
+    const n = city.config.blocks;
+    const pitch = city.config.blockSize + city.config.roadWidth;
+    for (const q of city.districts) {
+      const mine = new Set(q.blocks);
+      for (const r of city.roads) {
+        // The two blocks either side of this road segment.
+        const alongX = r.rect.w > r.rect.d;
+        const toBlock = (x: number, z: number) => {
+          const i = Math.floor((x + city.size / 2) / pitch);
+          const j = Math.floor((z + city.size / 2) / pitch);
+          return i >= 0 && j >= 0 && i < n && j < n ? j * n + i : -1;
+        };
+        const sides = alongX
+          ? [toBlock(r.rect.x, r.rect.z - pitch / 2), toBlock(r.rect.x, r.rect.z + pitch / 2)]
+          : [toBlock(r.rect.x - pitch / 2, r.rect.z), toBlock(r.rect.x + pitch / 2, r.rect.z)];
+        const between = sides.every((k) => mine.has(k));
+        expect(q.streets.has(`${r.a}>${r.b}`)).toBe(between);
+        expect(q.streets.has(`${r.b}>${r.a}`)).toBe(between);
+        // Roadworks never close one (placement rejects them inside).
+        if (between) expect(city.graph.nodes[r.a].neighbors).toContain(r.b);
+      }
+      // Blocks are a w × h rectangle at the grid position.
+      const cells = q.blocks.map((k) => blockOf(city, k));
+      expect(new Set(cells.map((c) => c.i)).size).toBe(q.grid.w);
+      expect(new Set(cells.map((c) => c.j)).size).toBe(q.grid.h);
+      expect(Math.min(...cells.map((c) => c.i))).toBe(q.grid.i0);
+      expect(Math.min(...cells.map((c) => c.j))).toBe(q.grid.j0);
+    }
+  });
+
+  it.each(SEEDS)('seed %i: the main street is the longest straight run, and gates follow the definition', (seed) => {
+    const city = withDistricts(seed);
+    const nodes = city.graph.nodes;
+    for (const q of city.districts) {
+      const def = DEFS.find((d) => d.kind === q.kind)!;
+      // Consecutive edges share a junction and keep the heading.
+      const pairs = q.mainStreet.map((k) => k.split('>').map(Number));
+      for (let i = 1; i < pairs.length; i++) expect(pairs[i][0]).toBe(pairs[i - 1][1]);
+      // No straight run of interior streets is longer: walk every street both ways.
+      let longest = 0;
+      for (const key of q.streets) {
+        let [a, b] = key.split('>').map(Number);
+        let run = 1;
+        for (;;) {
+          const dx = nodes[b].x - nodes[a].x, dz = nodes[b].z - nodes[a].z;
+          const next = nodes[b].neighbors.find((c) => q.streets.has(`${b}>${c}`) && Math.abs((nodes[c].x - nodes[b].x) - dx) < 1 && Math.abs((nodes[c].z - nodes[b].z) - dz) < 1);
+          if (next === undefined) break;
+          [a, b] = [b, next];
+          run++;
+        }
+        longest = Math.max(longest, run);
+      }
+      expect(q.mainStreet.length).toBe(longest);
+      const candidates = [...q.streets].filter((k) => {
+        const [a, b] = k.split('>').map(Number);
+        return q.perimeter.includes(a) && q.interior.includes(b);
+      });
+      if (def.gates === 'all') {
+        expect(q.gates.map((g) => g.edge).sort()).toEqual(candidates.sort());
+      } else {
+        // The main street's ends on the perimeter, plus at most extraGates (or enough to make two).
+        const ends = q.gates.filter((g) => q.mainStreet.includes(`${g.node}>${g.inner}`) || q.mainStreet.includes(`${g.inner}>${g.node}`));
+        const mainEnds = candidates.filter((k) => {
+          const [a, b] = k.split('>');
+          return q.mainStreet.includes(k) || q.mainStreet.includes(`${b}>${a}`);
+        });
+        expect(ends.length).toBe(mainEnds.length);
+        expect(q.gates.length - ends.length).toBeLessThanOrEqual(Math.max(def.extraGates ?? 0, 2 - mainEnds.length));
+      }
+      expect(new Set(q.gates.map((g) => g.edge)).size).toBe(q.gates.length);
+    }
+  });
+
+  it.each(SEEDS)('seed %i: the perimeter wall closes round the district, open only at the gates', (seed) => {
+    const city = withDistricts(seed);
+    const s = city.config.sidewalk;
+    for (const q of city.districts) {
+      const { segments, corners } = perimeterWall(q, city);
+      const ring = 2 * (q.bounds.w - 2 * s) + 2 * (q.bounds.d - 2 * s);
+      const walled = segments.reduce((sum, w) => sum + Math.hypot(w.bx - w.ax, w.bz - w.az), 0);
+      const crossings = [...q.streets].filter((k) => {
+        const [a, b] = k.split('>').map(Number);
+        return q.perimeter.includes(a) && !q.perimeter.includes(b);
+      });
+      const open = crossings.length * (city.config.roadWidth + 2 * s);
+      expect(walled + open).toBeCloseTo(ring, 3);
+      // Every segment lies on the wall line, inside the blocks, never on a road.
+      const half = { x: q.bounds.w / 2 - s, z: q.bounds.d / 2 - s };
+      for (const w of segments) {
+        for (const [x, z] of [[w.ax, w.az], [w.bx, w.bz]]) {
+          const onX = Math.abs(Math.abs(x - q.bounds.x) - half.x) < 1e-6;
+          const onZ = Math.abs(Math.abs(z - q.bounds.z) - half.z) < 1e-6;
+          expect(onX || onZ).toBe(true);
+        }
+        const mid = { x: (w.ax + w.bx) / 2, z: (w.az + w.bz) / 2 };
+        expect(city.roads.some((r) => inRect(r.rect, mid, -0.01))).toBe(false);
+      }
+      expect(corners).toHaveLength(4);
+      // Each gate sits in a gap of the wall, centred on its street.
+      for (const g of q.gates) {
+        const blocked = segments.some((w) => {
+          const t = ((g.x - w.ax) * (w.bx - w.ax) + (g.z - w.az) * (w.bz - w.az)) / ((w.bx - w.ax) ** 2 + (w.bz - w.az) ** 2);
+          const px = w.ax + (w.bx - w.ax) * t, pz = w.az + (w.bz - w.az) * t;
+          return t > 0 && t < 1 && Math.hypot(px - g.x, pz - g.z) < 0.5;
+        });
+        expect(blocked).toBe(false);
+      }
+    }
+  });
+
+  it.each(SEEDS)('seed %i: district buildings stand in their lots, off the roads and sidewalks', (seed) => {
+    const city = withDistricts(seed);
+    const s = city.config.sidewalk;
+    for (const q of city.districts) {
+      for (const b of city.buildings.filter((x) => x.district === q.kind)) {
+        const k = q.blocks.find((k) => inRect(city.blocks[k].rect, b));
+        expect(k).toBeDefined();
+        const r = city.blocks[k!].rect;
+        expect(Math.abs(b.x - r.x) + b.w / 2).toBeLessThanOrEqual(r.w / 2 - s + 1e-6);
+        expect(Math.abs(b.z - r.z) + b.d / 2).toBeLessThanOrEqual(r.d / 2 - s + 1e-6);
+        if (q.kind === INLAND.kind) expect(b.lot).toBe('house');
+        expect(q.roles.has(k!)).toBe(false);
+      }
+      // A role block of the coast stub is on the district's list.
+      for (const [k] of q.roles) expect(q.blocks).toContain(k);
+    }
   });
 });
