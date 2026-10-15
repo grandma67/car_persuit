@@ -239,7 +239,7 @@ export class Game {
     this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground, keepOf(this.city.driveSide), {
       nav: new NavGrid(this.city, built.props),
       ignore: (collider) => collider.parent()?.handle === this.player.body.handle,
-    }, { skip: copSpawnSkips(this.city), gates: roadblockGates(this.city) });
+    }, { skipAt: copSpawnSkips(this.city), gates: roadblockGates(this.city) });
     this.traffic = new CivilianTraffic(
       this.world,
       this.scene,

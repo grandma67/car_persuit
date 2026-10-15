@@ -27,8 +27,8 @@ export interface CopSteering {
 
 /** District rules for cops: rarer spawns inside some, roadblocks at the gates of others. */
 export interface CopDistricts {
-  /** Junction → chance a spawn try there is re-rolled. */
-  skip: Map<number, number>;
+  /** Chance a spawn spot at (x, z) is passed over for the next try. */
+  skipAt: (x: number, z: number) => number;
   /** Gate streets ("a>b", both ways): 4★+ roadblocks prefer these. */
   gates: Set<string>;
 }
@@ -356,10 +356,10 @@ export class CopDirector {
       ...elsewhere.slice(0, SPAWN_TRIES).map((n) => ({ node: n.id, toward: -1 })),
     ];
     for (const c of candidates) {
-      // Some districts keep cops rarer: a try there is often passed over for the next.
-      const skip = this.districts?.skip.get(c.node);
-      if (skip && this.rng.next() < skip) continue;
       const spot = this.aroundCorner(c.node, c.toward >= 0 ? c.toward : towardPlayer(c.node), player);
+      // Some districts keep cops rarer: a spot inside one is often passed over for the next.
+      const skip = spot ? this.districts?.skipAt(spot.x, spot.z) : 0;
+      if (skip && this.rng.next() < skip) continue;
       if (spot) {
         vehicle.teleport(spot.x, this.ground(spot.x, spot.z) + 1.2, spot.z, spot.yaw, spot.speed);
         return;

@@ -1,6 +1,7 @@
 // What the game's systems need from the placed districts: speed caps and no-go streets for
 // traffic, spawn weights, cop spawn skips, roadblock gates, destination zoning. Pure data.
 import type { CityData } from '../CityGenerator';
+import { inRect } from '../lots';
 import { DISTRICT_DEFS } from './index';
 import type { DistrictDef, DistrictKind, DistrictTraffic } from './District';
 
@@ -37,14 +38,16 @@ export function districtTraffic(city: CityData, defs: DistrictDef[] = DISTRICT_D
   return rules;
 }
 
-/** Chance a cop spawn try at this junction is re-rolled (inside a district that keeps cops rarer). */
-export function copSpawnSkips(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): Map<number, number> {
-  const out = new Map<number, number>();
-  for (const q of city.districts) {
+/**
+ * Chance a cop spawn spot at (x, z) is passed over for the next: inside the blocks of a district
+ * that keeps cops rarer (its interior streets included), else 0.
+ */
+export function copSpawnSkips(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): (x: number, z: number) => number {
+  const rare = city.districts.flatMap((q) => {
     const skip = defOf(q.kind, defs)?.copSpawnSkip ?? 0;
-    if (skip > 0) for (const id of q.interior) out.set(id, skip);
-  }
-  return out;
+    return skip > 0 ? [{ bounds: q.bounds, skip }] : [];
+  });
+  return (x, z) => rare.find((r) => inRect(r.bounds, { x, z }))?.skip ?? 0;
 }
 
 /** Gate streets (both ways) of districts whose roadblocks prefer a gate. */
