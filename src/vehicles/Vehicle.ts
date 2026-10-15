@@ -41,6 +41,15 @@ const SHIFT_CUT = 0.14; // seconds
 const SHIFT_CUT_DRIVE = 0.15; // share of the engine force left during the cut
 const SHIFT_KICK_PITCH = 0.35; // rad/s squat as the clutch bites
 const TORQUE_KICK_ROLL = 0.28; // rad/s torque reaction twist
+// In the air (arcade air control): pitch and roll spin is damped and the body eased back level, so
+// a car that leaves a lip nose-down or twisted still comes down on its wheels instead of digging
+// its bumper in. Yaw is left alone. Kicks in after a short hop so kerbs and bumps feel unchanged.
+const AIR_CONTROL_AFTER = 0.12; // seconds airborne
+const AIR_SPIN_DAMP = 3.5; // per second
+const AIR_LEVEL = 5; // rad/s² per radian of tilt
+// The springs and tyres take a landing along the car's own up axis: that share of a jolt counts
+// this much toward the impact (damage, crunch); hits from the side or onto the roof count in full.
+const SUSPENSION_ABSORB = 0.35;
 
 // A Rapier raycast vehicle plus its mesh. The same class drives the player and (later) cops;
 // only the DriveInput source differs.
@@ -90,6 +99,7 @@ export class Vehicle {
   private rollVel = 0;
   /** Rear tyre grip, 0 (locked and sliding) .. 1 (normal). Drops on the handbrake, recovers after. */
   private rearGrip = 1;
+  private airborneFor = 0; // seconds with no wheel touching
   // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
   private lastVel = new THREE.Vector3();
   private impact = 0;
@@ -282,6 +292,8 @@ export class Vehicle {
     this.frontSkid = c.wheelIsInContact(0) || c.wheelIsInContact(1) ? frontSkid : 0;
 
     if (this.tractionAssist > 0 && (c.wheelIsInContact(0) || c.wheelIsInContact(2))) this.assistTraction(dt);
+    this.airborneFor = this.grounded ? 0 : this.airborneFor + dt;
+    if (this.airborneFor > AIR_CONTROL_AFTER) this.airControl(dt);
 
     // Speed-scaled downforce keeps the car planted in fast corners.
     const rot = this.body.rotation();
@@ -393,6 +405,21 @@ export class Vehicle {
     this.body.setLinvel({ x: v.x * cos + v.z * sin, y: v.y, z: -v.x * sin + v.z * cos }, true);
   }
 
+  /** Damp pitch and roll spin in the air and ease the body level (see AIR_SPIN_DAMP). */
+  private airControl(dt: number): void {
+    const r = this.body.rotation();
+    const up = tmpVec.copy(UP).applyQuaternion(tmpQuat.set(r.x, r.y, r.z, r.w));
+    if (up.y < 0) return; // upside down already: no saving it
+    // Axis and angle that would bring the car's up back to world up (up × Y, |.| = sin tilt).
+    const ax = -up.z;
+    const az = up.x;
+    const w = this.body.angvel();
+    // Split the spin into yaw (about world up, kept) and the tumble (pitch and roll, damped).
+    const damp = Math.min(1, AIR_SPIN_DAMP * dt);
+    const level = AIR_LEVEL * dt;
+    this.body.setAngvel({ x: w.x * (1 - damp) + ax * level, y: w.y, z: w.z * (1 - damp) + az * level }, true);
+  }
+
   /** Signed angle between where the car points and where it's going (radians, 0 = no slide). */
   private slipAngle(): number {
     const v = this.body.linvel();
@@ -450,8 +477,12 @@ export class Vehicle {
     const dv = Math.hypot(v.x - this.lastVel.x, v.y - this.lastVel.y, v.z - this.lastVel.z);
     const dt = this.stepDt;
     this.updateBody((v.x - this.lastVel.x) / dt, (v.y - this.lastVel.y) / dt, (v.z - this.lastVel.z) / dt, dt);
-    if (dv > 1.5 && dv > this.impact) {
-      this.impact = dv;
+    // The part of the jolt along the car's up axis lands on the suspension (see SUSPENSION_ABSORB).
+    const up = tmpVec.copy(UP).applyQuaternion(this.currQuat);
+    const along = (v.x - this.lastVel.x) * up.x + (v.y - this.lastVel.y) * up.y + (v.z - this.lastVel.z) * up.z;
+    const absorbed = along > 0 ? Math.sqrt(Math.max(0, dv * dv - along * along * (1 - SUSPENSION_ABSORB * SUSPENSION_ABSORB))) : dv;
+    if (absorbed > 1.5 && absorbed > this.impact) {
+      this.impact = absorbed;
       this.impactVelocity.copy(this.lastVel);
       this.impactPush.set(this.lastVel.x - v.x, this.lastVel.y - v.y, this.lastVel.z - v.z);
     }
@@ -481,7 +512,7 @@ export class Vehicle {
     this.body.setLinvel(v, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.lastVel.set(v.x, v.y, v.z);
-    this.pitch = this.pitchVel = this.roll = this.rollVel = this.accelLong = this.accelLat = 0;
+    this.pitch = this.pitchVel = this.roll = this.rollVel = this.accelLong = this.accelLat = this.airborneFor = 0;
     this.snapshot();
     this.prevPos.copy(this.currPos);
     this.prevQuat.copy(this.currQuat);
