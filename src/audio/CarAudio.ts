@@ -315,6 +315,11 @@ export class CarAudio {
     if (!this.engineOff) this.sfx?.whoosh(strength, pan, heavy);
   }
 
+  /** The Old City's clock striking: volume falls off with distance (0..1). */
+  bell(strikes: number, volume: number): void {
+    if (volume > 0.02) this.sfx?.bell(strikes, 0.25 * volume);
+  }
+
   /** One-shot crash. strength 0..1. */
   impact(strength: number): void {
     this.sfx?.impact(strength);

@@ -14,6 +14,9 @@ const GRID_CELL = 10; // metres, spatial hash for vehicle-vs-prop checks
 /** Grid cell key: a number, not a "cx,cz" string — looked up for every car every physics step. */
 const cellKey = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096);
 const LAMP_HEAD = new THREE.Vector3(0, 5.8, 1.3); // bulb position in lamp space
+const OIL_LAMP_HEAD = new THREE.Vector3(0, 3.75, 0); // the lantern's flame, on top of its post
+/** Props that light up at night: a bulb (or flame) and a pool of light under it. */
+const LIGHTS = new Set<PropKind>(['lamp', 'oilLamp']);
 const LIGHT_POOL_RADIUS = 7;
 const SIGN_FACE_Y = 2.35;
 const SIGNAL_HEAD_X = -3.7; // signal arm reaches over the lane along local -X
@@ -61,11 +64,15 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   }
 };
 
-type ModelKey = 'lamp' | 'hydrant' | 'bench' | 'fence' | `sign-${SignShape}` | 'signal' | 'signal-right' | 'cone' | `tree-${TreeKind}` | 'umbrella';
-const modelKey = (p: StreetProp): ModelKey =>
-  p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
-/** Props tinted per instance (umbrella canopies, tree shades). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella']);
+type PlainKind = Exclude<PropKind, 'sign' | 'tree'>;
+type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old';
+const modelKey = (p: StreetProp): ModelKey => {
+  const key: ModelKey =
+    p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
+  return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
+};
+/** Props tinted per instance (umbrella canopies, tree shades, stall awnings). */
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall']);
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -99,7 +106,7 @@ interface PropState {
   key: ModelKey;
   instance: number; // index within its model's instanced mesh
   attachments: Attachment[];
-  pool?: number; // lamp bulb + light-pool instance (the pool stays on the ground)
+  pool?: number; // lamp bulb (or lantern flame) + light-pool instance (the pool stays on the ground)
   lenses?: number; // first signal-lens instance (3 consecutive)
 }
 
@@ -201,12 +208,113 @@ function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
     part(cyl(0.05, 2.6, 5), 0xe8e4dc, 0, 1.3),
     part(new THREE.ConeGeometry(1.7, 0.7, 8), 0xffffff, 0, 2.55),
   ]);
+  // Old-style junction controls (a district's `style: 'old'`): black iron posts with a moulded
+  // foot and a ball finial; same faces, heads and lenses.
+  const oldSign = (shape: SignShape) =>
+    mergeGeometries([
+      part(cyl(0.16, 0.35, 6), iron, 0, 0.17),
+      part(cyl(0.06, SIGN_FACE_Y + 0.35), iron, 0, (SIGN_FACE_Y + 0.35) / 2),
+      part(new THREE.SphereGeometry(0.1, 6, 4), OLD_GOLD, 0, SIGN_FACE_Y + 0.45),
+      part(plateGeometry(shape, 0.02).rotateY(Math.PI), iron, 0, SIGN_FACE_Y, 0.05),
+    ]);
+  const oldSignal = (side: number) => {
+    const headX = side * -SIGNAL_HEAD_X;
+    return mergeGeometries([
+      part(cyl(0.3, 0.5, 8), iron, 0, 0.25),
+      part(cyl(0.2, 0.25, 8), iron, 0, 0.6),
+      part(cyl(0.11, 5.6, 8), iron, 0, 2.8),
+      part(new THREE.SphereGeometry(0.16, 6, 4), OLD_GOLD, 0, 5.75),
+      part(box(3.9, 0.1, 0.1), iron, headX / 2, 5.45),
+      part(new THREE.TorusGeometry(0.5, 0.04, 4, 10, Math.PI / 2).rotateZ(side < 0 ? Math.PI / 2 : 0), iron, side * -0.5, 4.95), // scroll bracket
+      part(box(0.42, 1.15, 0.3), 0x1f2a22, headX, 4.85),
+      part(box(0.52, 1.25, 0.04), 0x141a16, headX, 4.85, -0.16),
+    ]);
+  };
   return {
     ...treeModels(look),
     umbrella,
     lamp, hydrant, bench, fence, signal, 'signal-right': signalModel(1), cone,
     'sign-octagon': sign('octagon'), 'sign-round': sign('round'), 'sign-triangle': sign('triangle'), 'sign-square': sign('square'), 'sign-diamond': sign('diamond'),
+    'signal-old': oldSignal(-1), 'signal-right-old': oldSignal(1),
+    'sign-octagon-old': oldSign('octagon'), 'sign-round-old': oldSign('round'), 'sign-triangle-old': oldSign('triangle'), 'sign-square-old': oldSign('square'), 'sign-diamond-old': oldSign('diamond'),
+    ...oldCityModels(),
   };
+}
+
+const OLD_GOLD = 0xb8923a;
+
+/** The Old City's breakables: market and kerb clutter, and the oil lamp. */
+function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp', THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (rt: number, rb: number, h: number, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
+  const oak = 0x7a5432;
+  const oakDark = 0x553a22;
+  const clay = 0xb8643a;
+  const iron = 0x2a2d33;
+  const straw = 0xd9b45a;
+  // A turned profile (lathe) for pottery: radius at each height.
+  const lathe = (pts: [number, number][], color: number) => part(new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), 8), color);
+  const amphora = mergeGeometries([
+    lathe([[0.01, 0], [0.08, 0.02], [0.2, 0.25], [0.24, 0.5], [0.2, 0.7], [0.08, 0.8], [0.07, 0.92], [0.1, 0.95]], clay),
+    ...[-1, 1].map((k) => part(new THREE.TorusGeometry(0.1, 0.025, 4, 6, Math.PI).rotateY(Math.PI / 2), clay, 0, 0.78, k * 0.1)),
+  ]);
+  const pot = mergeGeometries([
+    lathe([[0.01, 0], [0.2, 0.02], [0.3, 0.3], [0.28, 0.5], [0.3, 0.58], [0.26, 0.6]], clay),
+    part(new THREE.SphereGeometry(0.3, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0x4f7a3a, 0, 0.55), // a shrub
+  ]);
+  const cart = mergeGeometries([
+    part(box(1.3, 0.1, 2.0), oak, 0, 0.75, 0.2),
+    ...[-0.62, 0.62].map((x) => part(box(0.06, 0.45, 2.0), oakDark, x, 1.0, 0.2)),
+    part(box(1.3, 0.45, 0.06), oakDark, 0, 1.0, 1.18),
+    ...[-0.75, 0.75].map((x) => part(cyl(0.55, 0.55, 0.08, 10).rotateZ(Math.PI / 2), oakDark, x, 0.55, 0.1)),
+    ...[-0.35, 0.35].map((x) => part(box(0.07, 0.07, 1.6), oak, x, 0.6, -1.4)), // shafts
+    part(box(1.0, 0.35, 1.2), straw, 0, 0.98, 0.3), // a load of hay
+  ]);
+  // Market stall: trestle counter under an awning (tinted per instance; drawn white here).
+  const stall = mergeGeometries([
+    ...[-1.2, 1.2].flatMap((x) => [-0.8, 0.8].map((z) => part(box(0.09, 2.5, 0.09), oak, x, 1.25, z))),
+    part(box(2.5, 0.08, 1.2), oak, 0, 0.9, 0.2),
+    part(box(2.4, 0.8, 0.05), oakDark, 0, 0.5, 0.78),
+    part(box(2.7, 0.06, 2.0).rotateX(-0.18), 0xffffff, 0, 2.55),
+    part(box(2.7, 0.3, 0.03), 0xffffff, 0, 2.3, 1.02),
+    ...[-0.8, -0.25, 0.3, 0.85].map((x, k) => part(box(0.4, 0.25, 0.35), [0xd04a2a, 0xe8b23a, 0x6f9a3a, 0xa83a5a][k], x, 1.07, 0.3)),
+  ]);
+  const barrel = (x: number, z: number) => [
+    part(cyl(0.3, 0.3, 0.9, 10), oak, x, 0.45, z),
+    part(cyl(0.34, 0.34, 0.12, 10), oakDark, x, 0.45, z),
+    ...[0.12, 0.78].map((y) => part(cyl(0.31, 0.31, 0.05, 10), iron, x, y, z)),
+  ];
+  const barrels = mergeGeometries([...barrel(-0.3, -0.25), ...barrel(0.32, -0.2), ...barrel(0, 0.32)]);
+  const balls: THREE.BufferGeometry[] = [part(box(0.9, 0.08, 0.9), oakDark, 0, 0.04)];
+  for (const [x, y, z] of [[-0.2, 0.2, -0.2], [0.2, 0.2, -0.2], [-0.2, 0.2, 0.2], [0.2, 0.2, 0.2], [0, 0.48, 0]]) {
+    balls.push(part(new THREE.SphereGeometry(0.2, 7, 5), iron, x, y, z));
+  }
+  const cannonballs = mergeGeometries(balls);
+  const pillory = mergeGeometries([
+    part(box(1.8, 0.15, 0.7), oakDark, 0, 0.07),
+    part(box(0.18, 2.1, 0.18), oak, 0, 1.05),
+    part(box(1.4, 0.35, 0.16), oak, 0, 1.75),
+    ...[-0.4, 0, 0.4].map((x) => part(cyl(0.06, 0.06, 0.18).rotateX(Math.PI / 2), 0x1a1a1a, x, 1.75)),
+  ]);
+  const haybale = mergeGeometries([
+    part(box(1.15, 1.0, 1.15), straw, 0, 0.5),
+    ...[-0.3, 0.3].map((x) => part(box(0.04, 1.02, 1.17), 0xa8823a, x, 0.5)),
+  ]);
+  const signpost = mergeGeometries([
+    part(box(0.16, 2.8, 0.16), oak, 0, 1.4),
+    part(box(1.1, 0.24, 0.05).translate(0.45, 0, 0), 0xe8dcc0, 0, 2.45, 0.1),
+    part(box(1.0, 0.22, 0.05).translate(-0.4, 0, 0).rotateY(0.6), 0xe8dcc0, 0, 2.1, 0.1),
+    part(box(0.9, 0.22, 0.05).translate(0.38, 0, 0).rotateY(-1.9), 0xe8dcc0, 0, 1.78, 0.1),
+  ]);
+  const oilLamp = mergeGeometries([
+    part(cyl(0.2, 0.28, 0.5), iron, 0, 0.25),
+    part(cyl(0.07, 0.09, 3.3, 6), iron, 0, 2.1),
+    part(box(0.36, 0.08, 0.36), iron, 0, 3.55),
+    ...[-1, 1].flatMap((a) => [-1, 1].map((b) => part(box(0.03, 0.45, 0.03), iron, a * 0.16, 3.8, b * 0.16))),
+    part(cyl(0, 0.3, 0.3, 4).rotateY(Math.PI / 4), iron, 0, 4.17),
+    part(new THREE.SphereGeometry(0.05, 4, 3), iron, 0, 4.35),
+  ]);
+  return { amphora, pot, cart, stall, barrels, cannonballs, pillory, haybale, signpost, oilLamp };
 }
 
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
@@ -424,6 +532,9 @@ function signTexture(variant: SignVariant): THREE.Texture {
   });
 }
 
+/** District props: their meshes are only built in a city that has some. */
+const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp']);
+
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
 // like hitting a wall.
@@ -457,6 +568,8 @@ export class PropSystem {
     for (const p of defs) counts[modelKey(p)]++;
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.2 });
     for (const key of Object.keys(models) as ModelKey[]) {
+      // Old-style and district props only exist in cities that have them.
+      if (!counts[key] && (key.endsWith('-old') || DISTRICT_KEYS.has(key))) continue;
       const mesh = new THREE.InstancedMesh(models[key], material, Math.max(1, counts[key]));
       mesh.count = counts[key];
       mesh.castShadow = key !== 'fence'; // thousands of fence pickets aren't worth the shadow pass
@@ -475,7 +588,7 @@ export class PropSystem {
     };
 
     // Lamp bulbs (unlit, so they glow) and soft light pools on the ground beneath them.
-    const lamps = counts.lamp;
+    const lamps = counts.lamp + counts.oilLamp;
     this.bulbs = addAttachmentMesh(new THREE.BoxGeometry(0.38, 0.05, 0.24), new THREE.MeshBasicMaterial({ toneMapped: false }), lamps);
     this.pools = addAttachmentMesh(
       new THREE.PlaneGeometry(LIGHT_POOL_RADIUS * 2, LIGHT_POOL_RADIUS * 2).rotateX(-Math.PI / 2),
@@ -518,6 +631,7 @@ export class PropSystem {
     const nextFace = {} as Record<SignVariant, number>;
     for (const v of SIGN_VARIANTS) nextFace[v] = 0;
     let nextLens = 0;
+    let nextLight = 0;
     const warm = new THREE.Color(0xffe2b0).lerp(new THREE.Color(0xc8c8c8), 1 - lampGlow); // unlit by day
 
     this.world = world;
@@ -537,11 +651,15 @@ export class PropSystem {
         mesh.setMatrixAt(index, world4.clone().multiply(local));
         if (color) mesh.setColorAt(index, color);
       };
-      if (def.kind === 'lamp') {
-        const li = (state.pool = state.instance); // lamp, bulb and pool share an index
-        attach(this.bulbs, li, new THREE.Matrix4().makeTranslation(LAMP_HEAD), warm);
+      if (LIGHTS.has(def.kind)) {
+        const li = (state.pool = nextLight++); // bulb and pool share an index
+        const at = def.kind === 'lamp' ? LAMP_HEAD : OIL_LAMP_HEAD;
+        // A lantern's flame is a small upright block, a street lamp's bulb a flat panel.
+        const local = new THREE.Matrix4().makeTranslation(at);
+        if (def.kind === 'oilLamp') local.multiply(new THREE.Matrix4().makeScale(0.55, 6, 0.9));
+        attach(this.bulbs, li, local, warm);
         // The pool lies on the ground, tilted to the slope.
-        const head = LAMP_HEAD.clone().applyQuaternion(this.q);
+        const head = at.clone().applyQuaternion(this.q);
         const px = def.x + head.x;
         const pz = def.z + head.z;
         const n = groundNormal(city.terrain, px, pz);
@@ -751,7 +869,7 @@ export class PropSystem {
     const dz = lv.z / speed;
     const lift = 1.5 + Math.random() * 2;
     body.setLinvel({ x: lv.x * 1.05 + (Math.random() - 0.5) * 2, y: lift, z: lv.z * 1.05 + (Math.random() - 0.5) * 2 }, true);
-    const tall = p.def.kind === 'lamp' || p.def.kind === 'signal' || p.def.kind === 'tree' || p.def.kind === 'umbrella';
+    const tall = LIGHTS.has(p.def.kind) || p.def.kind === 'signal' || p.def.kind === 'tree' || p.def.kind === 'umbrella' || p.def.kind === 'signpost';
     const spin = (tall ? 3 : 6) * Math.min(1, speed / 15);
     body.setAngvel({ x: dz * spin, y: (Math.random() - 0.5) * 4, z: -dx * spin }, true);
 
@@ -759,7 +877,7 @@ export class PropSystem {
     vehicle.body.setLinvel({ x: lv.x * keep, y: lv.y, z: lv.z * keep }, true);
 
     // Lights go out.
-    if (p.def.kind === 'lamp') {
+    if (LIGHTS.has(p.def.kind)) {
       this.bulbs.setColorAt(p.pool!, this.color.setHex(0x222222));
       this.bulbs.instanceColor!.needsUpdate = true;
       this.pools.setMatrixAt(p.pool!, this.m4.makeScale(0, 0, 0));

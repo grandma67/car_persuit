@@ -59,6 +59,11 @@ export class Effects {
     color: 0x0e0f11, maxAlpha: 0.85, additive: false, startSize: 0.4, growth: 2.4, lift: [0.25, 0.6], spread: 0.5, life: [0.8, 1.4], jitter: 0.08,
     carry: EXHAUST_CARRY, nearFade: [0.8, 2.2],
   });
+  // Old City breakables: wood chips and planks, straw, a cloth puff from stall awnings, pottery shards.
+  private chips = new TireSmoke({ color: 0x6b4a2c, maxAlpha: 0.95, additive: false, startSize: 0.28, growth: 0.05, lift: [2.5, 6], gravity: 9.8, spread: 5, life: [0.7, 1.1], carry: 0.4 });
+  private straw = new TireSmoke({ color: 0xdcbc62, maxAlpha: 0.9, additive: false, startSize: 0.3, growth: 0.5, lift: [2, 5], gravity: 4, spread: 4, life: [0.9, 1.5], carry: 0.3 });
+  private cloth = new TireSmoke({ color: 0xece4d4, maxAlpha: 0.55, additive: false, startSize: 0.6, growth: 2.2, lift: [0.6, 1.6], spread: 1.5, life: [0.5, 0.9] });
+  private shards = new TireSmoke({ color: 0xb8643a, maxAlpha: 0.95, additive: false, startSize: 0.2, growth: 0, lift: [1.5, 4.5], gravity: 9.8, spread: 4, life: [0.6, 0.9], carry: 0.3 });
   private exhaustBudget = 0;
   private sootBudget = 0;
   private exhaustTime = 0;
@@ -77,6 +82,7 @@ export class Effects {
     this.smoke.setColor(sprayColor);
     scene.add(this.skidMarks.mesh, this.smoke.points);
     scene.add(this.exhaust.points, this.soot.points, this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points, this.flash);
+    scene.add(this.chips.points, this.straw.points, this.cloth.points, this.shards.points);
   }
 
   /** A car blowing up at `at`: fireball, smoke, flames and a flash of light above it. */
@@ -100,8 +106,19 @@ export class Effects {
     }
   }
 
-  /** Lamps and signals spark; hydrants start a geyser. */
+  /** Lamps and signals spark; hydrants start a geyser; wood splinters, straw bursts, pots shatter. */
   propBreak(b: PropBreak): void {
+    const burst = (emitter: TireSmoke, n: number) => {
+      for (let i = 0; i < n; i++) emitter.emit(b.position, this.tmpVel.set(0, 0, 0), 0);
+    };
+    switch (b.kind) {
+      case 'haybale': return burst(this.straw, 45);
+      case 'cart': burst(this.straw, 18); return burst(this.chips, 18);
+      case 'stall': burst(this.cloth, 10); return burst(this.chips, 22);
+      case 'barrels': case 'pillory': case 'signpost': return burst(this.chips, 18);
+      case 'pot': case 'amphora': return burst(this.shards, 16);
+      case 'oilLamp': return burst(this.fire, 10);
+    }
     if (b.kind === 'lamp' || b.kind === 'signal') {
       for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0);
     } else if (b.kind === 'hydrant') {
@@ -154,6 +171,10 @@ export class Effects {
     this.engineSmoke.update(dt);
     this.fire.update(dt);
     this.fireball.update(dt);
+    this.chips.update(dt);
+    this.straw.update(dt);
+    this.cloth.update(dt);
+    this.shards.update(dt);
     this.flash.intensity *= Math.exp(-6 * dt);
 
     // Broken hydrants spout water, tapering off.

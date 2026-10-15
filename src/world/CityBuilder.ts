@@ -5,6 +5,7 @@ import type { Building, CityData, Rect } from './CityGenerator';
 import { ROOF_TILES, zoneLook, type CityTheme } from './CityTheme';
 import { DISTRICT_DEFS } from './districts/index';
 import type { LotLook, TrimKind } from './districts/District';
+import { ARCADE_DEPTH, EAVE, JETTY_FROM, clockTowerFrame, jettyDepth, roofRise } from './districts/trims';
 import type { Climate, TreeKind } from './Climate';
 import type { StreetProp } from './StreetProps';
 import { clipRect, groundBase, groundHeight, groundNormal, isFlat, type Terrain } from './Terrain';
@@ -462,7 +463,10 @@ export function buildingGeometry(city: CityData, theme: CityTheme, climate: Clim
 export function lookFor(b: Building, theme: CityTheme): LotLook {
   const def = b.district && b.lot ? DISTRICT_DEFS.find((d) => d.kind === b.district) : undefined;
   const look = def && b.lot ? def.looks[b.lot] : undefined;
-  return look ? { ...look, ...theme.districts?.[b.district!]?.[b.lot!] } : zoneLook(theme, b.zone);
+  if (!look) return zoneLook(theme, b.zone);
+  const full = { ...look, ...theme.districts?.[b.district!]?.[b.lot!] };
+  // Some lots take the look's alternative roof.
+  return full.roofAlt && (b.variant * 5) % 1 < 0.4 ? { ...full, roof: full.roofAlt } : full;
 }
 
 /** Flat-roof cap per facade: overhang past the walls, height above the roof line, depth below it. */
@@ -475,6 +479,8 @@ const CAPS: Record<FacadeStyle, { over: number; up: number; down: number; stone:
   siding: { over: 0.3, up: 0.3, down: 0.3, stone: false },
   adobe: { over: 0.1, up: 0.7, down: 0.1, stone: false },
   industrial: { over: 0.05, up: 0.4, down: 0.2, stone: false },
+  halfTimber: { over: 0.25, up: 0.25, down: 0.25, stone: false },
+  ashlar: { over: 0.35, up: 0.5, down: 0.45, stone: true },
 };
 const WHITE = new THREE.Color(0xffffff);
 
@@ -550,12 +556,30 @@ function addBuilding(
       band(upper, f, fb, yw, yb);
     }
   };
-  wallFaces(b, y0, ySplit, 0, split, true);
-  if (split < floors) wallFaces(top, ySplit, y1, split, floors, false);
+  const trims = look.trims ?? [];
+  // An arcade sets its ground floor back behind columns; a jetty pushes the upper floors out.
+  const arcade = trims.includes('colonnade') && split === floors && floors >= 2;
+  const jetFloor = Math.ceil(JETTY_FROM / floor - 1e-6);
+  const jetty = !arcade && trims.includes('jetty') && split === floors && jetFloor < floors ? jettyDepth(b.variant) : 0;
+  let roofB: Building = b;
+  if (arcade) {
+    wallFaces(grow(b, -ARCADE_DEPTH), y0, y0 + floor, 0, 1, true);
+    wallFaces(b, y0 + floor, ySplit, 1, split, false);
+  } else if (jetty) {
+    const yj = y0 + jetFloor * floor;
+    roofB = { ...b, ...grow(b, jetty) };
+    wallFaces(b, y0, yj, 0, jetFloor, true);
+    wallFaces(roofB, yj, y1, jetFloor, floors, false);
+  } else {
+    wallFaces(b, y0, ySplit, 0, split, true);
+    if (split < floors) wallFaces(top, ySplit, y1, split, floors, false);
+  }
 
-  addRoof(look, b, { y1, ySplit, split, floors, top }, roofs, rng, wallColor, roofColor, snowy);
-  addTrims(look.trims ?? [], b, y0, roofs, wallColor);
+  addRoof(look, roofB, { y1, ySplit, split, floors, top: roofB === b ? top : roofB }, roofs, rng, wallColor, roofColor, snowy);
+  addTrims(trims, b, { y0, floor, jetty, jetFloor, roofB, roof: look.roof, tile: roofColor }, roofs, wallColor, snowy);
 }
+
+const grow = (r: Rect, m: number): Rect => ({ x: r.x, z: r.z, w: r.w + m * 2, d: r.d + m * 2 });
 
 interface RoofFrame {
   y1: number; // wall tops
@@ -570,9 +594,13 @@ function addRoof(look: LotLook, b: Building, f: RoofFrame, roofs: GeometryBuilde
   const tiles = look.roofTiles ?? ROOF_TILES;
   const tile = () => (snowy ? new THREE.Color(SNOW) : new THREE.Color(tiles[Math.floor(b.variant * 31) % tiles.length]));
   switch (look.roof) {
+    case 'steepGable':
+      addGable(b, f.y1, roofs, wallColor, tile(), roofRise('steepGable', b));
+      return;
+    case 'hip':
+      addHip(b, f.y1, roofs, tile(), roofRise('hip', b));
+      return;
     case 'gable':
-    case 'steepGable': // stub
-    case 'hip': // stub
     case 'gambrel': // stub
     case 'monopitch': // stub
       addGable(b, f.y1, roofs, wallColor, tile());
@@ -617,35 +645,108 @@ function addFlatRoof(facade: FacadeStyle, b: Building, f: RoofFrame, roofs: Geom
   }
 }
 
+interface TrimFrame {
+  y0: number; // footing
+  floor: number; // storey height
+  jetty: number; // how far the upper floors stand out (0: none)
+  jetFloor: number; // the first jettied floor
+  roofB: Rect; // the footprint the roof covers
+  roof: LotLook['roof'];
+  tile: THREE.Color;
+}
+
 /**
  * Trims: a few merged boxes and quads in the roof mesh (no new draw calls). The collider stays the
  * lot box. Each district milestone fills in its own.
  */
-function addTrims(trims: TrimKind[], b: Building, y0: number, roofs: GeometryBuilder, wallColor: THREE.Color): void {
+function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryBuilder, wallColor: THREE.Color, snowy: boolean): void {
+  const oak = new THREE.Color(0x3b2a1c);
+  const y1 = f.y0 + b.h;
   for (const trim of trims) {
     switch (trim) {
-      case 'jetty':
-      case 'colonnade':
+      case 'jetty': {
+        if (!f.jetty) break;
+        // A dark bressumer beam round the overhang, and its underside.
+        const yj = f.y0 + f.jetFloor * f.floor;
+        const r = f.roofB;
+        roofs.box(r, yj - 0.25, 0.25, oak, null, oak);
+        const x0 = r.x - r.w / 2, x1 = r.x + r.w / 2, z0 = r.z - r.d / 2, z1 = r.z + r.d / 2, yb = yj - 0.25;
+        roofs.quad([[x0, yb, z0], [x1, yb, z0], [x1, yb, z1], [x0, yb, z1]], [0, -1, 0], oak.clone().multiplyScalar(0.7));
+        break;
+      }
+      case 'chimney': {
+        // On some houses (by variant): a stack near one end of the ridge, rising past it.
+        if ((b.variant * 7) % 1 >= 0.55) break;
+        const r = f.roofB;
+        const alongX = r.w >= r.d;
+        const end = ((b.variant * 31) % 1 < 0.5 ? -1 : 1) * ((alongX ? r.w : r.d) / 2 - 1.2);
+        const across = ((b.variant * 17) % 1 - 0.5) * Math.min(r.w, r.d) * 0.3;
+        const x = alongX ? r.x + end : r.x + across;
+        const z = alongX ? r.z + across : r.z + end;
+        const top = y1 + roofRise(f.roof, r) + 1.1;
+        const brick = new THREE.Color(0x8a4a3a);
+        roofs.box({ x, z, w: 0.8, d: 0.8 }, y1 - 0.5, top - y1 + 0.5, brick, null, snowy ? new THREE.Color(SNOW) : new THREE.Color(0x2a2a2a));
+        roofs.box({ x, z, w: 1.0, d: 1.0 }, top - 0.25, 0.25, brick.clone().multiplyScalar(0.8), null, snowy ? new THREE.Color(SNOW) : brick);
+        break;
+      }
+      case 'clockTower': {
+        // The tower and its spire; the district renderer adds the dials and hands.
+        const t = clockTowerFrame(b, f.roof);
+        const stone = wallColor.clone().lerp(WHITE, 0.15);
+        roofs.box({ x: t.x, z: t.z, w: t.half * 2, d: t.half * 2 }, f.y0 + t.base, t.top - t.base, stone, null, stone);
+        roofs.box({ x: t.x, z: t.z, w: t.half * 2 + 0.5, d: t.half * 2 + 0.5 }, f.y0 + t.top - 0.4, 0.4, stone.clone().multiplyScalar(0.8), null, stone);
+        const apex = f.y0 + t.top + t.half * 2.4;
+        const h = t.half + 0.25;
+        const yb = f.y0 + t.top;
+        const c = [[-h, -h], [h, -h], [h, h], [-h, h]];
+        const slope = Math.hypot(apex - yb, h);
+        for (let k = 0; k < 4; k++) {
+          const [ax, az] = c[k];
+          const [bx, bz] = c[(k + 1) % 4];
+          // The face's outward direction is its bottom edge's midpoint (the tower is centred).
+          const mx = (ax + bx) / 2 / h, mz = (az + bz) / 2 / h;
+          const n = [(mx * (apex - yb)) / slope, h / slope, (mz * (apex - yb)) / slope];
+          roofs.quad([[t.x + bx, yb, t.z + bz], [t.x + ax, yb, t.z + az], [t.x, apex, t.z], [t.x, apex, t.z]], n, f.tile);
+        }
+        break;
+      }
+      case 'colonnade': {
+        // Columns on the lot line every ~3 m round the set-back ground floor, and the arcade's ceiling.
+        const top = f.y0 + f.floor;
+        const col = wallColor.clone().lerp(WHITE, 0.3);
+        const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2;
+        const sides: [number, number, number, number][] = [[x0, z0, x1, z0], [x1, z0, x1, z1], [x1, z1, x0, z1], [x0, z1, x0, z0]];
+        for (const [ax, az, bx, bz] of sides) {
+          const len = Math.hypot(bx - ax, bz - az);
+          const n = Math.max(2, Math.round(len / 3));
+          // Just inside the lot line, so the columns stay within the collider.
+          const ix = az === bz ? 0 : Math.sign(b.x - ax) * 0.25;
+          const iz = ax === bx ? 0 : Math.sign(b.z - az) * 0.25;
+          for (let k = 0; k < n; k++) {
+            const u = (k + 0.5) / n;
+            roofs.box({ x: ax + (bx - ax) * u + ix, z: az + (bz - az) * u + iz, w: 0.5, d: 0.5 }, f.y0, f.floor, col, null, col);
+          }
+        }
+        const yb = top - 0.02;
+        roofs.quad([[x0, yb, z0], [x1, yb, z0], [x1, yb, z1], [x0, yb, z1]], [0, -1, 0], col.clone().multiplyScalar(0.6));
+        break;
+      }
       case 'balcony':
       case 'loadingDock':
       case 'porch':
-      case 'chimney':
       case 'hoist':
-      case 'clockTower':
       case 'radarMast':
-        void b; void y0; void roofs; void wallColor;
         break;
     }
   }
 }
 
 /** Pitched roof with overhanging eaves, ridge along the longer side, gable ends in the wall colour. */
-function addGable(b: Building, y: number, roofs: GeometryBuilder, wallColor: THREE.Color, tileColor: THREE.Color): void {
-  const o = 0.35;
+function addGable(b: Rect, y: number, roofs: GeometryBuilder, wallColor: THREE.Color, tileColor: THREE.Color, rise = roofRise('gable', b)): void {
+  const o = EAVE;
   const alongX = b.w >= b.d;
   const len = (alongX ? b.w : b.d) / 2 + o; // half-length along the ridge
   const run = (alongX ? b.d : b.w) / 2 + o; // eave to ridge, horizontally
-  const rise = Math.min(3.5, (run - o) * 0.75); // ridge height above the wall tops
   // Local (a along the ridge, c across it) to world; swapping axes mirrors, so flip the winding.
   const P = (a: number, h: number, c: number) => (alongX ? [b.x + a, h, b.z + c] : [b.x + c, h, b.z + a]);
   const N = (a: number, h: number, c: number) => (alongX ? [a, h, c] : [c, h, a]);
@@ -661,6 +762,27 @@ function addGable(b: Building, y: number, roofs: GeometryBuilder, wallColor: THR
   quad([P(-len, ye, -run), P(len, ye, -run), P(len, ye, run), P(-len, ye, run)], [0, -1, 0], tileColor.clone().multiplyScalar(0.6));
   quad([P(ea, y, ec), P(ea, y, -ec), P(ea, yr, 0), P(ea, yr, 0)], N(1, 0, 0), wallColor);
   quad([P(-ea, y, -ec), P(-ea, y, ec), P(-ea, yr, 0), P(-ea, yr, 0)], N(-1, 0, 0), wallColor);
+}
+
+/** Hipped roof: sloping on all four sides, a short ridge along the longer side, overhanging eaves. */
+function addHip(b: Rect, y: number, roofs: GeometryBuilder, tileColor: THREE.Color, rise: number): void {
+  const o = EAVE;
+  const alongX = b.w >= b.d;
+  const len = (alongX ? b.w : b.d) / 2 + o;
+  const run = (alongX ? b.d : b.w) / 2 + o;
+  const ridge = Math.max(0, len - run); // hips at 45° in plan
+  const ye = y - (rise * o) / (run - o);
+  const yr = y + rise;
+  const P = (a: number, h: number, c: number) => (alongX ? [b.x + a, h, b.z + c] : [b.x + c, h, b.z + a]);
+  const N = (a: number, h: number, c: number) => (alongX ? [a, h, c] : [c, h, a]);
+  const quad = (corners: number[][], normal: number[], color: THREE.Color) => roofs.quad(alongX ? corners : [...corners].reverse(), normal, color);
+  const k = Math.hypot(run, yr - ye);
+  quad([P(-len, ye, run), P(len, ye, run), P(ridge, yr, 0), P(-ridge, yr, 0)], N(0, run / k, (yr - ye) / k), tileColor);
+  quad([P(len, ye, -run), P(-len, ye, -run), P(-ridge, yr, 0), P(ridge, yr, 0)], N(0, run / k, -(yr - ye) / k), tileColor);
+  const kh = Math.hypot(len - ridge, yr - ye);
+  quad([P(len, ye, run), P(len, ye, -run), P(ridge, yr, 0), P(ridge, yr, 0)], N((yr - ye) / kh, (len - ridge) / kh, 0), tileColor.clone().multiplyScalar(0.92));
+  quad([P(-len, ye, -run), P(-len, ye, run), P(-ridge, yr, 0), P(-ridge, yr, 0)], N(-(yr - ye) / kh, (len - ridge) / kh, 0), tileColor.clone().multiplyScalar(0.92));
+  quad([P(-len, ye, -run), P(len, ye, -run), P(len, ye, run), P(-len, ye, run)], [0, -1, 0], tileColor.clone().multiplyScalar(0.6));
 }
 
 function pickTree(climate: Climate, rng: Rng): TreeKind {

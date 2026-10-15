@@ -11,7 +11,7 @@ import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, type CityConfig, type CityData } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
-import { pickTheme, pickTimeOfDay } from '../world/CityTheme';
+import { pickTheme, pickTimeOfDay, type TimeOfDayName } from '../world/CityTheme';
 import { applyClimate, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
 import { Sky } from '../render/Sky';
 import { Precipitation } from '../render/Precipitation';
@@ -212,7 +212,10 @@ export class Game {
     s.far = sunDist + 100;
     // The shadow camera looks down -sunDir with world up, as Object3D.lookAt orients it.
     new THREE.Matrix4().lookAt(sunDir, new THREE.Vector3(), new THREE.Object3D().up).extractBasis(this.sunAxes[0], this.sunAxes[1], new THREE.Vector3());
-    this.districtViews = buildDistricts(this.city, this.scene, { theme, climate, lampGlow: time.lampGlow, ground: this.ground });
+    this.districtViews = buildDistricts(this.city, this.scene, {
+      theme, climate, lampGlow: time.lampGlow, ground: this.ground, hour0: startHour(seed, time.name),
+      bell: (strikes, at) => this.audio.bell(strikes, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.position) / 450, 0, 1)),
+    });
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
 
     const { spawn } = this.city;
@@ -1000,6 +1003,12 @@ export class Game {
 }
 
 /** Impact = velocity change (or closing speed) in m/s: ~3 is a scrape, 40+ is a full-speed hit. */
+/** The game clock when a run starts: the time of day's hour plus some minutes from the seed. */
+export function startHour(seed: number, time: TimeOfDayName): number {
+  const hour = { day: 10, afternoon: 17, night: 22 }[time];
+  return hour + (((seed * 2654435761) >>> 0) % 60) / 60;
+}
+
 function impactStrength(speed: number): number {
   return THREE.MathUtils.clamp((speed - 1.5) / 20, 0.1, 1);
 }

@@ -6,6 +6,9 @@ import { part } from '../geometry';
 import type { CityData } from '../../world/CityGenerator';
 import type { District, Structure } from '../../world/districts/District';
 import type { WallPiece } from '../../world/districts/OldCityWalls';
+import { clockTowerFrame } from '../../world/districts/trims';
+import { inRect } from '../../world/lots';
+import { groundBase } from '../../world/Terrain';
 import type { DistrictRenderContext, DistrictView } from './index';
 
 const STONE = 0xb5aa93;
@@ -186,6 +189,126 @@ function decks(q: District, ground: (x: number, z: number) => number, out: THREE
   }
 }
 
+/** Cobbled setts over the market square, in rows of slightly varied stone, following the ground. */
+function cobbles(q: District, ground: (x: number, z: number) => number): THREE.BufferGeometry | null {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const c = new THREE.Color();
+  for (const p of q.dressing.ground) {
+    if (p.kind !== 'cobbles') continue;
+    const sett = 1.1;
+    const n = Math.floor(p.w / sett);
+    const m = Math.floor(p.d / sett);
+    let seed = 1;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let j = 0; j < m; j++) {
+      const shift = (j % 2) * sett * 0.5;
+      for (let i = 0; i < n; i++) {
+        const x0 = p.x - p.w / 2 + i * sett + shift + 0.06;
+        const x1 = Math.min(x0 + sett - 0.12, p.x + p.w / 2);
+        const z0 = p.z - p.d / 2 + j * sett + 0.06;
+        const z1 = z0 + sett - 0.12;
+        if (x1 <= x0) continue;
+        c.setHex(STONE_DARK).lerp(new THREE.Color(STONE), rand() * 0.8).multiplyScalar(0.8 + rand() * 0.15);
+        const y = (x: number, z: number) => ground(x, z) + 0.07;
+        const quad = [[x0, z1], [x1, z1], [x1, z0], [x0, z0]];
+        for (const k of [0, 1, 2, 0, 2, 3]) {
+          const [x, z] = quad[k];
+          pos.push(x, y(x, z), z);
+          col.push(c.r, c.g, c.b);
+        }
+      }
+    }
+  }
+  if (!pos.length) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A ruin: a shell of broken walls round its lot, jagged on top, with a fallen block or two. */
+function ruin(s: Structure, y: number, stone: THREE.BufferGeometry[]): void {
+  const { w, d, h, heights } = s.data as { w: number; d: number; h: number; heights: number[] };
+  const t = 0.7;
+  const x0 = s.x - w / 2 + t / 2, x1 = s.x + w / 2 - t / 2, z0 = s.z - d / 2 + t / 2, z1 = s.z + d / 2 - t / 2;
+  const sides: [number, number, number, number][] = [[x0, z0, x1, z0], [x1, z0, x1, z1], [x1, z1, x0, z1], [x0, z1, x0, z0]];
+  const per = Math.floor(heights.length / 4);
+  sides.forEach(([ax, az, bx, bz], side) => {
+    for (let k = 0; k < per; k++) {
+      const hk = h * heights[side * per + k];
+      if (hk < 0.5) continue;
+      const u0 = k / per, u1 = (k + 1) / per;
+      const x = ax + (bx - ax) * (u0 + u1) / 2, z = az + (bz - az) * (u0 + u1) / 2;
+      const len = Math.hypot(bx - ax, bz - az) / per + 0.02;
+      const alongX = az === bz;
+      stone.push(column(alongX ? len : t, alongX ? t : len, x, y - 0.3, y + hk, z, (side + k) % 3 ? STONE : STONE_DARK));
+    }
+  });
+  stone.push(part(box(1.2, 0.7, 0.8).rotateY(0.5), STONE_DARK, s.x + w * 0.15, y + 0.3, s.z - d * 0.1));
+  stone.push(part(box(0.9, 0.5, 1.4).rotateY(-0.3), STONE, s.x - w * 0.2, y + 0.2, s.z + d * 0.18));
+}
+
+/** The town hall's four clock faces, with hands that follow the game clock and strike the hour. */
+function clock(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext, stone: THREE.BufferGeometry[], metal: THREE.Material): DistrictView {
+  const hall = city.buildings.find((b) => b.district === 'oldtown' && b.lot === 'townHall' && inRect(q.bounds, b));
+  if (!hall) return {};
+  const y0 = groundBase(city.terrain, hall.x, hall.z, Math.max(hall.w, hall.d) / 2) - 0.3; // as CityBuilder stands it
+  const t = clockTowerFrame(hall, 'hip');
+  const faces = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+  const frames = faces.map(([nx, nz]) => {
+    const m = new THREE.Matrix4().makeRotationY(Math.atan2(nx, nz));
+    m.setPosition(t.x + nx * (t.half + 0.04), y0 + t.dialY, t.z + nz * (t.half + 0.04));
+    return m;
+  });
+  // Dials: a white face in a dark ring with hour marks, merged with the stone.
+  for (const m of frames) {
+    const dial = [
+      part(new THREE.CircleGeometry(t.dialR, 20), 0xf2ecdc),
+      part(new THREE.RingGeometry(t.dialR, t.dialR + 0.18, 20), 0x2a2a2e, 0, 0, 0.005),
+      ...Array.from({ length: 12 }, (_, k) => {
+        const a = (k / 12) * Math.PI * 2;
+        return part(new THREE.PlaneGeometry(k % 3 ? 0.06 : 0.12, 0.28).rotateZ(-a), 0x2a2a2e, Math.sin(a) * t.dialR * 0.82, Math.cos(a) * t.dialR * 0.82, 0.01);
+      }),
+    ].map((g) => g.applyMatrix4(m));
+    stone.push(...dial);
+  }
+  // Hands: instanced (four faces each), pivoting at the dial's centre and pointing up at 12.
+  const hand = (length: number, width: number) => {
+    const g = part(new THREE.BoxGeometry(width, length, 0.04).translate(0, length / 2 - 0.15, 0.03), 0x1c1c20);
+    const mesh = new THREE.InstancedMesh(g, metal, 4);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(mesh);
+    return mesh;
+  };
+  const hourHand = hand(t.dialR * 0.55, 0.16);
+  const minuteHand = hand(t.dialR * 0.85, 0.1);
+  const turn = new THREE.Matrix4();
+  const out = new THREE.Matrix4();
+  let lastHour = Math.floor(ctx.hour0);
+  const at = new THREE.Vector3(t.x, y0 + t.dialY, t.z);
+  const set = (hours: number) => {
+    for (const [mesh, angle] of [[hourHand, ((hours % 12) / 12) * Math.PI * 2], [minuteHand, (hours % 1) * Math.PI * 2]] as const) {
+      turn.makeRotationZ(-angle);
+      frames.forEach((m, k) => mesh.setMatrixAt(k, out.multiplyMatrices(m, turn)));
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+  };
+  set(ctx.hour0);
+  return {
+    update(_dt, time) {
+      const hours = ctx.hour0 + time / 3600;
+      set(hours);
+      const h = Math.floor(hours);
+      if (h !== lastHour) {
+        lastHour = h;
+        ctx.bell?.(((h + 11) % 12) + 1, at);
+      }
+    },
+  };
+}
+
 export function renderOldCity(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
   const stone: THREE.BufferGeometry[] = [];
   const iron: THREE.BufferGeometry[] = [];
@@ -196,15 +319,19 @@ export function renderOldCity(q: District, city: CityData, scene: THREE.Scene, c
     else if (s.kind === 'tower') tower(s, base(s.footprints[0]), stone);
     else if (s.kind === 'gatehouse') gatehouse(s, stone, iron, city.config.roadWidth);
     else if (s.kind === 'postern') postern(s, Math.min(...s.footprints.map(base)), stone);
+    else if (s.kind === 'ruin') ruin(s, base(s.footprints[0]), stone);
   }
   decks(q, ctx.ground, stone);
+  const setts = cobbles(q, ctx.ground);
+  if (setts) stone.push(setts);
   const solid = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 });
   const metal = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.4, metalness: 0.6 });
+  const view = clock(q, city, scene, ctx, stone, metal);
   for (const [geos, mat] of [[stone, solid], [iron, metal]] as const) {
     if (!geos.length) continue;
     const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
     mesh.castShadow = mesh.receiveShadow = true;
     scene.add(mesh);
   }
-  return {};
+  return view;
 }

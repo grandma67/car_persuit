@@ -120,6 +120,10 @@ export const OLD_CITY = {
   /** Share of the ordinary lots per kind (the rest are half-timbered). */
   stoneShare: 0.35,
   ruinShare: 0.08,
+  townHallHeight: 12, // at least, metres
+  crossOffset: 13, // market cross from the well, metres
+  stalls: 9, // round the well (fewer where the cross stands)
+  stallRing: 16, // metres from the well
 };
 
 /** Old City walls and gatehouses (world/districts/OldCityWalls.ts), metres. */

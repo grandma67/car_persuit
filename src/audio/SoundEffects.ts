@@ -203,6 +203,27 @@ export class SoundEffects {
       this.impact(Math.min(0.5, strength));
       return;
     }
+    // Old City breakables.
+    if (kind === 'haybale') {
+      this.burst(0, 0.35, 'lowpass', 900, 0.7, gain * 1.4); // a soft whump of straw
+      this.burst(0.02, 0.6, 'highpass', 2500, 0.5, gain * 0.4);
+      return;
+    }
+    if (kind === 'pot' || kind === 'amphora') {
+      // Terracotta: a dull knock and a bright scatter of shards.
+      this.burst(0, 0.06, 'bandpass', 700, 1.2, gain * 1.2);
+      this.burst(0.02, 0.25, 'bandpass', 3800, 1.5, gain * 0.9);
+      return;
+    }
+    if (kind === 'cannonballs') {
+      this.impact(Math.min(0.6, strength + 0.2));
+      return;
+    }
+    if (kind === 'cart' || kind === 'stall' || kind === 'barrels' || kind === 'pillory' || kind === 'signpost') {
+      this.woodBreak(kind === 'signpost' ? 0.35 : kind === 'barrels' ? 0.6 : 0.8, gain);
+      if (kind === 'stall') this.burst(0.03, 0.35, 'bandpass', 900, 0.8, gain * 0.6); // the awning
+      return;
+    }
     if (kind === 'tree' || kind === 'umbrella' || kind === 'bench' || kind === 'fence') {
       const size = kind === 'tree' ? (tree === 'palm' ? 0.8 : 1) : kind === 'bench' ? 0.55 : 0.35;
       this.woodBreak(size, gain);
@@ -215,7 +236,8 @@ export class SoundEffects {
 
     if (metal) {
       // Inharmonic partials ring like struck metal.
-      const base = kind === 'lamp' || kind === 'signal' ? 380 : kind === 'sign' ? 700 : 520;
+      const base = kind === 'lamp' || kind === 'signal' ? 380 : kind === 'sign' ? 700 : kind === 'oilLamp' ? 620 : 520;
+      if (kind === 'oilLamp') this.burst(0.01, 0.2, 'highpass', 5000, 0.6, gain * 0.8); // lantern glass
       for (const ratio of [1, 2.76, 5.4]) {
         const osc = ctx.createOscillator();
         osc.frequency.value = base * ratio * (0.95 + Math.random() * 0.1);
@@ -263,6 +285,26 @@ export class SoundEffects {
    * One-shot crash: a low thump plus a burst of crunch noise. strength is 0..1 — from the collision
    * speed (and distance, for other cars' crashes); quieter hits are also duller and shorter.
    */
+  /** A church-tower bell: `strikes` deep strokes, a couple of seconds apart. */
+  bell(strikes: number, volume = 0.25): void {
+    const ctx = this.ctx;
+    for (let k = 0; k < strikes; k++) {
+      const at = ctx.currentTime + k * 2.2;
+      // A bell's partials: hum, prime, tierce (minor third), quint, nominal.
+      for (const [ratio, level, decay] of [[0.5, 0.5, 4.5], [1, 0.8, 3.5], [1.19, 0.45, 2.5], [1.5, 0.3, 2], [2, 0.35, 1.6], [2.66, 0.15, 1]]) {
+        const osc = ctx.createOscillator();
+        osc.frequency.value = 220 * ratio;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(volume * level, at + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + decay);
+        osc.connect(g).connect(this.master);
+        osc.start(at);
+        osc.stop(at + decay + 0.05);
+      }
+    }
+  }
+
   impact(strength: number): void {
     if (strength <= 0.01) return;
     const ctx = this.ctx;

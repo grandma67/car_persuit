@@ -27,6 +27,7 @@ export interface LotLook {
   facade: FacadeStyle; // upper floors
   ground?: FacadeStyle; // floor 0 only (shopfronts, roller doors, barn doors); defaults to `facade`
   roof: RoofShape;
+  roofAlt?: RoofShape; // some lots of this kind (by variant) take this roof instead
   palette: number[]; // wall tints, picked by the building's variant
   roofTiles?: number[]; // roof colours for pitched roofs
   trims?: TrimKind[];

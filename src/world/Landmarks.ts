@@ -5,7 +5,10 @@ import type { Rng } from '../core/Rng';
 import type { Block, Building, CityConfig } from './CityGenerator';
 import { groundHeight, type Terrain } from './Terrain';
 
-export type LandmarkKind = 'fountain' | 'statue' | 'obelisk' | 'sculpture' | 'ramp';
+export type LandmarkKind =
+  | 'fountain' | 'statue' | 'obelisk' | 'sculpture' | 'ramp'
+  // Old City set pieces: placed by the district, never rolled as a town square's centrepiece.
+  | 'cannon' | 'column' | 'ruinArch' | 'well' | 'marketCross';
 
 export interface Landmark {
   kind: LandmarkKind;
@@ -35,8 +38,14 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   obelisk: 1.8,
   sculpture: 2.2,
   ramp: 4,
+  cannon: 1.4,
+  column: 0.9,
+  ruinArch: 2.6,
+  well: 1.5,
+  marketCross: 3.2,
 };
-const LANDMARK_KINDS = Object.keys(LANDMARK_RADIUS) as LandmarkKind[];
+/** What a town square may roll (fixed: adding a kind above must not move any seed's squares). */
+const LANDMARK_KINDS: LandmarkKind[] = ['fountain', 'statue', 'obelisk', 'sculpture', 'ramp'];
 const MONUMENT_KINDS = LANDMARK_KINDS.filter((k) => k !== 'ramp');
 
 /**

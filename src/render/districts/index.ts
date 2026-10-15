@@ -14,6 +14,10 @@ export interface DistrictRenderContext {
   climate: Climate;
   lampGlow: number; // 0 by day … 1 at night
   ground: GroundHeight;
+  /** The game clock at the start of the run, in hours (10.5 = half past ten). */
+  hour0: number;
+  /** A bell rings out from `at` (the Old City's clock striking the hour). */
+  bell?: (strikes: number, at: THREE.Vector3) => void;
 }
 
 /** A district's meshes, with whatever moves each frame. */

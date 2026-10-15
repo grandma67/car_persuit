@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from './CityGenerator';
-import { PROP_SPECS, footprintsOverlap, propFootprint, propSpec, rectFootprint, type Footprint } from './StreetProps';
+import { PROP_SPECS, footprintsOverlap, propFootprint, propSpec, rectFootprint, type Footprint, type PropKind, type StreetProp } from './StreetProps';
+import { inDistrict } from './districts/apply';
+
+/** The street furniture every city has; the rest is district dressing. */
+const BASE_KINDS = new Set<PropKind>(['lamp', 'hydrant', 'bench', 'fence', 'sign', 'signal', 'cone', 'tree', 'umbrella']);
 
 const SEEDS = [1, 42, 1234, 99999];
 
@@ -54,8 +58,10 @@ describe('generateStreetProps', () => {
       ...city.props.map(rectFootprint),
       ...city.trees.map((t) => ({ x: t.x, z: t.z, hx: 0.5, hz: 0.5, yaw: 0 })),
     ];
-    // Roadworks cones stand on the road on purpose.
-    const bad = city.streetProps.filter((p) => p.kind !== 'cone' && blockers.some((b) => overlaps(propFootprint(p), b)));
+    // Roadworks cones stand on the road on purpose; a district's kerb clutter may poke into the
+    // roadway (never within DISTRICTS.clutterMinOffset of the centre line: the district tests).
+    const clutter = (p: StreetProp) => !BASE_KINDS.has(p.kind) && city.districts.some((q) => inDistrict(q, p));
+    const bad = city.streetProps.filter((p) => p.kind !== 'cone' && !clutter(p) && blockers.some((b) => overlaps(propFootprint(p), b)));
     expect(bad).toEqual([]);
   });
 
