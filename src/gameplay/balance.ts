@@ -124,6 +124,10 @@ export const OLD_CITY = {
   crossOffset: 13, // market cross from the well, metres
   stalls: 9, // round the well (fewer where the cross stands)
   stallRing: 16, // metres from the well
+  // Glow budget: emissive instances inside the walls (oil lamps + gatehouse torches, two a gate,
+  // at most maxTorches). Oil lamps past it are thinned out evenly.
+  maxGlow: 60,
+  maxTorches: 16,
 };
 
 /** Old City walls and gatehouses (world/districts/OldCityWalls.ts), metres. */

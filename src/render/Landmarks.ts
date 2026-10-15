@@ -157,6 +157,15 @@ function marketCross(): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
+const SNOW = 0xeef2f6;
+/** Snow lying on the Old City pieces in a snowy city. */
+const SNOW_CAPS = {
+  cannon: () => mergeGeometries([part(box(0.36, 0.08, 2.2), SNOW, 0, 1.2, 0.35), part(box(1.0, 0.06, 1.6), SNOW, 0, 0.47, -0.1)]),
+  well: () => part(cyl(0, 1.85, 0.95, 4).rotateY(Math.PI / 4), SNOW, 0, 3.55),
+  marketCross: () => part(cyl(0, 3.4, 2.25, 8), SNOW, 0, 5.6),
+  column: () => part(cyl(0.44, 0.44, 0.1, 12), SNOW, 0, 3.9),
+};
+
 /** Old City pieces stand straight on the ground, without a paved pad. */
 const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross']);
 
@@ -240,7 +249,7 @@ export class Landmarks {
    * lampGlow: 0 by day … 1 at night (fountain water glows a little after dark).
    * Returns collider handles so crash marks treat landmarks like walls.
    */
-  constructor(landmarks: Landmark[], terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, lampGlow: number, readonly colliders = new Set<number>()) {
+  constructor(landmarks: Landmark[], terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, lampGlow: number, readonly colliders = new Set<number>(), private snowy = false) {
     const solid = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 });
     const metal = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.4, metalness: 0.6 });
     const water = new THREE.MeshStandardMaterial({
@@ -301,7 +310,8 @@ export class Landmarks {
   /** An Old City piece: on its lowest ground, with a box collider round its footprint. */
   private addPlain(l: Landmark, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, model: THREE.BufferGeometry, solid: THREE.Material): void {
     const y = groundBase(terrain, l.x, l.z, l.radius) - 0.05;
-    const mesh = new THREE.Mesh(model, solid);
+    const cap = this.snowy ? SNOW_CAPS[l.kind as keyof typeof SNOW_CAPS]?.() : undefined;
+    const mesh = new THREE.Mesh(cap ? mergeGeometries([model, cap]) : model, solid);
     mesh.position.set(l.x, y, l.z);
     mesh.rotation.y = l.yaw;
     mesh.castShadow = mesh.receiveShadow = true;

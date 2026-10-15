@@ -8,6 +8,20 @@ import { pickClimate, type Climate } from './Climate';
 import type { FacadeStyle } from '../render/Facades';
 import type { DistrictKind, LotLook } from './districts/District';
 
+/** The Old City in sandstone (desert) and whitewash (by the sea), lot by lot. */
+const OLD_CITY_SANDSTONE: Record<string, Partial<LotLook>> = {
+  halfTimbered: { palette: [0xe8cfa0, 0xdcc08e, 0xeed8ac] },
+  stoneHouse: { palette: [0xd9b47e, 0xceaa72, 0xe0bf8c], roofTiles: [0xb0643a, 0xa05a34] },
+  townHall: { palette: [0xd4ae78, 0xdcb886] },
+  arcade: { palette: [0xd9b47e, 0xe0bf8c] },
+};
+const OLD_CITY_WHITEWASH: Record<string, Partial<LotLook>> = {
+  halfTimbered: { palette: [0xf6f3ec, 0xf2eee4, 0xfaf8f2] },
+  stoneHouse: { palette: [0xf0ece2, 0xe8e2d4, 0xf4f0e8], roofTiles: [0xb85a36, 0xc0683e, 0xa8502e] },
+  townHall: { palette: [0xf2eee6, 0xeae4d8] },
+  arcade: { palette: [0xf0ece2, 0xf4f0e8] },
+};
+
 export interface CityTheme {
   name: string;
   buildings: Record<Zone, number[]>;
@@ -98,6 +112,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xb8a78c, 0xa0937e, 0xc4b394, 0x8f8574],
     },
     asphalt: 0x34363b, sidewalk: 0xb7ab95, plaza: 0xa88f6e, quay: 0x9c9080, seaWall: 0xd8cfbf, planter: 0xb59a78,
+    districts: { oldtown: OLD_CITY_WHITEWASH },
     grass: 0x56733d, leaves: [0x4a6b34, 0x5a7a3a, 0x3e5f30, 0x6b7f40], trunk: 0x5a4430,
     centerLine: 0xeeeeea, edgeLine: 0xeeeeea,
   },
@@ -126,6 +141,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xa08c70, 0x8f7f68, 0xb39c7c, 0x7d705e],
     },
     asphalt: 0x3a3835, sidewalk: 0xc2b49a, plaza: 0xb08f6a, quay: 0x9a8a72, seaWall: 0xcbbd9f, planter: 0xa38a6a,
+    districts: { oldtown: OLD_CITY_SANDSTONE },
     grass: 0x6b7a3e, leaves: [0x5f6e34, 0x6f7a3c, 0x55642f, 0x7a8240], trunk: 0x5a4632,
     centerLine: 0xe0b84a, edgeLine: 0xe6e2d8,
   },
@@ -140,6 +156,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xc4b8a4, 0xb0a894, 0xd0c4ae, 0x9c9484],
     },
     asphalt: 0x36383d, sidewalk: 0xcfc6b4, plaza: 0xc8bca6, quay: 0xa0988a, seaWall: 0xe8e2d6, planter: 0xc0a888,
+    districts: { oldtown: OLD_CITY_WHITEWASH },
     grass: 0x5d8a3e, leaves: [0x4f8a3a, 0x5c9440, 0x467a34, 0x6a9a48], trunk: 0x8a6a48,
     centerLine: 0xe0b84a, edgeLine: 0xeeeeea,
   },

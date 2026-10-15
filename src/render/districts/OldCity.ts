@@ -9,17 +9,22 @@ import type { WallPiece } from '../../world/districts/OldCityWalls';
 import { clockTowerFrame } from '../../world/districts/trims';
 import { inRect } from '../../world/lots';
 import { groundBase } from '../../world/Terrain';
+import { OLD_CITY } from '../../gameplay/balance';
 import type { DistrictRenderContext, DistrictView } from './index';
 
-const STONE = 0xb5aa93;
-const STONE_DARK = 0x8a806d;
+// The walls' stone by climate (set per district in renderOldCity): grey limestone, sandstone in
+// the desert, limewashed by the sea.
+const STONES: Record<string, [number, number]> = { temperate: [0xb5aa93, 0x8a806d], snow: [0xa9a397, 0x7f7a70], desert: [0xd2ae78, 0xa8885a], beach: [0xe6e0d2, 0xb8ae9c] };
+let STONE = 0xb5aa93;
+let STONE_DARK = 0x8a806d;
+let SNOWY = false;
+const SNOW = 0xeef2f6;
 const SLATE = 0x4f5560;
 const OAK = 0x6b4a2c;
 const OAK_DARK = 0x4a321d;
 const IRON = 0x2e2f33;
 const BANNER = [0x8e1f24, 0x1f3f7a];
 const GOLD = 0xc9a23a;
-const FLAME = 0xffa53a;
 
 const MERLON = { w: 0.9, h: 0.9, d: 0.55, pitch: 1.7 };
 const LIP = { out: 0.45, h: 0.25 };
@@ -69,6 +74,7 @@ function wall(s: Structure, stone: THREE.BufferGeometry[]): void {
     stone.push(column(w + (nz ? 0 : 0.3), d + (nz ? 0.3 : 0), x + nx * 0.15, y0, p.y + 0.8, z + nz * 0.15, STONE_DARK));
     stone.push(column(nz ? w : LIP.out, nz ? LIP.out : d, x - nx * (thick / 2 + LIP.out / 2), top - 0.6 - LIP.h, top - 0.6, z - nz * (thick / 2 + LIP.out / 2), STONE_DARK));
     merlons(p.ax, p.az, p.bx, p.bz, top, nx, nz, stone, -MERLON.d / 2);
+    if (SNOWY) stone.push(column(w + 0.04, d + 0.04, x, top, top + 0.12, z, SNOW)); // snow on the walkway
   }
 }
 
@@ -78,10 +84,11 @@ function tower(s: Structure, y: number, stone: THREE.BufferGeometry[]): void {
   if (round) {
     stone.push(part(new THREE.CylinderGeometry(half, half * 1.06, height + 0.6, 14), STONE, s.x, y - 0.6 + (height + 0.6) / 2, s.z));
     stone.push(part(new THREE.CylinderGeometry(half + 0.35, half + 0.35, 0.5, 14), STONE_DARK, s.x, top - 0.25, s.z));
-    stone.push(part(new THREE.ConeGeometry(half + 0.6, half * 1.6, 14), SLATE, s.x, top + (half * 1.6) / 2, s.z));
+    stone.push(part(new THREE.ConeGeometry(half + 0.6, half * 1.6, 14), SNOWY ? SNOW : SLATE, s.x, top + (half * 1.6) / 2, s.z));
   } else {
     stone.push(column(half * 2, half * 2, s.x, y - 0.6, top, s.z, STONE));
     stone.push(column(half * 2 + 0.6, half * 2 + 0.6, s.x, top - 0.5, top, s.z, STONE_DARK));
+    if (SNOWY) stone.push(column(half * 2 + 0.5, half * 2 + 0.5, s.x, top, top + 0.15, s.z, SNOW));
     const e = half + 0.3 - MERLON.d / 2;
     const c = [[-e, -e], [e, -e], [e, e], [-e, e]];
     for (let k = 0; k < 4; k++) {
@@ -92,7 +99,7 @@ function tower(s: Structure, y: number, stone: THREE.BufferGeometry[]): void {
   }
 }
 
-function gatehouse(s: Structure, stone: THREE.BufferGeometry[], iron: THREE.BufferGeometry[], roadWidth: number): void {
+function gatehouse(s: Structure, stone: THREE.BufferGeometry[], iron: THREE.BufferGeometry[], roadWidth: number, flames: THREE.Vector3[]): void {
   const d = s.data as {
     ax: number; az: number; nx: number; nz: number; opening: number; towerHalf: number; height: number; wallHeight: number; thick: number;
     archBottom: number; portcullisBottom: number; banners: boolean; y: number;
@@ -104,6 +111,7 @@ function gatehouse(s: Structure, stone: THREE.BufferGeometry[], iron: THREE.Buff
   for (const t of s.footprints) {
     stone.push(column(t.hx * 2, t.hz * 2, t.x, y - 0.6, top, t.z, STONE));
     stone.push(column(t.hx * 2 + 0.5, t.hz * 2 + 0.5, t.x, top - 0.45, top, t.z, STONE_DARK));
+    if (SNOWY) stone.push(column(t.hx * 2 + 0.4, t.hz * 2 + 0.4, t.x, top, top + 0.15, t.z, SNOW));
     const e = t.hx + 0.25 - MERLON.d / 2;
     const c = [[-e, -e], [e, -e], [e, e], [-e, e]];
     for (let k = 0; k < 4; k++) merlons(t.x + c[k][0], t.z + c[k][1], t.x + c[(k + 1) % 4][0], t.z + c[(k + 1) % 4][1], top, 0, 0, stone);
@@ -148,7 +156,8 @@ function gatehouse(s: Structure, stone: THREE.BufferGeometry[], iron: THREE.Buff
   // Torches on iron brackets.
   for (const t of d.torches) {
     iron.push(column(0.12, 0.12, t.x, y + t.y - 0.6, y + t.y, t.z, IRON));
-    stone.push(part(new THREE.ConeGeometry(0.16, 0.45, 5), FLAME, t.x, y + t.y + 0.2, t.z));
+    stone.push(part(new THREE.CylinderGeometry(0.14, 0.08, 0.3, 5), IRON, t.x, y + t.y + 0.05, t.z)); // the cup
+    flames.push(new THREE.Vector3(t.x, y + t.y + 0.38, t.z));
   }
   // Banners hang on the outer face of the towers beside the larger gates.
   if (d.banners) {
@@ -189,36 +198,56 @@ function decks(q: District, ground: (x: number, z: number) => number, out: THREE
   }
 }
 
-/** Cobbled setts over the market square, in rows of slightly varied stone, following the ground. */
-function cobbles(q: District, ground: (x: number, z: number) => number): THREE.BufferGeometry | null {
-  const pos: number[] = [];
-  const col: number[] = [];
+/**
+ * Cobbled setts over a rectangle, in rows of slightly varied stone, following the ground. Streets
+ * (`along` set) run their rows across the road and have a darker gutter down the middle.
+ */
+function setts(r: { x: number; z: number; w: number; d: number }, lift: number, along: 'x' | 'z' | null, ground: (x: number, z: number) => number, pos: number[], col: number[], seed: number): void {
+  const size = 1.0;
   const c = new THREE.Color();
-  for (const p of q.dressing.ground) {
-    if (p.kind !== 'cobbles') continue;
-    const sett = 1.1;
-    const n = Math.floor(p.w / sett);
-    const m = Math.floor(p.d / sett);
-    let seed = 1;
-    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let j = 0; j < m; j++) {
-      const shift = (j % 2) * sett * 0.5;
-      for (let i = 0; i < n; i++) {
-        const x0 = p.x - p.w / 2 + i * sett + shift + 0.06;
-        const x1 = Math.min(x0 + sett - 0.12, p.x + p.w / 2);
-        const z0 = p.z - p.d / 2 + j * sett + 0.06;
-        const z1 = z0 + sett - 0.12;
-        if (x1 <= x0) continue;
-        c.setHex(STONE_DARK).lerp(new THREE.Color(STONE), rand() * 0.8).multiplyScalar(0.8 + rand() * 0.15);
-        const y = (x: number, z: number) => ground(x, z) + 0.07;
-        const quad = [[x0, z1], [x1, z1], [x1, z0], [x0, z0]];
-        for (const k of [0, 1, 2, 0, 2, 3]) {
-          const [x, z] = quad[k];
-          pos.push(x, y(x, z), z);
-          col.push(c.r, c.g, c.b);
-        }
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  // Work in (u across rows, v along rows); rows run across a street.
+  const alongX = along === 'x';
+  const [U, V] = alongX ? [r.w, r.d] : [r.d, r.w];
+  const rows = Math.floor(U / size);
+  const per = Math.floor(V / size);
+  for (let j = 0; j < rows; j++) {
+    const shift = (j % 2) * size * 0.5;
+    for (let i = 0; i <= per; i++) {
+      const v0 = Math.max(-V / 2, -V / 2 + i * size - shift) + 0.05;
+      const v1 = Math.min(V / 2, -V / 2 + (i + 1) * size - shift) - 0.05;
+      if (v1 - v0 < 0.2) continue;
+      const u0 = -U / 2 + j * size + 0.05;
+      const u1 = u0 + size - 0.1;
+      const gutter = along && Math.abs((v0 + v1) / 2) < 0.6;
+      c.setHex(STONE_DARK).lerp(new THREE.Color(STONE), gutter ? 0 : rand() * 0.8).multiplyScalar(gutter ? 0.6 : 0.78 + rand() * 0.15);
+      const P = (u: number, v: number) => (alongX ? [r.x + u, r.z + v] : [r.x + v, r.z + u]);
+      // Counter-clockwise from above whichever way the street runs.
+      const quad = alongX ? [P(u0, v1), P(u1, v1), P(u1, v0), P(u0, v0)] : [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)];
+      for (const k of [0, 1, 2, 0, 2, 3]) {
+        const [x, z] = quad[k];
+        pos.push(x, ground(x, z) + lift, z);
+        col.push(c.r, c.g, c.b);
       }
     }
+  }
+}
+
+/** The square's cobbles, and the interior streets and junctions cobbled with a gutter. */
+function cobbles(q: District, city: CityData, ground: (x: number, z: number) => number): THREE.BufferGeometry | null {
+  const pos: number[] = [];
+  const col: number[] = [];
+  for (const p of q.dressing.ground) if (p.kind === 'cobbles') setts(p, 0.07, null, ground, pos, col, 1);
+  // Under the road markings (0.02 up), over the asphalt.
+  const inner = new Set(q.interior);
+  for (const road of city.roads) {
+    if (!q.streets.has(`${road.a}>${road.b}`)) continue;
+    setts(road.rect, 0.012, road.rect.w > road.rect.d ? 'x' : 'z', ground, pos, col, road.a * 31 + road.b);
+  }
+  for (const id of inner) {
+    const n = city.graph.nodes[id];
+    const box = city.intersections.find((r) => Math.abs(r.x - n.x) < 0.5 && Math.abs(r.z - n.z) < 0.5);
+    if (box) setts(box, 0.012, null, ground, pos, col, id + 7);
   }
   if (!pos.length) return null;
   const g = new THREE.BufferGeometry();
@@ -310,20 +339,23 @@ function clock(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRen
 }
 
 export function renderOldCity(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
+  [STONE, STONE_DARK] = STONES[ctx.climate.name] ?? STONES.temperate;
+  SNOWY = ctx.climate.snowRoofs;
   const stone: THREE.BufferGeometry[] = [];
   const iron: THREE.BufferGeometry[] = [];
+  const flames: THREE.Vector3[] = [];
   const base = (f: { x: number; z: number; hx: number; hz: number }) =>
     Math.min(ctx.ground(f.x, f.z), ctx.ground(f.x - f.hx, f.z - f.hz), ctx.ground(f.x + f.hx, f.z - f.hz), ctx.ground(f.x - f.hx, f.z + f.hz), ctx.ground(f.x + f.hx, f.z + f.hz));
   for (const s of q.dressing.structures) {
     if (s.kind === 'wall') wall(s, stone);
     else if (s.kind === 'tower') tower(s, base(s.footprints[0]), stone);
-    else if (s.kind === 'gatehouse') gatehouse(s, stone, iron, city.config.roadWidth);
+    else if (s.kind === 'gatehouse') gatehouse(s, stone, iron, city.config.roadWidth, flames);
     else if (s.kind === 'postern') postern(s, Math.min(...s.footprints.map(base)), stone);
     else if (s.kind === 'ruin') ruin(s, base(s.footprints[0]), stone);
   }
   decks(q, ctx.ground, stone);
-  const setts = cobbles(q, ctx.ground);
-  if (setts) stone.push(setts);
+  const paving = cobbles(q, city, ctx.ground);
+  if (paving) stone.push(paving);
   const solid = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 });
   const metal = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.4, metalness: 0.6 });
   const view = clock(q, city, scene, ctx, stone, metal);
@@ -333,5 +365,25 @@ export function renderOldCity(q: District, city: CityData, scene: THREE.Scene, c
     mesh.castShadow = mesh.receiveShadow = true;
     scene.add(mesh);
   }
+  torches(flames, scene, ctx.lampGlow);
   return view;
+}
+
+/**
+ * Torch flames: unlit and tone-map free, so they glow (the same instanced material as the street
+ * lamps' bulbs: no new shader); dim orange by day, bright at night, within OLD_CITY.maxGlow.
+ */
+function torches(flames: THREE.Vector3[], scene: THREE.Scene, lampGlow: number): void {
+  const count = Math.min(flames.length, OLD_CITY.maxTorches);
+  if (!count) return;
+  const mesh = new THREE.InstancedMesh(new THREE.ConeGeometry(0.15, 0.45, 5).translate(0, 0.1, 0), new THREE.MeshBasicMaterial({ toneMapped: false }), count);
+  const day = new THREE.Color(0xc8742a);
+  const night = new THREE.Color(0xffc060).multiplyScalar(1.6);
+  const color = day.lerp(night, lampGlow);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < count; i++) {
+    mesh.setMatrixAt(i, m.makeTranslation(flames[i].x, flames[i].y, flames[i].z));
+    mesh.setColorAt(i, color);
+  }
+  scene.add(mesh);
 }

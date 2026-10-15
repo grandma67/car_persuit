@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from '../CityGenerator';
 import { inRect } from '../lots';
-import { DISTRICTS, OLD_CITY_WALLS } from '../../gameplay/balance';
+import { DISTRICTS, OLD_CITY, OLD_CITY_WALLS } from '../../gameplay/balance';
 import { footprintsOverlap, propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
 import { inDistrict, isJunctionControl } from './apply';
 import { facingSquare, squareBlock } from './OldCity';
@@ -197,5 +197,16 @@ describe('Old City square, landmarks and clutter', () => {
     for (let i = 0; i < mine.length; i++) {
       for (let j = i + 1; j < mine.length; j++) expect(footprintsOverlap(propFootprint(mine[i]), propFootprint(mine[j]))).toBe(false);
     }
+  });
+});
+
+describe('Old City glow budget', () => {
+  it.each(SEEDS)('seed %i: oil lamps and torches stay within maxGlow', (seed) => {
+    const c = city(seed);
+    const q = c.districts.find((d) => d.kind === 'oldtown');
+    if (!q) return;
+    const lamps = c.streetProps.filter((p) => p.kind === 'oilLamp' && inDistrict(q, p)).length;
+    expect(lamps).toBeGreaterThan(0);
+    expect(lamps + Math.min(OLD_CITY.maxTorches, 2 * q.gates.length)).toBeLessThanOrEqual(OLD_CITY.maxGlow);
   });
 });

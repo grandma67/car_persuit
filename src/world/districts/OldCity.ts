@@ -213,6 +213,13 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
     if (isJunctionControl(p)) return [inDistrict(q, p) ? { ...p, style: 'old' as const } : p];
     return inDistrict(q, p) && blocked(p) ? [] : [p];
   });
+  // The glow budget: thin the oil lamps evenly if they and the torches would pass it.
+  const lamps = city.streetProps.filter((p) => p.kind === 'oilLamp' && inDistrict(q, p));
+  const room = OLD_CITY.maxGlow - Math.min(OLD_CITY.maxTorches, 2 * q.gates.length);
+  if (lamps.length > room) {
+    const keep = new Set(lamps.filter((_, i) => Math.floor((i * room) / lamps.length) !== Math.floor(((i + 1) * room) / lamps.length)));
+    city.streetProps = city.streetProps.filter((p) => !lamps.includes(p) || keep.has(p));
+  }
   // Kerb clutter goes in last, round everything else.
   const kept: StreetProp[] = [];
   for (const p of props) {

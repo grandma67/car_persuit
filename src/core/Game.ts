@@ -195,7 +195,7 @@ export class Game {
     const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
     this.canalWater = built.canalWater;
     this.walls = built.walls;
-    this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls);
+    this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs);
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
       leaves: theme.leaves[0],
