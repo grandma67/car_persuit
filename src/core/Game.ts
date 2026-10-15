@@ -31,7 +31,8 @@ import { toggleFullscreen } from '../ui/fullscreen';
 import { CarAudio } from '../audio/CarAudio';
 import { Effects } from '../render/Effects';
 import { Sirens } from '../render/Sirens';
-import { Sea, SEA_LEVEL } from '../render/Sea';
+import { Sea, SEA_LEVEL, swellAtWall } from '../render/Sea';
+import { waterNearby } from '../audio/shore';
 import { keepOf } from '../world/driveSide';
 import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
@@ -955,6 +956,8 @@ export class Game {
     this.ramSound = 0;
     this.audio.impact(Math.max(playerCrash, crashSound));
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
+    const w = waterNearby(p.position.x, p.position.z, this.city.islandSize / 2, this.city.terrain.canals);
+    this.audio.setWater(dt, { sea: w.sea, surge: swellAtWall(w.wallX, w.wallZ, this.sea.elapsed), canal: w.canal });
   }
 }
 

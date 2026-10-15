@@ -2,6 +2,7 @@
 // tyre and siren sounds and the music; one-shot sounds live in SoundEffects. Browsers only allow
 // audio after a user gesture, so the context is created on the first key/pointer press.
 import { MenuMusic, WIN_SONG } from './MenuMusic';
+import { SeaAudio, type WaterSound } from './SeaAudio';
 import { SoundEffects } from './SoundEffects';
 import { gearFor, GEAR_TOP_SPEEDS } from '../vehicles/gears';
 import type { TreeKind } from '../world/Climate';
@@ -50,6 +51,7 @@ export class CarAudio {
   private sirenFilter!: BiquadFilterNode;
   private sirenGain!: GainNode;
   private sfx: SoundEffects | null = null;
+  private water: SeaAudio | null = null;
   private rpm = 0.15;
   private engineOff = false; // wrecked
   private engineRunning = false; // silent on the menu until the mission starts
@@ -169,6 +171,8 @@ export class CarAudio {
     this.sirenOsc.start();
     this.sirenLfo.start();
 
+    this.water = new SeaAudio(ctx, this.master, () => this.loopNoise());
+
     this.music = new MenuMusic(ctx, this.master);
     if (this.wantMusic) this.music.start();
   }
@@ -262,6 +266,11 @@ export class CarAudio {
 
     this.screechGain.gain.setTargetAtTime(silent ? 0 : s.skid * 0.12, now, 0.04);
     this.screechFilter.frequency.setTargetAtTime(950 + s.skid * 250 + Math.random() * 80, now, 0.05);
+  }
+
+  /** Surf and canal water near the player (heard once the run has started). */
+  setWater(dt: number, w: WaterSound): void {
+    this.water?.update(dt, w, this.engineRunning);
   }
 
   /** Silence everything while the game is paused. */

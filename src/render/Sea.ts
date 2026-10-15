@@ -82,6 +82,15 @@ function seaGeometry(islandHalf: number): THREE.BufferGeometry {
 // to a swell that rolls in toward the quay, shortening and steepening as it comes, breaking into
 // foam on its last few crests and splashing against the wall. With flat shading, every triangle
 // catches light differently, giving faceted waves that match the art style.
+/**
+ * How hard the swell is surging against the quay at a point on the wall, 0..1: the same crest
+ * timing as the wall splash in the shader, so the surf you hear lands with the foam you see.
+ */
+export function swellAtWall(x: number, z: number, time: number): number {
+  const phase = Math.sin(x * 0.013 + z * 0.017) * 1.3 + Math.sin(z * 0.031 - x * 0.009 + time * 0.2) * 0.7 + time * 1.5;
+  return Math.pow(0.5 + 0.5 * Math.sin(phase - 0.4), 3);
+}
+
 export class Sea {
   readonly mesh: THREE.Mesh;
   private time = { value: 0 };
@@ -192,5 +201,10 @@ export class Sea {
 
   update(dt: number): void {
     this.time.value += dt;
+  }
+
+  /** Seconds of wave animation so far (the shader's clock). */
+  get elapsed(): number {
+    return this.time.value;
   }
 }
