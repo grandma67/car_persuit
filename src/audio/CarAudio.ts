@@ -310,6 +310,11 @@ export class CarAudio {
     this.sfx?.propBreak(kind, strength, tree);
   }
 
+  /** A car flashing past close (see PassBy). */
+  whoosh(strength: number, pan: number, heavy: number): void {
+    if (!this.engineOff) this.sfx?.whoosh(strength, pan, heavy);
+  }
+
   /** One-shot crash. strength 0..1. */
   impact(strength: number): void {
     this.sfx?.impact(strength);

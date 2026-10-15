@@ -33,6 +33,7 @@ import { Effects } from '../render/Effects';
 import { Sirens } from '../render/Sirens';
 import { Sea, SEA_LEVEL, swellAtWall } from '../render/Sea';
 import { waterNearby } from '../audio/shore';
+import { PassBy } from '../audio/passBy';
 import { keepOf } from '../world/driveSide';
 import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
@@ -111,6 +112,7 @@ export class Game {
   private sunk = new WeakSet<Vehicle>(); // cars that have gone into the water
   private walls: Set<number>; // collider handles of buildings, sea wall, landmarks
   private copContact: CopContact;
+  private passBy = new PassBy(); // cars flashing past, for the whoosh
   private runLog = new RunLog(); // the route driven and what happened, for the end-screen map
   private airtime = new Airtime(); // the player's jumps, for the run log
   private rampJump = false; // the flight in progress left from a ramp
@@ -955,9 +957,25 @@ export class Game {
     const playerCrash = Math.max(impact > 0 ? impactStrength(impact) : 0, this.ramSound);
     this.ramSound = 0;
     this.audio.impact(Math.max(playerCrash, crashSound));
+    if (this.state === 'playing') this.whooshes();
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
     const w = waterNearby(p.position.x, p.position.z, this.city.islandSize / 2, this.city.terrain.canals);
     this.audio.setWater(dt, { sea: w.sea, surge: swellAtWall(w.wallX, w.wallZ, this.sea.elapsed), canal: w.canal });
+  }
+
+  /** A whoosh for each car the player flashes past close (or that flashes past them). */
+  private whooshes(): void {
+    const p = this.player.position;
+    const pv = this.player.body.linvel();
+    const right = this.player.forward(new THREE.Vector3()).cross(new THREE.Vector3(0, 1, 0)); // forward × up
+    for (const v of [...this.traffic.cars.map((c) => c.vehicle), ...this.director.cops.map((c) => c.vehicle)]) {
+      const rx = v.position.x - p.x;
+      const rz = v.position.z - p.z;
+      if (rx * rx + rz * rz > 50 * 50) continue;
+      const ov = v.body.linvel();
+      const w = this.passBy.check(v, rx, rz, ov.x - pv.x, ov.z - pv.z, right.x, right.z, v.spec.mass);
+      if (w) this.audio.whoosh(w.strength, w.pan, w.heavy);
+    }
   }
 }
 

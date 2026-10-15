@@ -295,4 +295,48 @@ export class SoundEffects {
     crunch.start(now, Math.random() * 1.5);
     crunch.stop(now + 0.5 + strength * 0.3);
   }
+
+  /**
+   * A car flashing past (see PassBy): a noise swish swept from bright to dull as it goes by (the
+   * Doppler drop), panned to its side, with a low buffet from the bow wave of a bus or truck.
+   */
+  whoosh(strength: number, pan: number, heavy: number): void {
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const panner = ctx.createStereoPanner();
+    panner.pan.setValueAtTime(pan * 0.8, now);
+    panner.pan.linearRampToValueAtTime(pan * 0.5, now + 0.5); // drifting behind
+    panner.connect(this.master);
+    const peak = now + 0.12;
+    const end = now + 0.55;
+
+    const swish = ctx.createBufferSource();
+    swish.buffer = this.noise;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 0.9;
+    band.frequency.setValueAtTime(1400 + 900 * strength, now);
+    band.frequency.exponentialRampToValueAtTime(500, end);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.32 * strength, peak);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+    swish.connect(band).connect(gain).connect(panner);
+    swish.start(now, Math.random() * 1.5);
+    swish.stop(end + 0.05);
+
+    if (heavy <= 0) return;
+    const buffet = ctx.createBufferSource();
+    buffet.buffer = this.noise;
+    const low = ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.value = 160;
+    const lowGain = ctx.createGain();
+    lowGain.gain.setValueAtTime(0.0001, now);
+    lowGain.gain.exponentialRampToValueAtTime(0.6 * heavy * strength, peak + 0.05);
+    lowGain.gain.exponentialRampToValueAtTime(0.0001, end + 0.2);
+    buffet.connect(low).connect(lowGain).connect(panner);
+    buffet.start(now, Math.random() * 1.5);
+    buffet.stop(end + 0.25);
+  }
 }
