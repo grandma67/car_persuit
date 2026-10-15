@@ -137,6 +137,6 @@ export interface DistrictDef {
   copSpawnSkip: number; // 0..1 chance a cop spawn try inside is re-rolled
   roadblockGates: boolean; // 4★+ roadblocks prefer a gate edge
   mapColor: number;
-  label: string; // for the start toast, e.g. "Old City"
+  label: string; // its display name, e.g. "Old City"
   dress(q: District, city: CityData, rng: Rng): DistrictDressing;
 }

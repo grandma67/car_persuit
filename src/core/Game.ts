@@ -52,7 +52,7 @@ import { Airtime, type Takeoff } from '../gameplay/Airtime';
 import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { DISTRICT_DEFS } from '../world/districts/index';
-import { copSpawnSkips, districtNames, districtOfNode, districtTraffic, roadblockGates } from '../world/districts/runtime';
+import { copSpawnSkips, districtOfNode, districtTraffic, roadblockGates } from '../world/districts/runtime';
 import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { COP_RAM, DAMAGE } from '../gameplay/balance';
@@ -347,9 +347,7 @@ export class Game {
     this.audio.uiBlip('click');
     this.screens.hide();
     this.showDestination();
-    const districts = districtNames(this.city).toUpperCase();
-    const news = [this.city.driveSide === 'left' ? 'ENGLAND: KEEP LEFT' : '', districts].filter(Boolean);
-    this.hud.toast(['GO!', ...news].join('  ·  '), news.length ? 2.5 : 1.2);
+    this.hud.toast(this.city.driveSide === 'left' ? 'GO!  ·  ENGLAND: KEEP LEFT' : 'GO!', this.city.driveSide === 'left' ? 2.5 : 1.2);
   }
 
   /**

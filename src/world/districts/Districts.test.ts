@@ -8,7 +8,7 @@ import { DISTRICTS } from '../../gameplay/balance';
 import { emptyDressing, type District, type DistrictDef } from './District';
 import { inDistrict, isJunctionControl, kerbClutter, perimeterWall } from './apply';
 import { rollDistricts } from './place';
-import { copSpawnSkips, districtNames, districtOfNode, districtTraffic, roadblockGates } from './runtime';
+import { copSpawnSkips, districtOfNode, districtTraffic, roadblockGates } from './runtime';
 
 const base = {
   looks: {},
@@ -241,7 +241,6 @@ describe('district placement', () => {
       // Off the district's blocks there is no skip.
       expect(skips(q.bounds.x + q.bounds.w / 2 + 20, q.bounds.z)).toBe(0);
     }
-    expect(districtNames(city, DEFS).split(' · ').length).toBe(city.districts.length || 1);
   });
 
   it('with no definitions the city has no districts', () => {

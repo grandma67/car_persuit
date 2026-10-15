@@ -59,8 +59,3 @@ export function roadblockGates(city: CityData, defs: DistrictDef[] = DISTRICT_DE
   }
   return out;
 }
-
-/** "Old City · Harbor": the city's districts, for the start toast. */
-export function districtNames(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): string {
-  return city.districts.map((q) => defOf(q.kind, defs)?.label ?? q.kind).join(' · ');
-}
