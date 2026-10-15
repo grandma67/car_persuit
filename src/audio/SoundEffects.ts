@@ -236,8 +236,8 @@ export class SoundEffects {
 
     if (metal) {
       // Inharmonic partials ring like struck metal.
-      const base = kind === 'lamp' || kind === 'signal' ? 380 : kind === 'sign' ? 700 : kind === 'oilLamp' ? 620 : 520;
-      if (kind === 'oilLamp') this.burst(0.01, 0.2, 'highpass', 5000, 0.6, gain * 0.8); // lantern glass
+      const base = kind === 'lamp' || kind === 'signal' ? 380 : kind === 'sign' ? 700 : kind === 'oilLamp' || kind === 'dragonLamp' ? 620 : 520;
+      if (kind === 'oilLamp' || kind === 'dragonLamp') this.burst(0.01, 0.2, 'highpass', 5000, 0.6, gain * 0.8); // lantern glass
       for (const ratio of [1, 2.76, 5.4]) {
         const osc = ctx.createOscillator();
         osc.frequency.value = base * ratio * (0.95 + Math.random() * 0.1);

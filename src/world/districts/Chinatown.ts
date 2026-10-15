@@ -7,7 +7,9 @@ import { CHINATOWN } from '../../gameplay/balance';
 import type { Building, CityData } from '../CityGenerator';
 import { LANDMARK_RADIUS, makeSquare, type Landmark } from '../Landmarks';
 import { inRect } from '../lots';
-import type { StreetProp } from '../StreetProps';
+import { footprintsOverlap, propFootprint, type Footprint, type StreetProp } from '../StreetProps';
+import { inDistrict, isJunctionControl } from './apply';
+import { lanternStrings, paifangs } from './ChinatownGates';
 import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook } from './District';
 
 export type ChinatownLot = 'shophouse' | 'restaurant' | 'banquetHall' | 'teaHouse' | 'bubbleTea' | 'herbalShop' | 'bakery' | 'temple';
@@ -104,7 +106,7 @@ export const CHINATOWN_DEF: DistrictDef = {
   roles,
   lots,
   drop,
-  swap: {},
+  swap: { lamp: 'dragonLamp' },
   keepZebras: true,
   traffic: { speed: CHINATOWN.speed, speedOn: 'mainStreet', density: CHINATOWN.density, heavy: true, weights: { Van: CHINATOWN.vanWeight } },
   copSpawnSkip: 0,
@@ -130,7 +132,7 @@ function CHINATOWN_LOOKS(): Record<ChinatownLot, LotLook> {
   };
 }
 
-function dress(q: District, city: CityData, _rng: Rng): DistrictDressing {
+function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const out = emptyDressing();
   // The small square: paved round a fountain (the pagoda takes its place in CT3).
   const sq = squareBlock(q);
@@ -140,5 +142,37 @@ function dress(q: District, city: CityData, _rng: Rng): DistrictDressing {
     ({ buildings: city.buildings, trees: city.trees } = makeSquare(block, centre, city.buildings, city.trees, city.config, false));
     out.landmarks.push(centre);
   }
+  // Paifang and lions at the gates, lanterns across the streets.
+  const gates = paifangs(q, city, rng);
+  out.structures.push(...gates.structures);
+  out.landmarks.push(...gates.landmarks);
+  out.solids.push(...gates.solids);
+  out.overhead.push(...gates.overhead);
+  const built = city.buildings.filter((b) => b.district === 'chinatown' && inRect(q.bounds, b));
+  out.overhead.push(...lanternStrings(q, city, built, gates.structures, rng));
+
+  // Street furniture under a column or a lion goes (junction controls never stand there); the
+  // dragon lamps on the main street carry lucky-character banners.
+  const solid: Footprint[] = [...out.solids, ...gates.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: l.yaw }))];
+  let banner = 0;
+  city.streetProps = city.streetProps.flatMap((p) => {
+    if (!inDistrict(q, p) || isJunctionControl(p)) return [p];
+    if (solid.some((f) => footprintsOverlap(propFootprint(p, 0.2), f))) return [];
+    if (p.kind === 'dragonLamp' && onMainStreetSidewalk(p, q, city)) return [{ ...p, banner: banner++ % 2 ? 'chun' as const : 'fu' as const }];
+    return [p];
+  });
   return out;
+}
+
+/** On a sidewalk beside the main street (not its junctions). */
+function onMainStreetSidewalk(p: { x: number; z: number }, q: District, city: CityData): boolean {
+  const reach = city.config.roadWidth / 2 + city.config.sidewalk;
+  return q.mainStreet.some((key) => {
+    const [a, b] = key.split('>').map(Number);
+    const A = city.graph.nodes[a], B = city.graph.nodes[b];
+    const len = Math.hypot(B.x - A.x, B.z - A.z);
+    const t = ((p.x - A.x) * (B.x - A.x) + (p.z - A.z) * (B.z - A.z)) / len;
+    const off = Math.abs((p.x - A.x) * (B.z - A.z) - (p.z - A.z) * (B.x - A.x)) / len;
+    return t > reach && t < len - reach && off <= reach;
+  });
 }

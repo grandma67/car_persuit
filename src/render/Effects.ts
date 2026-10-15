@@ -117,7 +117,7 @@ export class Effects {
       case 'stall': burst(this.cloth, 10); return burst(this.chips, 22);
       case 'barrels': case 'pillory': case 'signpost': return burst(this.chips, 18);
       case 'pot': case 'amphora': return burst(this.shards, 16);
-      case 'oilLamp': return burst(this.fire, 10);
+      case 'oilLamp': case 'dragonLamp': return burst(this.fire, 10);
     }
     if (b.kind === 'lamp' || b.kind === 'signal') {
       for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0);

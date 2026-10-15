@@ -157,6 +157,32 @@ function marketCross(): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
+/**
+ * A guardian lion on its plinth, facing +Z: sitting up on its haunches, curly-maned, one front paw
+ * on a ball. Granite grey, the mane and eyes picked out darker.
+ */
+function lion(): THREE.BufferGeometry {
+  const grey = 0xb7b2a8;
+  const dark = 0x7f7a72;
+  const curl = (x: number, y: number, z: number, r = 0.13) => part(new THREE.SphereGeometry(r, 5, 4), dark, x, y, z);
+  return mergeGeometries([
+    part(box(1.1, 0.75, 1.1), STONE_DARK, 0, 0.375), // plinth
+    part(box(1.2, 0.12, 1.2), STONE, 0, 0.81),
+    part(box(0.7, 0.45, 0.8), grey, 0, 1.1, -0.12), // haunches
+    part(box(0.62, 0.65, 0.42), grey, 0, 1.45, 0.08).rotateX(-0.12), // chest
+    ...[-0.2, 0.2].map((x) => part(box(0.16, 0.62, 0.18), grey, x, 1.18, 0.28)), // front legs
+    part(new THREE.SphereGeometry(0.2, 7, 5), grey, 0.22, 0.98, 0.5), // the ball
+    part(box(0.18, 0.1, 0.24), grey, 0.22, 1.21, 0.46), // paw on it
+    part(box(0.55, 0.5, 0.5), grey, 0, 1.98, 0.12), // head
+    part(box(0.36, 0.2, 0.2), grey, 0, 1.86, 0.43), // muzzle
+    ...[-0.13, 0.13].map((x) => part(box(0.08, 0.06, 0.03), 0x2a2622, x, 2.08, 0.38)), // eyes
+    // Mane: rows of curls round the head, and a tuft of tail.
+    ...[-0.3, -0.1, 0.1, 0.3].flatMap((x) => [curl(x, 2.26, 0.05), curl(x, 1.72, -0.08)]),
+    ...[-0.32, 0.32].flatMap((x) => [curl(x, 2.05, 0.02), curl(x, 1.88, 0)]),
+    curl(0, 1.25, -0.55, 0.18),
+  ]);
+}
+
 const SNOW = 0xeef2f6;
 /** Snow lying on the Old City pieces in a snowy city. */
 const SNOW_CAPS = {
@@ -164,10 +190,11 @@ const SNOW_CAPS = {
   well: () => part(cyl(0, 1.85, 0.95, 4).rotateY(Math.PI / 4), SNOW, 0, 3.55),
   marketCross: () => part(cyl(0, 3.4, 2.25, 8), SNOW, 0, 5.6),
   column: () => part(cyl(0.44, 0.44, 0.1, 12), SNOW, 0, 3.9),
+  lion: () => mergeGeometries([part(box(0.57, 0.06, 0.52), SNOW, 0, 2.26, 0.12), part(box(1.12, 0.05, 1.12), SNOW, 0, 0.89)]),
 };
 
-/** Old City pieces stand straight on the ground, without a paved pad. */
-const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross']);
+/** District pieces (Old City, the lions) stand straight on the ground, without a paved pad. */
+const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion']);
 
 /**
  * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
@@ -263,6 +290,7 @@ export class Landmarks {
     const models = {
       fountain: fountain(), statue: statue(), obelisk: obelisk(), sculpture: sculpture(),
       cannon: cannon(), column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
+      lion: lion(),
     };
 
     for (const l of landmarks) {

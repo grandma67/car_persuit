@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from '../CityGenerator';
 import { inRect } from '../lots';
-import { CHINATOWN } from '../../gameplay/balance';
+import { CHINATOWN, CHINATOWN_GATES, DISTRICTS } from '../../gameplay/balance';
+import { footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
+import { groundHeight } from '../Terrain';
 import { squareBlock } from './Chinatown';
+import { wireY, type LanternData, type PaifangData } from './ChinatownGates';
 import { inDistrict, isJunctionControl } from './apply';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
@@ -98,6 +101,91 @@ describe('Chinatown with the Old City', () => {
       const apart = b.i0 >= a.i0 + a.w + 1 || a.i0 >= b.i0 + b.w + 1 || b.j0 >= a.j0 + a.h + 1 || a.j0 >= b.j0 + b.h + 1;
       expect(apart).toBe(true);
       expect(ct.blocks.some((k) => ot.blocks.includes(k))).toBe(false);
+    }
+  });
+});
+
+describe('Chinatown paifang, lions and lanterns', () => {
+  const roadsOf = (c: (typeof placed)[number][1]): Footprint[] => [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
+
+  it.each(placed)('seed %i: every gate is on an interior street, with a paifang across it', (_seed, _c, q) => {
+    const paifang = q.dressing.structures.filter((s) => s.kind === 'paifang');
+    expect(paifang).toHaveLength(q.gates.length);
+    const perimeter = new Set(q.perimeter);
+    for (const [i, g] of q.gates.entries()) {
+      expect(q.streets.has(g.edge)).toBe(true);
+      expect(perimeter.has(g.node)).toBe(true);
+      expect(perimeter.has(g.inner)).toBe(false);
+      // The paifang stands on that street, just inside the gate line.
+      const p = paifang[i];
+      const ix = Math.sin(g.yaw), iz = Math.cos(g.yaw);
+      const along = (p.x - g.x) * ix + (p.z - g.z) * iz;
+      expect(Math.abs((p.x - g.x) * iz - (p.z - g.z) * ix)).toBeLessThan(0.01);
+      expect(CHINATOWN_GATES.setIn).toContain(Math.round(along * 10) / 10);
+    }
+  });
+
+  it.each(placed)('seed %i: columns and lions stand off the roads and junctions, and off every junction control', (_seed, c, q) => {
+    const roads = roadsOf(c);
+    const lions = q.dressing.landmarks.filter((l) => l.kind === 'lion');
+    expect(lions.length).toBe(q.gates.length * 2);
+    const solid = [...q.dressing.structures.filter((s) => s.kind === 'paifang').flatMap((s) => s.footprints), ...lions.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: l.yaw }))];
+    const controls = c.streetProps.filter(isJunctionControl).map((p) => propFootprint(p));
+    for (const f of solid) {
+      expect(roads.filter((r) => footprintsOverlap(f, r))).toEqual([]);
+      expect(controls.filter((p) => footprintsOverlap(f, p))).toEqual([]);
+    }
+    // Nothing else stands in them either.
+    const props = c.streetProps.filter((p) => inDistrict(q, p)).map((p) => propFootprint(p));
+    for (const f of solid) expect(props.filter((p) => footprintsOverlap(f, p))).toEqual([]);
+  });
+
+  it.each(placed)('seed %i: everything over the road clears overheadClearance', (_seed, c, q) => {
+    const ground = (x: number, z: number) => groundHeight(c.terrain, x, z);
+    for (const s of q.dressing.structures.filter((s) => s.kind === 'paifang')) {
+      const d = s.data as unknown as PaifangData;
+      expect(d.beam).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+      // The beam's underside over every point of the roadway, from the paifang's base.
+      const y0 = Math.min(...s.footprints.map((f) => ground(f.x, f.z)));
+      for (let l = -c.config.roadWidth / 2; l <= c.config.roadWidth / 2; l += 0.5) {
+        const x = s.x + Math.cos(s.yaw) * l, z = s.z - Math.sin(s.yaw) * l;
+        expect(y0 + d.beam - ground(x, z)).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+      }
+    }
+    const strings = q.dressing.overhead.filter((o) => o.kind === 'lanterns');
+    for (const o of strings) {
+      const d = o.data as unknown as LanternData;
+      const [a, b] = o.points;
+      for (const t of d.at) {
+        const y = wireY(d, t) - CHINATOWN_GATES.lanternDrop - ground(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t);
+        expect(y).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+      }
+      expect(o.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+    }
+    for (const o of q.dressing.overhead) expect(o.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+  });
+
+  it('strings lanterns across most main streets', () => {
+    const withStrings = placed.filter(([, , q]) => q.dressing.overhead.some((o) => o.kind === 'lanterns'));
+    expect(withStrings.length).toBe(placed.length);
+  });
+
+  it.each(placed)('seed %i: dragon lamps for street lamps; banners only on the main street', (seed, c, q) => {
+    expect(c.streetProps.filter((p) => inRect(q.bounds, p) && p.kind === 'lamp')).toEqual([]);
+    const plain = generateCity(seed, undefined, { defs: [] });
+    const lamps = c.streetProps.filter((p) => inRect(q.bounds, p) && p.kind === 'dragonLamp');
+    expect(lamps.length).toBeGreaterThan(0);
+    // Every dragon lamp stands where a street lamp stood.
+    const was = new Set(plain.streetProps.filter((p) => p.kind === 'lamp').map((p) => `${p.x},${p.z}`));
+    for (const p of lamps) expect(was.has(`${p.x},${p.z}`)).toBe(true);
+    const reach = c.config.roadWidth / 2 + c.config.sidewalk;
+    for (const p of c.streetProps.filter((p) => p.banner)) {
+      expect(p.kind).toBe('dragonLamp');
+      const near = q.mainStreet.some((k) => {
+        const [A, B] = k.split('>').map((id) => c.graph.nodes[Number(id)]);
+        return Math.abs(A.x - B.x) < 0.5 ? Math.abs(p.x - A.x) <= reach : Math.abs(p.z - A.z) <= reach;
+      });
+      expect(near).toBe(true);
     }
   });
 });

@@ -145,6 +145,23 @@ export const CHINATOWN = {
   shops: { teaHouse: 2, bubbleTea: 2, herbalShop: 2, bakery: 2 },
 };
 
+/** Chinatown's paifang, lions and lantern strings (world/districts/ChinatownGates.ts), metres. */
+export const CHINATOWN_GATES = {
+  setIn: [4.5, 6.5, 8.5], // paifang in from the gate line (further in if a column would touch a junction control)
+  column: 0.45, // a column's solid footprint, half across the road (its plinth)…
+  columnAlong: 0.8, // …and half along it (its drum stones)
+  fourChance: 0.5, // four columns (two a side) rather than two
+  beam: 6.2, // beam underside above the highest ground under the span (≥ DISTRICTS.overheadClearance)
+  lionOut: 2.5, // lions in front of the paifang
+  wireHeight: 7.6, // lantern wires tie to the buildings this high
+  sag: 0.9, // wire sag at mid-span
+  lanternDrop: 0.8, // wire to a lantern's bottom
+  lanternSpacing: 1.6, // between lanterns on a wire
+  lanternPitch: 10, // between strings on the main street
+  lanternGap: 3, // strings stay this far past the building line from a junction
+  sideStrings: [1, 2] as [number, number], // strings per side street
+};
+
 /** Old City walls and gatehouses (world/districts/OldCityWalls.ts), metres. */
 export const OLD_CITY_WALLS = {
   height: 7, // wall top above its footing

@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from '../render/geometry';
 import { SUNK_BELOW } from '../render/Sea';
+import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
 import type { Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
 import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
@@ -15,8 +16,12 @@ const GRID_CELL = 10; // metres, spatial hash for vehicle-vs-prop checks
 const cellKey = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096);
 const LAMP_HEAD = new THREE.Vector3(0, 5.8, 1.3); // bulb position in lamp space
 const OIL_LAMP_HEAD = new THREE.Vector3(0, 3.75, 0); // the lantern's flame, on top of its post
+const DRAGON_LAMP_HEAD = new THREE.Vector3(0, 4.12, 0); // the pagoda lantern's glass
+const LAMP_HEADS: Partial<Record<PropKind, THREE.Vector3>> = { lamp: LAMP_HEAD, oilLamp: OIL_LAMP_HEAD, dragonLamp: DRAGON_LAMP_HEAD };
 /** Props that light up at night: a bulb (or flame) and a pool of light under it. */
-const LIGHTS = new Set<PropKind>(['lamp', 'oilLamp']);
+const LIGHTS = new Set<PropKind>(['lamp', 'oilLamp', 'dragonLamp']);
+/** A dragon lamp's banner: hung from the brackets on its street side, edge-on to the kerb. */
+const BANNER = { w: 0.5, h: 1.05, y: 2.45, z: 0.42 };
 const LIGHT_POOL_RADIUS = 7;
 const SIGN_FACE_Y = 2.35;
 const SIGNAL_HEAD_X = -3.7; // signal arm reaches over the lane along local -X
@@ -238,6 +243,7 @@ function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
     'signal-old': oldSignal(-1), 'signal-right-old': oldSignal(1),
     'sign-octagon-old': oldSign('octagon'), 'sign-round-old': oldSign('round'), 'sign-triangle-old': oldSign('triangle'), 'sign-square-old': oldSign('square'), 'sign-diamond-old': oldSign('diamond'),
     ...oldCityModels(),
+    ...chinatownModels(),
   };
 }
 
@@ -315,6 +321,44 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
     part(new THREE.SphereGeometry(0.05, 4, 3), iron, 0, 4.35),
   ]);
   return { amphora, pot, cart, stall, barrels, cannonballs, pillory, haybale, signpost, oilLamp };
+}
+
+/** Chinatown's street furniture. */
+function chinatownModels(): Record<'dragonLamp', THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (rt: number, rb: number, h: number, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
+  const red = 0xb0221e;
+  const gold = 0xd6a637;
+  const green = 0x2f6b4a;
+  // After San Francisco's 1925 Grant Avenue lamps: a red bamboo-jointed shaft on a lotus base, two
+  // gold dragons coiling up to a pagoda-roofed lantern (its glass is the lamp's bulb attachment).
+  const dragon = (side: number) => [
+    part(new THREE.TorusGeometry(0.3, 0.045, 4, 8, Math.PI * 1.2).rotateY(side < 0 ? Math.PI : 0), gold, side * 0.3, 3.35),
+    part(box(0.16, 0.12, 0.2), gold, side * 0.2, 3.62, 0.04), // head, towards the lantern
+  ];
+  const dragonLamp = mergeGeometries([
+    part(cyl(0.34, 0.4, 0.45), red, 0, 0.22),
+    part(cyl(0.3, 0.34, 0.12), gold, 0, 0.5),
+    part(cyl(0, 0.34, 0.35, 8).rotateX(Math.PI), gold, 0, 0.73), // lotus
+    part(cyl(0.09, 0.1, 3.0, 8), red, 0, 2.15),
+    ...[1.0, 1.6, 2.2, 2.8].map((y) => part(cyl(0.12, 0.12, 0.06, 8), gold, 0, y)), // bamboo joints
+    // Banner brackets on the street side.
+    ...[BANNER.y + BANNER.h / 2 + 0.04, BANNER.y - BANNER.h / 2 - 0.04].map((y) => part(box(0.04, 0.04, BANNER.z + 0.05), gold, 0, y, BANNER.z / 2)),
+    ...dragon(-1), ...dragon(1),
+    part(cyl(0.32, 0.18, 0.18, 6), gold, 0, 3.78), // lantern seat
+    ...[0, 1, 2, 3, 4, 5].map((k) => {
+      const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+      return part(box(0.05, 0.6, 0.05), red, Math.cos(a) * 0.29, 4.12, Math.sin(a) * 0.29);
+    }),
+    part(cyl(0.12, 0.62, 0.32, 6), green, 0, 4.55), // pagoda roof
+    ...[0, 1, 2, 3, 4, 5].map((k) => {
+      const a = (k / 6) * Math.PI * 2;
+      return part(box(0.07, 0.07, 0.24).rotateX(-0.6).rotateY(-a + Math.PI / 2), gold, Math.cos(a) * 0.62, 4.45, Math.sin(a) * 0.62); // upturned eaves
+    }),
+    part(cyl(0.05, 0.1, 0.2, 6), red, 0, 4.8),
+    part(new THREE.SphereGeometry(0.08, 6, 4), gold, 0, 4.96),
+  ]);
+  return { dragonLamp };
 }
 
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
@@ -533,7 +577,7 @@ function signTexture(variant: SignVariant): THREE.Texture {
 }
 
 /** District props: their meshes are only built in a city that has some. */
-const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp']);
+const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp', 'dragonLamp']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
@@ -588,7 +632,7 @@ export class PropSystem {
     };
 
     // Lamp bulbs (unlit, so they glow) and soft light pools on the ground beneath them.
-    const lamps = counts.lamp + counts.oilLamp;
+    const lamps = counts.lamp + counts.oilLamp + counts.dragonLamp;
     this.bulbs = addAttachmentMesh(new THREE.BoxGeometry(0.38, 0.05, 0.24), new THREE.MeshBasicMaterial({ toneMapped: false }), lamps);
     this.pools = addAttachmentMesh(
       new THREE.PlaneGeometry(LIGHT_POOL_RADIUS * 2, LIGHT_POOL_RADIUS * 2).rotateX(-Math.PI / 2),
@@ -618,6 +662,14 @@ export class PropSystem {
         faceCounts[v],
       );
     }
+
+    // Lucky-character banners on Chinatown's main-street dragon lamps (only built when there are some).
+    const bannerCount = (b: 'fu' | 'chun') => defs.filter((p) => p.banner === b).length;
+    const bannerMat = defs.some((p) => p.banner) ? glyphMaterial() : null;
+    const banners = bannerMat
+      ? { fu: addAttachmentMesh(glyphPlate(BANNER.w, BANNER.h, 'fu', 0.02), bannerMat, bannerCount('fu')), chun: addAttachmentMesh(glyphPlate(BANNER.w, BANNER.h, 'chun', 0.02), bannerMat, bannerCount('chun')) }
+      : null;
+    const nextBanner = { fu: 0, chun: 0 };
 
     // Signal lenses (unlit so lit ones glow), three per signal head.
     this.lenses = addAttachmentMesh(
@@ -653,11 +705,17 @@ export class PropSystem {
       };
       if (LIGHTS.has(def.kind)) {
         const li = (state.pool = nextLight++); // bulb and pool share an index
-        const at = def.kind === 'lamp' ? LAMP_HEAD : OIL_LAMP_HEAD;
-        // A lantern's flame is a small upright block, a street lamp's bulb a flat panel.
+        const at = LAMP_HEADS[def.kind]!;
+        // A lantern's flame is a small upright block, a street lamp's bulb a flat panel, a dragon
+        // lamp's glass a block filling its lantern.
         const local = new THREE.Matrix4().makeTranslation(at);
         if (def.kind === 'oilLamp') local.multiply(new THREE.Matrix4().makeScale(0.55, 6, 0.9));
+        if (def.kind === 'dragonLamp') local.multiply(new THREE.Matrix4().makeScale(1.1, 11, 1.8));
         attach(this.bulbs, li, local, warm);
+        if (def.banner && banners) {
+          // Edge-on to the kerb, so it faces along the street.
+          attach(banners[def.banner], nextBanner[def.banner]++, new THREE.Matrix4().makeTranslation(0, BANNER.y, BANNER.z).multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2)));
+        }
         // The pool lies on the ground, tilted to the slope.
         const head = at.clone().applyQuaternion(this.q);
         const px = def.x + head.x;

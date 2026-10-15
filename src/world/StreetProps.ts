@@ -8,7 +8,9 @@ import type { TreeKind } from './Climate';
 export type PropKind =
   | 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone' | 'tree' | 'umbrella'
   // Old City
-  | 'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp';
+  | 'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp'
+  // Chinatown
+  | 'dragonLamp';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -25,6 +27,7 @@ export interface StreetProp {
   scale?: number; // trees: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
   style?: 'old'; // restyled by a district (old iron posts): same kind and variant, so the same rules
+  banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
 }
 
 export interface PropSpec {
@@ -60,6 +63,8 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   haybale: { hx: 0.6, hz: 0.6, height: 1.2, mass: 60, breakSpeed: 1.5, slowdown: 0.06 },
   signpost: { hx: 0.1, hz: 0.1, height: 2.8, mass: 20, breakSpeed: 2, slowdown: 0.02 },
   oilLamp: { hx: 0.15, hz: 0.15, height: 4.2, mass: 80, breakSpeed: 3, slowdown: 0.06 },
+  // Chinatown
+  dragonLamp: { hx: 0.2, hz: 0.2, height: 4.9, mass: 110, breakSpeed: 3.5, slowdown: 0.07 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */
