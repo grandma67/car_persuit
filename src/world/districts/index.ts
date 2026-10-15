@@ -1,0 +1,5 @@
+// The district registry, in placement order: Old City, Chinatown, Harbor, Farm. Placement follows
+// this order, and a later district keeps a block away from the earlier ones.
+import type { DistrictDef } from './District';
+
+export const DISTRICT_DEFS: DistrictDef[] = [];

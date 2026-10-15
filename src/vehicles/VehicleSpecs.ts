@@ -4,6 +4,8 @@ export interface VehicleSpec {
   name: string;
   color: number;
   livery?: 'police';
+  /** Paint finish: 'gloss' (default) metallic flake under a clear coat; 'work' a duller, rougher coat for tractors and work trucks. */
+  paint?: 'gloss' | 'work';
   body?: 'sports' | 'sedan' | 'suv' | 'truck' | 'van' | 'pickup' | 'bus' | 'boxtruck' | 'ramptruck'; // mesh shape, default sports
   maxHealth?: number; // default 100
   kerb?: 'left' | 'right'; // side the doors open onto (buses), default right
@@ -257,3 +259,26 @@ export function rampHullPoints(spec: VehicleSpec): Float32Array {
   }
   return new Float32Array(pts);
 }
+
+/**
+ * Height of a vehicle's top above a flat road, at rest: the chassis centre stands its wheel
+ * radius plus suspension rest length above the road (raised by low-mounted wheels, wheelY), and
+ * the body mesh (carMesh) reaches this far above that. Overhead dressing (gate arches, lantern
+ * strings, crane portals) clears the tallest of these (DISTRICTS.overheadClearance).
+ */
+export function vehicleTop(spec: VehicleSpec): number {
+  const ride = spec.wheelRadius + spec.suspensionRestLength - (spec.wheelY ?? 0);
+  const hy = spec.halfExtents.y;
+  const body = spec.body ?? 'sports';
+  // The roof line per body, as carMesh builds it (the light bar sits on it), and anything above it.
+  const roof = { sports: hy + 0.48, sedan: hy + 0.58, suv: hy + 0.77, truck: hy, van: hy, pickup: hy + 0.75, bus: hy + 0.08, boxtruck: hy, ramptruck: RAMP.cab.top }[body];
+  const extras = { truck: hy + 0.12, ramptruck: RAMP.top.y + 0.05 } as Partial<Record<typeof body, number>>; // roof hatch; deck and exhaust stack
+  const lightBar = spec.livery === 'police' ? roof + 0.26 : 0;
+  return ride + Math.max(roof, extras[body] ?? 0, lightBar);
+}
+
+/** Every vehicle spec in the game, for checks that must cover them all. */
+export const ALL_SPECS: VehicleSpec[] = [
+  PLAYER_SPEC, COP_PATROL_SPEC, COP_INTERCEPTOR_SPEC, COP_SUV_SPEC, COP_ARMORED_SPEC,
+  VAN_SPEC, PICKUP_SPEC, BUS_SPEC, BOX_TRUCK_SPEC, RAMP_TRUCK_SPEC,
+];

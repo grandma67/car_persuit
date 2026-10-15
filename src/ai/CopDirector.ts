@@ -25,6 +25,14 @@ export interface CopSteering {
   ignore: (collider: RAPIER.Collider) => boolean;
 }
 
+/** District rules for cops: rarer spawns inside some, roadblocks at the gates of others. */
+export interface CopDistricts {
+  /** Junction → chance a spawn try there is re-rolled. */
+  skip: Map<number, number>;
+  /** Gate streets ("a>b", both ways): 4★+ roadblocks prefer these. */
+  gates: Set<string>;
+}
+
 export interface DirectorTuning {
   firstSpawnDelay: number; // seconds after the mission starts
   spawnMin: number; // metres by road from the player
@@ -96,6 +104,7 @@ export class CopDirector {
     private ground: GroundHeight = FLAT,
     private keep: Keep = 1,
     private steering: CopSteering | null = null,
+    private districts: CopDistricts | null = null,
   ) {
     this.spawnTimer = tuning.firstSpawnDelay;
   }
@@ -213,31 +222,36 @@ export class CopDirector {
     const g = this.graph;
     let along = 0;
     let prev = { x: player.position.x, z: player.position.z };
+    // Route steps inside the window; a district gate among them is the place to block.
+    const steps: number[] = [];
     for (let i = 0; i < route.length - 1; i++) {
       const node = g.nodes[route[i]];
       along += Math.hypot(node.x - prev.x, node.z - prev.z);
       prev = node;
       if (along < this.tuning.roadblockAhead[0]) continue;
-      if (along > this.tuning.roadblockAhead[1]) return false;
-      if (this.nearCheckpoint(node)) continue;
-      // Block the road leaving this node toward the next one, a little past the junction.
-      const next = g.nodes[route[i + 1]];
-      const len = Math.hypot(next.x - node.x, next.z - node.z);
-      const dx = (next.x - node.x) / len;
-      const dz = (next.z - node.z) / len;
-      const cx = node.x + dx * 20;
-      const cz = node.z + dz * 20;
-      const across = Math.atan2(-dz, dx); // perpendicular to the road
-      for (const side of [-1, 1]) {
-        const cop = this.create('suv');
-        const x = cx + -dz * side * 3;
-        const z = cz + dx * side * 3;
-        cop.vehicle.teleport(x, this.ground(x, z) + 1.2, z, across + (side > 0 ? Math.PI : 0));
-        cop.controller.holdUntilClose = true;
-      }
-      return true;
+      if (along > this.tuning.roadblockAhead[1]) break;
+      if (!this.nearCheckpoint(node)) steps.push(i);
     }
-    return false;
+    const gates = this.districts?.gates;
+    const step = steps.find((i) => gates?.has(`${route[i]}>${route[i + 1]}`)) ?? steps[0];
+    if (step === undefined) return false;
+    const node = g.nodes[route[step]];
+    // Block the road leaving this node toward the next one, a little past the junction.
+    const next = g.nodes[route[step + 1]];
+    const len = Math.hypot(next.x - node.x, next.z - node.z);
+    const dx = (next.x - node.x) / len;
+    const dz = (next.z - node.z) / len;
+    const cx = node.x + dx * 20;
+    const cz = node.z + dz * 20;
+    const across = Math.atan2(-dz, dx); // perpendicular to the road
+    for (const side of [-1, 1]) {
+      const cop = this.create('suv');
+      const x = cx + -dz * side * 3;
+      const z = cz + dx * side * 3;
+      cop.vehicle.teleport(x, this.ground(x, z) + 1.2, z, across + (side > 0 ? Math.PI : 0));
+      cop.controller.holdUntilClose = true;
+    }
+    return true;
   }
 
   private nearCheckpoint(p: Point): boolean {
@@ -342,6 +356,9 @@ export class CopDirector {
       ...elsewhere.slice(0, SPAWN_TRIES).map((n) => ({ node: n.id, toward: -1 })),
     ];
     for (const c of candidates) {
+      // Some districts keep cops rarer: a try there is often passed over for the next.
+      const skip = this.districts?.skip.get(c.node);
+      if (skip && this.rng.next() < skip) continue;
       const spot = this.aroundCorner(c.node, c.toward >= 0 ? c.toward : towardPlayer(c.node), player);
       if (spot) {
         vehicle.teleport(spot.x, this.ground(spot.x, spot.z) + 1.2, spot.z, spot.yaw, spot.speed);

@@ -7,6 +7,12 @@ import { canalRampShape, planLandmarks, type Landmark } from './Landmarks';
 import { planRoadworks, type Roadworks } from './Roadworks';
 import { keepOf, type DriveSide } from './driveSide';
 import { clipRect, inCanal, landPieces, onGround, pickBridges, planTerrain, type Terrain, type TerrainConfig } from './Terrain';
+import { fillBlock, scatterTrees } from './lots';
+import { fastStreets } from './TrafficControl';
+import type { District, DistrictDef, DistrictKind } from './districts/District';
+import { applyDistricts } from './districts/apply';
+import type { DistrictForce, DistrictGrid } from './districts/place';
+import { DISTRICT_DEFS } from './districts/index';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
@@ -42,7 +48,7 @@ export const DEFAULT_CITY: CityConfig = {
   bridgeSpacing: [3, 5],
 };
 
-export type District = 'downtown' | 'midtown' | 'residential' | 'industrial';
+export type Zone = 'downtown' | 'midtown' | 'residential' | 'industrial';
 
 /** Axis-aligned rectangle: centre (x, z), size w (along X) × d (along Z). */
 export interface Rect {
@@ -54,16 +60,19 @@ export interface Rect {
 
 export interface Building extends Rect {
   h: number;
-  district: District;
+  zone: Zone;
   /** 0..1 per-building variation used for colour and window pattern. */
   variant: number;
+  district?: DistrictKind; // built by a district
+  lot?: string; // what kind of building it is in its district (picks its look)
 }
 
 export interface Block {
   rect: Rect;
-  district: District;
+  zone: Zone;
   park: boolean;
   square?: boolean; // town square: paved, no buildings, centrepiece landmark
+  district?: DistrictKind; // part of a district (it keeps its zone)
 }
 
 export interface RoadSegment {
@@ -92,6 +101,13 @@ export interface CityData {
   terrain: Terrain; // hill, canals and their bridges
   driveSide: DriveSide; // which side of the road traffic keeps to, for the whole game
   spawn: { x: number; z: number; yaw: number };
+  districts: District[]; // themed districts laid over the grid (often none)
+}
+
+/** Which district definitions a city may get, and URL overrides (?oldtown=1 forces the roll on, 0 off). */
+export interface DistrictOptions {
+  defs?: DistrictDef[];
+  force?: DistrictForce;
 }
 
 interface Edge {
@@ -104,7 +120,7 @@ interface Edge {
   canal: boolean; // under a canal: no road, no plaza
 }
 
-export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): CityData {
+export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, districtOpts: DistrictOptions = {}): CityData {
   const rng = new Rng(seed);
   const { blocks: n, blockSize, roadWidth } = config;
   const pitch = blockSize + roadWidth;
@@ -220,16 +236,16 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   const plazaEdges = edges.filter((e) => e.removed && !quaySquares.includes(e));
   const intersections = nodes.filter((nd) => nd.neighbors.length).map((nd) => ({ x: nd.x, z: nd.z, w: roadWidth, d: roadWidth }));
 
-  // --- Districts: downtown core by distance, then smooth noise splits residential/industrial ---
+  // --- Zones: downtown core by distance, then smooth noise splits residential/industrial ---
   const noise = makeValueNoise(rng, 4);
   const blocksOut: Block[] = [];
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
       const rect = { x: line(i) + pitch / 2, z: line(j) + pitch / 2, w: blockSize, d: blockSize };
       const dist = Math.hypot(rect.x, rect.z) / (size / 2);
-      const district: District =
+      const zone: Zone =
         dist < 0.32 ? 'downtown' : dist < 0.6 ? 'midtown' : noise(i / n, j / n) < 0.55 ? 'residential' : 'industrial';
-      blocksOut.push({ rect, district, park: district !== 'downtown' && rng.next() < config.parkChance });
+      blocksOut.push({ rect, zone, park: zone !== 'downtown' && rng.next() < config.parkChance });
     }
   }
 
@@ -369,7 +385,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
   };
   const streetProps = [...generateStreetProps(blocksOut, plazas, landmarks, config, size, new Rng(seed ^ 0x57ee7)), ...traffic.props, ...works.cones]
     .filter((p) => dry(p.x, p.z, 0.8) && (p.kind === 'cone' || !onTree(p)));
-  return {
+  const city: CityData = {
     config, seed, size, islandSize, graph, roads, intersections, plazas, blocks: blocksOut,
     // A footpath's width of quay is left clear along the water.
     buildings: buildings.filter((b) => !inCanal(terrain, b.x, b.z, Math.max(b.w, b.d) / 2 + config.sidewalk)),
@@ -379,63 +395,26 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY): C
     streetProps,
     roadMarks: traffic.marks.filter((m) => dry(m.x, m.z, 0)),
     roadworks: works.sites, terrain, spawn, driveSide,
+    districts: [],
   };
-}
 
-// Lot layout and height ranges per district.
-const DISTRICT_STYLE: Record<District, { lots: [number, number]; height: [number, number]; gap: [number, number]; empty: number }> = {
-  downtown: { lots: [1, 2], height: [35, 95], gap: [1, 3], empty: 0 },
-  midtown: { lots: [2, 3], height: [12, 34], gap: [1, 2.5], empty: 0.08 },
-  residential: { lots: [3, 4], height: [5, 11], gap: [2.5, 4], empty: 0.12 },
-  industrial: { lots: [1, 2], height: [7, 14], gap: [2, 4], empty: 0.1 },
-};
-
-function fillBlock(block: Block, sidewalk: number, rng: Rng, out: Building[], trees: { x: number; z: number }[]): void {
-  const style = DISTRICT_STYLE[block.district];
-  const inner = shrink(block.rect, sidewalk);
-  const nx = rng.int(style.lots[0], style.lots[1]);
-  const nz = rng.int(style.lots[0], style.lots[1]);
-  const xs = splitPoints(inner.x - inner.w / 2, inner.w, nx, rng);
-  const zs = splitPoints(inner.z - inner.d / 2, inner.d, nz, rng);
-  for (let a = 0; a < nx; a++) {
-    for (let b = 0; b < nz; b++) {
-      const lot = { x: (xs[a] + xs[a + 1]) / 2, z: (zs[b] + zs[b + 1]) / 2, w: xs[a + 1] - xs[a], d: zs[b + 1] - zs[b] };
-      if (rng.next() < style.empty) {
-        if (block.district === 'residential') scatterTrees(lot, 2, rng.int(1, 3), rng, trees);
-        continue;
-      }
-      const gap = rng.range(style.gap[0], style.gap[1]);
-      const fp = shrink(lot, gap);
-      if (fp.w < 4 || fp.d < 4) continue;
-      // Taller towards the very centre of downtown.
-      let h = rng.range(style.height[0], style.height[1]);
-      if (block.district === 'downtown') h *= 1.25 - Math.min(Math.hypot(lot.x, lot.z) / 250, 0.5);
-      out.push({ ...fp, h: Math.round(h * 10) / 10, district: block.district, variant: rng.next() });
-    }
+  // --- Districts: laid over the finished city, each from its own RNG stream, so everything
+  // outside a district's blocks and frontage is exactly as without it ---
+  const defs = districtOpts.defs ?? DISTRICT_DEFS;
+  if (defs.length) {
+    const grid: DistrictGrid = {
+      n, line, nodeId, canalNodes,
+      edges: edges.map((e) => ({
+        a: e.a, b: e.b, horizontal: e.horizontal, i: e.i, j: e.j,
+        kind: e.canal ? 'canal' : quaySquares.includes(e) ? 'quay' : e.removed ? 'plaza' : 'road',
+      })),
+      blockedNodes: new Set([centre.id, ...centre.neighbors, ...rampNodes]),
+      works: works.sites.map((w) => ({ node: w.node, edge: w.edge })),
+      fast: fastStreets(graph, traffic.props),
+    };
+    applyDistricts(city, grid, defs, districtOpts.force);
   }
-}
-
-function scatterTrees(area: Rect, margin: number, count: number, rng: Rng, out: { x: number; z: number }[]): void {
-  const r = shrink(area, margin);
-  if (r.w <= 0 || r.d <= 0) return;
-  const placed: { x: number; z: number }[] = [];
-  for (let attempt = 0; attempt < count * 6 && placed.length < count; attempt++) {
-    const p = { x: r.x + (rng.next() - 0.5) * r.w, z: r.z + (rng.next() - 0.5) * r.d };
-    if (placed.every((q) => Math.hypot(p.x - q.x, p.z - q.z) > 5)) placed.push(p);
-  }
-  out.push(...placed);
-}
-
-/** Split [start, start+length] into `parts` with jittered boundaries. */
-function splitPoints(start: number, length: number, parts: number, rng: Rng): number[] {
-  const pts = [start];
-  for (let k = 1; k < parts; k++) pts.push(start + (length * (k + (rng.next() - 0.5) * 0.4)) / parts);
-  pts.push(start + length);
-  return pts;
-}
-
-function shrink(r: Rect, m: number): Rect {
-  return { x: r.x, z: r.z, w: r.w - m * 2, d: r.d - m * 2 };
+  return city;
 }
 
 function shuffle<T>(items: T[], rng: Rng): void {

@@ -242,10 +242,10 @@ export function generateTrafficControl(
         if (busRng.next() < BUS_STOP_ODDS) signBefore(mid.x, mid.z, t, -BUS_STOP_PAST_MID, 'busStop');
         // The block on this direction's kerb side decides what the street is like.
         const side = blockAt(mid.x + t.rx * (rw / 2 + 10), mid.z + t.rz * (rw / 2 + 10));
-        const homes = side?.district === 'residential' || side?.park === true;
+        const homes = side?.zone === 'residential' || side?.park === true;
         const roll = rng.next();
         if (homes && roll < 0.3) signBefore(mid.x, mid.z, t, 12, 'children');
-        else if (roll < 0.45) signBefore(mid.x, mid.z, t, 9, side?.district === 'residential' ? 'speed30' : 'speed50');
+        else if (roll < 0.45) signBefore(mid.x, mid.z, t, 9, side?.zone === 'residential' ? 'speed30' : 'speed50');
         else if (!homes && side && roll < 0.7) signBefore(mid.x, mid.z, t, -13, 'noParking');
       }
     }

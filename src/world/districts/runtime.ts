@@ -1,0 +1,63 @@
+// What the game's systems need from the placed districts: speed caps and no-go streets for
+// traffic, spawn weights, cop spawn skips, roadblock gates, destination zoning. Pure data.
+import type { CityData } from '../CityGenerator';
+import { DISTRICT_DEFS } from './index';
+import type { DistrictDef, DistrictKind, DistrictTraffic } from './District';
+
+const defOf = (kind: DistrictKind, defs: DistrictDef[]) => defs.find((d) => d.kind === kind);
+
+/** The district whose interior holds this junction (perimeter junctions are ordinary city streets). */
+export function districtOfNode(city: CityData, id: number): DistrictKind | undefined {
+  return city.districts.find((q) => q.interior.includes(id))?.kind;
+}
+
+/** Traffic rules inside the districts, keyed by street ("a>b") and by interior junction. */
+export interface DistrictTrafficRules {
+  /** Speed cap (m/s) per street, entering it included. */
+  limits: Map<string, number>;
+  /** Streets buses and trucks keep out of. */
+  noHeavy: Set<string>;
+  /** Interior junctions and their district's traffic (spawn density and mix). */
+  nodes: Map<number, DistrictTraffic>;
+}
+
+export function districtTraffic(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): DistrictTrafficRules {
+  const rules: DistrictTrafficRules = { limits: new Map(), noHeavy: new Set(), nodes: new Map() };
+  for (const q of city.districts) {
+    const def = defOf(q.kind, defs);
+    if (!def) continue;
+    const t = def.traffic;
+    if (t.speed !== undefined) {
+      const capped = t.speedOn === 'mainStreet' ? q.mainStreet.flatMap((k) => [k, k.split('>').reverse().join('>')]) : [...q.streets];
+      for (const k of capped) rules.limits.set(k, t.speed);
+    }
+    if (!t.heavy) for (const k of q.streets) rules.noHeavy.add(k);
+    for (const id of q.interior) rules.nodes.set(id, t);
+  }
+  return rules;
+}
+
+/** Chance a cop spawn try at this junction is re-rolled (inside a district that keeps cops rarer). */
+export function copSpawnSkips(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const q of city.districts) {
+    const skip = defOf(q.kind, defs)?.copSpawnSkip ?? 0;
+    if (skip > 0) for (const id of q.interior) out.set(id, skip);
+  }
+  return out;
+}
+
+/** Gate streets (both ways) of districts whose roadblocks prefer a gate. */
+export function roadblockGates(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): Set<string> {
+  const out = new Set<string>();
+  for (const q of city.districts) {
+    if (!defOf(q.kind, defs)?.roadblockGates) continue;
+    for (const g of q.gates) out.add(`${g.node}>${g.inner}`).add(`${g.inner}>${g.node}`);
+  }
+  return out;
+}
+
+/** "Old City · Harbor": the city's districts, for the start toast. */
+export function districtNames(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): string {
+  return city.districts.map((q) => defOf(q.kind, defs)?.label ?? q.kind).join(' · ');
+}

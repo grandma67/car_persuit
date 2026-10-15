@@ -58,10 +58,10 @@ describe('generateCity', () => {
     expect(onRoad).toBe(true);
   });
 
-  it('has every district type and a sensible amount of buildings', () => {
+  it('has every zone type and a sensible amount of buildings', () => {
     const city = generateCity(42);
-    const districts = new Set(city.buildings.map((b) => b.district));
-    expect(districts).toEqual(new Set(['downtown', 'midtown', 'residential', 'industrial']));
+    const zones = new Set(city.buildings.map((b) => b.zone));
+    expect(zones).toEqual(new Set(['downtown', 'midtown', 'residential', 'industrial']));
     expect(city.buildings.length).toBeGreaterThan(300);
     expect(city.buildings.length).toBeLessThan(1500);
   });

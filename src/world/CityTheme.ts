@@ -3,14 +3,15 @@
 // ranges (unit-tested).
 import * as THREE from 'three';
 import { Rng } from '../core/Rng';
-import type { District } from './CityGenerator';
+import type { Zone } from './CityGenerator';
 import { pickClimate, type Climate } from './Climate';
 import type { FacadeStyle } from '../render/Facades';
+import type { DistrictKind, LotLook } from './districts/District';
 
 export interface CityTheme {
   name: string;
-  buildings: Record<District, number[]>;
-  facades: Record<District, FacadeStyle>;
+  buildings: Record<Zone, number[]>;
+  facades: Record<Zone, FacadeStyle>;
   gables: boolean; // residential houses get pitched roofs
   asphalt: number;
   sidewalk: number;
@@ -24,6 +25,16 @@ export interface CityTheme {
   centerLine: number;
   edgeLine: number;
   promenade?: number; // seafront strip; defaults to the sidewalk colour
+  /** Per-climate overrides of a district's lot looks (a sandstone Old City in the desert …). */
+  districts?: Partial<Record<DistrictKind, Record<string, Partial<LotLook>>>>;
+}
+
+/** Roof colours for pitched roofs. */
+export const ROOF_TILES = [0x6e3a2e, 0x45484d, 0x5a4e44, 0x7a4a36];
+
+/** A zone's look, from the theme: its facade, wall palette, and pitched roofs on residential houses where the style has them. */
+export function zoneLook(theme: CityTheme, zone: Zone): LotLook {
+  return { facade: theme.facades[zone], roof: theme.gables && zone === 'residential' ? 'gable' : 'flat', palette: theme.buildings[zone], roofTiles: ROOF_TILES };
 }
 
 export type TimeOfDayName = 'day' | 'afternoon' | 'night';
@@ -179,7 +190,7 @@ export function pickTheme(seed: number, climate: Climate = pickClimate(seed)): C
   const j = (hex: number) => jitter(hex, rng);
   const buildings = Object.fromEntries(
     Object.entries(base.buildings).map(([d, colors]) => [d, colors.map(j)]),
-  ) as Record<District, number[]>;
+  ) as Record<Zone, number[]>;
   return {
     ...base,
     buildings,

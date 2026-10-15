@@ -51,6 +51,9 @@ import { RunLog, type IncidentKind } from '../gameplay/RunLog';
 import { Airtime, type Takeoff } from '../gameplay/Airtime';
 import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
+import { DISTRICT_DEFS } from '../world/districts/index';
+import { copSpawnSkips, districtNames, districtOfNode, districtTraffic, roadblockGates } from '../world/districts/runtime';
+import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { COP_RAM, DAMAGE } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
@@ -105,6 +108,7 @@ export class Game {
   private look = '';
   private props: PropSystem;
   private roadworks: RoadworksSite[];
+  private districtViews: DistrictView[] = [];
   private director: CopDirector;
   private wanted = new WantedSystem();
   private traffic: CivilianTraffic;
@@ -183,7 +187,11 @@ export class Game {
     const canals = Number.parseInt(params.get('canals') ?? '', 10);
     if (this.debug && canals >= 0 && canals <= 2) config.canalOdds = [canals === 0 ? 1 : 0, canals === 1 ? 1 : 0, canals === 2 ? 1 : 0];
     if (this.debug && params.has('hill')) config.hillChance = params.get('hill') === '0' ? 0 : 1;
-    this.city = generateCity(seed, config);
+    // ?oldtown=1 forces a district's roll on, =0 off (every registered district, like ?roadworks).
+    const force = Object.fromEntries(
+      DISTRICT_DEFS.filter((d) => params.get(d.kind) === '0' || params.get(d.kind) === '1').map((d) => [d.kind, params.get(d.kind) === '1']),
+    );
+    this.city = generateCity(seed, config, { force });
     const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
     this.canalWater = built.canalWater;
     this.walls = built.walls;
@@ -204,6 +212,7 @@ export class Game {
     s.far = sunDist + 100;
     // The shadow camera looks down -sunDir with world up, as Object3D.lookAt orients it.
     new THREE.Matrix4().lookAt(sunDir, new THREE.Vector3(), new THREE.Object3D().up).extractBasis(this.sunAxes[0], this.sunAxes[1], new THREE.Vector3());
+    this.districtViews = buildDistricts(this.city, this.scene, { theme, climate, lampGlow: time.lampGlow, ground: this.ground });
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
 
     const { spawn } = this.city;
@@ -221,13 +230,13 @@ export class Game {
 
     // Destinations get their own RNG stream so they're stable per seed.
     const startNode = this.city.graph.nearest(spawn.x, spawn.z);
-    this.destinations = pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id);
+    this.destinations = pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id, undefined, (id) => districtOfNode(this.city, id));
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
 
     this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground, keepOf(this.city.driveSide), {
       nav: new NavGrid(this.city, built.props),
       ignore: (collider) => collider.parent()?.handle === this.player.body.handle,
-    });
+    }, { skip: copSpawnSkips(this.city), gates: roadblockGates(this.city) });
     this.traffic = new CivilianTraffic(
       this.world,
       this.scene,
@@ -239,6 +248,7 @@ export class Game {
       keepOf(this.city.driveSide),
       fastStreets(this.city.graph, this.city.streetProps),
       busStops(this.city.graph, this.city.streetProps),
+      districtTraffic(this.city),
     );
     this.scene.add(this.crashMarks.mesh);
     this.sirens = new Sirens(this.scene);
@@ -334,7 +344,9 @@ export class Game {
     this.audio.uiBlip('click');
     this.screens.hide();
     this.showDestination();
-    this.hud.toast(this.city.driveSide === 'left' ? 'GO!  ·  ENGLAND: KEEP LEFT' : 'GO!', this.city.driveSide === 'left' ? 2.5 : 1.2);
+    const districts = districtNames(this.city).toUpperCase();
+    const news = [this.city.driveSide === 'left' ? 'ENGLAND: KEEP LEFT' : '', districts].filter(Boolean);
+    this.hud.toast(['GO!', ...news].join('  ·  '), news.length ? 2.5 : 1.2);
   }
 
   /**
@@ -554,6 +566,7 @@ export class Game {
     this.props.sync();
     this.props.updateSignals(this.timer.getElapsed());
     for (const works of this.roadworks) works.update(frameDt, this.timer.getElapsed());
+    for (const view of this.districtViews) view.update?.(frameDt, this.timer.getElapsed(), this.chase.camera);
     const carPos = this.player.mesh.root.position;
     this.updateSun(carPos);
 

@@ -1,4 +1,5 @@
 // All gameplay tuning numbers in one place. Wanted/cop tuning joins this in M5.
+import { ALL_SPECS, vehicleTop } from '../vehicles/VehicleSpecs';
 
 export interface MissionConfig {
   timeLimit: number; // seconds
@@ -95,3 +96,17 @@ export const CHECKPOINT_HEAT_RATE = 1.3;
 
 /** Seconds between roadblock attempts at 4+ stars. */
 export const ROADBLOCK_INTERVAL = 35;
+
+/**
+ * City districts (Old City, Chinatown, Harbor, Farm): shared rules. Anything above a road (gate
+ * arches, lantern strings, crane portals) clears the tallest vehicle by 1.5 m; kerb clutter may
+ * poke into the roadway but stays this far from the centre line (about 0.75 m beside the widest
+ * body in its lane).
+ */
+export const DISTRICTS = {
+  max: 4, // safety cap on districts per city, in registry order
+  clutterMinOffset: 5, // metres from the centre line
+  overheadClearance: Math.max(...ALL_SPECS.map(vehicleTop)) + 1.5,
+  frontageSea: 50, // metres of sea a coast district's frontage reaches out
+  clutterGap: 8, // metres kept clear at junction mouths and gate approaches
+};

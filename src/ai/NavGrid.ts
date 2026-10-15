@@ -72,6 +72,10 @@ export class NavGrid {
     city.roads.forEach((r) => pave(r.rect));
     city.intersections.forEach(pave);
     terrain.bridges.forEach(pave);
+    // Districts' off-road ground (yard corridors, fields): drivable, at the off-road cost.
+    for (const q of city.districts) {
+      for (const r of q.dressing.drivable) this.eachCellIn(r.x - r.w / 2, r.z - r.d / 2, r.x + r.w / 2, r.z + r.d / 2, (k) => (base[k] = OFF_ROAD));
+    }
 
     // Everything solid, and how close to it a route may come.
     const obstacles: Obstacle[] = [
@@ -79,6 +83,7 @@ export class NavGrid {
       ...city.props.map((p) => ({ fp: rectFootprint(p), hard: true })), // planters
       ...city.landmarks.map((l) => ({ circle: { x: l.x, z: l.z, r: l.radius }, hard: true as const })),
       ...[...city.streetProps, ...extraProps].map((p) => ({ fp: propFootprint(p), hard: !SOFT.has(p.kind) })),
+      ...city.districts.flatMap((q) => q.dressing.solids.map((fp) => ({ fp, hard: true }))), // walls, towers, stacks …
       ...city.roadworks.flatMap((site) =>
         site.items.filter((it) => it.kind !== 'patch').map((it) => ({ fp: { x: it.x, z: it.z, hx: it.hw, hz: it.hl, yaw: it.yaw }, hard: true })),
       ),
