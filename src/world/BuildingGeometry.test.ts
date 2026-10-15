@@ -17,7 +17,7 @@ function fingerprint(g: GeometryBuilder): string {
 describe('building geometry', () => {
   // With no district, every theme's buildings come out exactly as before the LotLook refactor.
   it.each([1, 42, 1234])('seed %i: walls per facade and roofs are unchanged', (seed) => {
-    const city = generateCity(seed);
+    const city = generateCity(seed, undefined, { defs: [] });
     const out: Record<string, Record<string, string>> = {};
     for (const theme of ALL_THEMES) {
       for (const climate of [CLIMATES.temperate, CLIMATES.snow]) {

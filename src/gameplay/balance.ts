@@ -110,3 +110,14 @@ export const DISTRICTS = {
   frontageSea: 50, // metres of sea a coast district's frontage reaches out
   clutterGap: 8, // metres kept clear at junction mouths and gate approaches
 };
+
+/** The Old City: a walled medieval core in the middle ring (world/districts/OldCity.ts). */
+export const OLD_CITY = {
+  chance: 0.55,
+  speed: 30 / 3.6, // m/s cap on every street inside
+  density: 0.5,
+  copSpawnSkip: 0.6,
+  /** Share of the ordinary lots per kind (the rest are half-timbered). */
+  stoneShare: 0.35,
+  ruinShare: 0.08,
+};
