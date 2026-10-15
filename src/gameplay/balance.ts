@@ -121,6 +121,7 @@ export const OLD_CITY = {
   stoneShare: 0.35,
   ruinShare: 0.08,
   townHallHeight: 12, // at least, metres
+  ruinWall: 3.5, // highest a ruin's broken walls stand, metres (its arch rises to ~7)
   crossOffset: 13, // market cross from the well, metres
   stalls: 9, // round the well (fewer where the cross stands)
   stallRing: 16, // metres from the well

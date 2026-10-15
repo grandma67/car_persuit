@@ -139,9 +139,18 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
     const fp = rectFootprint(b);
     // Wall heights round the shell, in ~1.5 m stones: jagged, highest at a corner.
     const heights = Array.from({ length: Math.max(8, Math.round((b.w + b.d) * 2 / 1.5)) }, () => rng.range(0.6, 1) ** 2);
-    out.structures.push({ kind: 'ruin', x: b.x, z: b.z, yaw: 0, footprints: [fp], data: { w: b.w, d: b.d, h: Math.min(b.h * 0.45, 5.5), heights } });
+    // Low broken walls, so what stands inside shows over them.
+    out.structures.push({ kind: 'ruin', x: b.x, z: b.z, yaw: 0, footprints: [fp], data: { w: b.w, d: b.d, h: Math.min(b.h * 0.3, OLD_CITY.ruinWall), heights } });
     out.solids.push(fp);
-    if (Math.min(b.w, b.d) >= 7) mark(rng.next() < 0.5 ? 'column' : 'ruinArch', b.x, b.z, rng.pick([0, Math.PI / 2]));
+    if (Math.min(b.w, b.d) >= 7) {
+      const kind = rng.next() < 0.5 ? 'column' : 'ruinArch';
+      rng.next(); // was the arch's random turn: kept so the rest of the district's stream doesn't move
+      // An arch faces the nearest street: it runs along the block side closest to the lot.
+      const r = q.blocks.map((k) => city.blocks[k].rect).find((br) => inRect(br, b))!;
+      const toX = r.w / 2 - Math.abs(b.x - r.x); // to the nearest side across X
+      const toZ = r.d / 2 - Math.abs(b.z - r.z);
+      mark(kind, b.x, b.z, toZ <= toX ? 0 : Math.PI / 2);
+    }
   }
 
   // --- The market square: cobbles round a well, the market cross and pillory, a ring of stalls ---

@@ -65,16 +65,18 @@ function wall(s: Structure, stone: THREE.BufferGeometry[]): void {
     // Centre of the strip: the wall line moved in by half the thickness.
     const x = (p.ax + p.bx) / 2 - (nx * thick) / 2;
     const z = (p.az + p.bz) / 2 - (nz * thick) / 2;
-    const w = nz ? len + 0.02 : thick;
-    const d = nz ? thick : len + 0.02;
+    // Butt-joined: overlapping neighbours would put two faces in one plane (z-fighting).
+    const w = nz ? len : thick;
+    const d = nz ? thick : len;
     const y0 = p.y - 0.6;
     const top = p.y + height;
     stone.push(column(w, d, x, y0, top, z, STONE));
     // A darker plinth course, and the walkway lip on the inner face.
-    stone.push(column(w + (nz ? 0 : 0.3), d + (nz ? 0.3 : 0), x + nx * 0.15, y0, p.y + 0.8, z + nz * 0.15, STONE_DARK));
+    // The plinth stands proud of both faces (0.3 m out, 0.05 m in), never flush with them.
+    stone.push(column(w + (nz ? 0 : 0.35), d + (nz ? 0.35 : 0), x + nx * 0.125, y0, p.y + 0.8, z + nz * 0.125, STONE_DARK));
     stone.push(column(nz ? w : LIP.out, nz ? LIP.out : d, x - nx * (thick / 2 + LIP.out / 2), top - 0.6 - LIP.h, top - 0.6, z - nz * (thick / 2 + LIP.out / 2), STONE_DARK));
     merlons(p.ax, p.az, p.bx, p.bz, top, nx, nz, stone, -MERLON.d / 2);
-    if (SNOWY) stone.push(column(w + 0.04, d + 0.04, x, top, top + 0.12, z, SNOW)); // snow on the walkway
+    if (SNOWY) stone.push(column(w + (nz ? 0 : 0.04), d + (nz ? 0.04 : 0), x, top, top + 0.12, z, SNOW)); // snow on the walkway, butt-joined
   }
 }
 
@@ -83,11 +85,11 @@ function tower(s: Structure, y: number, stone: THREE.BufferGeometry[]): void {
   const top = y + height;
   if (round) {
     stone.push(part(new THREE.CylinderGeometry(half, half * 1.06, height + 0.6, 14), STONE, s.x, y - 0.6 + (height + 0.6) / 2, s.z));
-    stone.push(part(new THREE.CylinderGeometry(half + 0.35, half + 0.35, 0.5, 14), STONE_DARK, s.x, top - 0.25, s.z));
+    stone.push(part(new THREE.CylinderGeometry(half + 0.35, half + 0.35, 0.5, 14), STONE_DARK, s.x, top - 0.22, s.z)); // tops out 3 cm above the body
     stone.push(part(new THREE.ConeGeometry(half + 0.6, half * 1.6, 14), SNOWY ? SNOW : SLATE, s.x, top + (half * 1.6) / 2, s.z));
   } else {
     stone.push(column(half * 2, half * 2, s.x, y - 0.6, top, s.z, STONE));
-    stone.push(column(half * 2 + 0.6, half * 2 + 0.6, s.x, top - 0.5, top, s.z, STONE_DARK));
+    stone.push(column(half * 2 + 0.6, half * 2 + 0.6, s.x, top - 0.5, top + 0.03, s.z, STONE_DARK));
     if (SNOWY) stone.push(column(half * 2 + 0.5, half * 2 + 0.5, s.x, top, top + 0.15, s.z, SNOW));
     const e = half + 0.3 - MERLON.d / 2;
     const c = [[-e, -e], [e, -e], [e, e], [-e, e]];
@@ -109,8 +111,9 @@ function gatehouse(s: Structure, stone: THREE.BufferGeometry[], iron: THREE.Buff
   const { ax, az, nx, nz, y } = d;
   const top = y + d.height;
   for (const t of s.footprints) {
-    stone.push(column(t.hx * 2, t.hz * 2, t.x, y - 0.6, top, t.z, STONE));
-    stone.push(column(t.hx * 2 + 0.5, t.hz * 2 + 0.5, t.x, top - 0.45, top, t.z, STONE_DARK));
+    // 3 cm proud of the footprint all round: the walls end exactly on it.
+    stone.push(column(t.hx * 2 + 0.06, t.hz * 2 + 0.06, t.x, y - 0.6, top, t.z, STONE));
+    stone.push(column(t.hx * 2 + 0.5, t.hz * 2 + 0.5, t.x, top - 0.45, top + 0.03, t.z, STONE_DARK));
     if (SNOWY) stone.push(column(t.hx * 2 + 0.4, t.hz * 2 + 0.4, t.x, top, top + 0.15, t.z, SNOW));
     const e = t.hx + 0.25 - MERLON.d / 2;
     const c = [[-e, -e], [e, -e], [e, e], [-e, e]];
@@ -127,7 +130,7 @@ function gatehouse(s: Structure, stone: THREE.BufferGeometry[], iron: THREE.Buff
   for (let k = 0; k < slices; k++) {
     const u = (k + 0.5) / slices - 0.5; // -0.5 … 0.5 across the opening
     const bottom = y + d.archBottom + rise * (1 - (2 * u) ** 2);
-    const along = d.opening / slices + 0.02;
+    const along = d.opening / slices; // butt-joined (see wall)
     const x = cx + ax * u * d.opening;
     const z = cz + az * u * d.opening;
     stone.push(column(ax ? along : depth, az ? along : depth, x, bottom, blockTop, z, k % 2 ? STONE : STONE_DARK));
@@ -177,7 +180,7 @@ function gatehouse(s: Structure, stone: THREE.BufferGeometry[], iron: THREE.Buff
 function postern(s: Structure, y: number, stone: THREE.BufferGeometry[]): void {
   const { height } = s.data as { height: number };
   for (const t of s.footprints) {
-    stone.push(column(t.hx * 2, t.hz * 2, t.x, y - 0.6, y + height, t.z, STONE));
+    stone.push(column(t.hx * 2 + 0.06, t.hz * 2 + 0.06, t.x, y - 0.6, y + height, t.z, STONE)); // proud of the wall ends
     stone.push(part(new THREE.ConeGeometry(t.hx * 1.25, 1.4, 4).rotateY(Math.PI / 4), SLATE, t.x, y + height + 0.7, t.z));
   }
 }
@@ -233,12 +236,27 @@ function setts(r: { x: number; z: number; w: number; d: number }, lift: number, 
   }
 }
 
-/** The square's cobbles, and the interior streets and junctions cobbled with a gutter. */
-function cobbles(q: District, city: CityData, ground: (x: number, z: number) => number): THREE.BufferGeometry | null {
+const toGeometry = (pos: number[], col: number[]): THREE.BufferGeometry | null => {
+  if (!pos.length) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+};
+
+/** The square's cobbles (over the plaza paving). */
+function squareCobbles(q: District, ground: (x: number, z: number) => number): THREE.BufferGeometry | null {
   const pos: number[] = [];
   const col: number[] = [];
   for (const p of q.dressing.ground) if (p.kind === 'cobbles') setts(p, 0.07, null, ground, pos, col, 1);
-  // Under the road markings (0.02 up), over the asphalt.
+  return toGeometry(pos, col);
+}
+
+/** The interior streets and junctions, cobbled with a gutter: over the asphalt, under the road markings (0.02 up). */
+function streetCobbles(q: District, city: CityData, ground: (x: number, z: number) => number): THREE.BufferGeometry | null {
+  const pos: number[] = [];
+  const col: number[] = [];
   const inner = new Set(q.interior);
   for (const road of city.roads) {
     if (!q.streets.has(`${road.a}>${road.b}`)) continue;
@@ -249,12 +267,7 @@ function cobbles(q: District, city: CityData, ground: (x: number, z: number) => 
     const box = city.intersections.find((r) => Math.abs(r.x - n.x) < 0.5 && Math.abs(r.z - n.z) < 0.5);
     if (box) setts(box, 0.012, null, ground, pos, col, id + 7);
   }
-  if (!pos.length) return null;
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  g.computeVertexNormals();
-  return g;
+  return toGeometry(pos, col);
 }
 
 /** A ruin: a shell of broken walls round its lot, jagged on top, with a fallen block or two. */
@@ -270,7 +283,7 @@ function ruin(s: Structure, y: number, stone: THREE.BufferGeometry[]): void {
       if (hk < 0.5) continue;
       const u0 = k / per, u1 = (k + 1) / per;
       const x = ax + (bx - ax) * (u0 + u1) / 2, z = az + (bz - az) * (u0 + u1) / 2;
-      const len = Math.hypot(bx - ax, bz - az) / per + 0.02;
+      const len = Math.hypot(bx - ax, bz - az) / per;
       const alongX = az === bz;
       stone.push(column(alongX ? len : t, alongX ? t : len, x, y - 0.3, y + hk, z, (side + k) % 3 ? STONE : STONE_DARK));
     }
@@ -354,7 +367,7 @@ export function renderOldCity(q: District, city: CityData, scene: THREE.Scene, c
     else if (s.kind === 'ruin') ruin(s, base(s.footprints[0]), stone);
   }
   decks(q, ctx.ground, stone);
-  const paving = cobbles(q, city, ctx.ground);
+  const paving = squareCobbles(q, ctx.ground);
   if (paving) stone.push(paving);
   const solid = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 });
   const metal = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.4, metalness: 0.6 });
@@ -363,6 +376,18 @@ export function renderOldCity(q: District, city: CityData, scene: THREE.Scene, c
     if (!geos.length) continue;
     const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
     mesh.castShadow = mesh.receiveShadow = true;
+    scene.add(mesh);
+  }
+  // A centimetre over the asphalt and under the markings is too thin a gap for the depth buffer at
+  // a distance: push the street setts back in depth, less than the asphalt (offset 1) is pushed.
+  const streets = streetCobbles(q, city, ctx.ground);
+  if (streets) {
+    const setts = solid.clone();
+    setts.polygonOffset = true;
+    setts.polygonOffsetFactor = 0.5;
+    setts.polygonOffsetUnits = 0.5;
+    const mesh = new THREE.Mesh(streets, setts);
+    mesh.receiveShadow = true;
     scene.add(mesh);
   }
   torches(flames, scene, ctx.lampGlow);

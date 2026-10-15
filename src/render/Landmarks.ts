@@ -106,21 +106,21 @@ function column(): THREE.BufferGeometry {
   ]);
 }
 
-/** A ruined archway: two piers and a broken arch, along X. */
+/** A ruined archway standing whole: two piers and a round arch, along X. */
 function ruinArch(): THREE.BufferGeometry {
   const stones: THREE.BufferGeometry[] = [];
   for (const x of [-1.9, 1.9]) {
     stones.push(part(box(1.1, 4.2, 1.1), OLD_STONE, x, 2.1));
     stones.push(part(box(1.3, 0.35, 1.3), OLD_STONE_DARK, x, 4.35));
   }
-  // Voussoirs round a half circle, the right shoulder fallen.
+  // A full round arch of voussoirs springing from the pier caps, the keystone standing proud.
   for (let k = 0; k < 9; k++) {
-    if (k >= 6) continue;
     const a = Math.PI - (k + 0.5) * (Math.PI / 9);
-    const g = box(0.55, 0.9, 1.0).rotateZ(a - Math.PI / 2);
-    stones.push(part(g, k % 2 ? OLD_STONE : OLD_STONE_DARK, Math.cos(a) * 1.9, 4.5 + Math.sin(a) * 1.9));
+    const key = k === 4;
+    const g = box(key ? 0.72 : 0.62, key ? 1.1 : 0.9, key ? 1.1 : 1.0).rotateZ(a - Math.PI / 2);
+    const r = key ? 2.0 : 1.9;
+    stones.push(part(g, key ? OLD_STONE : k % 2 ? OLD_STONE : OLD_STONE_DARK, Math.cos(a) * r, 4.5 + Math.sin(a) * r));
   }
-  stones.push(part(box(0.9, 0.6, 1.0).rotateY(0.4), OLD_STONE_DARK, 2.6, 0.3, 1.2)); // fallen block
   return mergeGeometries(stones);
 }
 
