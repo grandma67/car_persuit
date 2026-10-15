@@ -7,6 +7,7 @@ import type { CityTheme } from '../../world/CityTheme';
 import type { Climate } from '../../world/Climate';
 import type { District, DistrictKind } from '../../world/districts/District';
 import type { GroundHeight } from '../../world/Terrain';
+import { renderOldCity } from './OldCity';
 
 export interface DistrictRenderContext {
   theme: CityTheme;
@@ -23,7 +24,9 @@ export interface DistrictView {
 export type DistrictRenderer = (q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext) => DistrictView;
 
 /** One renderer per district kind (registered as each district is built). */
-export const DISTRICT_RENDERERS: Partial<Record<DistrictKind, DistrictRenderer>> = {};
+export const DISTRICT_RENDERERS: Partial<Record<DistrictKind, DistrictRenderer>> = {
+  oldtown: renderOldCity,
+};
 
 /** Draw every placed district's structures, overhead pieces and ground patches. */
 export function buildDistricts(city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView[] {

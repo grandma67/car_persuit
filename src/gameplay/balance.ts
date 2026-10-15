@@ -121,3 +121,18 @@ export const OLD_CITY = {
   stoneShare: 0.35,
   ruinShare: 0.08,
 };
+
+/** Old City walls and gatehouses (world/districts/OldCityWalls.ts), metres. */
+export const OLD_CITY_WALLS = {
+  height: 7, // wall top above its footing
+  thick: 1.8, // from the wall line inward
+  piece: 10, // longest wall stretch on one footing (walls step up a hill)
+  cornerHalf: 3.5, // corner towers
+  cornerHeight: 11,
+  cornerOut: 1.6, // how far a corner tower stands out over the sidewalk: clear of the corner signals and signs
+  gateHalf: 2.6, // gatehouse towers beside each opening
+  gateHeight: 10.5,
+  gateOut: 2, // how far a gatehouse tower stands out over the sidewalk
+  postHalf: 1.2, // plain posts where a plaza crosses the wall line
+  archAbove: 0.6, // extra headroom over overheadClearance under arches
+};

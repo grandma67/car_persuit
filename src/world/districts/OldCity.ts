@@ -4,8 +4,10 @@
 import type { Rng } from '../../core/Rng';
 import { OLD_CITY } from '../../gameplay/balance';
 import type { Block, Building, CityData } from '../CityGenerator';
-import type { StreetProp } from '../StreetProps';
-import { emptyDressing, type BlockRole, type District, type DistrictDef } from './District';
+import { footprintsOverlap, propFootprint, type StreetProp } from '../StreetProps';
+import { isJunctionControl } from './apply';
+import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing } from './District';
+import { clearOfWalls, wallDressing, wallPlan } from './OldCityWalls';
 
 export type OldCityLot = 'halfTimbered' | 'stoneHouse' | 'townHall' | 'ruin';
 
@@ -54,6 +56,7 @@ function roles(q: District, city: CityData, rng: Rng): Map<number, BlockRole> {
 }
 
 function lots(q: District, buildings: Building[], city: CityData, rng: Rng): void {
+  clearOfWalls(buildings, wallPlan(q, city).solids);
   for (const b of buildings) {
     const r = rng.next();
     b.lot = r < OLD_CITY.ruinShare ? 'ruin' : r < OLD_CITY.ruinShare + OLD_CITY.stoneShare ? 'stoneHouse' : 'halfTimbered';
@@ -94,5 +97,12 @@ export const OLD_CITY_DEF: DistrictDef = {
   copSpawnSkip: OLD_CITY.copSpawnSkip,
   roadblockGates: true,
   mapColor: 0xb3a68c,
-  dress: () => emptyDressing(),
+  dress,
 };
+
+function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
+  const plan = wallPlan(q, city);
+  // Street furniture where a tower stands out over the sidewalk goes (junction controls never do).
+  city.streetProps = city.streetProps.filter((p) => isJunctionControl(p) || !plan.solids.some((s) => footprintsOverlap(propFootprint(p), s)));
+  return { ...emptyDressing(), ...wallDressing(q, city, plan, rng), solids: plan.solids };
+}
