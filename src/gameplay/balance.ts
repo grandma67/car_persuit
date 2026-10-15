@@ -131,6 +131,20 @@ export const OLD_CITY = {
   maxTorches: 16,
 };
 
+/** Chinatown: an open, busy district behind paifang gates (world/districts/Chinatown.ts). */
+export const CHINATOWN = {
+  chance: 0.5,
+  speed: 40 / 3.6, // m/s cap on the main street only
+  density: 1.3,
+  vanWeight: 2, // spawn weight multiplier for vans inside
+  squareChance: 0.4, // a small square for the pagoda
+  restaurants: [2, 4] as [number, number],
+  banquetChance: 0.5,
+  templeChance: 0.4,
+  /** How many of each small shop, at most (from the lots fronting a street). */
+  shops: { teaHouse: 2, bubbleTea: 2, herbalShop: 2, bakery: 2 },
+};
+
 /** Old City walls and gatehouses (world/districts/OldCityWalls.ts), metres. */
 export const OLD_CITY_WALLS = {
   height: 7, // wall top above its footing

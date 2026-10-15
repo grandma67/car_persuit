@@ -126,6 +126,7 @@ export interface DistrictDef {
   minShare?: Partial<Record<Zone, number>>; // e.g. { midtown: 0.5 }
   gates: 'all' | 'mainStreet';
   extraGates?: number; // with 'mainStreet': up to this many more
+  minMainStreet?: number; // the main street's least length in edges (default 1)
   buildingStyle: LotStyle;
   looks: Record<string, LotLook>; // per lot kind (Building.lot)
   roles(q: District, city: CityData, rng: Rng): Map<number, BlockRole>;

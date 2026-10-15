@@ -214,6 +214,7 @@ function tryPlace(
     }
   }
   const longest = Math.max(...runs.map((r) => r.length));
+  if (longest < (def.minMainStreet ?? 1)) return null;
   const main = rng.pick(runs.filter((r) => r.length === longest));
   const mainStreet = main.map((e) => edgeKey(e.a, e.b));
 
