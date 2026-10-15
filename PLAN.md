@@ -11,6 +11,7 @@ No git tags; versions are grouped by day of work.
 - **v0.3 (2026-10-12):** installable offline PWA; seeded hill and canals with bridges and canal ramps; falling into water ends the run; handbrake drifts; turn signals; car scratches and dents; body dive/squat and gears.
 - **v0.4 (2026-10-13):** No Police mode; left-hand traffic on rare seeds; junction priority, bus stops, 90 km/h main streets, smarter civilians; cops chase off-road; exhaust fumes; splash chase scene; end-screen run map shareable as an image; mute and difficulty remembered between sessions.
 - **v0.5 (2026-10-14):** performance work (long runs, spawns, shader warm-up, phone shadows), Node 24 and updated dependencies, turn-aware cop routing, FPS counter, wanted-level sound, fullscreen icon with landscape lock.
+- **v0.6 (2026-10-15):** city districts framework; the Old City: a walled medieval quarter with gatehouses, a market square and clock tower, half-timbered streets, cannons, ruins and breakable market clutter, 30 km/h traffic and fewer cops inside.
 
 ## Rules
 
@@ -47,6 +48,7 @@ Generation and gameplay logic are pure data (no Three.js) and unit-tested with V
 - Zones (downtown towers → residential/industrial), parks, drivable plazas (shortcuts cops don't path through), town squares with fountains, statues and the occasional jump ramp ("The Leap", canal ramps).
 - Seed picks style, time of day, climate (temperate, snow, beach, desert), weather (rain/snow) and, rarely, left-hand traffic.
 - Traffic lights, priority junctions with stop signs, crossings, bus stops, roadworks sites; lamps, hydrants, signs, fences, trees and more are breakable.
+- Districts: themed areas laid over a rectangle of blocks, each rolled per seed on its own stream (`world/districts/`). The **Old City** (55% of seeds, a 2×2 in the middle ring): crenellated walls with corner towers, a gatehouse at every street in (arch, raised portcullis, drawbridge deck, torches, banners), cobbled streets with a gutter, half-timbered and stone houses with jetties and steep roofs, a market square (well, market cross, pillory, stalls, cannons) faced by a town hall whose clock keeps the game time and strikes the hour, ruins, and breakable pots, barrels, carts and haybales on the kerbs. Inside: 30 km/h, half the traffic, no buses or trucks, cops spawn less, and 4★+ roadblocks prefer the gates. Sandstone in the desert, limewashed by the sea, snow on the walls in winter.
 
 ## Police
 
@@ -71,4 +73,4 @@ Damage (smoke, fire, explosion, scratches/dents), skid marks and tyre smoke, bod
 
 ## Debug (`?debug`)
 
-FPS counter; C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`, `?weather=`, `?hill=0|1`; `window.game` in the console (used by `npm run check:browser`). Without debug: `?seed=`, `?time=`, `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?touch`.
+FPS counter; C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`, `?weather=`, `?hill=0|1`; `window.game` in the console (used by `npm run check:browser`). Without debug: `?seed=`, `?time=`, `?oldtown=0|1` (force the Old City off or on), `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?touch`.

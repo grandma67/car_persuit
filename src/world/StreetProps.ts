@@ -5,7 +5,10 @@ import type { Block, CityConfig, Rect } from './CityGenerator';
 import { inRampLane, type Landmark } from './Landmarks';
 import type { TreeKind } from './Climate';
 
-export type PropKind = 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone' | 'tree' | 'umbrella';
+export type PropKind =
+  | 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone' | 'tree' | 'umbrella'
+  // Old City
+  | 'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -20,7 +23,8 @@ export interface StreetProp {
   armRight?: boolean; // signals: arm reaches to the driver's right (pole on the left kerb, left-hand traffic)
   tree?: TreeKind; // trees
   scale?: number; // trees: size multiplier
-  color?: number; // umbrellas: canopy colour; trees: tint
+  color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
+  style?: 'old'; // restyled by a district (old iron posts): same kind and variant, so the same rules
 }
 
 export interface PropSpec {
@@ -45,6 +49,17 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   // Trees take a real hit to snap and cost a lot of speed; the footprint is the trunk only.
   tree: { hx: 0.35, hz: 0.35, height: 5, mass: 300, breakSpeed: 7, slowdown: 0.28 },
   umbrella: { hx: 0.12, hz: 0.12, height: 2.6, mass: 6, breakSpeed: 1.5, slowdown: 0.02 },
+  // Old City clutter and market.
+  amphora: { hx: 0.25, hz: 0.25, height: 0.95, mass: 15, breakSpeed: 1, slowdown: 0.01 },
+  pot: { hx: 0.3, hz: 0.3, height: 0.6, mass: 12, breakSpeed: 1, slowdown: 0.01 },
+  cart: { hx: 0.8, hz: 1.3, height: 1.2, mass: 120, breakSpeed: 3, slowdown: 0.08 },
+  stall: { hx: 1.3, hz: 0.9, height: 2.6, mass: 60, breakSpeed: 2, slowdown: 0.06 },
+  barrels: { hx: 0.6, hz: 0.6, height: 1.0, mass: 90, breakSpeed: 2.5, slowdown: 0.06 },
+  cannonballs: { hx: 0.45, hz: 0.45, height: 0.6, mass: 300, breakSpeed: 3, slowdown: 0.1 },
+  pillory: { hx: 0.9, hz: 0.35, height: 2.2, mass: 50, breakSpeed: 2, slowdown: 0.05 },
+  haybale: { hx: 0.6, hz: 0.6, height: 1.2, mass: 60, breakSpeed: 1.5, slowdown: 0.06 },
+  signpost: { hx: 0.1, hz: 0.1, height: 2.8, mass: 20, breakSpeed: 2, slowdown: 0.02 },
+  oilLamp: { hx: 0.15, hz: 0.15, height: 4.2, mass: 80, breakSpeed: 3, slowdown: 0.06 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */

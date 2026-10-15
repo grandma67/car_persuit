@@ -11,7 +11,7 @@ import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, type CityConfig, type CityData } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
-import { pickTheme, pickTimeOfDay } from '../world/CityTheme';
+import { pickTheme, pickTimeOfDay, type TimeOfDayName } from '../world/CityTheme';
 import { applyClimate, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
 import { Sky } from '../render/Sky';
 import { Precipitation } from '../render/Precipitation';
@@ -52,7 +52,7 @@ import { Airtime, type Takeoff } from '../gameplay/Airtime';
 import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { DISTRICT_DEFS } from '../world/districts/index';
-import { copSpawnSkips, districtNames, districtOfNode, districtTraffic, roadblockGates } from '../world/districts/runtime';
+import { copSpawnSkips, districtOfNode, districtTraffic, roadblockGates } from '../world/districts/runtime';
 import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { COP_RAM, DAMAGE } from '../gameplay/balance';
@@ -195,7 +195,7 @@ export class Game {
     const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
     this.canalWater = built.canalWater;
     this.walls = built.walls;
-    this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls);
+    this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs);
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
       leaves: theme.leaves[0],
@@ -212,7 +212,10 @@ export class Game {
     s.far = sunDist + 100;
     // The shadow camera looks down -sunDir with world up, as Object3D.lookAt orients it.
     new THREE.Matrix4().lookAt(sunDir, new THREE.Vector3(), new THREE.Object3D().up).extractBasis(this.sunAxes[0], this.sunAxes[1], new THREE.Vector3());
-    this.districtViews = buildDistricts(this.city, this.scene, { theme, climate, lampGlow: time.lampGlow, ground: this.ground });
+    this.districtViews = buildDistricts(this.city, this.scene, {
+      theme, climate, lampGlow: time.lampGlow, ground: this.ground, hour0: startHour(seed, time.name),
+      bell: (strikes, at) => this.audio.bell(strikes, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.position) / 450, 0, 1)),
+    });
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
 
     const { spawn } = this.city;
@@ -236,7 +239,7 @@ export class Game {
     this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground, keepOf(this.city.driveSide), {
       nav: new NavGrid(this.city, built.props),
       ignore: (collider) => collider.parent()?.handle === this.player.body.handle,
-    }, { skip: copSpawnSkips(this.city), gates: roadblockGates(this.city) });
+    }, { skipAt: copSpawnSkips(this.city), gates: roadblockGates(this.city) });
     this.traffic = new CivilianTraffic(
       this.world,
       this.scene,
@@ -344,9 +347,7 @@ export class Game {
     this.audio.uiBlip('click');
     this.screens.hide();
     this.showDestination();
-    const districts = districtNames(this.city).toUpperCase();
-    const news = [this.city.driveSide === 'left' ? 'ENGLAND: KEEP LEFT' : '', districts].filter(Boolean);
-    this.hud.toast(['GO!', ...news].join('  ·  '), news.length ? 2.5 : 1.2);
+    this.hud.toast(this.city.driveSide === 'left' ? 'GO!  ·  ENGLAND: KEEP LEFT' : 'GO!', this.city.driveSide === 'left' ? 2.5 : 1.2);
   }
 
   /**
@@ -1000,6 +1001,12 @@ export class Game {
 }
 
 /** Impact = velocity change (or closing speed) in m/s: ~3 is a scrape, 40+ is a full-speed hit. */
+/** The game clock when a run starts: the time of day's hour plus some minutes from the seed. */
+export function startHour(seed: number, time: TimeOfDayName): number {
+  const hour = { day: 10, afternoon: 17, night: 22 }[time];
+  return hour + (((seed * 2654435761) >>> 0) % 60) / 60;
+}
+
 function impactStrength(speed: number): number {
   return THREE.MathUtils.clamp((speed - 1.5) / 20, 0.1, 1);
 }

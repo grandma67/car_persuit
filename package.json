@@ -8,7 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "check:browser": "node scripts/browser-check.mjs"
+    "check:browser": "node scripts/browser-check.mjs",
+    "t": "node scripts/test.mjs",
+    "stats": "node scripts/run-ts.mjs scripts/district-stats.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.18.2",

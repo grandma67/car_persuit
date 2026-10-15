@@ -21,6 +21,7 @@ Add `?seed=1234` to replay a city, `?time=day|afternoon|night` to force the time
 ## Features
 
 - Seeded island city on a hill with canals, bridges, parks, plazas, town squares and jump ramps; climates (temperate, snow, beach, desert), rain and snow, day to night.
+- Themed districts: a walled Old City with gatehouses, a market square and a striking town-hall clock (`?oldtown=1` to force it).
 - Rapier vehicle physics, drifting, crash damage, scratches and explosions.
 - Cops that route, cut you off, ram and set roadblocks; patrol cars, interceptors, SUVs and armored trucks.
 - Civilian traffic that obeys lights and right of way, including buses and trucks; breakable street props.

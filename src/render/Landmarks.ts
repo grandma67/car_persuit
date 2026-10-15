@@ -76,6 +76,99 @@ function sculpture(): THREE.BufferGeometry {
   ]);
 }
 
+// --- Old City set pieces ---
+const OLD_STONE = 0xb5aa93;
+const OLD_STONE_DARK = 0x8a806d;
+const IRON = 0x2e2f33;
+const OAK = 0x6b4a2c;
+const SLATE = 0x4f5560;
+
+/** A cannon on a timber carriage, barrel along +Z. */
+function cannon(): THREE.BufferGeometry {
+  return mergeGeometries([
+    ...[-0.45, 0.45].map((x) => part(box(0.14, 0.55, 2.0), OAK, x, 0.55)), // cheeks
+    part(box(1.05, 0.18, 1.7), OAK, 0, 0.35, -0.1),
+    ...[-0.6, 0.6].flatMap((x) => [0.55, -0.55].map((z) => part(cyl(0.38, 0.38, 0.1, 10).rotateZ(Math.PI / 2), OAK, x, 0.38, z))),
+    part(cyl(0.2, 0.27, 2.5, 10).rotateX(Math.PI / 2), IRON, 0, 0.95, 0.35),
+    part(new THREE.SphereGeometry(0.28, 8, 6), IRON, 0, 0.95, -0.95), // cascabel
+    part(cyl(0.29, 0.29, 0.12, 10).rotateX(Math.PI / 2), IRON, 0, 0.95, 1.55), // muzzle ring
+  ]);
+}
+
+/** A broken column on its plinth. */
+function column(): THREE.BufferGeometry {
+  return mergeGeometries([
+    part(box(1.6, 0.45, 1.6), OLD_STONE_DARK, 0, 0.22),
+    part(cyl(0.48, 0.55, 0.3, 12), OLD_STONE, 0, 0.6),
+    part(cyl(0.42, 0.45, 3.1, 12), OLD_STONE, 0, 2.3),
+    part(cyl(0.3, 0.42, 0.5, 7).rotateZ(0.25), OLD_STONE, 0.05, 4.05), // broken stub, leaning
+    part(cyl(0.42, 0.42, 1.4, 12).rotateZ(Math.PI / 2).rotateY(0.6), OLD_STONE, 1.6, 0.45, 0.7), // fallen drum
+  ]);
+}
+
+/** A ruined archway standing whole: two piers and a round arch, along X. */
+function ruinArch(): THREE.BufferGeometry {
+  const stones: THREE.BufferGeometry[] = [];
+  for (const x of [-1.9, 1.9]) {
+    stones.push(part(box(1.1, 4.2, 1.1), OLD_STONE, x, 2.1));
+    stones.push(part(box(1.3, 0.35, 1.3), OLD_STONE_DARK, x, 4.35));
+  }
+  // A full round arch of voussoirs springing from the pier caps, the keystone standing proud.
+  for (let k = 0; k < 9; k++) {
+    const a = Math.PI - (k + 0.5) * (Math.PI / 9);
+    const key = k === 4;
+    const g = box(key ? 0.72 : 0.62, key ? 1.1 : 0.9, key ? 1.1 : 1.0).rotateZ(a - Math.PI / 2);
+    const r = key ? 2.0 : 1.9;
+    stones.push(part(g, key ? OLD_STONE : k % 2 ? OLD_STONE : OLD_STONE_DARK, Math.cos(a) * r, 4.5 + Math.sin(a) * r));
+  }
+  return mergeGeometries(stones);
+}
+
+/** A stone well: round curb, two posts, a little roof and a windlass. */
+function well(): THREE.BufferGeometry {
+  return mergeGeometries([
+    part(cyl(1.25, 1.35, 0.95, 14), OLD_STONE, 0, 0.47),
+    part(new THREE.TorusGeometry(1.15, 0.13, 4, 14).rotateX(Math.PI / 2), OLD_STONE_DARK, 0, 0.98),
+    part(cyl(0.98, 0.98, 0.04, 14), 0x23323a, 0, 0.85), // dark water
+    ...[-1.05, 1.05].map((x) => part(box(0.18, 2.2, 0.18), OAK, x, 2.0)),
+    part(cyl(0.1, 0.1, 2.3, 6).rotateZ(Math.PI / 2), OAK, 0, 2.3),
+    part(cyl(0.06, 0.06, 0.6, 4), IRON, 0, 1.9), // rope
+    part(box(0.4, 0.4, 0.4), OAK, 0, 1.45),
+    part(cyl(0, 1.75, 0.9, 4).rotateY(Math.PI / 4), SLATE, 0, 3.5),
+  ]);
+}
+
+/** Market cross: an open-sided roofed shelter on a stepped stone base round a cross shaft. */
+function marketCross(): THREE.BufferGeometry {
+  const parts = [
+    part(cyl(3.2, 3.3, 0.35, 8), OLD_STONE_DARK, 0, 0.17),
+    part(cyl(2.7, 2.8, 0.35, 8), OLD_STONE, 0, 0.52),
+    part(cyl(0.35, 0.4, 4.6, 8), OLD_STONE, 0, 3.0),
+    part(box(1.4, 0.3, 0.3), OLD_STONE, 0, 4.9),
+    part(box(0.3, 1.2, 0.3), OLD_STONE, 0, 4.9),
+  ];
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
+    parts.push(part(box(0.32, 3.4, 0.32), OLD_STONE, Math.cos(a) * 2.35, 2.4, Math.sin(a) * 2.35));
+  }
+  parts.push(part(cyl(2.85, 2.85, 0.4, 8), OLD_STONE_DARK, 0, 4.25));
+  parts.push(part(cyl(0, 3.3, 2.2, 8), SLATE, 0, 5.55));
+  parts.push(part(new THREE.SphereGeometry(0.25, 6, 4), 0xc9a23a, 0, 6.75));
+  return mergeGeometries(parts);
+}
+
+const SNOW = 0xeef2f6;
+/** Snow lying on the Old City pieces in a snowy city. */
+const SNOW_CAPS = {
+  cannon: () => mergeGeometries([part(box(0.36, 0.08, 2.2), SNOW, 0, 1.2, 0.35), part(box(1.0, 0.06, 1.6), SNOW, 0, 0.47, -0.1)]),
+  well: () => part(cyl(0, 1.85, 0.95, 4).rotateY(Math.PI / 4), SNOW, 0, 3.55),
+  marketCross: () => part(cyl(0, 3.4, 2.25, 8), SNOW, 0, 5.6),
+  column: () => part(cyl(0.44, 0.44, 0.1, 12), SNOW, 0, 3.9),
+};
+
+/** Old City pieces stand straight on the ground, without a paved pad. */
+const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross']);
+
 /**
  * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
  * pair of bronze wings sweeping up from plinths either side of the lip, as if the ramp itself
@@ -156,7 +249,7 @@ export class Landmarks {
    * lampGlow: 0 by day … 1 at night (fountain water glows a little after dark).
    * Returns collider handles so crash marks treat landmarks like walls.
    */
-  constructor(landmarks: Landmark[], terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, lampGlow: number, readonly colliders = new Set<number>()) {
+  constructor(landmarks: Landmark[], terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, lampGlow: number, readonly colliders = new Set<number>(), private snowy = false) {
     const solid = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 });
     const metal = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.4, metalness: 0.6 });
     const water = new THREE.MeshStandardMaterial({
@@ -167,11 +260,18 @@ export class Landmarks {
       emissiveIntensity: 0.15 + lampGlow * 0.5,
     });
     const paving = new THREE.MeshStandardMaterial({ color: STONE_DARK, roughness: 0.95 });
-    const models = { fountain: fountain(), statue: statue(), obelisk: obelisk(), sculpture: sculpture() };
+    const models = {
+      fountain: fountain(), statue: statue(), obelisk: obelisk(), sculpture: sculpture(),
+      cannon: cannon(), column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
+    };
 
     for (const l of landmarks) {
       if (l.kind === 'ramp') {
         this.addRamp(l, terrain, scene, world, solid, metal);
+        continue;
+      }
+      if (NO_PAD.has(l.kind)) {
+        this.addPlain(l, terrain, scene, world, models[l.kind as keyof typeof models], solid);
         continue;
       }
       // A circle of darker paving under the centrepiece; on a slope it's a level terrace, its top
@@ -205,6 +305,21 @@ export class Landmarks {
       this.colliders.add(world.createCollider(desc).handle);
     }
     scene.add(this.spray.points);
+  }
+
+  /** An Old City piece: on its lowest ground, with a box collider round its footprint. */
+  private addPlain(l: Landmark, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, model: THREE.BufferGeometry, solid: THREE.Material): void {
+    const y = groundBase(terrain, l.x, l.z, l.radius) - 0.05;
+    const cap = this.snowy ? SNOW_CAPS[l.kind as keyof typeof SNOW_CAPS]?.() : undefined;
+    const mesh = new THREE.Mesh(cap ? mergeGeometries([model, cap]) : model, solid);
+    mesh.position.set(l.x, y, l.z);
+    mesh.rotation.y = l.yaw;
+    mesh.castShadow = mesh.receiveShadow = true;
+    scene.add(mesh);
+    const r = l.radius * 0.8;
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), l.yaw);
+    const desc = RAPIER.ColliderDesc.cuboid(r, 2, r).setTranslation(l.x, y + 2, l.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
+    this.colliders.add(world.createCollider(desc).handle);
   }
 
   /** The jump monument: drivable curved deck (convex slices), solid plinths. Tilted with the slope. */

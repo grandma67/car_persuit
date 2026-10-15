@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { Rng } from '../core/Rng';
 
-export type FacadeStyle = 'curtain' | 'office' | 'brick' | 'stucco' | 'shutters' | 'siding' | 'adobe' | 'industrial';
+export type FacadeStyle = 'curtain' | 'office' | 'brick' | 'stucco' | 'shutters' | 'siding' | 'adobe' | 'industrial' | 'halfTimber' | 'ashlar';
 
 export const WINDOW_CELLS = 8;
 const PX = 64; // pixels per cell
@@ -138,7 +138,80 @@ const STYLES: Record<FacadeStyle, StyleSpec> = {
     panes: [{ x: 0.04, y: 0.12, w: 0.92, h: 0.3 }],
     glass: '#2c343c', wallRough: 0.6, glassRough: 0.2, glassMetal: 0.2, lit: 0.18, mullions: 'vertical', frame: '#7a7f86',
   },
+  halfTimber: {
+    // Light plaster between dark oak: posts at each bay's edges, a rail at sill and floor, and
+    // diagonal braces either side; a small leaded casement in the middle.
+    wall: (c, rng) => speckle(c, rng, 238, 14),
+    panes: [{ x: 0.36, y: 0.3, w: 0.28, h: 0.36 }],
+    glass: '#2a3138', wallRough: 0.95, glassRough: 0.2, glassMetal: 0.1, lit: 0.28, mullions: 'cross', frame: '#3b2a1c',
+    extras: (c, x, y) => {
+      const oak = '#3b2a1c';
+      const t = PX * 0.07;
+      c.fillStyle = oak;
+      c.fillRect(x, y, t, PX); // post (the next bay's post closes the right side)
+      c.fillRect(x, y + PX - t, PX, t); // floor rail
+      c.fillRect(x, y + PX * 0.72, PX * 0.3, t * 0.8); // sill rail beside the window
+      c.fillRect(x + PX * 0.7, y + PX * 0.72, PX * 0.3, t * 0.8);
+      c.fillRect(x, y + PX * 0.18, PX, t * 0.7); // head rail
+      // Braces from the posts up to the head rail, either side of the window.
+      c.strokeStyle = oak;
+      c.lineWidth = t * 0.8;
+      c.beginPath();
+      c.moveTo(x + t, y + PX * 0.72);
+      c.lineTo(x + PX * 0.3, y + PX * 0.2);
+      c.moveTo(x + PX, y + PX * 0.72);
+      c.lineTo(x + PX * 0.7, y + PX * 0.2);
+      c.stroke();
+      leaded(c, { x: 0.36, y: 0.3, w: 0.28, h: 0.36 }, x, y);
+    },
+  },
+  ashlar: {
+    // Coursed stone blocks, each tinted a little differently; small deep windows with leaded
+    // diamond panes under a lintel.
+    wall: (c, rng) => {
+      c.fillStyle = grey(200); // mortar
+      c.fillRect(0, 0, SIZE, SIZE);
+      const course = PX / 5;
+      for (let r = 0; r * course < SIZE; r++) {
+        let x = -rng.range(0, PX / 2);
+        while (x < SIZE) {
+          const w = PX * rng.range(0.35, 0.65);
+          c.fillStyle = grey(205 + Math.floor(rng.next() * 45));
+          c.fillRect(x + 1, r * course + 1, w - 2, course - 2);
+          x += w;
+        }
+      }
+    },
+    panes: [{ x: 0.38, y: 0.26, w: 0.24, h: 0.44, arch: true }],
+    glass: '#262c33', wallRough: 0.95, glassRough: 0.2, glassMetal: 0.1, lit: 0.24, mullions: 'none', frame: '#6f6656',
+    extras: (c, x, y) => {
+      c.fillStyle = grey(245);
+      c.fillRect(x + PX * 0.33, y + PX * 0.7, PX * 0.34, PX * 0.06); // sill
+      leaded(c, { x: 0.38, y: 0.26, w: 0.24, h: 0.44 }, x, y);
+    },
+  },
 };
+
+/** Lead cames in a diamond lattice over a pane. */
+function leaded(c: Ctx, p: Pane, x: number, y: number): void {
+  const px = x + p.x * PX, py = y + p.y * PX, w = p.w * PX, h = p.h * PX;
+  c.save();
+  c.beginPath();
+  c.rect(px, py, w, h);
+  c.clip();
+  c.strokeStyle = 'rgba(30,30,30,0.85)';
+  c.lineWidth = 1;
+  c.beginPath();
+  const step = w / 3;
+  for (let k = -6; k <= 6; k++) {
+    c.moveTo(px + k * step, py);
+    c.lineTo(px + k * step + h, py + h);
+    c.moveTo(px + k * step, py + h);
+    c.lineTo(px + k * step + h, py);
+  }
+  c.stroke();
+  c.restore();
+}
 
 function pane(c: Ctx, p: Pane, x: number, y: number, inset = 0): void {
   const px = x + p.x * PX + inset, py = y + p.y * PX + inset, w = p.w * PX - inset * 2, h = p.h * PX - inset * 2;

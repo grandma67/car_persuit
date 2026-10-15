@@ -110,3 +110,38 @@ export const DISTRICTS = {
   frontageSea: 50, // metres of sea a coast district's frontage reaches out
   clutterGap: 8, // metres kept clear at junction mouths and gate approaches
 };
+
+/** The Old City: a walled medieval core in the middle ring (world/districts/OldCity.ts). */
+export const OLD_CITY = {
+  chance: 0.55,
+  speed: 30 / 3.6, // m/s cap on every street inside
+  density: 0.5,
+  copSpawnSkip: 0.6,
+  /** Share of the ordinary lots per kind (the rest are half-timbered). */
+  stoneShare: 0.35,
+  ruinShare: 0.08,
+  townHallHeight: 12, // at least, metres
+  ruinWall: 3.5, // highest a ruin's broken walls stand, metres (its arch rises to ~7)
+  crossOffset: 13, // market cross from the well, metres
+  stalls: 9, // round the well (fewer where the cross stands)
+  stallRing: 16, // metres from the well
+  // Glow budget: emissive instances inside the walls (oil lamps + gatehouse torches, two a gate,
+  // at most maxTorches). Oil lamps past it are thinned out evenly.
+  maxGlow: 60,
+  maxTorches: 16,
+};
+
+/** Old City walls and gatehouses (world/districts/OldCityWalls.ts), metres. */
+export const OLD_CITY_WALLS = {
+  height: 7, // wall top above its footing
+  thick: 1.8, // from the wall line inward
+  piece: 10, // longest wall stretch on one footing (walls step up a hill)
+  cornerHalf: 3.5, // corner towers
+  cornerHeight: 11,
+  cornerOut: 1.6, // how far a corner tower stands out over the sidewalk: clear of the corner signals and signs
+  gateHalf: 2.6, // gatehouse towers beside each opening
+  gateHeight: 10.5,
+  gateOut: 2, // how far a gatehouse tower stands out over the sidewalk
+  postHalf: 1.2, // plain posts where a plaza crosses the wall line
+  archAbove: 0.6, // extra headroom over overheadClearance under arches
+};
