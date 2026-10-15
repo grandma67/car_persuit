@@ -99,6 +99,14 @@ Pitfalls already met:
 - Interior streets may be plaza (removed) edges: they're not streets and never gates.
 - `perimeterWall` opens at *every* street crossing the wall line, not only gates; a
   `'mainStreet'` district has crossings without a gate.
+- Don't derive a random pick list from a `Record` you extend: `LANDMARK_KINDS` (town square
+  centrepieces) is an explicit list so new landmark kinds don't move every seed.
+- Cops spawn 20 m down a side street, so district rules about spawns must test the spot
+  (`skipAt(x, z)`), not the junction.
+- A physics sim in a test must call `vehicle.snapshot()` after `world.step()`: `position` is the
+  snapshot, so without it cars look parked at their spawn.
+- `StreetProps.test` and `BuildingGeometry.test` use the default registry or `defs: []`; a new
+  district shows up on their seeds, so district dressing is exempted where it's allowed to differ.
 - Two "district" meanings existed once; if you read old commits, `district` there means zone.
 
 ## Testing districts
