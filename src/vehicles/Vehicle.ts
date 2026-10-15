@@ -41,6 +41,16 @@ const SHIFT_CUT = 0.14; // seconds
 const SHIFT_CUT_DRIVE = 0.15; // share of the engine force left during the cut
 const SHIFT_KICK_PITCH = 0.35; // rad/s squat as the clutch bites
 const TORQUE_KICK_ROLL = 0.28; // rad/s torque reaction twist
+// Knocked by a crash: a hard shove sideways overwhelms the tyres on the axle that took it, and
+// they slide. Sliding rubber is plain kinetic friction (~0.75 g on dry asphalt: a steady drag, not
+// a grip), far below this car's arcade cornering grip, so while an axle is knocked its side grip is
+// swapped for that drag, applied at the axle, until its slide dies down. A T-bone shoves the whole
+// car sideways; a clip on the rear corner knocks only the rears loose and the car pivots round its
+// still-gripping fronts, like a PIT. Without it the tyres cancel a shove within a car length.
+const KNOCK_FULL_SHOVE = 5; // m/s of sideways velocity change at an axle in a step for a full knock
+const SLIDE_FRICTION = 0.75; // × g, tyres sliding sideways
+const KNOCK_SETTLED = 1.5; // m/s sideways at the axle below which its tyres start to bite again
+const KNOCK_RECOVER = 3; // per second, once settled
 // In the air (arcade air control): pitch and roll spin is damped and the body eased back level, so
 // a car that leaves a lip nose-down or twisted still comes down on its wheels instead of digging
 // its bumper in. Yaw is left alone. Kicks in after a short hop so kerbs and bumps feel unchanged.
@@ -100,6 +110,10 @@ export class Vehicle {
   /** Rear tyre grip, 0 (locked and sliding) .. 1 (normal). Drops on the handbrake, recovers after. */
   private rearGrip = 1;
   private airborneFor = 0; // seconds with no wheel touching
+  /** 0..1 how hard the last crash knocked each axle's tyres loose, front and rear (see SLIDE_FRICTION). */
+  readonly knock = [0, 0];
+  private lastYawRate = 0;
+  private gripScale = 1; // road grip (wet, ice)
   // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
   private lastVel = new THREE.Vector3();
   private impact = 0;
@@ -262,13 +276,15 @@ export class Vehicle {
     if (input.handbrake) engine = 0;
     // Locked rears slide sideways at any speed; after release their grip comes back gradually.
     const rearSide = input.handbrake ? s.driftSideFriction : THREE.MathUtils.lerp(s.driftSideFriction, s.sideFriction, this.rearGrip);
+    const knockedFront = this.knock[0] > 0 ? this.slideAfterKnock(0, dt) : 1;
+    const knockedRear = this.knock[1] > 0 ? this.slideAfterKnock(1, dt) : 1;
 
     // Rear-wheel drive.
     for (let i = 0; i < 4; i++) {
       const rear = i >= 2;
       c.setWheelEngineForce(i, rear ? engine : 0);
       c.setWheelBrake(i, rear ? (input.handbrake ? s.handbrakeForce : brake * REAR_BRAKE) : brake * FRONT_BRAKE);
-      c.setWheelSideFrictionStiffness(i, rear ? rearSide : s.sideFriction);
+      c.setWheelSideFrictionStiffness(i, rear ? rearSide * knockedRear : s.sideFriction * knockedFront);
     }
 
     c.updateVehicle(dt);
@@ -291,7 +307,8 @@ export class Vehicle {
     if (brake >= s.brakeForce * 0.5 && absSpeed > 8) frontSkid = Math.max(frontSkid, 0.5);
     this.frontSkid = c.wheelIsInContact(0) || c.wheelIsInContact(1) ? frontSkid : 0;
 
-    if (this.tractionAssist > 0 && (c.wheelIsInContact(0) || c.wheelIsInContact(2))) this.assistTraction(dt);
+    // A knocked civilian slides like anyone else; the lane-keeping help returns as it recovers.
+    if (this.tractionAssist > 0 && this.knock[0] + this.knock[1] === 0 && (c.wheelIsInContact(0) || c.wheelIsInContact(2))) this.assistTraction(dt);
     this.airborneFor = this.grounded ? 0 : this.airborneFor + dt;
     if (this.airborneFor > AIR_CONTROL_AFTER) this.airControl(dt);
 
@@ -405,6 +422,33 @@ export class Vehicle {
     this.body.setLinvel({ x: v.x * cos + v.z * sin, y: v.y, z: -v.x * sin + v.z * cos }, true);
   }
 
+  /**
+   * One knocked axle (0 front, 1 rear): its side grip mostly gone (returned as the share left for
+   * its wheels), its sideways slide braked by kinetic friction at the axle instead, which turns the
+   * car as well as slowing it. Once the axle has settled its grip comes back.
+   */
+  private slideAfterKnock(axle: 0 | 1, dt: number): number {
+    const d = axle === 0 ? this.spec.wheelZ : -this.spec.wheelZ; // axle offset along the car
+    const v = this.body.linvel();
+    const w = this.body.angvel();
+    const f = this.forward(tmpVec);
+    // Sideways velocity at the axle, along (f.z, -f.x): the body's plus the spin swinging it.
+    const u = v.x * f.z - v.z * f.x + w.y * d;
+    if (Math.abs(u) < KNOCK_SETTLED) this.knock[axle] = Math.max(0, this.knock[axle] - KNOCK_RECOVER * dt);
+    const k = Math.min(1, this.knock[axle] * 2);
+    if (this.grounded) {
+      const { x: hx, z: hz } = this.spec.halfExtents;
+      const m = this.spec.mass;
+      const inertia = (m / 12) * (4 * hx * hx + 4 * hz * hz);
+      // Each axle carries half the weight; never push past stopping the axle's slide.
+      const stop = Math.abs(u) / (1 / m + (d * d) / inertia);
+      const j = -Math.sign(u) * Math.min(stop, SLIDE_FRICTION * 9.81 * this.gripScale * (m / 2) * k * dt);
+      this.body.setLinvel({ x: v.x + (f.z * j) / m, y: v.y, z: v.z - (f.x * j) / m }, true);
+      this.body.setAngvel({ x: w.x, y: w.y + (j * d) / inertia, z: w.z }, true);
+    }
+    return 1 - 0.97 * k;
+  }
+
   /** Damp pitch and roll spin in the air and ease the body level (see AIR_SPIN_DAMP). */
   private airControl(dt: number): void {
     const r = this.body.rotation();
@@ -481,6 +525,18 @@ export class Vehicle {
     const up = tmpVec.copy(UP).applyQuaternion(this.currQuat);
     const along = (v.x - this.lastVel.x) * up.x + (v.y - this.lastVel.y) * up.y + (v.z - this.lastVel.z) * up.z;
     const absorbed = along > 0 ? Math.sqrt(Math.max(0, dv * dv - along * along * (1 - SUSPENSION_ABSORB * SUSPENSION_ABSORB))) : dv;
+    // Knock each axle by the sideways jolt it took: the body's shove plus the sudden spin.
+    const f = this.forward(tmpVec);
+    const shove = (v.x - this.lastVel.x) * f.z - (v.z - this.lastVel.z) * f.x;
+    const yawRate = this.body.angvel().y;
+    const spin = yawRate - this.lastYawRate;
+    this.lastYawRate = yawRate;
+    if (absorbed > 1.5) {
+      for (const axle of [0, 1] as const) {
+        const jolt = Math.abs(shove + spin * (axle === 0 ? this.spec.wheelZ : -this.spec.wheelZ));
+        this.knock[axle] = Math.min(1, Math.max(this.knock[axle], jolt / KNOCK_FULL_SHOVE));
+      }
+    }
     if (absorbed > 1.5 && absorbed > this.impact) {
       this.impact = absorbed;
       this.impactVelocity.copy(this.lastVel);
@@ -512,7 +568,8 @@ export class Vehicle {
     this.body.setLinvel(v, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.lastVel.set(v.x, v.y, v.z);
-    this.pitch = this.pitchVel = this.roll = this.rollVel = this.accelLong = this.accelLat = this.airborneFor = 0;
+    this.pitch = this.pitchVel = this.roll = this.rollVel = this.accelLong = this.accelLat = this.airborneFor = this.lastYawRate = 0;
+    this.knock.fill(0);
     this.snapshot();
     this.prevPos.copy(this.currPos);
     this.prevQuat.copy(this.currQuat);
@@ -546,6 +603,7 @@ export class Vehicle {
 
   /** Scale tyre grip (wet or icy roads). */
   setGrip(scale: number): void {
+    this.gripScale = scale;
     for (let i = 0; i < 4; i++) this.controller.setWheelFrictionSlip(i, this.spec.frictionSlip * scale);
   }
 

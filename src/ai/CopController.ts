@@ -154,7 +154,10 @@ export class CopController {
     // Backing off for another run at the suspect: straight back, then straight back into ram.
     if (this.state === 'backoff') {
       this.backoffFor -= dt;
-      if (this.backoffFor > 0) return { throttle: 0, brake: 1, steer: 0, handbrake: false };
+      // A pinned suspect slides along with the push, so the cop may still be rolling forward when
+      // it gives up: keep reversing until there's room for a run-up (within twice the time).
+      const room = dist > t.pinRange;
+      if (this.backoffFor > 0 || (!room && this.backoffFor > -t.backoffTime)) return { throttle: 0, brake: 1, steer: 0, handbrake: false };
       this.state = 'ram';
       this.runUpFor = t.runUpTime;
     }

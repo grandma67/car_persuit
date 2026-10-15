@@ -24,7 +24,8 @@ describe('cop ramming', () => {
     let hits = 0;
     let touching = false;
     const states = new Set<string>();
-    for (let i = 0; i < 12 / DT; i++) {
+    // Each ram shoves the (sliding) suspect a few metres before the cop backs off: ~3-4 s a cycle.
+    for (let i = 0; i < 16 / DT; i++) {
       target.position.copy(player.position);
       const pv = player.body.linvel();
       target.velocity.set(pv.x, 0, pv.z);
