@@ -127,7 +127,6 @@ describe('district placement', () => {
     const n = city.config.blocks;
     const nodes = city.graph.nodes;
     const fast = fastStreets(city.graph, city.streetProps);
-    const spawnNode = city.graph.nearest(city.spawn.x, city.spawn.z);
     for (const q of city.districts) {
       const { i0, j0, w, h } = q.grid;
       // A full rectangle of blocks, marked, in the right zones.
@@ -144,7 +143,6 @@ describe('district placement', () => {
       for (const id of all) {
         const nd = nodes[id];
         expect(city.terrain.canals.some((c) => Math.abs((c.axis === 'x' ? nd.z : nd.x) - c.at) < c.half + 6)).toBe(false);
-        expect(id).not.toBe(spawnNode.id);
       }
       for (const key of q.streets) expect(fast.has(key)).toBe(false);
       expect(city.landmarks.some((l) => l.kind === 'ramp' && inRect(q.bounds, l, 12))).toBe(false);
@@ -244,7 +242,7 @@ describe('district placement', () => {
   });
 
   it('with no definitions the city has no districts', () => {
-    expect(generateCity(42).districts).toEqual([]);
+    expect(generateCity(42, undefined, { defs: [] }).districts).toEqual([]);
   });
 });
 
@@ -271,8 +269,11 @@ describe('district generation logic', () => {
         const between = sides.every((k) => mine.has(k));
         expect(q.streets.has(`${r.a}>${r.b}`)).toBe(between);
         expect(q.streets.has(`${r.b}>${r.a}`)).toBe(between);
-        // Roadworks never close one (placement rejects them inside).
-        if (between) expect(city.graph.nodes[r.a].neighbors).toContain(r.b);
+      }
+      // Roadworks may close interior streets, but never a gate or the main street.
+      for (const key of [...q.mainStreet, ...q.gates.map((g) => g.edge)]) {
+        const [a, b] = key.split('>').map(Number);
+        expect(city.graph.nodes[a].neighbors).toContain(b);
       }
       // Blocks are a w × h rectangle at the grid position.
       const cells = q.blocks.map((k) => blockOf(city, k));
@@ -293,7 +294,12 @@ describe('district generation logic', () => {
       for (let i = 1; i < pairs.length; i++) expect(pairs[i][0]).toBe(pairs[i - 1][1]);
       // No straight run of interior streets is longer: walk every street both ways.
       let longest = 0;
-      for (const key of q.streets) {
+      // Streets closed by roadworks are no part of it.
+      const linked = (k: string) => {
+        const [a, b] = k.split('>').map(Number);
+        return nodes[a].neighbors.includes(b);
+      };
+      for (const key of [...q.streets].filter(linked)) {
         let [a, b] = key.split('>').map(Number);
         let run = 1;
         for (;;) {
@@ -306,7 +312,7 @@ describe('district generation logic', () => {
         longest = Math.max(longest, run);
       }
       expect(q.mainStreet.length).toBe(longest);
-      const candidates = [...q.streets].filter((k) => {
+      const candidates = [...q.streets].filter(linked).filter((k) => {
         const [a, b] = k.split('>').map(Number);
         return q.perimeter.includes(a) && q.interior.includes(b);
       });

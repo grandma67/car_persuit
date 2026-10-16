@@ -648,11 +648,12 @@ export class CivilianController {
       const prev = this.route[this.route.length - 2];
       const cur = this.graph.nodes[this.route[this.route.length - 1]];
       let options = cur.neighbors.filter((n) => n !== prev);
-      // Buses and trucks keep out of districts that ban them, unless there's no other way on.
+      // Buses and trucks keep out of districts that ban them: arriving from outside with no other
+      // way on, they turn back (a dead end); one already inside drives on out.
       const noHeavy = this.districts?.noHeavy;
       if (this.style.heavy && noHeavy?.size) {
         const allowed = options.filter((n) => !noHeavy.has(`${cur.id}>${n}`));
-        if (allowed.length) options = allowed;
+        if (allowed.length || !noHeavy.has(`${prev}>${cur.id}`)) options = allowed;
       }
       const from = this.graph.nodes[prev];
       const easy = !this.style.heavy ? options : options.filter((n) => turnAngle(from, cur, this.graph.nodes[n]) * this.keep <= 0.5);

@@ -52,7 +52,7 @@ import { Airtime, type Takeoff } from '../gameplay/Airtime';
 import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { DISTRICT_DEFS } from '../world/districts/index';
-import { copSpawnSkips, districtOfNode, districtTraffic, roadblockGates } from '../world/districts/runtime';
+import { copSpawnSkips, districtOfNode, districtTraffic, nightProps, roadblockGates } from '../world/districts/runtime';
 import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { COP_RAM, DAMAGE } from '../gameplay/balance';
@@ -192,6 +192,9 @@ export class Game {
       DISTRICT_DEFS.filter((d) => params.get(d.kind) === '0' || params.get(d.kind) === '1').map((d) => [d.kind, params.get(d.kind) === '1']),
     );
     this.city = generateCity(seed, config, { force });
+    // Night-only street props (Chinatown's night market and festival) join the city on a night run.
+    const night = time.name === 'night';
+    if (night) this.city.streetProps.push(...nightProps(this.city));
     const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
     this.canalWater = built.canalWater;
     this.walls = built.walls;
@@ -213,8 +216,9 @@ export class Game {
     // The shadow camera looks down -sunDir with world up, as Object3D.lookAt orients it.
     new THREE.Matrix4().lookAt(sunDir, new THREE.Vector3(), new THREE.Object3D().up).extractBasis(this.sunAxes[0], this.sunAxes[1], new THREE.Vector3());
     this.districtViews = buildDistricts(this.city, this.scene, {
-      theme, climate, lampGlow: time.lampGlow, ground: this.ground, hour0: startHour(seed, time.name),
+      theme, climate, lampGlow: time.lampGlow, night, ground: this.ground, hour0: startHour(seed, time.name),
       bell: (strikes, at) => this.audio.bell(strikes, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.position) / 450, 0, 1)),
+      firework: (at, colour) => this.effects.firework(at, colour),
     });
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
 
@@ -518,6 +522,12 @@ export class Game {
         }
       }
       const smashed = this.scratchOnProps(this.player, this.props.checkVehicle(this.player, FIXED_DT));
+      // A firecracker crate goes off under the car: a hop and a shove back, no damage.
+      if (smashed.some((b) => b.kind === 'firecrackerCrate')) {
+        const v = this.player.body.linvel();
+        const m = this.player.body.mass();
+        this.player.body.applyImpulse({ x: -v.x * m * 0.12, y: m * 2.2, z: -v.z * m * 0.12 }, true);
+      }
       if (this.state === 'playing') this.runLog.propsSmashed += smashed.length;
       breaks.push(...smashed);
       for (const cop of this.director.cops) {

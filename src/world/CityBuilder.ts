@@ -481,6 +481,8 @@ const CAPS: Record<FacadeStyle, { over: number; up: number; down: number; stone:
   industrial: { over: 0.05, up: 0.4, down: 0.2, stone: false },
   halfTimber: { over: 0.25, up: 0.25, down: 0.25, stone: false },
   ashlar: { over: 0.35, up: 0.5, down: 0.45, stone: true },
+  shophouse: { over: 0.3, up: 0.8, down: 0.35, stone: true }, // a moulded parapet
+  storefront: { over: 0.15, up: 0.5, down: 0.25, stone: false },
 };
 const WHITE = new THREE.Color(0xffffff);
 
@@ -580,6 +582,10 @@ function addBuilding(
 }
 
 const grow = (r: Rect, m: number): Rect => ({ x: r.x, z: r.z, w: r.w + m * 2, d: r.d + m * 2 });
+/** Chinatown's pagoda cap: how far out past the walls, how high its lid, and the corners' sweep. */
+const PAGODA = { over: 0.9, rise: 1.3, upturn: 0.6, sweep: 1.6 };
+/** How far a balcony stands out from the wall. */
+const BALCONY = 0.9;
 
 interface RoofFrame {
   y1: number; // wall tops
@@ -605,16 +611,59 @@ function addRoof(look: LotLook, b: Building, f: RoofFrame, roofs: GeometryBuilde
     case 'monopitch': // stub
       addGable(b, f.y1, roofs, wallColor, tile());
       return;
+    case 'pagoda':
+      addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy, false);
+      addPagodaEave(f.top, f.y1 + CAPS[look.facade].up, roofs, tile());
+      return;
     case 'flat':
     case 'sawtooth': // stub
     case 'barrel': // stub
-    case 'pagoda': // stub
       addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy);
   }
 }
 
+/**
+ * Chinatown's pagoda cap over a flat roof: a skirt of glazed tiles from a low lid out and down past
+ * the walls, its corners swept up, with a dark underside.
+ */
+function addPagodaEave(r: Rect, y: number, roofs: GeometryBuilder, tile: THREE.Color): void {
+  const inner = grow(r, -Math.min(1.4, Math.min(r.w, r.d) * 0.2));
+  const outer = grow(r, PAGODA.over);
+  const yi = y + PAGODA.rise;
+  const yo = y + 0.2;
+  const ring = (q: Rect) => [[q.x - q.w / 2, q.z - q.d / 2], [q.x + q.w / 2, q.z - q.d / 2], [q.x + q.w / 2, q.z + q.d / 2], [q.x - q.w / 2, q.z + q.d / 2]];
+  const o = ring(outer), i = ring(inner);
+  const under = tile.clone().multiplyScalar(0.45);
+  const face = (pts: number[][], color: THREE.Color, down: boolean) => {
+    const [p0, p1, , p3] = pts;
+    const a = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+    const c = [p3[0] - p0[0], p3[1] - p0[1], p3[2] - p0[2]];
+    let n = [a[1] * c[2] - a[2] * c[1], a[2] * c[0] - a[0] * c[2], a[0] * c[1] - a[1] * c[0]];
+    if (n[1] < 0 !== down) (pts = [...pts].reverse(), (n = n.map((v) => -v)));
+    const k = Math.hypot(n[0], n[1], n[2]) || 1;
+    roofs.quad(pts, n.map((v) => v / k), color);
+  };
+  for (let k = 0; k < 4; k++) {
+    const [A, B] = [o[k], o[(k + 1) % 4]];
+    const [a, b] = [i[k], i[(k + 1) % 4]];
+    const len = Math.hypot(B[0] - A[0], B[1] - A[1]);
+    const t = Math.min(0.3, PAGODA.sweep / len);
+    // The eave dips from each swept-up corner to a straight run between.
+    const us = [0, t, 1 - t, 1];
+    const lift = [PAGODA.upturn, 0, 0, PAGODA.upturn];
+    const P = (u: number, j: number) => [A[0] + (B[0] - A[0]) * u, yo + lift[j], A[1] + (B[1] - A[1]) * u];
+    const Q = (u: number) => [a[0] + (b[0] - a[0]) * u, yi, a[1] + (b[1] - a[1]) * u];
+    for (let j = 0; j < 3; j++) {
+      const pts = [P(us[j], j), P(us[j + 1], j + 1), Q(us[j + 1]), Q(us[j])];
+      face(pts, tile, false);
+      face(pts, under, true);
+    }
+  }
+  roofs.quad([[i[0][0], yi, i[0][1]], [i[3][0], yi, i[3][1]], [i[2][0], yi, i[2][1]], [i[1][0], yi, i[1][1]]], [0, 1, 0], tile.clone().multiplyScalar(0.85));
+}
+
 /** A cornice or parapet slab (at the step-back too), and rooftop details on taller buildings. */
-function addFlatRoof(facade: FacadeStyle, b: Building, f: RoofFrame, roofs: GeometryBuilder, rng: Rng, wallColor: THREE.Color, roofColor: THREE.Color, snowy: boolean): void {
+function addFlatRoof(facade: FacadeStyle, b: Building, f: RoofFrame, roofs: GeometryBuilder, rng: Rng, wallColor: THREE.Color, roofColor: THREE.Color, snowy: boolean, details = true): void {
   const { top, y1 } = f;
   // A cornice or parapet slab with a soffit under its overhang.
   const cap = CAPS[facade];
@@ -640,7 +689,8 @@ function addFlatRoof(facade: FacadeStyle, b: Building, f: RoofFrame, roofs: Geom
       const x = top.x + rng.range(-(top.w - w) / 2 + 0.5, (top.w - w) / 2 - 0.5);
       const z = top.z + rng.range(-(top.d - d) / 2 + 0.5, (top.d - d) / 2 - 0.5);
       const unitColor = snowy ? wallColor.clone().multiplyScalar(0.7) : roofColor.clone().multiplyScalar(1.4);
-      roofs.box({ x, z, w, d }, y1 + cap.up, rng.range(1.2, 3.5), unitColor, null, roofColor);
+      const h = rng.range(1.2, 3.5); // drawn either way, so the stream doesn't move
+      if (details) roofs.box({ x, z, w, d }, y1 + cap.up, h, unitColor, null, roofColor);
     }
   }
 }
@@ -731,7 +781,35 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
         roofs.quad([[x0, yb, z0], [x1, yb, z0], [x1, yb, z1], [x0, yb, z1]], [0, -1, 0], col.clone().multiplyScalar(0.6));
         break;
       }
-      case 'balcony':
+      case 'balcony': {
+        // A projecting balcony along each street side at the first floor from JETTY_FROM: a slab
+        // with a railing (every side when the building doesn't know its streets).
+        const jf = Math.ceil(JETTY_FROM / f.floor - 1e-6);
+        if (jf >= Math.round(b.h / f.floor)) break;
+        const y = f.y0 + jf * f.floor;
+        const slab = wallColor.clone().multiplyScalar(0.8);
+        const rail = new THREE.Color((b.variant * 13) % 1 < 0.5 ? 0x2f5a46 : 0xe8e2d4);
+        const sides: [number, number][] = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        const bits = [1, 2, 4, 8];
+        sides.forEach(([nx, nz], k) => {
+          if (b.street !== undefined && !(b.street & bits[k])) return;
+          const along = nx ? b.d : b.w;
+          const len = along - 1.2;
+          if (len < 2) return;
+          const cx = b.x + nx * (b.w / 2 + BALCONY / 2), cz = b.z + nz * (b.d / 2 + BALCONY / 2);
+          const r = nx ? { x: cx, z: cz, w: BALCONY, d: len } : { x: cx, z: cz, w: len, d: BALCONY };
+          roofs.box(r, y - 0.15, 0.15, slab, null, slab);
+          // Rail: a top bar on the outer edge and balusters every ~0.5 m.
+          const ox = b.x + nx * (b.w / 2 + BALCONY - 0.03), oz = b.z + nz * (b.d / 2 + BALCONY - 0.03);
+          roofs.box(nx ? { x: ox, z: cz, w: 0.06, d: len } : { x: cx, z: oz, w: len, d: 0.06 }, y + 0.95, 0.06, rail, null, rail);
+          const n = Math.round(len / 0.5);
+          for (let j = 0; j <= n; j++) {
+            const u = -len / 2 + (len * j) / n;
+            roofs.box(nx ? { x: ox, z: cz + u, w: 0.04, d: 0.04 } : { x: cx + u, z: oz, w: 0.04, d: 0.04 }, y, 0.95, rail, null, rail);
+          }
+        });
+        break;
+      }
       case 'loadingDock':
       case 'porch':
       case 'hoist':

@@ -4,7 +4,7 @@ import { inRect } from '../lots';
 import { DISTRICTS, OLD_CITY, OLD_CITY_WALLS } from '../../gameplay/balance';
 import { footprintsOverlap, propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
 import { inDistrict, isJunctionControl } from './apply';
-import { facingSquare, squareBlock } from './OldCity';
+import { facingSquare, OLD_CITY_DEF, squareBlock } from './OldCity';
 import { wallLine, wallPlan } from './OldCityWalls';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
@@ -17,20 +17,32 @@ describe('Old City placement', () => {
     expect(placed).toBeGreaterThan(SEEDS.length * 0.7);
   });
 
-  it.each(SEEDS)('seed %i: a valid cluster in the middle ring', (seed) => {
+  it('places every listed shape, either way round, on some seed', () => {
+    const got = new Set(SEEDS.flatMap((s) => { const g = oldCity(s)?.grid; return g ? [`${Math.min(g.w, g.h)}x${Math.max(g.w, g.h)}`] : []; }));
+    for (const [a, b] of OLD_CITY_DEF.shapes) expect(got).toContain(`${Math.min(a, b)}x${Math.max(a, b)}`);
+  });
+
+  it.each(SEEDS)('seed %i: a valid cluster in the inner city', (seed) => {
     const c = city(seed);
     const q = c.districts.find((d) => d.kind === 'oldtown');
     if (!q) return;
-    const { w, h } = q.grid;
-    expect([[2, 2], [3, 3]]).toContainEqual([w, h]);
+    const { i0, j0, w, h } = q.grid;
+    expect(OLD_CITY_DEF.shapes.flatMap(([a, b]) => [[a, b], [b, a]])).toContainEqual([w, h]);
+    // Clear of the outer ring, at least half downtown or midtown.
+    const n = c.config.blocks, ring = DISTRICTS.outerRing;
+    expect(i0 >= ring && j0 >= ring && i0 + w <= n - ring && j0 + h <= n - ring).toBe(true);
     const zones = q.blocks.map((k) => c.blocks[k].zone);
-    expect(zones.every((z) => z === 'midtown' || z === 'downtown')).toBe(true);
-    expect(zones.filter((z) => z === 'midtown').length).toBeGreaterThanOrEqual(zones.length / 2);
-    // No town square of the city's own inside; the market square is the district's.
-    const plain = generateCity(seed, undefined, { defs: [] });
-    expect(q.blocks.some((k) => plain.blocks[k].square)).toBe(false);
+    expect(zones.filter((z) => z === 'midtown' || z === 'downtown').length).toBeGreaterThanOrEqual(zones.length / 2);
+    // A town square inside is taken over: the only square left is the market square.
     expect(q.blocks.filter((k) => c.blocks[k].square)).toEqual([squareBlock(q)]);
     expect(q.gates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('comes in every size, in many places', () => {
+    const qs = SEEDS.map(oldCity).filter((q) => q !== undefined);
+    const sizes = new Set(qs.map((q) => q.grid.w));
+    expect([...sizes].sort()).toEqual([2, 3, 4]);
+    expect(new Set(qs.map((q) => `${q.grid.i0},${q.grid.j0}`)).size).toBeGreaterThan(qs.length / 3);
   });
 });
 

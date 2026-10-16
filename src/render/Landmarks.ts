@@ -157,6 +157,72 @@ function marketCross(): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
+/**
+ * A guardian lion on its plinth, facing +Z: sitting up on its haunches, curly-maned, one front paw
+ * on a ball. Granite grey, the mane and eyes picked out darker.
+ */
+function lion(): THREE.BufferGeometry {
+  const grey = 0xb7b2a8;
+  const dark = 0x7f7a72;
+  const curl = (x: number, y: number, z: number, r = 0.13) => part(new THREE.SphereGeometry(r, 5, 4), dark, x, y, z);
+  return mergeGeometries([
+    part(box(1.1, 0.75, 1.1), STONE_DARK, 0, 0.375), // plinth
+    part(box(1.2, 0.12, 1.2), STONE, 0, 0.81),
+    part(box(0.7, 0.45, 0.8), grey, 0, 1.1, -0.12), // haunches
+    part(box(0.62, 0.65, 0.42), grey, 0, 1.45, 0.08).rotateX(-0.12), // chest
+    ...[-0.2, 0.2].map((x) => part(box(0.16, 0.62, 0.18), grey, x, 1.18, 0.28)), // front legs
+    part(new THREE.SphereGeometry(0.2, 7, 5), grey, 0.22, 0.98, 0.5), // the ball
+    part(box(0.18, 0.1, 0.24), grey, 0.22, 1.21, 0.46), // paw on it
+    part(box(0.55, 0.5, 0.5), grey, 0, 1.98, 0.12), // head
+    part(box(0.36, 0.2, 0.2), grey, 0, 1.86, 0.43), // muzzle
+    ...[-0.13, 0.13].map((x) => part(box(0.08, 0.06, 0.03), 0x2a2622, x, 2.08, 0.38)), // eyes
+    // Mane: rows of curls round the head, and a tuft of tail.
+    ...[-0.3, -0.1, 0.1, 0.3].flatMap((x) => [curl(x, 2.26, 0.05), curl(x, 1.72, -0.08)]),
+    ...[-0.32, 0.32].flatMap((x) => [curl(x, 2.05, 0.02), curl(x, 1.88, 0)]),
+    curl(0, 1.25, -0.55, 0.18),
+  ]);
+}
+
+/** A Chinatown pagoda: octagonal red storeys narrowing upward, each under a flared green roof, on a stone plinth. */
+function pagoda(tiers: number, snowy: boolean): THREE.BufferGeometry {
+  const red = 0xb0221e;
+  const tile = snowy ? 0xeef2f6 : 0x2f7a55;
+  const parts = [part(cyl(3.6, 3.9, 0.6, 8), STONE_DARK, 0, 0.3), part(cyl(3.2, 3.3, 0.3, 8), STONE, 0, 0.75)];
+  let y = 0.9;
+  for (let k = 0; k < tiers; k++) {
+    const r = 2.5 - k * (1.6 / tiers);
+    const h = k === 0 ? 3 : 2.3;
+    parts.push(part(cyl(r, r, h, 8), red, 0, y + h / 2));
+    parts.push(part(cyl(r + 0.05, r + 0.05, 0.25, 8), GOLD, 0, y + h - 0.35)); // a gold band under the eaves
+    const eave = r + 1.1;
+    parts.push(part(cyl(r * 0.55, eave, 0.8, 8), tile, 0, y + h + 0.4));
+    parts.push(part(cyl(eave, eave + 0.1, 0.12, 8), 0x205a3e, 0, y + h + 0.02)); // eave edge
+    for (let c = 0; c < 8; c++) {
+      const a = (c / 8) * Math.PI * 2;
+      parts.push(part(box(0.18, 0.18, 0.6).rotateX(-0.7).rotateY(-a + Math.PI / 2), GOLD, Math.cos(a) * (eave + 0.1), y + h + 0.18, Math.sin(a) * (eave + 0.1)));
+    }
+    y += h + 0.8;
+  }
+  parts.push(part(cyl(0.08, 0.2, 2.2, 6), GOLD, 0, y + 1.1));
+  for (let k = 0; k < 3; k++) parts.push(part(new THREE.SphereGeometry(0.28 - k * 0.06, 8, 5), GOLD, 0, y + 0.5 + k * 0.6));
+  return mergeGeometries(parts);
+}
+
+/** A bronze incense burner: a three-legged cauldron with handles and a little roof, on a stone step. */
+function incense(): THREE.BufferGeometry {
+  const bronze = 0x6a5232;
+  return mergeGeometries([
+    part(box(1.4, 0.3, 1.4), STONE, 0, 0.15),
+    ...[0, 1, 2].map((k) => part(cyl(0.07, 0.07, 0.5, 5), bronze, Math.cos((k * 2 * Math.PI) / 3) * 0.4, 0.55, Math.sin((k * 2 * Math.PI) / 3) * 0.4)),
+    part(new THREE.SphereGeometry(0.55, 10, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), bronze, 0, 1.25),
+    part(cyl(0.58, 0.58, 0.08, 10), bronze, 0, 1.25),
+    ...[-1, 1].map((x) => part(new THREE.TorusGeometry(0.16, 0.04, 4, 8), bronze, x * 0.6, 1.35)),
+    ...[-0.25, 0, 0.25].map((x) => part(box(0.02, 0.4, 0.02), 0xc8784a, x, 1.45, 0)), // incense sticks
+    part(cyl(0.05, 0.05, 0.9, 5), bronze, 0, 1.75),
+    part(cyl(0.05, 0.75, 0.4, 6), 0x2f7a55, 0, 2.25),
+  ]);
+}
+
 const SNOW = 0xeef2f6;
 /** Snow lying on the Old City pieces in a snowy city. */
 const SNOW_CAPS = {
@@ -164,10 +230,11 @@ const SNOW_CAPS = {
   well: () => part(cyl(0, 1.85, 0.95, 4).rotateY(Math.PI / 4), SNOW, 0, 3.55),
   marketCross: () => part(cyl(0, 3.4, 2.25, 8), SNOW, 0, 5.6),
   column: () => part(cyl(0.44, 0.44, 0.1, 12), SNOW, 0, 3.9),
+  lion: () => mergeGeometries([part(box(0.57, 0.06, 0.52), SNOW, 0, 2.26, 0.12), part(box(1.12, 0.05, 1.12), SNOW, 0, 0.89)]),
 };
 
-/** Old City pieces stand straight on the ground, without a paved pad. */
-const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross']);
+/** District pieces (Old City, the lions) stand straight on the ground, without a paved pad. */
+const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense']);
 
 /**
  * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
@@ -263,15 +330,17 @@ export class Landmarks {
     const models = {
       fountain: fountain(), statue: statue(), obelisk: obelisk(), sculpture: sculpture(),
       cannon: cannon(), column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
+      lion: lion(), incense: incense(),
     };
 
+    const plain = new Map<string, THREE.Matrix4[]>(); // district pieces by kind, drawn instanced
     for (const l of landmarks) {
       if (l.kind === 'ramp') {
         this.addRamp(l, terrain, scene, world, solid, metal);
         continue;
       }
       if (NO_PAD.has(l.kind)) {
-        this.addPlain(l, terrain, scene, world, models[l.kind as keyof typeof models], solid);
+        this.addPlain(l, terrain, world, plain);
         continue;
       }
       // A circle of darker paving under the centrepiece; on a slope it's a level terrace, its top
@@ -288,7 +357,8 @@ export class Landmarks {
         this.colliders.add(world.createCollider(RAPIER.ColliderDesc.cylinder(step / 2, pad).setTranslation(l.x, y + 0.055 - step / 2, l.z)).handle);
       }
       group.add(base);
-      const mesh = new THREE.Mesh(models[l.kind], l.kind === 'statue' || l.kind === 'sculpture' ? metal : solid);
+      const model = l.kind === 'pagoda' ? pagoda(l.tiers ?? 4, this.snowy) : models[l.kind as keyof typeof models];
+      const mesh = new THREE.Mesh(model, l.kind === 'statue' || l.kind === 'sculpture' ? metal : solid);
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
       if (l.kind === 'fountain') {
@@ -304,20 +374,26 @@ export class Landmarks {
           : RAPIER.ColliderDesc.cuboid(l.radius * 0.8, 3, l.radius * 0.8).setTranslation(l.x, y + 3, l.z);
       this.colliders.add(world.createCollider(desc).handle);
     }
+    // One instanced mesh per district piece kind (lions, cannons …), snow-capped in a snowy city.
+    for (const [kind, matrices] of plain) {
+      const model = models[kind as keyof typeof models];
+      const cap = this.snowy ? SNOW_CAPS[kind as keyof typeof SNOW_CAPS]?.() : undefined;
+      const mesh = new THREE.InstancedMesh(cap ? mergeGeometries([model, cap]) : model, solid, matrices.length);
+      matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
+      mesh.computeBoundingSphere();
+      mesh.castShadow = mesh.receiveShadow = true;
+      scene.add(mesh);
+    }
     scene.add(this.spray.points);
   }
 
   /** An Old City piece: on its lowest ground, with a box collider round its footprint. */
-  private addPlain(l: Landmark, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, model: THREE.BufferGeometry, solid: THREE.Material): void {
+  private addPlain(l: Landmark, terrain: Terrain, world: RAPIER.World, plain: Map<string, THREE.Matrix4[]>): void {
     const y = groundBase(terrain, l.x, l.z, l.radius) - 0.05;
-    const cap = this.snowy ? SNOW_CAPS[l.kind as keyof typeof SNOW_CAPS]?.() : undefined;
-    const mesh = new THREE.Mesh(cap ? mergeGeometries([model, cap]) : model, solid);
-    mesh.position.set(l.x, y, l.z);
-    mesh.rotation.y = l.yaw;
-    mesh.castShadow = mesh.receiveShadow = true;
-    scene.add(mesh);
-    const r = l.radius * 0.8;
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), l.yaw);
+    if (!plain.has(l.kind)) plain.set(l.kind, []);
+    plain.get(l.kind)!.push(new THREE.Matrix4().compose(new THREE.Vector3(l.x, y, l.z), q, new THREE.Vector3(1, 1, 1)));
+    const r = l.radius * 0.8;
     const desc = RAPIER.ColliderDesc.cuboid(r, 2, r).setTranslation(l.x, y + 2, l.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
     this.colliders.add(world.createCollider(desc).handle);
   }

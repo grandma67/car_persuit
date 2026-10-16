@@ -1,7 +1,7 @@
 // The Old City's walls: wall stretches on the block side of the sidewalk (stepped on a hill), corner
 // towers, a gatehouse at each gate (flanking towers off the roadway, an arch and a raised
 // portcullis over it, a timber deck patch with chains, torches, banners) and plain posts where a
-// paved plaza crosses the wall line. Pure data; render/districts/OldCity.ts draws it.
+// paved plaza or a street closed by roadworks crosses the wall line. Pure data; render/districts/OldCity.ts draws it.
 import type { Rng } from '../../core/Rng';
 import { DISTRICTS, OLD_CITY_WALLS as W } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
@@ -19,7 +19,7 @@ export interface WallPiece {
   y: number; // footing: the lower ground of its two ends
 }
 
-/** A gap in the wall where a plaza crosses the wall line (not a gate: no gatehouse, no roadblock). */
+/** A gap in the wall where a plaza or a closed street crosses the wall line (not a gate: no gatehouse, no roadblock). */
 interface Postern {
   x: number;
   z: number;
@@ -76,6 +76,21 @@ export function wallPlan(q: District, city: CityData): WallPlan {
         ax: alongX ? 1 : 0, az: alongX ? 0 : 1, nx: side.nx, nz: side.nz, opening: width + 2 * s,
       });
     }
+  }
+  // A street closed by roadworks crosses the wall line through a postern too (no gate: it's shut).
+  const { roadWidth: rw } = city.config;
+  const perimeter = new Set(q.perimeter);
+  const gated = new Set(q.gates.map((g) => g.edge));
+  for (const key of q.streets) {
+    const [a, b] = key.split('>').map(Number);
+    if (!perimeter.has(a) || perimeter.has(b) || gated.has(key)) continue;
+    const A = city.graph.nodes[a], B = city.graph.nodes[b];
+    const len = Math.hypot(B.x - A.x, B.z - A.z);
+    const dx = Math.round((B.x - A.x) / len), dz = Math.round((B.z - A.z) / len);
+    posterns.push({
+      x: A.x + dx * (rw / 2 + s), z: A.z + dz * (rw / 2 + s),
+      ax: Math.abs(dz), az: Math.abs(dx), nx: -dx, nz: -dz, opening: rw + 2 * s,
+    });
   }
   const segments: WallSegment[] = [];
   for (const seg of raw) {

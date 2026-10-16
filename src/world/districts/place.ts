@@ -21,7 +21,7 @@ export interface DistrictGrid {
   nodeId: (i: number, j: number) => number;
   edges: GridEdge[];
   canalNodes: Set<number>; // junctions on a canal's line (bridges, quays)
-  blockedNodes: Set<number>; // spawn and its neighbours, ramp run-ups and landings
+  blockedNodes: Set<number>; // ramp run-ups and landings: never interior junctions
   /** Roadworks: closed junctions and closed roads (their two junctions). */
   works: { node: number | null; edge: [number, number] | null }[];
   fast: Set<string>; // fast stretches (speed90), "a>b"
@@ -47,18 +47,18 @@ export function rollDistricts(seed: number, defs: DistrictDef[], force: District
 
 export const edgeKey = (a: number, b: number) => `${a}>${b}`;
 
-/** Grid rectangles of `def.shapes` (both ways round) whose blocks suit the definition. */
-function candidates(def: DistrictDef, grid: DistrictGrid, city: CityData): { i0: number; j0: number; w: number; h: number }[] {
+/** Grid rectangles of one shape (both ways round) whose blocks suit the definition. */
+function candidates(def: DistrictDef, [a, b]: [number, number], grid: DistrictGrid, city: CityData): { i0: number; j0: number; w: number; h: number }[] {
   const { n } = grid;
+  const ring = DISTRICTS.outerRing;
   const out: { i0: number; j0: number; w: number; h: number }[] = [];
-  const sizes = new Map<string, [number, number]>();
-  for (const [a, b] of def.shapes) {
-    sizes.set(`${a}x${b}`, [a, b]);
-    sizes.set(`${b}x${a}`, [b, a]);
-  }
+  const sizes = new Map<string, [number, number]>([[`${a}x${b}`, [a, b]], [`${b}x${a}`, [b, a]]]);
   for (const [w, h] of sizes.values()) {
     for (let j0 = 0; j0 + h <= n; j0++) {
       for (let i0 = 0; i0 + w <= n; i0++) {
+        const touches = i0 === 0 || j0 === 0 || i0 + w === n || j0 + h === n;
+        if (def.site === 'inland' && (i0 < ring || j0 < ring || i0 + w > n - ring || j0 + h > n - ring)) continue;
+        if (def.site === 'edge' && !touches) continue;
         if (def.site === 'coast') {
           // The long side lies on the grid's outer row or column.
           const onRow = j0 === 0 || j0 + h === n;
@@ -70,6 +70,7 @@ function candidates(def: DistrictDef, grid: DistrictGrid, city: CityData): { i0:
         if (!zones.every((d) => def.rings.includes(d))) continue;
         const share = Object.entries(def.minShare ?? {}) as [Zone, number][];
         if (share.some(([d, min]) => zones.filter((x) => x === d).length < min * zones.length)) continue;
+        if (def.minCore && zones.filter((x) => x === 'downtown' || x === 'midtown').length < def.minCore * zones.length) continue;
         out.push({ i0, j0, w, h });
       }
     }
@@ -77,7 +78,7 @@ function candidates(def: DistrictDef, grid: DistrictGrid, city: CityData): { i0:
   return out;
 }
 
-function shuffle<T>(items: T[], rng: Rng): void {
+export function shuffle<T>(items: T[], rng: Rng): void {
   for (let i = items.length - 1; i > 0; i--) {
     const j = Math.floor(rng.next() * (i + 1));
     [items[i], items[j]] = [items[j], items[i]];
@@ -87,15 +88,22 @@ function shuffle<T>(items: T[], rng: Rng): void {
 const overlaps = (a: Rect, b: Rect) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.z - b.z) < (a.d + b.d) / 2;
 
 /**
- * Place one district: the first shuffled candidate that passes every check, or null (the district
- * sits this seed out). `earlier`: districts already placed, kept at least a block away.
+ * Place one district: its size is rolled first (so big ones turn up as often as small ones), then
+ * the first shuffled candidate of that size that passes every check; failing that, the smaller
+ * sizes, largest first (never a bigger one). Null: the district sits this seed out. `earlier`:
+ * districts already placed, kept at least a block away.
  */
 export function placeDistrict(def: DistrictDef, grid: DistrictGrid, city: CityData, rng: Rng, earlier: District[]): District | null {
-  const list = candidates(def, grid, city);
-  shuffle(list, rng);
-  for (const c of list) {
-    const q = tryPlace(def, grid, city, rng, earlier, c);
-    if (q) return q;
+  const rolled = def.shapes[rng.int(0, def.shapes.length - 1)];
+  const area = (s: [number, number]) => s[0] * s[1];
+  const rest = def.shapes.filter((s) => area(s) < area(rolled)).sort((u, v) => area(v) - area(u));
+  for (const shape of [rolled, ...rest]) {
+    const list = candidates(def, shape, grid, city);
+    shuffle(list, rng);
+    for (const c of list) {
+      const q = tryPlace(def, grid, city, rng, earlier, c);
+      if (q) return q;
+    }
   }
   return null;
 }
@@ -121,22 +129,21 @@ function tryPlace(
       (i === i0 || i === i0 + w || j === j0 || j === j0 + h ? perimeter : interior).push(id);
     }
   }
-  // Canals, quays and bridges; the spawn and ramps.
-  for (const id of nodes) if (grid.canalNodes.has(id) || grid.blockedNodes.has(id)) return null;
-  // Roadworks inside, or closing a perimeter junction an interior street comes out at (a closed
-  // road along the perimeter is just a city street being dug up).
-  const inside = new Set(interior);
-  const mouth = (id: number) => !inside.has(id) && nodes.has(id) &&
-    grid.edges.some((e) => (e.a === id && inside.has(e.b)) || (e.b === id && inside.has(e.a)));
-  for (const w of grid.works) {
-    if (w.node !== null && (inside.has(w.node) || mouth(w.node))) return null;
-    if (w.edge && w.edge.some((id) => inside.has(id))) return null;
-  }
+  // Canals, quays and bridges anywhere; ramp run-ups and landings inside (a ramp on its perimeter
+  // streets is ruled out below). The spawn may be inside: the run then starts in the district.
+  for (const id of nodes) if (grid.canalNodes.has(id)) return null;
+  for (const id of interior) if (grid.blockedNodes.has(id)) return null;
+  // Roadworks may be anywhere: a street they close stays a district street (paved, walls open
+  // round it) but is no way in, so it counts for neither the connection, the gates nor the main street.
+  const closedNodes = new Set(grid.works.flatMap((w) => (w.node === null ? [] : [w.node])));
+  const closedEdges = new Set(grid.works.flatMap((w) => (w.edge ? [edgeKey(w.edge[0], w.edge[1]), edgeKey(w.edge[1], w.edge[0])] : [])));
+  const open = (e: GridEdge) => !closedNodes.has(e.a) && !closedNodes.has(e.b) && !closedEdges.has(edgeKey(e.a, e.b));
   const edges = grid.edges.filter((e) => nodes.has(e.a) && nodes.has(e.b));
   if (edges.some((e) => e.kind === 'canal' || e.kind === 'quay')) return null;
   const blocks: number[] = [];
   for (let j = j0; j < j0 + h; j++) for (let i = i0; i < i0 + w; i++) blocks.push(j * n + i);
-  if (blocks.some((k) => city.blocks[k].square)) return null;
+  // A town square inside is taken over (its centrepiece goes with the block's old contents); a
+  // ramp centrepiece is ruled out below.
   const x0 = line(i0) + rw / 2;
   const x1 = line(i0 + w) - rw / 2;
   const z0 = line(j0) + rw / 2;
@@ -177,7 +184,8 @@ function tryPlace(
   // Interior streets: edges with district blocks on both sides. Plaza edges stay paved shortcuts.
   const isInterior = (e: GridEdge) =>
     e.horizontal ? e.i >= i0 && e.i < i0 + w && e.j > j0 && e.j < j0 + h : e.j >= j0 && e.j < j0 + h && e.i > i0 && e.i < i0 + w;
-  const inner = edges.filter((e) => isInterior(e) && e.kind === 'road');
+  const streetEdges = edges.filter((e) => isInterior(e) && e.kind === 'road');
+  const inner = streetEdges.filter(open);
   if (!inner.length) return null;
   if (inner.some((e) => grid.fast.has(edgeKey(e.a, e.b)) || grid.fast.has(edgeKey(e.b, e.a)))) return null;
   // Connected.
@@ -214,7 +222,13 @@ function tryPlace(
     }
   }
   const longest = Math.max(...runs.map((r) => r.length));
-  const main = rng.pick(runs.filter((r) => r.length === longest));
+  if (longest < (def.minMainStreet ?? 1)) return null;
+  // A gated main street must reach the perimeter at both ends (roadworks or a plaza may cut it short).
+  const ends = (r: GridEdge[]) => [r[0], r[r.length - 1]].filter((e) => onPerimeter.has(e.a) !== onPerimeter.has(e.b)).length;
+  const best = runs.filter((r) => r.length === longest);
+  const through = best.filter((r) => ends(r) === 2);
+  if (def.gates === 'mainStreet' && !through.length) return null;
+  const main = rng.pick(through.length ? through : best);
   const mainStreet = main.map((e) => edgeKey(e.a, e.b));
 
   const gateOf = (e: GridEdge): Gate => {
@@ -240,7 +254,7 @@ function tryPlace(
   }
 
   const streets = new Set<string>();
-  for (const e of inner) streets.add(edgeKey(e.a, e.b)).add(edgeKey(e.b, e.a));
+  for (const e of streetEdges) streets.add(edgeKey(e.a, e.b)).add(edgeKey(e.b, e.a));
   return {
     kind: def.kind,
     grid: { i0, j0, w, h },

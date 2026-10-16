@@ -1,12 +1,12 @@
 // The district overlay: the last step of generateCity. Each placed district refills its own blocks
 // from its own stream, filters and restyles the props inside, and adds its dressing; everything
 // outside its blocks and frontage stays exactly as the same seed without it. Pure data.
-import type { Rng } from '../../core/Rng';
+import { Rng } from '../../core/Rng';
 import { DISTRICTS } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { fillBlock, inRect } from '../lots';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../StreetProps';
-import { edgeKey, placeDistrict, rollDistricts, type DistrictForce, type DistrictGrid } from './place';
+import { edgeKey, placeDistrict, rollDistricts, shuffle, type DistrictForce, type DistrictGrid } from './place';
 import type { Gate, District, DistrictDef } from './District';
 
 /** Signals and stop / priority / speed signs: junction rules and fast stretches come from these, so they are never dropped. */
@@ -21,7 +21,11 @@ export function inDistrict(q: District, p: { x: number; z: number }): boolean {
 
 export function applyDistricts(city: CityData, grid: DistrictGrid, defs: DistrictDef[], force: DistrictForce = {}): void {
   const placed: District[] = [];
-  for (const { def, rng } of rollDistricts(city.seed, defs, force)) {
+  // Placement order is shuffled per seed: a later district keeps clear of the earlier ones and only
+  // shrinks to fit, so a fixed order would always leave the first one the most room.
+  const rolled = rollDistricts(city.seed, defs, force);
+  shuffle(rolled, new Rng(city.seed ^ DISTRICTS.orderSalt));
+  for (const { def, rng } of rolled) {
     if (placed.length >= DISTRICTS.max) break;
     const q = placeDistrict(def, grid, city, rng, placed);
     if (!q) continue;
@@ -37,6 +41,7 @@ function overlay(def: DistrictDef, q: District, city: CityData, rng: Rng): void 
   for (const k of q.blocks) {
     city.blocks[k].district = def.kind;
     city.blocks[k].park = false;
+    city.blocks[k].square = false; // a town square taken over (the district may make its own)
   }
   q.roles = def.roles(q, city, rng);
   // 2. Clear the blocks (park centrepieces too) and refill the ordinary ones from the district's stream.

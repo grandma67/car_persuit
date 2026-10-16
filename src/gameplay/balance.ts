@@ -104,11 +104,13 @@ export const ROADBLOCK_INTERVAL = 35;
  * body in its lane).
  */
 export const DISTRICTS = {
-  max: 4, // safety cap on districts per city, in registry order
+  max: 4, // safety cap on districts per city, in placement order
+  orderSalt: 0x0d3e7, // stream for the per-seed placement order of the rolled districts
   clutterMinOffset: 5, // metres from the centre line
   overheadClearance: Math.max(...ALL_SPECS.map(vehicleTop)) + 1.5,
   frontageSea: 50, // metres of sea a coast district's frontage reaches out
   clutterGap: 8, // metres kept clear at junction mouths and gate approaches
+  outerRing: 2, // rows of blocks round the edge kept for the outer districts (Harbor, Farm)
 };
 
 /** The Old City: a walled medieval core in the middle ring (world/districts/OldCity.ts). */
@@ -129,6 +131,53 @@ export const OLD_CITY = {
   // at most maxTorches). Oil lamps past it are thinned out evenly.
   maxGlow: 60,
   maxTorches: 16,
+};
+
+/** Chinatown: an open, busy district behind paifang gates (world/districts/Chinatown.ts). */
+export const CHINATOWN = {
+  chance: 0.5,
+  speed: 40 / 3.6, // m/s cap on the main street only
+  density: 1.3,
+  vanWeight: 2, // spawn weight multiplier for vans inside
+  squareChance: 0.4, // a small square for the pagoda
+  restaurants: [2, 4] as [number, number],
+  banquetChance: 0.5,
+  templeChance: 0.4,
+  templeHeight: 9, // at most, metres
+  squareStalls: 7, // stalls and mahjong tables round the pagoda
+  vans: [1, 3] as [number, number], // delivery vans double-parked on the main street
+  vanGap: 15, // metres, at least, from a junction mouth or a gate
+  vanOnKerb: 0.6, // how far a parked van stands up on the kerb (its inner side then clears the widest bus in the lane)
+  /** How many of each small shop, at most (from the lots fronting a street). */
+  shops: { teaHouse: 2, bubbleTea: 2, herbalShop: 2, bakery: 2 },
+  /** Lunar New Year: rolled per seed on the district's stream, shown at night. */
+  festivalChance: 0.25,
+  /** Glowing pieces at night, at most: string lanterns (festival ones included) plus night-market bulbs. */
+  maxGlow: 1100,
+  nightStalls: [3.5, 6] as [number, number], // metres between night-market stalls on the main street
+  bulbHeight: 4.4, // bare-bulb strings tie to the shopfronts this high
+  bulbSpan: 6, // between ties
+  bulbSag: 0.45,
+  bulbSpacing: 0.75, // between bulbs
+  fireworks: [1.2, 3] as [number, number], // seconds between bursts over the pagoda (festival nights)
+  fireworksRange: 350, // only while the camera is this near
+};
+
+/** Chinatown's paifang, lions and lantern strings (world/districts/ChinatownGates.ts), metres. */
+export const CHINATOWN_GATES = {
+  setIn: [4.5, 6.5, 8.5], // paifang in from the gate line (further in if a column would touch a junction control)
+  column: 0.45, // a column's solid footprint, half across the road (its plinth)…
+  columnAlong: 0.8, // …and half along it (its drum stones)
+  fourChance: 0.5, // four columns (two a side) rather than two
+  beam: 6.2, // beam underside above the highest ground under the span (≥ DISTRICTS.overheadClearance)
+  lionOut: 2.5, // lions in front of the paifang
+  wireHeight: 7.6, // lantern wires tie to the buildings this high
+  sag: 0.9, // wire sag at mid-span
+  lanternDrop: 0.8, // wire to a lantern's bottom
+  lanternSpacing: 1.6, // between lanterns on a wire
+  lanternPitch: 10, // between strings on the main street
+  lanternGap: 3, // strings stay this far past the building line from a junction
+  sideStrings: [1, 2] as [number, number], // strings per side street
 };
 
 /** Old City walls and gatehouses (world/districts/OldCityWalls.ts), metres. */

@@ -38,6 +38,7 @@ export interface SmokeStyle {
   spread?: number; // sideways speed range, m/s
   life?: [number, number]; // lifetime range, seconds
   carry?: number; // share of the source's velocity a particle keeps (default 0.15: left behind)
+  carryUp?: boolean; // keep the vertical share too (a burst flung in every direction)
   nearFade?: [number, number]; // camera distance (m) over which particles fade in; default [2, 6]
   startSize?: number; // metres at birth (default 0.7)
   jitter?: number; // metres of random scatter around the emit point (default 0.3)
@@ -99,7 +100,7 @@ export class TireSmoke {
     this.velocities.set(
       [
         carVelocity.x * (this.style.carry ?? 0.15) + (Math.random() - 0.5) * spread,
-        liftMin + Math.random() * (liftMax - liftMin),
+        liftMin + Math.random() * (liftMax - liftMin) + (this.style.carryUp ? carVelocity.y * (this.style.carry ?? 0.15) : 0),
         carVelocity.z * (this.style.carry ?? 0.15) + (Math.random() - 0.5) * spread,
       ],
       i * 3,

@@ -1,6 +1,7 @@
 // What the game's systems need from the placed districts: speed caps and no-go streets for
 // traffic, spawn weights, cop spawn skips, roadblock gates, destination zoning. Pure data.
 import type { CityData } from '../CityGenerator';
+import type { StreetProp } from '../StreetProps';
 import { inRect } from '../lots';
 import { DISTRICT_DEFS } from './index';
 import type { DistrictDef, DistrictKind, DistrictTraffic } from './District';
@@ -58,4 +59,9 @@ export function roadblockGates(city: CityData, defs: DistrictDef[] = DISTRICT_DE
     for (const g of q.gates) out.add(`${g.node}>${g.inner}`).add(`${g.inner}>${g.node}`);
   }
   return out;
+}
+
+/** Street props a district shows only at night (dressing.extra.nightProps: Chinatown's night market and festival). */
+export function nightProps(city: CityData): StreetProp[] {
+  return city.districts.flatMap((q) => (q.dressing.extra?.nightProps as StreetProp[] | undefined) ?? []);
 }

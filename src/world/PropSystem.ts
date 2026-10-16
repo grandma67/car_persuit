@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part } from '../render/geometry';
 import { SUNK_BELOW } from '../render/Sea';
+import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
 import type { Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
 import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
@@ -15,8 +16,12 @@ const GRID_CELL = 10; // metres, spatial hash for vehicle-vs-prop checks
 const cellKey = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096);
 const LAMP_HEAD = new THREE.Vector3(0, 5.8, 1.3); // bulb position in lamp space
 const OIL_LAMP_HEAD = new THREE.Vector3(0, 3.75, 0); // the lantern's flame, on top of its post
+const DRAGON_LAMP_HEAD = new THREE.Vector3(0, 4.12, 0); // the pagoda lantern's glass
+const LAMP_HEADS: Partial<Record<PropKind, THREE.Vector3>> = { lamp: LAMP_HEAD, oilLamp: OIL_LAMP_HEAD, dragonLamp: DRAGON_LAMP_HEAD };
 /** Props that light up at night: a bulb (or flame) and a pool of light under it. */
-const LIGHTS = new Set<PropKind>(['lamp', 'oilLamp']);
+const LIGHTS = new Set<PropKind>(['lamp', 'oilLamp', 'dragonLamp']);
+/** A dragon lamp's banner: hung from the brackets on its street side, edge-on to the kerb. */
+const BANNER = { w: 0.5, h: 1.05, y: 2.45, z: 0.42 };
 const LIGHT_POOL_RADIUS = 7;
 const SIGN_FACE_Y = 2.35;
 const SIGNAL_HEAD_X = -3.7; // signal arm reaches over the lane along local -X
@@ -71,8 +76,8 @@ const modelKey = (p: StreetProp): ModelKey => {
     p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
-/** Props tinted per instance (umbrella canopies, tree shades, stall awnings). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall']);
+/** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan']);
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -238,6 +243,7 @@ function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
     'signal-old': oldSignal(-1), 'signal-right-old': oldSignal(1),
     'sign-octagon-old': oldSign('octagon'), 'sign-round-old': oldSign('round'), 'sign-triangle-old': oldSign('triangle'), 'sign-square-old': oldSign('square'), 'sign-diamond-old': oldSign('diamond'),
     ...oldCityModels(),
+    ...chinatownModels(),
   };
 }
 
@@ -315,6 +321,157 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
     part(new THREE.SphereGeometry(0.05, 4, 3), iron, 0, 4.35),
   ]);
   return { amphora, pot, cart, stall, barrels, cannonballs, pillory, haybale, signpost, oilLamp };
+}
+
+/** Chinatown's street furniture. */
+type ChinatownKind = 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan'
+  | 'lionDance' | 'dragonFloat';
+function chinatownModels(): Record<ChinatownKind, THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (rt: number, rb: number, h: number, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
+  const red = 0xb0221e;
+  const gold = 0xd6a637;
+  const green = 0x2f6b4a;
+  // After San Francisco's 1925 Grant Avenue lamps: a red bamboo-jointed shaft on a lotus base, two
+  // gold dragons coiling up to a pagoda-roofed lantern (its glass is the lamp's bulb attachment).
+  const dragon = (side: number) => [
+    part(new THREE.TorusGeometry(0.3, 0.045, 4, 8, Math.PI * 1.2).rotateY(side < 0 ? Math.PI : 0), gold, side * 0.3, 3.35),
+    part(box(0.16, 0.12, 0.2), gold, side * 0.2, 3.62, 0.04), // head, towards the lantern
+  ];
+  const dragonLamp = mergeGeometries([
+    part(cyl(0.34, 0.4, 0.45), red, 0, 0.22),
+    part(cyl(0.3, 0.34, 0.12), gold, 0, 0.5),
+    part(cyl(0, 0.34, 0.35, 8).rotateX(Math.PI), gold, 0, 0.73), // lotus
+    part(cyl(0.09, 0.1, 3.0, 8), red, 0, 2.15),
+    ...[1.0, 1.6, 2.2, 2.8].map((y) => part(cyl(0.12, 0.12, 0.06, 8), gold, 0, y)), // bamboo joints
+    // Banner brackets on the street side.
+    ...[BANNER.y + BANNER.h / 2 + 0.04, BANNER.y - BANNER.h / 2 - 0.04].map((y) => part(box(0.04, 0.04, BANNER.z + 0.05), gold, 0, y, BANNER.z / 2)),
+    ...dragon(-1), ...dragon(1),
+    part(cyl(0.32, 0.18, 0.18, 6), gold, 0, 3.78), // lantern seat
+    ...[0, 1, 2, 3, 4, 5].map((k) => {
+      const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+      return part(box(0.05, 0.6, 0.05), red, Math.cos(a) * 0.29, 4.12, Math.sin(a) * 0.29);
+    }),
+    part(cyl(0.12, 0.62, 0.32, 6), green, 0, 4.55), // pagoda roof
+    ...[0, 1, 2, 3, 4, 5].map((k) => {
+      const a = (k / 6) * Math.PI * 2;
+      return part(box(0.07, 0.07, 0.24).rotateX(-0.6).rotateY(-a + Math.PI / 2), gold, Math.cos(a) * 0.62, 4.45, Math.sin(a) * 0.62); // upturned eaves
+    }),
+    part(cyl(0.05, 0.1, 0.2, 6), red, 0, 4.8),
+    part(new THREE.SphereGeometry(0.08, 6, 4), gold, 0, 4.96),
+  ]);
+  const wood = 0x7a5432;
+  const bamboo = 0xc8a868;
+  // A fruit and veg stall: a trestle of crates under an awning (tinted per instance; white here).
+  const fruit = [0xe8642a, 0xf2c23a, 0x6f9a3a, 0xc8302a, 0xe8a03a];
+  const produceStall = mergeGeometries([
+    ...[-1.1, 1.1].flatMap((x) => [-0.65, 0.65].map((z) => part(box(0.08, 2.3, 0.08), wood, x, 1.15, z))),
+    part(box(2.3, 0.08, 1.3), wood, 0, 0.85, 0),
+    ...[-0.8, -0.27, 0.27, 0.8].flatMap((x, k) => [
+      part(box(0.5, 0.25, 0.9).rotateX(-0.2), 0x9a7a4a, x, 1.02, 0.05),
+      part(box(0.44, 0.12, 0.8).rotateX(-0.2), fruit[k], x, 1.16, 0.05),
+    ]),
+    part(box(2.5, 0.06, 1.8).rotateX(-0.2), 0xffffff, 0, 2.35, 0.1),
+    part(box(2.5, 0.25, 0.03), 0xffffff, 0, 2.12, 1.0),
+  ]);
+  // Red paper lanterns hung on a bamboo stand.
+  const lanternStand = mergeGeometries([
+    part(box(0.6, 0.06, 0.6), wood, 0, 0.03),
+    part(cyl(0.04, 0.04, 2.1, 5), bamboo, 0, 1.08),
+    part(box(0.9, 0.04, 0.04), bamboo, 0, 2.0),
+    ...[-0.38, 0.38].flatMap((x) => [
+      part(new THREE.SphereGeometry(0.2, 8, 6).scale(1, 0.85, 1), 0xd62a22, x, 1.7),
+      part(cyl(0.08, 0.08, 0.04, 6), gold, x, 1.88),
+      part(box(0.03, 0.2, 0.03), 0xe8b02a, x, 1.42),
+    ]),
+    part(new THREE.SphereGeometry(0.17, 8, 6).scale(1, 0.85, 1), gold, 0, 1.35),
+  ]);
+  // A steamer cart: a box on wheels with a push bar and a stack of bamboo baskets.
+  const dimSumCart = mergeGeometries([
+    part(box(0.8, 0.6, 1.3), 0xb8b8b4, 0, 0.6),
+    ...[-0.42, 0.42].flatMap((x) => [-0.5, 0.5].map((z) => part(cyl(0.12, 0.12, 0.05, 8).rotateZ(Math.PI / 2), 0x2a2a2a, x, 0.12, z))),
+    part(box(0.7, 0.04, 0.04), 0x8a8a88, 0, 1.05, -0.75),
+    ...[0, 1, 2, 3].map((k) => part(cyl(0.28, 0.28, 0.14, 10), bamboo, 0, 0.98 + k * 0.15, 0.15)),
+    part(cyl(0.29, 0.29, 0.03, 10), 0x9a7a4a, 0, 1.6, 0.15),
+  ]);
+  // A crate of fish on ice.
+  const fishCrate = mergeGeometries([
+    part(box(1.0, 0.4, 0.75), 0x3a6aa0, 0, 0.2),
+    part(box(0.9, 0.05, 0.65), 0xe8f2f6, 0, 0.42),
+    ...[-0.3, 0, 0.3].map((x) => part(box(0.18, 0.08, 0.5).rotateY(x), 0x8a9aa8, x, 0.48)),
+  ]);
+  // A folding table with a game of mahjong on it and two stools.
+  const mahjongTable = mergeGeometries([
+    part(box(0.9, 0.05, 0.9), 0x2a6a3a, 0, 0.75),
+    ...[-0.38, 0.38].flatMap((x) => [-0.38, 0.38].map((z) => part(box(0.05, 0.73, 0.05), 0x3a3a3a, x, 0.36, z))),
+    ...[-0.3, -0.1, 0.1, 0.3].flatMap((x) => [-0.32, 0.32].map((z) => part(box(0.08, 0.05, 0.06), 0xf2ead8, x, 0.8, z))),
+    ...[-0.3, 0.3].map((x) => part(box(0.06, 0.05, 0.08), 0xf2ead8, x, 0.8, 0)),
+    ...[-0.75, 0.75].map((x) => part(cyl(0.18, 0.18, 0.45, 8), 0xc8302a, x, 0.22)),
+  ]);
+  // An A-frame menu board.
+  const menuBoard = mergeGeometries([
+    part(box(0.55, 1.0, 0.04).rotateX(0.18), 0x1e1a18, 0, 0.5, 0.1),
+    part(box(0.55, 1.0, 0.04).rotateX(-0.18), 0x1e1a18, 0, 0.5, -0.1),
+    part(box(0.45, 0.6, 0.01).rotateX(0.18), 0xe8d8b0, 0, 0.55, 0.13),
+    part(box(0.35, 0.1, 0.01).rotateX(0.18), 0xc8302a, 0, 0.88, 0.07),
+  ]);
+  // A red crate of firecrackers, string-bundles poking out.
+  const firecrackerCrate = mergeGeometries([
+    part(box(0.75, 0.45, 0.75), 0xc8202a, 0, 0.22),
+    part(box(0.6, 0.12, 0.25), gold, 0, 0.3, 0.38),
+    ...[-0.22, 0, 0.22].flatMap((x) => [part(cyl(0.05, 0.05, 0.3, 6), 0xd62a22, x, 0.55, -0.1), part(cyl(0.05, 0.05, 0.3, 6), 0xd62a22, x, 0.55, 0.12)]),
+  ]);
+  // A delivery van: the body tinted per instance (white here), dark glass, wheels.
+  const parkedVan = mergeGeometries([
+    part(box(1.95, 1.55, 4.9), 0xffffff, 0, 1.25, 0),
+    part(box(1.9, 0.5, 0.9).rotateX(-0.5), 0xffffff, 0, 1.95, 2.25),
+    part(box(1.8, 0.65, 0.05).rotateX(-0.45), 0x1c2228, 0, 1.75, 2.48),
+    ...[-1, 1].map((x) => part(box(0.05, 0.5, 0.9), 0x1c2228, x * 0.985, 1.65, 1.6)),
+    part(box(2.0, 0.25, 0.15), 0x2a2a2a, 0, 0.55, 2.47),
+    part(box(2.0, 0.25, 0.15), 0x2a2a2a, 0, 0.55, -2.47),
+    ...[-0.98, 0.98].flatMap((x) => [-1.7, 1.7].map((z) => part(cyl(0.38, 0.38, 0.25, 12).rotateZ(Math.PI / 2), 0x151515, x, 0.38, z))),
+    ...[-0.7, 0.7].map((x) => part(box(0.3, 0.15, 0.04), 0xfff2cc, x, 0.9, 2.47)),
+  ]);
+  // A lion-dance costume on its stand, facing +Z: a big-eyed head with a horn and a mirror, a
+  // red-and-gold fringed body behind it.
+  const lionDance = mergeGeometries([
+    part(box(0.9, 0.08, 2.2), wood, 0, 0.04),
+    ...[-0.25, 0.25].map((x) => part(box(0.06, 0.75, 0.06), wood, x, 0.45, 0.65)),
+    part(box(0.95, 0.85, 0.85), red, 0, 1.25, 0.75),
+    part(box(1.05, 0.2, 0.3), gold, 0, 1.75, 0.95), // brow
+    ...[-0.25, 0.25].flatMap((x) => [part(new THREE.SphereGeometry(0.15, 8, 6), 0xf6f2e8, x, 1.5, 1.2), part(new THREE.SphereGeometry(0.07, 6, 4), 0x141414, x, 1.5, 1.33)]),
+    part(box(0.75, 0.22, 0.25), 0xf6f2e8, 0, 0.98, 1.12), // teeth
+    part(cyl(0.02, 0.08, 0.35, 6).rotateX(0.4), gold, 0, 1.88, 1.0), // horn
+    part(cyl(0.09, 0.09, 0.03, 10).rotateX(Math.PI / 2), 0xd8e0e8, 0, 1.6, 1.19), // mirror
+    ...[-0.5, 0.5].map((x) => part(box(0.08, 0.35, 0.6), 0xf6f2e8, x, 1.1, 0.75)), // fur trim
+    part(box(0.85, 0.6, 1.3), 0xd8302a, 0, 0.95, -0.35).rotateX(0.05),
+    part(box(0.9, 0.12, 1.35), gold, 0, 0.62, -0.35),
+    part(box(0.2, 0.25, 0.3), gold, 0, 1.05, -1.05), // tail
+  ]);
+  // A dragon float: a low wheeled cart along Z with a long green-and-gold dragon coiling over it,
+  // head at +Z on poles.
+  const scales = 0x2f8a4a;
+  const dragonFloat = mergeGeometries([
+    part(box(1.6, 0.35, 8.2), 0x6a1a16, 0, 0.45),
+    part(box(1.7, 0.08, 8.3), gold, 0, 0.66),
+    ...[-0.75, 0.75].flatMap((x) => [-3.2, 0, 3.2].map((z) => part(cyl(0.25, 0.25, 0.15, 10).rotateZ(Math.PI / 2), 0x1e1a18, x, 0.26, z))),
+    ...Array.from({ length: 9 }, (_, k) => {
+      const z = -3.6 + k * 0.85;
+      const y = 1.45 + Math.sin(k * 1.1) * 0.35;
+      return mergeGeometries([
+        part(cyl(0.03, 0.03, y - 0.7, 5), wood, 0, 0.7 + (y - 0.7) / 2, z),
+        part(new THREE.SphereGeometry(0.36, 8, 6).scale(0.9, 0.85, 1.3), k % 2 ? scales : 0x3aa05a, 0, y, z),
+        part(box(0.08, 0.22, 0.4), gold, 0, y + 0.36, z), // spine fin
+      ]);
+    }),
+    part(box(0.75, 0.6, 0.9), scales, 0, 1.95, 3.9), // head
+    part(box(0.6, 0.2, 0.55), 0xd8302a, 0, 1.68, 4.35), // open jaw
+    ...[-0.22, 0.22].map((x) => part(new THREE.SphereGeometry(0.1, 6, 4), 0xf2d23a, x, 2.15, 4.3)),
+    ...[-0.25, 0.25].map((x) => part(cyl(0.02, 0.05, 0.5, 5).rotateX(-0.6), gold, x, 2.4, 3.7)), // horns
+    part(box(0.6, 0.06, 0.06), 0xf6f2e8, 0, 1.92, 4.38), // whiskers
+    part(new THREE.SphereGeometry(0.2, 8, 6), 0xd8302a, 0, 1.0, -4.0), // the pearl at its tail
+  ]);
+  return { dragonLamp, produceStall, lanternStand, dimSumCart, fishCrate, mahjongTable, menuBoard, firecrackerCrate, parkedVan, lionDance, dragonFloat };
 }
 
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
@@ -533,7 +690,8 @@ function signTexture(variant: SignVariant): THREE.Texture {
 }
 
 /** District props: their meshes are only built in a city that has some. */
-const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp']);
+const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp', 'dragonLamp',
+  'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
@@ -588,7 +746,7 @@ export class PropSystem {
     };
 
     // Lamp bulbs (unlit, so they glow) and soft light pools on the ground beneath them.
-    const lamps = counts.lamp + counts.oilLamp;
+    const lamps = counts.lamp + counts.oilLamp + counts.dragonLamp;
     this.bulbs = addAttachmentMesh(new THREE.BoxGeometry(0.38, 0.05, 0.24), new THREE.MeshBasicMaterial({ toneMapped: false }), lamps);
     this.pools = addAttachmentMesh(
       new THREE.PlaneGeometry(LIGHT_POOL_RADIUS * 2, LIGHT_POOL_RADIUS * 2).rotateX(-Math.PI / 2),
@@ -619,11 +777,19 @@ export class PropSystem {
       );
     }
 
+    // Lucky-character banners on Chinatown's main-street dragon lamps (only built when there are some).
+    const bannerCount = (b: 'fu' | 'chun') => defs.filter((p) => p.banner === b).length;
+    const bannerMat = defs.some((p) => p.banner) ? glyphMaterial() : null;
+    const banners = bannerMat
+      ? { fu: addAttachmentMesh(glyphPlate(BANNER.w, BANNER.h, 'fu', 0.02), bannerMat, bannerCount('fu')), chun: addAttachmentMesh(glyphPlate(BANNER.w, BANNER.h, 'chun', 0.02), bannerMat, bannerCount('chun')) }
+      : null;
+    const nextBanner = { fu: 0, chun: 0 };
+
     // Signal lenses (unlit so lit ones glow), three per signal head.
     this.lenses = addAttachmentMesh(
       new THREE.CylinderGeometry(0.12, 0.12, 0.05, 12).rotateX(Math.PI / 2),
       new THREE.MeshBasicMaterial({ toneMapped: false }),
-      counts.signal * 3,
+      defs.filter((p) => p.kind === 'signal').length * 3, // every signal model: plain, right-arm, old
     );
 
     const next = {} as Record<ModelKey, number>;
@@ -653,11 +819,17 @@ export class PropSystem {
       };
       if (LIGHTS.has(def.kind)) {
         const li = (state.pool = nextLight++); // bulb and pool share an index
-        const at = def.kind === 'lamp' ? LAMP_HEAD : OIL_LAMP_HEAD;
-        // A lantern's flame is a small upright block, a street lamp's bulb a flat panel.
+        const at = LAMP_HEADS[def.kind]!;
+        // A lantern's flame is a small upright block, a street lamp's bulb a flat panel, a dragon
+        // lamp's glass a block filling its lantern.
         const local = new THREE.Matrix4().makeTranslation(at);
         if (def.kind === 'oilLamp') local.multiply(new THREE.Matrix4().makeScale(0.55, 6, 0.9));
+        if (def.kind === 'dragonLamp') local.multiply(new THREE.Matrix4().makeScale(1.1, 11, 1.8));
         attach(this.bulbs, li, local, warm);
+        if (def.banner && banners) {
+          // Edge-on to the kerb, so it faces along the street.
+          attach(banners[def.banner], nextBanner[def.banner]++, new THREE.Matrix4().makeTranslation(0, BANNER.y, BANNER.z).multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2)));
+        }
         // The pool lies on the ground, tilted to the slope.
         const head = at.clone().applyQuaternion(this.q);
         const px = def.x + head.x;
@@ -687,6 +859,8 @@ export class PropSystem {
         }
       }
     });
+    // Parked vans are in physics from the start, wherever the player is (they stand in lanes).
+    defs.forEach((d, i) => d.kind === 'parkedVan' && this.activate(i));
   }
 
   private scale(def: StreetProp): THREE.Vector3 {
@@ -698,8 +872,11 @@ export class PropSystem {
     const p = this.props[i];
     if (p.body) return p.body;
     this.q.setFromAxisAngle(UP, p.def.yaw);
+    // A parked van stands in a lane: kinematic, so the civilians' forward sensor (which skips fixed
+    // bodies) sees it like a stopped car and they go round it.
+    const desc = p.def.kind === 'parkedVan' ? RAPIER.RigidBodyDesc.kinematicPositionBased() : RAPIER.RigidBodyDesc.fixed();
     p.body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed()
+      desc
         .setTranslation(p.def.x, p.y, p.def.z)
         .setRotation({ x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w }),
     );
@@ -744,7 +921,7 @@ export class PropSystem {
     }
     for (const i of this.active) {
       const p = this.props[i];
-      if (keep.has(i) || p.broken || !p.body) continue;
+      if (keep.has(i) || p.broken || !p.body || p.def.kind === 'parkedVan') continue;
       this.world.removeRigidBody(p.body);
       p.body = null;
       this.active.delete(i);
