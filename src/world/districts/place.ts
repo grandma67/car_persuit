@@ -89,13 +89,14 @@ const overlaps = (a: Rect, b: Rect) => Math.abs(a.x - b.x) < (a.w + b.w) / 2 && 
 
 /**
  * Place one district: its size is rolled first (so big ones turn up as often as small ones), then
- * the first shuffled candidate of that size that passes every check; failing that, the other sizes,
- * largest first. Null: the district sits this seed out. `earlier`: districts already placed, kept
- * at least a block away.
+ * the first shuffled candidate of that size that passes every check; failing that, the smaller
+ * sizes, largest first (never a bigger one). Null: the district sits this seed out. `earlier`:
+ * districts already placed, kept at least a block away.
  */
 export function placeDistrict(def: DistrictDef, grid: DistrictGrid, city: CityData, rng: Rng, earlier: District[]): District | null {
   const rolled = def.shapes[rng.int(0, def.shapes.length - 1)];
-  const rest = def.shapes.filter((s) => s !== rolled).sort((u, v) => v[0] * v[1] - u[0] * u[1]);
+  const area = (s: [number, number]) => s[0] * s[1];
+  const rest = def.shapes.filter((s) => area(s) < area(rolled)).sort((u, v) => area(v) - area(u));
   for (const shape of [rolled, ...rest]) {
     const list = candidates(def, shape, grid, city);
     shuffle(list, rng);

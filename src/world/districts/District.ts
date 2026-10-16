@@ -126,7 +126,7 @@ export interface DistrictDef {
    * cluster with its long side on the sea and a frontage.
    */
   site: 'inland' | 'edge' | 'coast';
-  shapes: [number, number][]; // cluster sizes in blocks; both orientations are tried. One is rolled per seed, the rest are fallbacks
+  shapes: [number, number][]; // cluster sizes in blocks; both orientations are tried. One is rolled per seed, the smaller ones are fallbacks
   rings: Zone[]; // zones its blocks may sit in
   minShare?: Partial<Record<Zone, number>>; // e.g. { midtown: 0.5 }
   minCore?: number; // least share of downtown + midtown blocks
