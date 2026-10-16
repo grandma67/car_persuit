@@ -417,8 +417,8 @@ export function buildCity(
   }));
   if (climate.beachProps) props.push(...addBeach(city, scene, rng));
 
-  // --- Sea wall along the island edge: a low visible barrier, plus a tall invisible one so a
-  // car launched off something can't sail into the sea. It stops where a canal opens to the sea
+  // --- Sea wall along the island edge: a low barrier, solid only as high as it looks, so a car
+  // launched off a ramp can clear it into the sea. It stops where a canal opens to the sea
   // (bridges there have their own railings) ---
   const wallT = 0.6;
   const wallH = 1;
@@ -436,7 +436,7 @@ export function buildCity(
   }
   for (const r of runs) {
     seaWall.box(r, 0, wallH, color(theme.seaWall), null, color(theme.seaWall));
-    wallColliders.add(world.createCollider(RAPIER.ColliderDesc.cuboid(r.w / 2, 10, r.d / 2).setTranslation(r.x, 10, r.z)).handle);
+    wallColliders.add(world.createCollider(RAPIER.ColliderDesc.cuboid(r.w / 2, wallH / 2, r.d / 2).setTranslation(r.x, wallH / 2, r.z)).handle);
   }
   const seaWallMesh = new THREE.Mesh(seaWall.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }));
   seaWallMesh.castShadow = seaWallMesh.receiveShadow = true;
