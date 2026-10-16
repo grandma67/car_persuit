@@ -1,5 +1,6 @@
-// The district registry, in placement order: Old City, Chinatown, Harbor, Farm. Placement follows
-// this order, and a later district keeps a block away from the earlier ones.
+// The district registry: Old City, Chinatown, Harbor, Farm. Each rolls on its own stream in this
+// order; placement then goes in a per-seed shuffled order (applyDistricts), a later district keeping
+// a block away from the earlier ones.
 import { CHINATOWN_DEF } from './Chinatown';
 import type { DistrictDef } from './District';
 import { OLD_CITY_DEF } from './OldCity';

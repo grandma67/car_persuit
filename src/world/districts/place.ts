@@ -78,7 +78,7 @@ function candidates(def: DistrictDef, [a, b]: [number, number], grid: DistrictGr
   return out;
 }
 
-function shuffle<T>(items: T[], rng: Rng): void {
+export function shuffle<T>(items: T[], rng: Rng): void {
   for (let i = items.length - 1; i > 0; i--) {
     const j = Math.floor(rng.next() * (i + 1));
     [items[i], items[j]] = [items[j], items[i]];

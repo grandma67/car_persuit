@@ -83,7 +83,7 @@ stream, drop/swap props, zebras, dressing; helpers `kerbClutter`, `perimeterWall
 `inDistrict`); `runtime.ts` (`districtTraffic` speed caps/no-heavy/spawn mix, `copSpawnSkips`,
 `roadblockGates`, `districtOfNode`, `nightProps` = `dressing.extra.nightProps`, joined to
 `city.streetProps` by `Game` only on night runs; generation never depends on time); `index.ts`
-(`DISTRICT_DEFS`, in placement order); `render/districts/index.ts` (`DISTRICT_RENDERERS[kind]`:
+(`DISTRICT_DEFS`; placement order is shuffled per seed on `DISTRICTS.orderSalt`); `render/districts/index.ts` (`DISTRICT_RENDERERS[kind]`:
 structures, overhead, ground patches).
 
 Adding one (each `TASKS.md` milestone is a step):

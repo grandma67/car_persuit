@@ -94,26 +94,32 @@ describe('Chinatown lots', () => {
 });
 
 describe('Chinatown with the Old City', () => {
-  it.each(SEEDS)('seed %i: both place, or Chinatown drops cleanly', (seed) => {
+  const alone = (seed: number, kind: 'oldtown' | 'chinatown') =>
+    generateCity(seed, undefined, { force: { oldtown: kind === 'oldtown', chinatown: kind === 'chinatown' } });
+
+  it.each(SEEDS)('seed %i: the first placed sits as alone, the second keeps clear or drops cleanly', (seed) => {
     const both = generateCity(seed, undefined, { force: { oldtown: true, chinatown: true } });
-    const old = generateCity(seed, undefined, { force: { oldtown: true, chinatown: false } });
-    const ot = both.districts.find((d) => d.kind === 'oldtown');
-    const ct = both.districts.find((d) => d.kind === 'chinatown');
-    // The Old City comes first, so Chinatown never moves it.
-    expect(ot?.grid).toEqual(old.districts.find((d) => d.kind === 'oldtown')?.grid);
-    if (!ct) {
-      // Dropped: the city is exactly the Old City one.
-      expect(both.buildings).toEqual(old.buildings);
-      expect(both.streetProps).toEqual(old.streetProps);
+    expect(both.districts.length).toBeGreaterThan(0);
+    const [first, second] = both.districts; // placement order
+    const solo = alone(seed, first.kind as 'oldtown' | 'chinatown');
+    // The later one never moves the first.
+    expect(first.grid).toEqual(solo.districts[0]?.grid);
+    if (!second) {
+      // Dropped: the city is exactly the first one's.
+      expect(both.buildings).toEqual(solo.buildings);
+      expect(both.streetProps).toEqual(solo.streetProps);
       return;
     }
-    if (ot) {
-      // At least a block apart, and no block shared.
-      const a = ot.grid, b = ct.grid;
-      const apart = b.i0 >= a.i0 + a.w + 1 || a.i0 >= b.i0 + b.w + 1 || b.j0 >= a.j0 + a.h + 1 || a.j0 >= b.j0 + b.h + 1;
-      expect(apart).toBe(true);
-      expect(ct.blocks.some((k) => ot.blocks.includes(k))).toBe(false);
-    }
+    // At least a block apart, and no block shared.
+    const a = first.grid, b = second.grid;
+    const apart = b.i0 >= a.i0 + a.w + 1 || a.i0 >= b.i0 + b.w + 1 || b.j0 >= a.j0 + a.h + 1 || a.j0 >= b.j0 + b.h + 1;
+    expect(apart).toBe(true);
+    expect(second.blocks.some((k) => first.blocks.includes(k))).toBe(false);
+  });
+
+  it('either one may go first', () => {
+    const firsts = new Set(SEEDS.map((seed) => generateCity(seed, undefined, { force: { oldtown: true, chinatown: true } }).districts[0]?.kind));
+    expect(firsts).toEqual(new Set(['oldtown', 'chinatown']));
   });
 });
 

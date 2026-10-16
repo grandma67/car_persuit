@@ -104,7 +104,8 @@ export const ROADBLOCK_INTERVAL = 35;
  * body in its lane).
  */
 export const DISTRICTS = {
-  max: 4, // safety cap on districts per city, in registry order
+  max: 4, // safety cap on districts per city, in placement order
+  orderSalt: 0x0d3e7, // stream for the per-seed placement order of the rolled districts
   clutterMinOffset: 5, // metres from the centre line
   overheadClearance: Math.max(...ALL_SPECS.map(vehicleTop)) + 1.5,
   frontageSea: 50, // metres of sea a coast district's frontage reaches out
