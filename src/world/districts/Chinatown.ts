@@ -204,7 +204,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
 
   // Delivery vans double-parked outside main-street restaurants, in the kerb lane.
   const blocked = (p: StreetProp, others: StreetProp[]) => {
-    const fp = propFootprint(p, 0.3);
+    const fp = propFootprint(p, p.kind === 'parkedVan' ? 0.1 : 0.3);
     return solid.some((f) => footprintsOverlap(fp, f)) || others.some((o) => footprintsOverlap(fp, propFootprint(o)));
   };
   const vans = parkedVans(q, city, built, rng).filter((v, i, all) => !blocked(v, [...city.streetProps.filter((p) => inDistrict(q, p)), ...all.slice(0, i)]));
@@ -247,11 +247,12 @@ function faceStreet(p: StreetProp, q: District, city: CityData): StreetProp {
 }
 
 /**
- * 1–3 vans in the kerb lane outside main-street restaurants (other main-street lots if there are
+ * 1–3 vans parked at the kerb outside main-street restaurants (other main-street lots if there are
  * none), facing the way that lane runs, at least CHINATOWN.vanGap from any junction mouth or gate.
  */
 function parkedVans(q: District, city: CityData, built: Building[], rng: Rng): StreetProp[] {
   const { roadWidth: rw } = city.config;
+  const kerbside = city.streetProps.filter((p) => inRect(q.bounds, p, 2));
   const keep = keepOf(city.driveSide);
   const gates = q.gates.map((g) => ({ x: g.x, z: g.z }));
   const front = shuffled(built.filter((b) => onMainStreet(b, q, city)), rng);
@@ -270,18 +271,23 @@ function parkedVans(q: District, city: CityData, built: Building[], rng: Rng): S
       const half = Math.abs(dx) * b.w / 2 + Math.abs(dz) * b.d / 2;
       const tc = (b.x - A.x) * dx + (b.z - A.z) * dz;
       const lo = rw / 2 + CHINATOWN.vanGap + 2.5, hi = len - rw / 2 - CHINATOWN.vanGap - 2.5; // the van's half length
-      const t = Math.max(lo, Math.min(hi, tc));
       const off = (b.x - A.x) * -dz + (b.z - A.z) * dx; // which side of the street the lot is on
-      if (Math.abs(t - tc) > half || lo > hi || Math.abs(off) > rw / 2 + city.config.sidewalk + b.w + b.d) continue;
-      if (out.some((o) => Math.hypot(o.x - (A.x + dx * t), o.z - (A.z + dz * t)) < 12)) continue;
+      if (lo > hi || Math.abs(off) > rw / 2 + city.config.sidewalk + b.w + b.d) continue;
       const side = Math.sign(off);
       const n = { x: -dz * side, z: dx * side }; // from the centre line towards the lot
-      const lateral = rw / 2 - VAN_HALF_WIDTH - 0.25;
-      const p = { x: A.x + dx * t + n.x * lateral, z: A.z + dz * t + n.z * lateral };
-      if (gates.some((g) => Math.hypot(g.x - p.x, g.z - p.z) < CHINATOWN.vanGap)) continue;
+      // Tight to the kerb, up on it a little: every vehicle in the lane clears it, the widest bus included.
+      const lateral = rw / 2 - VAN_HALF_WIDTH + CHINATOWN.vanOnKerb;
       // Facing the way traffic in that lane runs: its kerb side is towards the lot.
       const d = keep > 0 ? { x: n.z, z: -n.x } : { x: -n.z, z: n.x };
-      out.push({ kind: 'parkedVan', x: p.x, z: p.z, yaw: Math.atan2(d.x, d.z), color: rng.pick(VAN_COLOURS) });
+      // Along the lot's frontage, nearest its middle, where no lamp or hydrant stands in the way.
+      const spots = [0, -1, 1, -2, 2, -3, 3].map((k) => Math.max(lo, Math.min(hi, tc + k * 1.5))).filter((t) => Math.abs(t - tc) <= half);
+      const van = spots
+        .map((t): StreetProp => ({ kind: 'parkedVan', x: A.x + dx * t + n.x * lateral, z: A.z + dz * t + n.z * lateral, yaw: Math.atan2(d.x, d.z) }))
+        .find((v) => !gates.some((g) => Math.hypot(g.x - v.x, g.z - v.z) < CHINATOWN.vanGap) &&
+          !out.some((o) => Math.hypot(o.x - v.x, o.z - v.z) < 12) &&
+          !kerbside.some((o) => footprintsOverlap(propFootprint(v, 0.1), propFootprint(o))));
+      if (!van) continue;
+      out.push({ ...van, color: rng.pick(VAN_COLOURS) });
       break;
     }
   }

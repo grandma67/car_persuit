@@ -819,6 +819,8 @@ export class PropSystem {
         }
       }
     });
+    // Parked vans are in physics from the start, wherever the player is (they stand in lanes).
+    defs.forEach((d, i) => d.kind === 'parkedVan' && this.activate(i));
   }
 
   private scale(def: StreetProp): THREE.Vector3 {
@@ -830,8 +832,11 @@ export class PropSystem {
     const p = this.props[i];
     if (p.body) return p.body;
     this.q.setFromAxisAngle(UP, p.def.yaw);
+    // A parked van stands in a lane: kinematic, so the civilians' forward sensor (which skips fixed
+    // bodies) sees it like a stopped car and they go round it.
+    const desc = p.def.kind === 'parkedVan' ? RAPIER.RigidBodyDesc.kinematicPositionBased() : RAPIER.RigidBodyDesc.fixed();
     p.body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed()
+      desc
         .setTranslation(p.def.x, p.y, p.def.z)
         .setRotation({ x: this.q.x, y: this.q.y, z: this.q.z, w: this.q.w }),
     );
@@ -876,7 +881,7 @@ export class PropSystem {
     }
     for (const i of this.active) {
       const p = this.props[i];
-      if (keep.has(i) || p.broken || !p.body) continue;
+      if (keep.has(i) || p.broken || !p.body || p.def.kind === 'parkedVan') continue;
       this.world.removeRigidBody(p.body);
       p.body = null;
       this.active.delete(i);

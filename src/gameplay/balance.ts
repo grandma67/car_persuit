@@ -146,6 +146,7 @@ export const CHINATOWN = {
   squareStalls: 7, // stalls and mahjong tables round the pagoda
   vans: [1, 3] as [number, number], // delivery vans double-parked on the main street
   vanGap: 15, // metres, at least, from a junction mouth or a gate
+  vanOnKerb: 0.6, // how far a parked van stands up on the kerb (its inner side then clears the widest bus in the lane)
   /** How many of each small shop, at most (from the lots fronting a street). */
   shops: { teaHouse: 2, bubbleTea: 2, herbalShop: 2, bakery: 2 },
 };
