@@ -789,7 +789,7 @@ export class PropSystem {
     this.lenses = addAttachmentMesh(
       new THREE.CylinderGeometry(0.12, 0.12, 0.05, 12).rotateX(Math.PI / 2),
       new THREE.MeshBasicMaterial({ toneMapped: false }),
-      counts.signal * 3,
+      defs.filter((p) => p.kind === 'signal').length * 3, // every signal model: plain, right-arm, old
     );
 
     const next = {} as Record<ModelKey, number>;
