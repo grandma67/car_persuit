@@ -47,9 +47,9 @@ export class Input {
     };
   }
 
-  /** True once per key press; call endFrame() after reading. */
-  wasPressed(code: string): boolean {
-    return this.pressed.has(code);
+  /** Keys pressed since the last endFrame(), each once per press. */
+  pressedKeys(): string[] {
+    return [...this.pressed];
   }
 
   endFrame(): void {

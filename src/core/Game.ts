@@ -407,40 +407,65 @@ export class Game {
   }
 
   private handleKeys(): void {
-    const pressed = (...codes: string[]) => codes.some((c) => this.input.wasPressed(c));
-    if (pressed('KeyR') && this.state === 'playing') {
-      this.player.reset();
-      this.airtime.cancel();
-    }
-    if (pressed('KeyM')) this.toggleMute();
-    if (pressed('KeyF')) toggleFullscreen();
-    if (pressed('KeyP', 'Escape')) this.setPaused(this.state === 'playing');
-    if (pressed('Enter', 'NumpadEnter')) {
-      if (this.state === 'menu') this.startMission();
-      else if (this.state === 'won' || this.state === 'lost' || this.state === 'paused') this.restart(this.city.seed);
-    }
-    if (this.state === 'menu' && pressed('ArrowLeft', 'ArrowRight')) {
-      const i = DIFFICULTIES.indexOf(this.difficulty);
-      const next = DIFFICULTIES[(i + (pressed('ArrowRight') ? 1 : DIFFICULTIES.length - 1)) % DIFFICULTIES.length];
-      this.setDifficulty(next.id);
-    }
-    if (pressed('KeyN') && (this.state === 'won' || this.state === 'lost')) {
-      this.restart(Math.floor(Math.random() * 1_000_000));
-    }
-    if (this.debug) {
-      if (pressed('KeyC')) {
+    for (const code of this.input.pressedKeys()) this.handleKey(code);
+  }
+
+  private handleKey(code: string): void {
+    const playing = this.state === 'playing';
+    const over = this.state === 'won' || this.state === 'lost';
+    switch (code) {
+      case 'KeyR':
+        if (!playing) break;
+        this.player.reset();
+        this.airtime.cancel();
+        break;
+      case 'KeyM':
+        this.toggleMute();
+        break;
+      case 'KeyF':
+        toggleFullscreen();
+        break;
+      case 'KeyP':
+      case 'Escape':
+        this.setPaused(playing);
+        break;
+      case 'Enter':
+      case 'NumpadEnter':
+        if (this.state === 'menu') this.startMission();
+        else if (over || this.state === 'paused') this.restart(this.city.seed);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowRight': {
+        if (this.state !== 'menu') break;
+        const i = DIFFICULTIES.indexOf(this.difficulty);
+        const next = DIFFICULTIES[(i + (code === 'ArrowRight' ? 1 : DIFFICULTIES.length - 1)) % DIFFICULTIES.length];
+        this.setDifficulty(next.id);
+        break;
+      }
+      case 'KeyN':
+        if (over) this.restart(Math.floor(Math.random() * 1_000_000));
+        break;
+      // Debug only. C: overview camera. T: jump to the current destination. Y: leave 3 seconds on
+      // the clock. K: one more wanted star.
+      case 'KeyC':
+        if (!this.debug) break;
         this.overview = !this.overview;
         this.scene.fog = this.overview ? null : this.fog;
         this.sky.mesh.visible = !this.overview;
-      }
-      // T: jump to the current destination. Y: leave 3 seconds on the clock.
-      const target = this.mission.current;
-      if (pressed('KeyT') && target && this.state === 'playing') {
+        break;
+      case 'KeyT': {
+        const target = this.mission.current;
+        if (!this.debug || !playing || !target) break;
         this.player.teleport(target.x, this.ground(target.x, target.z) + 1.2, target.z, 0);
         this.airtime.cancel();
+        break;
       }
-      if (pressed('KeyY') && this.state === 'playing') this.mission.elapsed = MISSION.timeLimit - 3;
-      if (pressed('KeyK') && this.state === 'playing') this.raiseStars(this.wanted.bump());
+      case 'KeyY':
+        if (this.debug && playing) this.mission.elapsed = MISSION.timeLimit - 3;
+        break;
+      case 'KeyK':
+        if (this.debug && playing) this.raiseStars(this.wanted.bump());
+        break;
     }
   }
 
