@@ -221,7 +221,7 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   const body = spec.body ?? 'sports';
   // Body: a box with the front top edge pulled down — a sharp wedge for sports cars, a gentle
   // bonnet slope for sedans/SUVs, flat-fronted for trucks and buses.
-  const noseDrop = { sports: 1.15, sedan: 0.7, suv: 0.3, truck: 0, van: 0.35, pickup: 0.3, bus: 0, boxtruck: 0, ramptruck: 0 }[body];
+  const noseDrop = { sports: 0.85, sedan: 0.7, suv: 0.3, truck: 0, van: 0.35, pickup: 0.3, bus: 0, boxtruck: 0, ramptruck: 0 }[body];
   const tall = body === 'bus' || body === 'boxtruck';
   // The box truck is drawn as a cab plus a cargo box instead (below).
   if (body !== 'boxtruck') {
@@ -324,6 +324,17 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
     cabinGeo.scale(1.15, 1, body === 'sedan' ? 1.85 : 1.6);
     const cabin = new THREE.Mesh(cabinGeo, glass);
     cabin.position.set(0, hy + (body === 'sedan' ? 0.28 : 0.23), body === 'sedan' ? -0.2 : -0.3);
+    // The nose slopes down under the canopy: drop its bottom edge onto the body's top line (3 cm
+    // into it), or the windscreen floats above the bonnet.
+    const pos = cabinGeo.attributes.position;
+    const bottom = Math.min(...Array.from({ length: pos.count }, (_, i) => pos.getY(i)));
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getY(i) > bottom + 1e-6) continue;
+      const z = pos.getZ(i) + cabin.position.z;
+      const top = hy - hy * noseDrop * ((z + hz) / (2 * hz));
+      pos.setY(i, top - 0.03 - cabin.position.y);
+    }
+    cabinGeo.computeVertexNormals();
     root.add(cabin);
     roof = hy + (body === 'sedan' ? 0.58 : 0.48);
   }
