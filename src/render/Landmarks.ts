@@ -183,6 +183,46 @@ function lion(): THREE.BufferGeometry {
   ]);
 }
 
+/** A Chinatown pagoda: octagonal red storeys narrowing upward, each under a flared green roof, on a stone plinth. */
+function pagoda(tiers: number, snowy: boolean): THREE.BufferGeometry {
+  const red = 0xb0221e;
+  const tile = snowy ? 0xeef2f6 : 0x2f7a55;
+  const parts = [part(cyl(3.6, 3.9, 0.6, 8), STONE_DARK, 0, 0.3), part(cyl(3.2, 3.3, 0.3, 8), STONE, 0, 0.75)];
+  let y = 0.9;
+  for (let k = 0; k < tiers; k++) {
+    const r = 2.5 - k * (1.6 / tiers);
+    const h = k === 0 ? 3 : 2.3;
+    parts.push(part(cyl(r, r, h, 8), red, 0, y + h / 2));
+    parts.push(part(cyl(r + 0.05, r + 0.05, 0.25, 8), GOLD, 0, y + h - 0.35)); // a gold band under the eaves
+    const eave = r + 1.1;
+    parts.push(part(cyl(r * 0.55, eave, 0.8, 8), tile, 0, y + h + 0.4));
+    parts.push(part(cyl(eave, eave + 0.1, 0.12, 8), 0x205a3e, 0, y + h + 0.02)); // eave edge
+    for (let c = 0; c < 8; c++) {
+      const a = (c / 8) * Math.PI * 2;
+      parts.push(part(box(0.18, 0.18, 0.6).rotateX(-0.7).rotateY(-a + Math.PI / 2), GOLD, Math.cos(a) * (eave + 0.1), y + h + 0.18, Math.sin(a) * (eave + 0.1)));
+    }
+    y += h + 0.8;
+  }
+  parts.push(part(cyl(0.08, 0.2, 2.2, 6), GOLD, 0, y + 1.1));
+  for (let k = 0; k < 3; k++) parts.push(part(new THREE.SphereGeometry(0.28 - k * 0.06, 8, 5), GOLD, 0, y + 0.5 + k * 0.6));
+  return mergeGeometries(parts);
+}
+
+/** A bronze incense burner: a three-legged cauldron with handles and a little roof, on a stone step. */
+function incense(): THREE.BufferGeometry {
+  const bronze = 0x6a5232;
+  return mergeGeometries([
+    part(box(1.4, 0.3, 1.4), STONE, 0, 0.15),
+    ...[0, 1, 2].map((k) => part(cyl(0.07, 0.07, 0.5, 5), bronze, Math.cos((k * 2 * Math.PI) / 3) * 0.4, 0.55, Math.sin((k * 2 * Math.PI) / 3) * 0.4)),
+    part(new THREE.SphereGeometry(0.55, 10, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), bronze, 0, 1.25),
+    part(cyl(0.58, 0.58, 0.08, 10), bronze, 0, 1.25),
+    ...[-1, 1].map((x) => part(new THREE.TorusGeometry(0.16, 0.04, 4, 8), bronze, x * 0.6, 1.35)),
+    ...[-0.25, 0, 0.25].map((x) => part(box(0.02, 0.4, 0.02), 0xc8784a, x, 1.45, 0)), // incense sticks
+    part(cyl(0.05, 0.05, 0.9, 5), bronze, 0, 1.75),
+    part(cyl(0.05, 0.75, 0.4, 6), 0x2f7a55, 0, 2.25),
+  ]);
+}
+
 const SNOW = 0xeef2f6;
 /** Snow lying on the Old City pieces in a snowy city. */
 const SNOW_CAPS = {
@@ -194,7 +234,7 @@ const SNOW_CAPS = {
 };
 
 /** District pieces (Old City, the lions) stand straight on the ground, without a paved pad. */
-const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion']);
+const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense']);
 
 /**
  * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
@@ -290,7 +330,7 @@ export class Landmarks {
     const models = {
       fountain: fountain(), statue: statue(), obelisk: obelisk(), sculpture: sculpture(),
       cannon: cannon(), column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
-      lion: lion(),
+      lion: lion(), incense: incense(),
     };
 
     for (const l of landmarks) {
@@ -316,7 +356,8 @@ export class Landmarks {
         this.colliders.add(world.createCollider(RAPIER.ColliderDesc.cylinder(step / 2, pad).setTranslation(l.x, y + 0.055 - step / 2, l.z)).handle);
       }
       group.add(base);
-      const mesh = new THREE.Mesh(models[l.kind], l.kind === 'statue' || l.kind === 'sculpture' ? metal : solid);
+      const model = l.kind === 'pagoda' ? pagoda(l.tiers ?? 4, this.snowy) : models[l.kind as keyof typeof models];
+      const mesh = new THREE.Mesh(model, l.kind === 'statue' || l.kind === 'sculpture' ? metal : solid);
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
       if (l.kind === 'fountain') {

@@ -76,8 +76,8 @@ const modelKey = (p: StreetProp): ModelKey => {
     p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
-/** Props tinted per instance (umbrella canopies, tree shades, stall awnings). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall']);
+/** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan']);
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -324,7 +324,8 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
 }
 
 /** Chinatown's street furniture. */
-function chinatownModels(): Record<'dragonLamp', THREE.BufferGeometry> {
+type ChinatownKind = 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan';
+function chinatownModels(): Record<ChinatownKind, THREE.BufferGeometry> {
   const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
   const cyl = (rt: number, rb: number, h: number, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
   const red = 0xb0221e;
@@ -358,7 +359,79 @@ function chinatownModels(): Record<'dragonLamp', THREE.BufferGeometry> {
     part(cyl(0.05, 0.1, 0.2, 6), red, 0, 4.8),
     part(new THREE.SphereGeometry(0.08, 6, 4), gold, 0, 4.96),
   ]);
-  return { dragonLamp };
+  const wood = 0x7a5432;
+  const bamboo = 0xc8a868;
+  // A fruit and veg stall: a trestle of crates under an awning (tinted per instance; white here).
+  const fruit = [0xe8642a, 0xf2c23a, 0x6f9a3a, 0xc8302a, 0xe8a03a];
+  const produceStall = mergeGeometries([
+    ...[-1.1, 1.1].flatMap((x) => [-0.65, 0.65].map((z) => part(box(0.08, 2.3, 0.08), wood, x, 1.15, z))),
+    part(box(2.3, 0.08, 1.3), wood, 0, 0.85, 0),
+    ...[-0.8, -0.27, 0.27, 0.8].flatMap((x, k) => [
+      part(box(0.5, 0.25, 0.9).rotateX(-0.2), 0x9a7a4a, x, 1.02, 0.05),
+      part(box(0.44, 0.12, 0.8).rotateX(-0.2), fruit[k], x, 1.16, 0.05),
+    ]),
+    part(box(2.5, 0.06, 1.8).rotateX(-0.2), 0xffffff, 0, 2.35, 0.1),
+    part(box(2.5, 0.25, 0.03), 0xffffff, 0, 2.12, 1.0),
+  ]);
+  // Red paper lanterns hung on a bamboo stand.
+  const lanternStand = mergeGeometries([
+    part(box(0.6, 0.06, 0.6), wood, 0, 0.03),
+    part(cyl(0.04, 0.04, 2.1, 5), bamboo, 0, 1.08),
+    part(box(0.9, 0.04, 0.04), bamboo, 0, 2.0),
+    ...[-0.38, 0.38].flatMap((x) => [
+      part(new THREE.SphereGeometry(0.2, 8, 6).scale(1, 0.85, 1), 0xd62a22, x, 1.7),
+      part(cyl(0.08, 0.08, 0.04, 6), gold, x, 1.88),
+      part(box(0.03, 0.2, 0.03), 0xe8b02a, x, 1.42),
+    ]),
+    part(new THREE.SphereGeometry(0.17, 8, 6).scale(1, 0.85, 1), gold, 0, 1.35),
+  ]);
+  // A steamer cart: a box on wheels with a push bar and a stack of bamboo baskets.
+  const dimSumCart = mergeGeometries([
+    part(box(0.8, 0.6, 1.3), 0xb8b8b4, 0, 0.6),
+    ...[-0.42, 0.42].flatMap((x) => [-0.5, 0.5].map((z) => part(cyl(0.12, 0.12, 0.05, 8).rotateZ(Math.PI / 2), 0x2a2a2a, x, 0.12, z))),
+    part(box(0.7, 0.04, 0.04), 0x8a8a88, 0, 1.05, -0.75),
+    ...[0, 1, 2, 3].map((k) => part(cyl(0.28, 0.28, 0.14, 10), bamboo, 0, 0.98 + k * 0.15, 0.15)),
+    part(cyl(0.29, 0.29, 0.03, 10), 0x9a7a4a, 0, 1.6, 0.15),
+  ]);
+  // A crate of fish on ice.
+  const fishCrate = mergeGeometries([
+    part(box(1.0, 0.4, 0.75), 0x3a6aa0, 0, 0.2),
+    part(box(0.9, 0.05, 0.65), 0xe8f2f6, 0, 0.42),
+    ...[-0.3, 0, 0.3].map((x) => part(box(0.18, 0.08, 0.5).rotateY(x), 0x8a9aa8, x, 0.48)),
+  ]);
+  // A folding table with a game of mahjong on it and two stools.
+  const mahjongTable = mergeGeometries([
+    part(box(0.9, 0.05, 0.9), 0x2a6a3a, 0, 0.75),
+    ...[-0.38, 0.38].flatMap((x) => [-0.38, 0.38].map((z) => part(box(0.05, 0.73, 0.05), 0x3a3a3a, x, 0.36, z))),
+    ...[-0.3, -0.1, 0.1, 0.3].flatMap((x) => [-0.32, 0.32].map((z) => part(box(0.08, 0.05, 0.06), 0xf2ead8, x, 0.8, z))),
+    ...[-0.3, 0.3].map((x) => part(box(0.06, 0.05, 0.08), 0xf2ead8, x, 0.8, 0)),
+    ...[-0.75, 0.75].map((x) => part(cyl(0.18, 0.18, 0.45, 8), 0xc8302a, x, 0.22)),
+  ]);
+  // An A-frame menu board.
+  const menuBoard = mergeGeometries([
+    part(box(0.55, 1.0, 0.04).rotateX(0.18), 0x1e1a18, 0, 0.5, 0.1),
+    part(box(0.55, 1.0, 0.04).rotateX(-0.18), 0x1e1a18, 0, 0.5, -0.1),
+    part(box(0.45, 0.6, 0.01).rotateX(0.18), 0xe8d8b0, 0, 0.55, 0.13),
+    part(box(0.35, 0.1, 0.01).rotateX(0.18), 0xc8302a, 0, 0.88, 0.07),
+  ]);
+  // A red crate of firecrackers, string-bundles poking out.
+  const firecrackerCrate = mergeGeometries([
+    part(box(0.75, 0.45, 0.75), 0xc8202a, 0, 0.22),
+    part(box(0.6, 0.12, 0.25), gold, 0, 0.3, 0.38),
+    ...[-0.22, 0, 0.22].flatMap((x) => [part(cyl(0.05, 0.05, 0.3, 6), 0xd62a22, x, 0.55, -0.1), part(cyl(0.05, 0.05, 0.3, 6), 0xd62a22, x, 0.55, 0.12)]),
+  ]);
+  // A delivery van: the body tinted per instance (white here), dark glass, wheels.
+  const parkedVan = mergeGeometries([
+    part(box(1.95, 1.55, 4.9), 0xffffff, 0, 1.25, 0),
+    part(box(1.9, 0.5, 0.9).rotateX(-0.5), 0xffffff, 0, 1.95, 2.25),
+    part(box(1.8, 0.65, 0.05).rotateX(-0.45), 0x1c2228, 0, 1.75, 2.48),
+    ...[-1, 1].map((x) => part(box(0.05, 0.5, 0.9), 0x1c2228, x * 0.985, 1.65, 1.6)),
+    part(box(2.0, 0.25, 0.15), 0x2a2a2a, 0, 0.55, 2.47),
+    part(box(2.0, 0.25, 0.15), 0x2a2a2a, 0, 0.55, -2.47),
+    ...[-0.98, 0.98].flatMap((x) => [-1.7, 1.7].map((z) => part(cyl(0.38, 0.38, 0.25, 12).rotateZ(Math.PI / 2), 0x151515, x, 0.38, z))),
+    ...[-0.7, 0.7].map((x) => part(box(0.3, 0.15, 0.04), 0xfff2cc, x, 0.9, 2.47)),
+  ]);
+  return { dragonLamp, produceStall, lanternStand, dimSumCart, fishCrate, mahjongTable, menuBoard, firecrackerCrate, parkedVan };
 }
 
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
@@ -577,7 +650,8 @@ function signTexture(variant: SignVariant): THREE.Texture {
 }
 
 /** District props: their meshes are only built in a city that has some. */
-const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp', 'dragonLamp']);
+const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp', 'dragonLamp',
+  'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel

@@ -203,6 +203,28 @@ export class SoundEffects {
       this.impact(Math.min(0.5, strength));
       return;
     }
+    // Chinatown breakables.
+    if (kind === 'firecrackerCrate') {
+      // A ripple of little bangs.
+      for (let k = 0; k < 14; k++) this.burst(k * 0.035 + Math.random() * 0.02, 0.04, 'bandpass', 1800 + Math.random() * 1500, 1, gain * 0.9);
+      return;
+    }
+    if (kind === 'lanternStand' || kind === 'menuBoard') {
+      this.burst(0, 0.2, 'highpass', 2200, 0.6, gain * 0.7); // paper and thin wood
+      return;
+    }
+    if (kind === 'mahjongTable') {
+      for (let k = 0; k < 8; k++) this.burst(k * 0.03, 0.03, 'bandpass', 3200, 2, gain * 0.5); // tiles clattering
+      return;
+    }
+    if (kind === 'parkedVan') {
+      this.impact(Math.min(1, strength + 0.3));
+      return;
+    }
+    if (kind === 'produceStall' || kind === 'dimSumCart' || kind === 'fishCrate') {
+      this.woodBreak(0.4, gain);
+      return;
+    }
     // Old City breakables.
     if (kind === 'haybale') {
       this.burst(0, 0.35, 'lowpass', 900, 0.7, gain * 1.4); // a soft whump of straw

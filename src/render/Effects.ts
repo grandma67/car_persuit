@@ -64,6 +64,13 @@ export class Effects {
   private straw = new TireSmoke({ color: 0xdcbc62, maxAlpha: 0.9, additive: false, startSize: 0.3, growth: 0.5, lift: [2, 5], gravity: 4, spread: 4, life: [0.9, 1.5], carry: 0.3 });
   private cloth = new TireSmoke({ color: 0xece4d4, maxAlpha: 0.55, additive: false, startSize: 0.6, growth: 2.2, lift: [0.6, 1.6], spread: 1.5, life: [0.5, 0.9] });
   private shards = new TireSmoke({ color: 0xb8643a, maxAlpha: 0.95, additive: false, startSize: 0.2, growth: 0, lift: [1.5, 4.5], gravity: 9.8, spread: 4, life: [0.6, 0.9], carry: 0.3 });
+  // Chinatown breakables: tumbling fruit, a red paper puff, steam from the baskets, mahjong tiles,
+  // firecracker sparks.
+  private fruit = new TireSmoke({ color: 0xe8742a, maxAlpha: 0.95, additive: false, startSize: 0.22, growth: 0, lift: [2, 5], gravity: 9.8, spread: 4.5, life: [0.7, 1.1], carry: 0.4 });
+  private paper = new TireSmoke({ color: 0xd8302a, maxAlpha: 0.8, additive: false, startSize: 0.25, growth: 0.6, lift: [1, 3], gravity: 2, spread: 3, life: [0.8, 1.4], carry: 0.3 });
+  private steam = new TireSmoke({ color: 0xf6f6f2, maxAlpha: 0.45, additive: false, startSize: 0.7, growth: 2.5, lift: [1, 2.2], spread: 1.2, life: [0.8, 1.3] });
+  private tiles = new TireSmoke({ color: 0xf2ead8, maxAlpha: 0.95, additive: false, startSize: 0.14, growth: 0, lift: [2, 4.5], gravity: 9.8, spread: 4, life: [0.6, 0.9], carry: 0.3 });
+  private sparks = new TireSmoke({ color: 0xffc040, maxAlpha: 0.9, additive: true, startSize: 0.18, growth: 0.1, lift: [2, 7], gravity: 6, spread: 6, life: [0.3, 0.7] });
   private exhaustBudget = 0;
   private sootBudget = 0;
   private exhaustTime = 0;
@@ -83,6 +90,7 @@ export class Effects {
     scene.add(this.skidMarks.mesh, this.smoke.points);
     scene.add(this.exhaust.points, this.soot.points, this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points, this.flash);
     scene.add(this.chips.points, this.straw.points, this.cloth.points, this.shards.points);
+    scene.add(this.fruit.points, this.paper.points, this.steam.points, this.tiles.points, this.sparks.points);
   }
 
   /** A car blowing up at `at`: fireball, smoke, flames and a flash of light above it. */
@@ -118,6 +126,14 @@ export class Effects {
       case 'barrels': case 'pillory': case 'signpost': return burst(this.chips, 18);
       case 'pot': case 'amphora': return burst(this.shards, 16);
       case 'oilLamp': case 'dragonLamp': return burst(this.fire, 10);
+      case 'produceStall': burst(this.fruit, 30); burst(this.cloth, 8); return burst(this.chips, 12);
+      case 'lanternStand': return burst(this.paper, 30);
+      case 'dimSumCart': burst(this.steam, 14); return burst(this.chips, 10);
+      case 'fishCrate': burst(this.water, 20); return burst(this.chips, 8);
+      case 'mahjongTable': return burst(this.tiles, 40);
+      case 'menuBoard': return burst(this.chips, 10);
+      case 'firecrackerCrate': burst(this.sparks, 60); return burst(this.paper, 20);
+      case 'parkedVan': return burst(this.shards, 10);
     }
     if (b.kind === 'lamp' || b.kind === 'signal') {
       for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0);
@@ -174,6 +190,7 @@ export class Effects {
     this.chips.update(dt);
     this.straw.update(dt);
     this.cloth.update(dt);
+    for (const e of [this.fruit, this.paper, this.steam, this.tiles, this.sparks]) e.update(dt);
     this.shards.update(dt);
     this.flash.intensity *= Math.exp(-6 * dt);
 

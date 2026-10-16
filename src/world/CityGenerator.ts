@@ -65,6 +65,7 @@ export interface Building extends Rect {
   variant: number;
   district?: DistrictKind; // built by a district
   lot?: string; // what kind of building it is in its district (picks its look)
+  street?: number; // district buildings: the sides on a street (bits: 1 +Z, 2 -Z, 4 +X, 8 -X)
 }
 
 export interface Block {

@@ -10,7 +10,7 @@ export type LandmarkKind =
   // Old City set pieces: placed by the district, never rolled as a town square's centrepiece.
   | 'cannon' | 'column' | 'ruinArch' | 'well' | 'marketCross'
   // Chinatown
-  | 'lion';
+  | 'lion' | 'pagoda' | 'incense';
 
 export interface Landmark {
   kind: LandmarkKind;
@@ -23,6 +23,8 @@ export interface Landmark {
   shape?: RampShape;
   /** Canal ramps: the `at` of the canal they jump. */
   crossing?: number;
+  /** Pagodas: how many storeys. */
+  tiers?: number;
 }
 
 /** A jump ramp's deck in local space: the car drives along +Z from the toe to the lip. */
@@ -46,6 +48,8 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   well: 1.5,
   marketCross: 3.2,
   lion: 0.7,
+  pagoda: 4.2,
+  incense: 0.8,
 };
 /** What a town square may roll (fixed: adding a kind above must not move any seed's squares). */
 const LANDMARK_KINDS: LandmarkKind[] = ['fountain', 'statue', 'obelisk', 'sculpture', 'ramp'];

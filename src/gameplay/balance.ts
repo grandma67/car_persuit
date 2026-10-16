@@ -142,6 +142,10 @@ export const CHINATOWN = {
   restaurants: [2, 4] as [number, number],
   banquetChance: 0.5,
   templeChance: 0.4,
+  templeHeight: 9, // at most, metres
+  squareStalls: 7, // stalls and mahjong tables round the pagoda
+  vans: [1, 3] as [number, number], // delivery vans double-parked on the main street
+  vanGap: 15, // metres, at least, from a junction mouth or a gate
   /** How many of each small shop, at most (from the lots fronting a street). */
   shops: { teaHouse: 2, bubbleTea: 2, herbalShop: 2, bakery: 2 },
 };

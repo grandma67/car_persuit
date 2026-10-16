@@ -518,6 +518,12 @@ export class Game {
         }
       }
       const smashed = this.scratchOnProps(this.player, this.props.checkVehicle(this.player, FIXED_DT));
+      // A firecracker crate goes off under the car: a hop and a shove back, no damage.
+      if (smashed.some((b) => b.kind === 'firecrackerCrate')) {
+        const v = this.player.body.linvel();
+        const m = this.player.body.mass();
+        this.player.body.applyImpulse({ x: -v.x * m * 0.12, y: m * 2.2, z: -v.z * m * 0.12 }, true);
+      }
       if (this.state === 'playing') this.runLog.propsSmashed += smashed.length;
       breaks.push(...smashed);
       for (const cop of this.director.cops) {

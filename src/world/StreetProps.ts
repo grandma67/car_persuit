@@ -10,7 +10,7 @@ export type PropKind =
   // Old City
   | 'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp'
   // Chinatown
-  | 'dragonLamp';
+  | 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -65,6 +65,15 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   oilLamp: { hx: 0.15, hz: 0.15, height: 4.2, mass: 80, breakSpeed: 3, slowdown: 0.06 },
   // Chinatown
   dragonLamp: { hx: 0.2, hz: 0.2, height: 4.9, mass: 110, breakSpeed: 3.5, slowdown: 0.07 },
+  produceStall: { hx: 1.2, hz: 0.75, height: 2.4, mass: 70, breakSpeed: 2, slowdown: 0.06 },
+  lanternStand: { hx: 0.45, hz: 0.45, height: 2.2, mass: 25, breakSpeed: 1.5, slowdown: 0.03 },
+  dimSumCart: { hx: 0.45, hz: 0.75, height: 1.3, mass: 60, breakSpeed: 2, slowdown: 0.05 },
+  fishCrate: { hx: 0.5, hz: 0.4, height: 0.55, mass: 25, breakSpeed: 1, slowdown: 0.02 },
+  mahjongTable: { hx: 0.55, hz: 0.55, height: 0.8, mass: 30, breakSpeed: 1.5, slowdown: 0.03 },
+  menuBoard: { hx: 0.3, hz: 0.25, height: 1.1, mass: 8, breakSpeed: 1, slowdown: 0.01 },
+  firecrackerCrate: { hx: 0.4, hz: 0.4, height: 0.6, mass: 15, breakSpeed: 1, slowdown: 0.02 },
+  // A delivery van double-parked in the kerb lane: heavy, and it takes a real hit to shove.
+  parkedVan: { hx: 1.0, hz: 2.5, height: 2.3, mass: 1600, breakSpeed: 9, slowdown: 0.35 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */

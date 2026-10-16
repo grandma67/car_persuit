@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { Rng } from '../core/Rng';
 
-export type FacadeStyle = 'curtain' | 'office' | 'brick' | 'stucco' | 'shutters' | 'siding' | 'adobe' | 'industrial' | 'halfTimber' | 'ashlar';
+export type FacadeStyle = 'curtain' | 'office' | 'brick' | 'stucco' | 'shutters' | 'siding' | 'adobe' | 'industrial' | 'halfTimber' | 'ashlar' | 'shophouse' | 'storefront';
 
 export const WINDOW_CELLS = 8;
 const PX = 64; // pixels per cell
@@ -188,6 +188,48 @@ const STYLES: Record<FacadeStyle, StyleSpec> = {
       c.fillStyle = grey(245);
       c.fillRect(x + PX * 0.33, y + PX * 0.7, PX * 0.34, PX * 0.06); // sill
       leaded(c, { x: 0.38, y: 0.26, w: 0.24, h: 0.44 }, x, y);
+    },
+  },
+  shophouse: {
+    // Chinatown's upper floors: pastel plaster, two tall windows with round fanlights between
+    // pilasters, louvred shutters folded back beside each, a moulded band at each floor.
+    wall: (c, rng) => {
+      speckle(c, rng, 240, 10);
+      for (let y = 0; y < WINDOW_CELLS; y++) { c.fillStyle = grey(212); c.fillRect(0, y * PX + PX - 4, SIZE, 4); }
+    },
+    panes: [{ x: 0.2, y: 0.2, w: 0.22, h: 0.6, arch: true }, { x: 0.58, y: 0.2, w: 0.22, h: 0.6, arch: true }],
+    glass: '#263039', wallRough: 0.9, glassRough: 0.15, glassMetal: 0.15, lit: 0.3, mullions: 'cross', frame: '#f4f0e6',
+    extras: (c, x, y) => {
+      c.fillStyle = grey(250); // pilasters at the bay's edges
+      c.fillRect(x, y, PX * 0.07, PX);
+      c.fillRect(x + PX * 0.93, y, PX * 0.07, PX);
+      // Shutters, coloured by bay.
+      c.fillStyle = ['#3f7a5e', '#2f5f80', '#8a3a30', '#3f7a5e'][(x / PX + y / PX * 3) % 4];
+      for (const sx of [0.1, 0.43, 0.8]) {
+        c.fillRect(x + PX * sx, y + PX * 0.28, PX * 0.09, PX * 0.52);
+      }
+      c.fillStyle = 'rgba(0,0,0,0.25)';
+      for (const sx of [0.1, 0.43, 0.8]) for (let k = 0; k < 7; k++) c.fillRect(x + PX * sx, y + PX * (0.31 + k * 0.07), PX * 0.09, 1);
+    },
+  },
+  storefront: {
+    // A shop's ground floor: a signboard band over wide glazing in a dark frame, a roller shutter
+    // half down on some bays.
+    wall: (c, rng) => speckle(c, rng, 235, 8),
+    panes: [{ x: 0.06, y: 0.32, w: 0.88, h: 0.64 }],
+    glass: '#2a3138', wallRough: 0.85, glassRough: 0.1, glassMetal: 0.2, lit: 0.55, mullions: 'vertical', frame: '#3a2a22',
+    extras: (c, x, y) => {
+      c.fillStyle = grey(150); // the signboard band (a darker shade of the wall)
+      c.fillRect(x, y + PX * 0.08, PX, PX * 0.17);
+      c.fillStyle = grey(235);
+      c.fillRect(x, y + PX * 0.25, PX, PX * 0.03);
+      if (((x / PX) * 5 + (y / PX) * 3) % 7 < 2) {
+        // A roller shutter, part way down.
+        c.fillStyle = '#9aa0a6';
+        c.fillRect(x + PX * 0.06, y + PX * 0.32, PX * 0.88, PX * 0.3);
+        c.fillStyle = '#7d838a';
+        for (let k = 0; k < 9; k++) c.fillRect(x + PX * 0.06, y + PX * (0.33 + k * 0.032), PX * 0.88, 1);
+      }
     },
   },
 };

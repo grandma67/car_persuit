@@ -8,6 +8,7 @@ import { part } from '../geometry';
 import type { CityData } from '../../world/CityGenerator';
 import type { District, Overhead, Structure } from '../../world/districts/District';
 import { wireY, type LanternData, type PaifangData } from '../../world/districts/ChinatownGates';
+import { renderChinatownShops } from './ChinatownShops';
 import { glyphMaterial, glyphPlate } from './glyphs';
 import type { DistrictRenderContext, DistrictView } from './index';
 
@@ -135,7 +136,8 @@ function wires(strings: StringState[], out: THREE.BufferGeometry[]): void {
   }
 }
 
-export function renderChinatown(q: District, _city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
+export function renderChinatown(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
+  renderChinatownShops(q, city, scene, ctx);
   const snowy = ctx.climate.snowRoofs;
   const geos: THREE.BufferGeometry[] = [];
   const boards: THREE.Matrix4[] = [];

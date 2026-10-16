@@ -1,21 +1,41 @@
 // Chinese characters for Chinatown's name boards, banners and signs: real, neutral glyphs (中華街
-// Chinatown, 福 fortune, 春 spring) drawn once at load into one canvas atlas from the system's fonts
+// Chinatown, 福 fortune, 春 spring, shop words like 茶 tea and 飯店 restaurant) drawn once at load into one canvas atlas from the system's fonts
 // (nearly every phone has CJK fonts; a generic serif is the last resort). Plates use the sign faces'
 // material settings, so they add no shader program.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const FONT = '"PingFang SC", "Hiragino Sans GB", "Heiti SC", "Noto Serif CJK SC", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "SimHei", serif';
-const SIZE = 1024;
+const W = 1024;
+const H = 2048;
 
-export type GlyphCell = 'board' | 'fu' | 'chun';
+/** Shop signboards: Chinese over an English name (made-up shop names, real words). */
+export const SIGNBOARDS = {
+  restaurant: ['金龍酒家', 'GOLDEN DRAGON'],
+  restaurant2: ['翠園飯店', 'JADE GARDEN'],
+  restaurant3: ['福星樓', 'LUCKY STAR'],
+  teaHouse: ['茶樓', 'TEA HOUSE'],
+  bubbleTea: ['珍珠奶茶', 'BUBBLE TEA'],
+  herbalShop: ['參茸藥材', 'HERBS & TONICS'],
+  bakery: ['餅家', 'BAKERY'],
+  grocery: ['雜貨', 'GROCERY'],
+} as const;
+export type Signboard = keyof typeof SIGNBOARDS;
+/** Vertical neon signs: one word each, in a neon colour. */
+export const NEON: [string, string][] = [['飯店', '#ff3a4a'], ['茶', '#4aff9a'], ['海鮮', '#3ad8ff'], ['珠寶', '#ffd23a'], ['酒家', '#ff5ad8'], ['麵', '#ffa03a'], ['金行', '#ffe25a'], ['旅館', '#7a8aff']];
+
+export type GlyphCell = 'board' | 'fu' | 'chun' | Signboard | `neon${number}`;
 
 /** Each cell's rectangle in atlas pixels (top-left origin). */
-const CELLS: Record<GlyphCell, { x: number; y: number; w: number; h: number }> = {
+const CELLS: Record<string, { x: number; y: number; w: number; h: number }> = {
   board: { x: 0, y: 0, w: 1024, h: 256 },
   fu: { x: 0, y: 256, w: 256, h: 512 },
   chun: { x: 256, y: 256, w: 256, h: 512 },
 };
+// Signboards: 512 × 128, two a row from y 1024.
+(Object.keys(SIGNBOARDS) as Signboard[]).forEach((k, i) => (CELLS[k] = { x: (i % 2) * 512, y: 1024 + Math.floor(i / 2) * 128, w: 512, h: 128 }));
+// Neon strips: 128 × 512, four beside the banners and four below the signboards.
+NEON.forEach((_, i) => (CELLS[`neon${i}`] = i < 4 ? { x: 512 + i * 128, y: 256, w: 128, h: 512 } : { x: (i - 4) * 128, y: 1536, w: 128, h: 512 }));
 
 const RED = '#a8191c';
 const GOLD = '#e0b13e';
@@ -50,6 +70,38 @@ function draw(g: CanvasRenderingContext2D): void {
     // A fringe of tassels along the bottom.
     for (let k = 0; k < 7; k++) g.fillRect(c.x + 26 + k * 33, c.y + c.h - 60, 10, 42);
   }
+  // Signboards: lacquered black or red boards with gold lettering, the English beneath.
+  (Object.keys(SIGNBOARDS) as Signboard[]).forEach((k, i) => {
+    const c = CELLS[k];
+    const [zh, en] = SIGNBOARDS[k];
+    g.fillStyle = i % 3 === 1 ? RED : '#1c1a18';
+    g.fillRect(c.x, c.y, c.w, c.h);
+    g.strokeStyle = GOLD;
+    g.lineWidth = 6;
+    g.strokeRect(c.x + 8, c.y + 8, c.w - 16, c.h - 16);
+    g.fillStyle = GOLD;
+    g.font = `bold 62px ${FONT}`;
+    g.fillText(zh, c.x + c.w / 2, c.y + 50, c.w - 40);
+    g.font = 'bold 26px "Helvetica Neue", Arial, sans-serif';
+    g.fillText(en, c.x + c.w / 2, c.y + 102, c.w - 40);
+  });
+  // Neon strips: dark boxes with glowing characters stacked top to bottom.
+  NEON.forEach(([word, color], i) => {
+    const c = CELLS[`neon${i}`];
+    g.fillStyle = '#141018';
+    g.fillRect(c.x, c.y, c.w, c.h);
+    g.strokeStyle = color;
+    g.lineWidth = 6;
+    g.strokeRect(c.x + 10, c.y + 10, c.w - 20, c.h - 20);
+    g.fillStyle = color;
+    g.shadowColor = color;
+    g.shadowBlur = 18;
+    const chars = [...word];
+    const step = (c.h - 60) / chars.length;
+    g.font = `bold ${Math.min(96, step * 0.85)}px ${FONT}`;
+    chars.forEach((ch, k) => g.fillText(ch, c.x + c.w / 2, c.y + 30 + step * (k + 0.5)));
+    g.shadowBlur = 0;
+  });
 }
 
 let atlas: THREE.Texture | null = null;
@@ -58,7 +110,8 @@ let atlas: THREE.Texture | null = null;
 export function glyphAtlas(): THREE.Texture {
   if (atlas) return atlas;
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = SIZE;
+  canvas.width = W;
+  canvas.height = H;
   draw(canvas.getContext('2d')!);
   atlas = new THREE.CanvasTexture(canvas);
   atlas.colorSpace = THREE.SRGBColorSpace;
@@ -76,7 +129,7 @@ export function glyphMaterial(): THREE.MeshStandardMaterial {
 function toCell(geo: THREE.BufferGeometry, cell: GlyphCell): THREE.BufferGeometry {
   const c = CELLS[cell];
   const uv = geo.attributes.uv;
-  for (let i = 0; i < uv.count; i++) uv.setXY(i, (c.x + uv.getX(i) * c.w) / SIZE, 1 - (c.y + (1 - uv.getY(i)) * c.h) / SIZE);
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (c.x + uv.getX(i) * c.w) / W, 1 - (c.y + (1 - uv.getY(i)) * c.h) / H);
   return geo;
 }
 

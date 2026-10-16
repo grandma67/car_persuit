@@ -4,7 +4,7 @@ import { inRect } from '../lots';
 import { CHINATOWN, CHINATOWN_GATES, DISTRICTS } from '../../gameplay/balance';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
 import { groundHeight } from '../Terrain';
-import { squareBlock } from './Chinatown';
+import { CHINATOWN_DEF, squareBlock } from './Chinatown';
 import { wireY, type LanternData, type PaifangData } from './ChinatownGates';
 import { inDistrict, isJunctionControl } from './apply';
 
@@ -193,6 +193,81 @@ describe('Chinatown paifang, lions and lanterns', () => {
         return Math.abs(A.x - B.x) < 0.5 ? Math.abs(p.x - A.x) <= reach : Math.abs(p.z - A.z) <= reach;
       });
       expect(near).toBe(true);
+    }
+  });
+});
+
+describe('Chinatown shops, props and vans', () => {
+  const roadsOf = (c: (typeof placed)[number][1]) => [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
+  const CLUTTER = new Set(['produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate']);
+
+  it.each(placed)('seed %i: kerb clutter keeps clutterMinOffset from every centre line and stays off the buildings', (_seed, c, q) => {
+    const sq = squareBlock(q);
+    const clutter = q.dressing.props.filter((p) => CLUTTER.has(p.kind) && (sq === undefined || !inRect(c.blocks[sq].rect, p, -3)));
+    expect(clutter.length).toBeGreaterThan(0);
+    const buildings = c.buildings.filter((b) => inRect(q.bounds, b)).map(rectFootprint);
+    for (const p of clutter) {
+      const fp = propFootprint(p);
+      const reach = Math.hypot(fp.hx, fp.hz);
+      for (const { rect } of c.roads.filter((r) => footprintsOverlap(rectFootprint({ ...r.rect, w: r.rect.w + 10, d: r.rect.d + 10 }), fp))) {
+        const lateral = rect.w > rect.d ? Math.abs(p.z - rect.z) : Math.abs(p.x - rect.x);
+        expect(lateral - reach).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
+      }
+      expect(buildings.filter((b) => footprintsOverlap(fp, b))).toEqual([]);
+    }
+  });
+
+  it.each(placed)('seed %i: 1–3 vans in the main street\'s kerb lane, 15 m from junction mouths and gates', (_seed, c, q) => {
+    const vans = q.dressing.props.filter((p) => p.kind === 'parkedVan');
+    expect(vans.length).toBeLessThanOrEqual(CHINATOWN.vans[1]);
+    const rw = c.config.roadWidth;
+    for (const v of vans) {
+      // On a main-street edge, between the lane centre and the kerb, along the street.
+      const on = q.mainStreet.find((k) => {
+        const [A, B] = k.split('>').map((id) => c.graph.nodes[Number(id)]);
+        const alongX = Math.abs(A.z - B.z) < 0.5;
+        const lateral = alongX ? Math.abs(v.z - A.z) : Math.abs(v.x - A.x);
+        const t = alongX ? v.x : v.z;
+        const [a, b] = alongX ? [A.x, B.x] : [A.z, B.z];
+        return lateral > 3 && lateral < rw / 2 && t > Math.min(a, b) && t < Math.max(a, b);
+      });
+      expect(on).toBeDefined();
+      for (const n of [...q.interior, ...q.perimeter].map((id) => c.graph.nodes[id])) {
+        expect(Math.hypot(v.x - n.x, v.z - n.z)).toBeGreaterThanOrEqual(rw / 2 + CHINATOWN.vanGap - 1e-6);
+      }
+      for (const g of q.gates) expect(Math.hypot(v.x - g.x, v.z - g.z)).toBeGreaterThanOrEqual(CHINATOWN.vanGap);
+      expect(Math.abs(Math.sin(v.yaw * 2))).toBeLessThan(1e-6); // square to the street
+    }
+  });
+
+  it('parks a van on most seeds', () => {
+    expect(placed.filter(([, , q]) => q.dressing.props.some((p) => p.kind === 'parkedVan')).length).toBeGreaterThan(placed.length * 0.7);
+  });
+
+  it.each(placed)('seed %i: the pagoda and the incense burner stand off the road and off every junction control', (_seed, c, q) => {
+    const roads = roadsOf(c);
+    const controls = c.streetProps.filter(isJunctionControl).map((p) => propFootprint(p));
+    for (const l of q.dressing.landmarks.filter((l) => l.kind === 'pagoda' || l.kind === 'incense')) {
+      const fp = { x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 };
+      expect(roads.filter((r) => footprintsOverlap(fp, r))).toEqual([]);
+      expect(controls.filter((p) => footprintsOverlap(fp, p))).toEqual([]);
+      if (l.kind === 'pagoda') expect(l.tiers).toBeGreaterThanOrEqual(3), expect(l.tiers).toBeLessThanOrEqual(5);
+    }
+    expect(q.dressing.landmarks.some((l) => l.kind === 'pagoda')).toBe(squareBlock(q) !== undefined);
+  });
+
+  it.each(placed)('seed %i: benches, umbrellas and decorative signs are gone; hydrants stay', (_seed, c, q) => {
+    const inside = c.streetProps.filter((p) => inDistrict(q, p));
+    expect(inside.filter((p) => p.kind === 'bench' || p.kind === 'umbrella' || (p.kind === 'sign' && (p.variant === 'noSmoking' || p.variant === 'children')))).toEqual([]);
+  });
+
+  it('every lot kind has a look; the restaurants, banquet hall, tea house and temple wear pagoda caps', () => {
+    for (const lot of ['shophouse', 'restaurant', 'banquetHall', 'teaHouse', 'bubbleTea', 'herbalShop', 'bakery', 'temple']) {
+      const look = CHINATOWN_DEF.looks[lot];
+      expect(look).toBeDefined();
+      expect(look.facade).toBe('shophouse');
+      expect(look.ground).toBe('storefront');
+      expect(look.roof === 'pagoda').toBe(['restaurant', 'banquetHall', 'teaHouse', 'temple'].includes(lot));
     }
   });
 });
