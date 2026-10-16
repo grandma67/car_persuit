@@ -21,9 +21,14 @@ describe('Chinatown placement', () => {
     expect(placed.length).toBeGreaterThan(SEEDS.length * 0.7);
   });
 
+  it('places every listed shape, either way round, on some seed', () => {
+    const got = new Set(placed.map(([, , q]) => `${Math.min(q.grid.w, q.grid.h)}x${Math.max(q.grid.w, q.grid.h)}`));
+    for (const [a, b] of CHINATOWN_DEF.shapes) expect(got).toContain(`${Math.min(a, b)}x${Math.max(a, b)}`);
+  });
+
   it.each(placed)('seed %i: a valid cluster in the inner city', (_seed, c, q) => {
     const { i0, j0, w, h } = q.grid;
-    expect([[2, 2], [3, 3], [4, 4]]).toContainEqual([w, h]);
+    expect(CHINATOWN_DEF.shapes.flatMap(([a, b]) => [[a, b], [b, a]])).toContainEqual([w, h]);
     const n = c.config.blocks, ring = DISTRICTS.outerRing;
     expect(i0 >= ring && j0 >= ring && i0 + w <= n - ring && j0 + h <= n - ring).toBe(true);
     const zones = q.blocks.map((k) => c.blocks[k].zone);

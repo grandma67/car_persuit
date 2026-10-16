@@ -4,7 +4,7 @@ import { inRect } from '../lots';
 import { DISTRICTS, OLD_CITY, OLD_CITY_WALLS } from '../../gameplay/balance';
 import { footprintsOverlap, propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
 import { inDistrict, isJunctionControl } from './apply';
-import { facingSquare, squareBlock } from './OldCity';
+import { facingSquare, OLD_CITY_DEF, squareBlock } from './OldCity';
 import { wallLine, wallPlan } from './OldCityWalls';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
@@ -17,12 +17,17 @@ describe('Old City placement', () => {
     expect(placed).toBeGreaterThan(SEEDS.length * 0.7);
   });
 
+  it('places every listed shape, either way round, on some seed', () => {
+    const got = new Set(SEEDS.flatMap((s) => { const g = oldCity(s)?.grid; return g ? [`${Math.min(g.w, g.h)}x${Math.max(g.w, g.h)}`] : []; }));
+    for (const [a, b] of OLD_CITY_DEF.shapes) expect(got).toContain(`${Math.min(a, b)}x${Math.max(a, b)}`);
+  });
+
   it.each(SEEDS)('seed %i: a valid cluster in the inner city', (seed) => {
     const c = city(seed);
     const q = c.districts.find((d) => d.kind === 'oldtown');
     if (!q) return;
     const { i0, j0, w, h } = q.grid;
-    expect([[2, 2], [3, 3], [4, 4]]).toContainEqual([w, h]);
+    expect(OLD_CITY_DEF.shapes.flatMap(([a, b]) => [[a, b], [b, a]])).toContainEqual([w, h]);
     // Clear of the outer ring, at least half downtown or midtown.
     const n = c.config.blocks, ring = DISTRICTS.outerRing;
     expect(i0 >= ring && j0 >= ring && i0 + w <= n - ring && j0 + h <= n - ring).toBe(true);

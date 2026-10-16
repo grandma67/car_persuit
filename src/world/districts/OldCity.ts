@@ -91,7 +91,7 @@ export const OLD_CITY_DEF: DistrictDef = {
   salt: 0x01dc17,
   chance: OLD_CITY.chance,
   site: 'inland',
-  shapes: [[2, 2], [3, 3], [4, 4]],
+  shapes: [[2, 2], [2, 3], [3, 3], [3, 4], [4, 4]],
   rings: ['midtown', 'downtown', 'residential', 'industrial'], // any inner block; minCore keeps it central
   minCore: 0.5,
   gates: 'all',
