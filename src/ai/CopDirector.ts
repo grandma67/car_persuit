@@ -185,6 +185,12 @@ export class CopDirector {
     return this.levelTuning!;
   }
 
+  /** Remove every cop, wrecks too (debug: police switched off). */
+  clear(): void {
+    for (const cop of this.cops) cop.vehicle.dispose();
+    this.cops.length = 0;
+  }
+
   wreck(cop: Cop): void {
     cop.wreckedFor = 0;
     cop.vehicle.lightsOff = true;

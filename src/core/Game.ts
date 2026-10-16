@@ -102,6 +102,7 @@ export class Game {
   private health = new Health();
   private prefs = loadPrefs(safeStorage()); // mute and difficulty, kept between sessions
   private difficulty: Difficulty = difficultyById(this.prefs.difficulty);
+  private policeOff = false; // debug: O switches the police off and on
   private records = new Records(safeStorage());
   private touch: TouchControls | null = null;
   private destinations: ReturnType<typeof pickDestinations>;
@@ -267,7 +268,7 @@ export class Game {
     this.hud = new Hud(hudRoot, this.minimap.canvas);
     this.audio.setMuted(this.prefs.muted);
     this.hud.setMuted(this.prefs.muted);
-    this.hud.setWantedVisible(this.difficulty.police);
+    this.hud.setWantedVisible(this.police);
     if (this.debug) this.hud.showFps();
     this.screens = new Screens(document.body, (kind) => this.audio.uiBlip(kind));
     const england = this.city.driveSide === 'left' ? 'England · drive on the left' : null;
@@ -330,7 +331,7 @@ export class Game {
     this.difficulty = difficultyById(id);
     this.prefs.difficulty = this.difficulty.id;
     savePrefs(safeStorage(), this.prefs);
-    this.hud.setWantedVisible(this.difficulty.police);
+    this.hud.setWantedVisible(this.police);
     // Rebuild the (not yet started) mission so the timer shows this difficulty's limit.
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
     this.showMenu();
@@ -343,7 +344,7 @@ export class Game {
     this.health = new Health({ ...DAMAGE, maxHealth: d.maxHealth, impactThreshold: d.armor, impactScale: DAMAGE.impactScale * d.damageScale });
     this.wanted.rate = d.heatRate;
     this.traffic.count = d.traffic;
-    this.hud.setWantedVisible(d.police);
+    this.hud.setWantedVisible(this.police);
     this.touch?.setVisible(true);
     this.audio.unlock();
     this.audio.menuMusic(false);
@@ -379,6 +380,19 @@ export class Game {
     this.prefs.muted = muted;
     savePrefs(safeStorage(), this.prefs);
     return muted;
+  }
+
+  /** Whether cops chase this run: the difficulty has police and debug hasn't switched them off. */
+  private get police(): boolean {
+    return this.difficulty.police && !this.policeOff;
+  }
+
+  /** Debug: switch the police off (every cop removed, stars frozen) or back on. */
+  private togglePolice(): void {
+    this.policeOff = !this.policeOff;
+    if (this.policeOff) this.director.clear();
+    this.hud.setWantedVisible(this.police);
+    this.hud.toast(this.policeOff ? 'POLICE OFF' : 'POLICE ON', 1.5);
   }
 
   private setPaused(paused: boolean): void {
@@ -446,7 +460,7 @@ export class Game {
         if (over) this.restart(Math.floor(Math.random() * 1_000_000));
         break;
       // Debug only. C: overview camera. T: jump to the current destination. Y: leave 3 seconds on
-      // the clock. K: one more wanted star.
+      // the clock. K: one more wanted star. O: police off and on.
       case 'KeyC':
         if (!this.debug) break;
         this.overview = !this.overview;
@@ -465,6 +479,9 @@ export class Game {
         break;
       case 'KeyK':
         if (this.debug && playing) this.raiseStars(this.wanted.bump());
+        break;
+      case 'KeyO':
+        if (this.debug) this.togglePolice();
         break;
     }
   }
@@ -585,7 +602,7 @@ export class Game {
     if (this.carShadowCull) this.cullCarShadows();
     this.checkWater();
     this.traffic.update(this.player.position, [this.player, ...this.director.cops.map((c) => c.vehicle)]);
-    if (this.state === 'playing' && this.difficulty.police) {
+    if (this.state === 'playing' && this.police) {
       this.raiseStars(this.wanted.update(frameDt));
       const level = this.wanted.level;
       this.director.update(
@@ -627,8 +644,8 @@ export class Game {
       timeLeft: this.mission.timeLeft,
       distance: this.state === 'playing' ? (this.route?.distance ?? null) : null,
       health: this.health.ratio,
-      stars: this.difficulty.police ? this.wanted.stars : 0,
-      starProgress: this.difficulty.police ? this.wanted.progress : 0,
+      stars: this.police ? this.wanted.stars : 0,
+      starProgress: this.police ? this.wanted.progress : 0,
     });
     const fwd = this.player.forward();
     const target = this.state === 'playing' ? this.mission.current : null;
@@ -884,7 +901,7 @@ export class Game {
 
   /** Announce a new wanted level. */
   private raiseStars(stars: number | null): void {
-    if (stars === null || !this.difficulty.police) return;
+    if (stars === null || !this.police) return;
     this.logIncident('stars', `Wanted level ${stars} ${'★'.repeat(stars)}`);
     const news = ['', '', 'MORE UNITS RESPONDING', 'INTERCEPTORS INBOUND', 'SUVs AND ROADBLOCKS', 'ARMORED UNITS DEPLOYED'][stars];
     this.hud.toast(`${'★'.repeat(stars)}  ${news}`, 2.5);
