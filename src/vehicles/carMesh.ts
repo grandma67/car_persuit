@@ -240,114 +240,19 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   skirt.position.y = -hy + 0.04;
   root.add(skirt);
 
-  // Cabin / glasshouse, and where the roof ends up (for the light bar).
+  // Cabin / glasshouse and the body's own extras; each returns where the roof ends up (for the light bar).
+  const parts: BodyParts = { spec, root, hx, hy, hz, noseDrop, paint, trim, glass, box };
   let roof: number;
-  if (body === 'truck') {
-    // Armored truck: slit windscreen and side vision ports in the slab body, roof hatch.
-    const slit = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.7, hy * 0.35, 0.06), glass);
-    slit.position.set(0, hy * 0.45, hz + 0.01);
-    root.add(slit);
-    for (const side of [-1, 1]) {
-      const port = new THREE.Mesh(new THREE.BoxGeometry(0.06, hy * 0.3, hz * 0.5), glass);
-      port.position.set(side * (hx + 0.01), hy * 0.45, hz * 0.45);
-      root.add(port);
-    }
-    const hatch = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.9), trim);
-    hatch.position.set(0, hy + 0.06, -hz * 0.3);
-    root.add(hatch);
-    roof = hy;
-  } else if (body === 'bus') {
-    // City bus: a long window band down both sides, big windscreen, white roof.
-    for (const side of [-1, 1]) box(0.04, hy * 0.6, hz * 1.7, glass, side * (hx + 0.01), hy * 0.35, -hz * 0.05);
-    box(hx * 1.8, hy * 0.75, 0.04, glass, 0, hy * 0.3, hz + 0.01);
-    box(hx * 1.8, 0.4, 0.04, glass, 0, hy * 0.75, -hz - 0.01);
-    box(hx * 1.95, 0.08, hz * 1.95, new THREE.MeshStandardMaterial({ color: 0xe8e8e4, roughness: 0.6, flatShading: true }), 0, hy + 0.04, 0);
-    // Door on the kerb side: right (-X), or left (+X) where traffic keeps left.
-    const door = spec.kerb === 'left' ? 1 : -1;
-    box(0.05, hy * 1.5, 1.1, trim, door * (hx + 0.02), -hy * 0.2, hz * 0.72);
-    roof = hy + 0.08;
-  } else if (body === 'boxtruck') {
-    // Short cab with a windscreen, tall white cargo box behind it.
-    const cabLen = 1.9;
-    const cabTop = hy * 0.35;
-    box(hx * 2, cabTop + hy, cabLen, paint, 0, (cabTop - hy) / 2, hz - cabLen / 2);
-    box(hx * 1.7, (cabTop + hy) * 0.35, 0.04, glass, 0, cabTop - (cabTop + hy) * 0.22, hz + 0.01);
-    for (const side of [-1, 1]) box(0.04, (cabTop + hy) * 0.3, cabLen * 0.5, glass, side * (hx + 0.01), cabTop - (cabTop + hy) * 0.22, hz - cabLen * 0.4);
-    const cargo = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.7, flatShading: true });
-    box(hx * 2.04, hy * 2, hz * 2 - cabLen - 0.15, cargo, 0, 0, -cabLen / 2 - 0.075);
-    roof = hy;
-  } else if (body === 'van') {
-    // Tall glasshouse almost the length of the van.
-    box(hx * 1.9, hy * 0.55, 0.04, glass, 0, hy * 0.5, hz - 0.15);
-    for (const side of [-1, 1]) box(0.04, hy * 0.45, hz * 1.2, glass, side * (hx + 0.01), hy * 0.5, hz * 0.05);
-    roof = hy;
-  } else if (body === 'pickup') {
-    // Cab up front, open bed with low walls behind.
-    box(hx * 1.86, 0.7, hz * 0.62, glass, 0, hy + 0.35, hz * 0.12);
-    box(hx * 1.9, 0.06, hz * 0.64, paint, 0, hy + 0.72, hz * 0.12);
-    for (const side of [-1, 1]) box(0.08, 0.3, hz * 0.8, paint, side * (hx - 0.04), hy + 0.15, -hz * 0.58);
-    box(hx * 2, 0.3, 0.08, paint, 0, hy + 0.15, -hz + 0.04);
-    roof = hy + 0.75;
-  } else if (body === 'ramptruck') {
-    // Cab in the paint colour; the tilted deck in dark steel with yellow/black chevrons on top.
-    const { z0, z1, top } = RAMP.cab;
-    box(RAMP.halfWidth * 2, top - hy, z1 - z0, paint, 0, (top + hy) / 2, (z0 + z1) / 2);
-    box(RAMP.halfWidth * 1.7, (top - hy) * 0.4, 0.04, glass, 0, top - (top - hy) * 0.3, z1 + 0.01);
-    for (const side of [-1, 1]) box(0.04, (top - hy) * 0.35, (z1 - z0) * 0.5, glass, side * (RAMP.halfWidth + 0.01), top - (top - hy) * 0.3, z1 - (z1 - z0) * 0.3);
-    const steel = new THREE.MeshStandardMaterial({ color: 0x3a3e45, metalness: 0.7, roughness: 0.45, flatShading: true });
-    // Drawn 1 cm inside the body's sides and floor, which it would otherwise share and flicker against.
-    const hull = pointsOf(rampHullPoints(spec)).map((p) => p.set(p.x * (1 - 0.01 / RAMP.halfWidth), p.y <= -hy ? p.y + 0.01 : p.y, p.z));
-    root.add(new THREE.Mesh(new ConvexGeometry(hull), steel));
-    const run = RAMP.top.z - RAMP.tail.z;
-    const rise = RAMP.top.y - RAMP.tail.y;
-    // Flat, facing up, texture-top toward the front; then tilted to the deck slope.
-    const deckGeo = new THREE.PlaneGeometry(RAMP.halfWidth * 2, Math.hypot(run, rise)).rotateX(-Math.PI / 2).rotateY(Math.PI);
-    const chevrons = sharedChevronTexture();
-    const deck = new THREE.Mesh(deckGeo, new THREE.MeshStandardMaterial({ map: chevrons, color: chevrons ? 0xffffff : 0xf2c12e, roughness: 0.7 }));
-    deck.rotation.x = -Math.atan2(rise, run);
-    deck.position.set(0, (RAMP.tail.y + RAMP.top.y) / 2 + 0.02, (RAMP.tail.z + RAMP.top.z) / 2);
-    deck.receiveShadow = true;
-    root.add(deck);
-    roof = top;
-  } else if (body === 'suv') {
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.86, 0.72, hz * 1.25), glass);
-    cabin.position.set(0, hy + 0.36, -hz * 0.18);
-    root.add(cabin);
-    const roofPanel = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.9, 0.06, hz * 1.27), paint);
-    roofPanel.position.set(0, hy + 0.74, -hz * 0.18);
-    root.add(roofPanel);
-    roof = hy + 0.77;
-  } else {
-    // Faceted canopy, set slightly back; taller and longer on a sedan.
-    const cabinGeo = new THREE.CylinderGeometry(0.75, 1.0, body === 'sedan' ? 0.6 : 0.5, 4, 1);
-    cabinGeo.rotateY(Math.PI / 4);
-    cabinGeo.scale(1.15, 1, body === 'sedan' ? 1.85 : 1.6);
-    const cabin = new THREE.Mesh(cabinGeo, glass);
-    cabin.position.set(0, hy + (body === 'sedan' ? 0.28 : 0.23), body === 'sedan' ? -0.2 : -0.3);
-    // The nose slopes down under the canopy: drop its bottom edge onto the body's top line (3 cm
-    // into it), or the windscreen floats above the bonnet.
-    const pos = cabinGeo.attributes.position;
-    const bottom = Math.min(...Array.from({ length: pos.count }, (_, i) => pos.getY(i)));
-    for (let i = 0; i < pos.count; i++) {
-      if (pos.getY(i) > bottom + 1e-6) continue;
-      const z = pos.getZ(i) + cabin.position.z;
-      const top = hy - hy * noseDrop * ((z + hz) / (2 * hz));
-      pos.setY(i, top - 0.03 - cabin.position.y);
-    }
-    cabinGeo.computeVertexNormals();
-    root.add(cabin);
-    roof = hy + (body === 'sedan' ? 0.58 : 0.48);
-  }
-
-  if (body === 'sports') {
-    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 - 0.1, 0.08, 0.35), paint);
-    spoiler.position.set(0, hy + 0.3, -hz + 0.15);
-    root.add(spoiler);
-    for (const x of [-0.6, 0.6]) {
-      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), trim);
-      strut.position.set(x, hy + 0.15, -hz + 0.2);
-      root.add(strut);
-    }
+  switch (body) {
+    case 'truck': roof = armoredTruck(parts); break;
+    case 'bus': roof = bus(parts); break;
+    case 'boxtruck': roof = boxTruck(parts); break;
+    case 'van': roof = van(parts); break;
+    case 'pickup': roof = pickup(parts); break;
+    case 'ramptruck': roof = rampTruck(parts); break;
+    case 'suv': roof = suv(parts); break;
+    case 'sedan':
+    case 'sports': roof = canopyCar(parts, body); break;
   }
 
   for (const x of [-0.65, 0.65]) {
@@ -582,6 +487,127 @@ export function setGlow(sprite: THREE.Sprite, opacity: number): void {
 }
 
 let glowCache: THREE.Texture | null | undefined;
+/** What the per-body builders below draw with: the car's size, its root and shared materials. */
+interface BodyParts {
+  spec: VehicleSpec;
+  root: THREE.Group;
+  hx: number;
+  hy: number;
+  hz: number;
+  noseDrop: number;
+  paint: THREE.Material;
+  trim: THREE.Material;
+  glass: THREE.Material;
+  /** Adds a box to the root, centred at (x, y, z). */
+  box: (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => THREE.Mesh;
+}
+
+/** Armored truck: slit windscreen and side vision ports in the slab body, roof hatch. */
+function armoredTruck({ hx, hy, hz, trim, glass, box }: BodyParts): number {
+  box(hx * 1.7, hy * 0.35, 0.06, glass, 0, hy * 0.45, hz + 0.01);
+  for (const side of [-1, 1]) box(0.06, hy * 0.3, hz * 0.5, glass, side * (hx + 0.01), hy * 0.45, hz * 0.45);
+  box(0.9, 0.12, 0.9, trim, 0, hy + 0.06, -hz * 0.3);
+  return hy;
+}
+
+/** City bus: a long window band down both sides, big windscreen, white roof, door on the kerb side. */
+function bus({ spec, hx, hy, hz, trim, glass, box }: BodyParts): number {
+  for (const side of [-1, 1]) box(0.04, hy * 0.6, hz * 1.7, glass, side * (hx + 0.01), hy * 0.35, -hz * 0.05);
+  box(hx * 1.8, hy * 0.75, 0.04, glass, 0, hy * 0.3, hz + 0.01);
+  box(hx * 1.8, 0.4, 0.04, glass, 0, hy * 0.75, -hz - 0.01);
+  box(hx * 1.95, 0.08, hz * 1.95, new THREE.MeshStandardMaterial({ color: 0xe8e8e4, roughness: 0.6, flatShading: true }), 0, hy + 0.04, 0);
+  // Door on the kerb side: right (-X), or left (+X) where traffic keeps left.
+  const door = spec.kerb === 'left' ? 1 : -1;
+  box(0.05, hy * 1.5, 1.1, trim, door * (hx + 0.02), -hy * 0.2, hz * 0.72);
+  return hy + 0.08;
+}
+
+/** Short cab with a windscreen, tall white cargo box behind it (instead of the body shell). */
+function boxTruck({ hx, hy, hz, paint, glass, box }: BodyParts): number {
+  const cabLen = 1.9;
+  const cabTop = hy * 0.35;
+  box(hx * 2, cabTop + hy, cabLen, paint, 0, (cabTop - hy) / 2, hz - cabLen / 2);
+  box(hx * 1.7, (cabTop + hy) * 0.35, 0.04, glass, 0, cabTop - (cabTop + hy) * 0.22, hz + 0.01);
+  for (const side of [-1, 1]) box(0.04, (cabTop + hy) * 0.3, cabLen * 0.5, glass, side * (hx + 0.01), cabTop - (cabTop + hy) * 0.22, hz - cabLen * 0.4);
+  const cargo = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.7, flatShading: true });
+  box(hx * 2.04, hy * 2, hz * 2 - cabLen - 0.15, cargo, 0, 0, -cabLen / 2 - 0.075);
+  return hy;
+}
+
+/** Tall glasshouse almost the length of the van. */
+function van({ hx, hy, hz, glass, box }: BodyParts): number {
+  box(hx * 1.9, hy * 0.55, 0.04, glass, 0, hy * 0.5, hz - 0.15);
+  for (const side of [-1, 1]) box(0.04, hy * 0.45, hz * 1.2, glass, side * (hx + 0.01), hy * 0.5, hz * 0.05);
+  return hy;
+}
+
+/** Cab up front, open bed with low walls behind. */
+function pickup({ hx, hy, hz, paint, glass, box }: BodyParts): number {
+  box(hx * 1.86, 0.7, hz * 0.62, glass, 0, hy + 0.35, hz * 0.12);
+  box(hx * 1.9, 0.06, hz * 0.64, paint, 0, hy + 0.72, hz * 0.12);
+  for (const side of [-1, 1]) box(0.08, 0.3, hz * 0.8, paint, side * (hx - 0.04), hy + 0.15, -hz * 0.58);
+  box(hx * 2, 0.3, 0.08, paint, 0, hy + 0.15, -hz + 0.04);
+  return hy + 0.75;
+}
+
+/** Cab in the paint colour; the tilted deck in dark steel with yellow/black chevrons on top. */
+function rampTruck({ spec, root, hy, paint, glass, box }: BodyParts): number {
+  const { z0, z1, top } = RAMP.cab;
+  box(RAMP.halfWidth * 2, top - hy, z1 - z0, paint, 0, (top + hy) / 2, (z0 + z1) / 2);
+  box(RAMP.halfWidth * 1.7, (top - hy) * 0.4, 0.04, glass, 0, top - (top - hy) * 0.3, z1 + 0.01);
+  for (const side of [-1, 1]) box(0.04, (top - hy) * 0.35, (z1 - z0) * 0.5, glass, side * (RAMP.halfWidth + 0.01), top - (top - hy) * 0.3, z1 - (z1 - z0) * 0.3);
+  const steel = new THREE.MeshStandardMaterial({ color: 0x3a3e45, metalness: 0.7, roughness: 0.45, flatShading: true });
+  // Drawn 1 cm inside the body's sides and floor, which it would otherwise share and flicker against.
+  const hull = pointsOf(rampHullPoints(spec)).map((p) => p.set(p.x * (1 - 0.01 / RAMP.halfWidth), p.y <= -hy ? p.y + 0.01 : p.y, p.z));
+  root.add(new THREE.Mesh(new ConvexGeometry(hull), steel));
+  const run = RAMP.top.z - RAMP.tail.z;
+  const rise = RAMP.top.y - RAMP.tail.y;
+  // Flat, facing up, texture-top toward the front; then tilted to the deck slope.
+  const deckGeo = new THREE.PlaneGeometry(RAMP.halfWidth * 2, Math.hypot(run, rise)).rotateX(-Math.PI / 2).rotateY(Math.PI);
+  const chevrons = sharedChevronTexture();
+  const deck = new THREE.Mesh(deckGeo, new THREE.MeshStandardMaterial({ map: chevrons, color: chevrons ? 0xffffff : 0xf2c12e, roughness: 0.7 }));
+  deck.rotation.x = -Math.atan2(rise, run);
+  deck.position.set(0, (RAMP.tail.y + RAMP.top.y) / 2 + 0.02, (RAMP.tail.z + RAMP.top.z) / 2);
+  deck.receiveShadow = true;
+  root.add(deck);
+  return top;
+}
+
+/** Boxy glass cabin under a painted roof panel. */
+function suv({ hx, hy, hz, paint, glass, box }: BodyParts): number {
+  box(hx * 1.86, 0.72, hz * 1.25, glass, 0, hy + 0.36, -hz * 0.18);
+  box(hx * 1.9, 0.06, hz * 1.27, paint, 0, hy + 0.74, -hz * 0.18);
+  return hy + 0.77;
+}
+
+/** Faceted canopy, set slightly back; taller and longer on a sedan. Sports cars add a rear spoiler. */
+function canopyCar({ root, hx, hy, hz, noseDrop, paint, trim, glass, box }: BodyParts, body: 'sedan' | 'sports'): number {
+  const sedan = body === 'sedan';
+  const cabinGeo = new THREE.CylinderGeometry(0.75, 1.0, sedan ? 0.6 : 0.5, 4, 1);
+  cabinGeo.rotateY(Math.PI / 4);
+  cabinGeo.scale(1.15, 1, sedan ? 1.85 : 1.6);
+  const cabin = new THREE.Mesh(cabinGeo, glass);
+  cabin.position.set(0, hy + (sedan ? 0.28 : 0.23), sedan ? -0.2 : -0.3);
+  // The nose slopes down under the canopy: drop its bottom edge onto the body's top line (3 cm
+  // into it), or the windscreen floats above the bonnet.
+  const pos = cabinGeo.attributes.position;
+  const bottom = Math.min(...Array.from({ length: pos.count }, (_, i) => pos.getY(i)));
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) > bottom + 1e-6) continue;
+    const z = pos.getZ(i) + cabin.position.z;
+    const top = hy - hy * noseDrop * ((z + hz) / (2 * hz));
+    pos.setY(i, top - 0.03 - cabin.position.y);
+  }
+  cabinGeo.computeVertexNormals();
+  root.add(cabin);
+  if (body === 'sports') {
+    box(hx * 2 - 0.1, 0.08, 0.35, paint, 0, hy + 0.3, -hz + 0.15);
+    for (const x of [-0.6, 0.6]) box(0.08, 0.3, 0.12, trim, x, hy + 0.15, -hz + 0.2);
+  }
+  return hy + (sedan ? 0.58 : 0.48);
+}
+
+
 /** One glow texture shared by every car; none in headless tests (no DOM). */
 export function sharedGlowTexture(): THREE.Texture | null {
   if (glowCache === undefined) glowCache = typeof document === 'undefined' ? null : glowSpriteTexture();
