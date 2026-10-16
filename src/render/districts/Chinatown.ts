@@ -8,6 +8,8 @@ import { part } from '../geometry';
 import type { CityData } from '../../world/CityGenerator';
 import type { District, Overhead, Structure } from '../../world/districts/District';
 import { wireY, type LanternData, type PaifangData } from '../../world/districts/ChinatownGates';
+import { CHINATOWN } from '../../gameplay/balance';
+import { chinatownExtra, type BulbString } from '../../world/districts/Chinatown';
 import { renderChinatownShops } from './ChinatownShops';
 import { glyphMaterial, glyphPlate } from './glyphs';
 import type { DistrictRenderContext, DistrictView } from './index';
@@ -101,43 +103,65 @@ interface StringState {
   mid: THREE.Vector3;
   axis: THREE.Vector3; // along the wire
   pivots: THREE.Vector3[]; // where each lantern hangs from the wire
-  first: number; // its first lantern instance
+  slots: [THREE.InstancedMesh, number][]; // each lantern's mesh (red or gold) and instance
   kick: number; // extra swing from a car passing under, decaying
   phase: number;
 }
 
 const LANTERN_HANG = 0.25; // pivot to the lantern's centre (G.lanternDrop is to its bottom)
 
-function lanternGeometry(): THREE.BufferGeometry {
+function lanternGeometry(body = 0xd62a22): THREE.BufferGeometry {
   return mergeGeometries([
     part(box(0.02, LANTERN_HANG - 0.22, 0.02), WIRE, 0, -(LANTERN_HANG - 0.22) / 2), // cord
-    part(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 8), GOLD, 0, -LANTERN_HANG + 0.25),
-    part(new THREE.SphereGeometry(0.3, 10, 7).scale(1, 0.82, 1), 0xd62a22, 0, -LANTERN_HANG),
-    part(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 8), GOLD, 0, -LANTERN_HANG - 0.25),
+    part(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 6, 1, true), GOLD, 0, -LANTERN_HANG + 0.25),
+    part(new THREE.SphereGeometry(0.3, 8, 6).scale(1, 0.82, 1), body, 0, -LANTERN_HANG),
+    part(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 6, 1, true), GOLD, 0, -LANTERN_HANG - 0.25),
     part(box(0.05, 0.28, 0.05), 0xe8b02a, 0, -LANTERN_HANG - 0.42), // tassel
   ]);
 }
 
-/** Wires as thin bars along the sag curve, merged. */
-function wires(strings: StringState[], out: THREE.BufferGeometry[]): void {
+/** A wire as thin bars along its sag curve, from a (height ya) to b (yb), into `out`. */
+function wire(out: THREE.BufferGeometry[], a: { x: number; z: number }, b: { x: number; z: number }, d: LanternData | BulbString, n = 10): void {
+  let prev = new THREE.Vector3(a.x, d.ya, a.z);
+  for (let k = 1; k <= n; k++) {
+    const t = k / n;
+    const p = new THREE.Vector3(a.x + (b.x - a.x) * t, sagY(d, t), a.z + (b.z - a.z) * t);
+    const len = prev.distanceTo(p);
+    const bar = new THREE.CylinderGeometry(0.018, 0.018, len, 4).translate(0, len / 2, 0);
+    bar.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), p.clone().sub(prev).normalize()));
+    out.push(part(bar, WIRE, prev.x, prev.y, prev.z));
+    prev = p;
+  }
+}
+const sagY = (d: { ya: number; yb: number; sag: number }, t: number) => wireY({ ...d, at: [] }, t);
+
+/**
+ * The night market's bare bulbs: unlit and tone-map free, so they glow (the street lamps' bulb
+ * material: no new shader), small warm points along swags on the shopfronts.
+ */
+function bulbs(strings: BulbString[], scene: THREE.Scene, out: THREE.BufferGeometry[]): void {
+  const count = strings.reduce((n, s) => n + s.n, 0);
+  if (!count) return;
+  const mesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.07), new THREE.MeshBasicMaterial({ toneMapped: false }), count);
+  const warm = new THREE.Color(0xffd890).multiplyScalar(1.5);
+  const m = new THREE.Matrix4();
+  let i = 0;
   for (const s of strings) {
-    const [a, b] = s.o.points;
-    const n = 10;
-    let prev = new THREE.Vector3(a.x, s.d.ya, a.z);
-    for (let k = 1; k <= n; k++) {
-      const t = k / n;
-      const p = new THREE.Vector3(a.x + (b.x - a.x) * t, wireY(s.d, t), a.z + (b.z - a.z) * t);
-      const len = prev.distanceTo(p);
-      const bar = new THREE.CylinderGeometry(0.018, 0.018, len, 4).translate(0, len / 2, 0);
-      bar.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), p.clone().sub(prev).normalize()));
-      out.push(part(bar, WIRE, prev.x, prev.y, prev.z));
-      prev = p;
+    wire(out, s.a, s.b, s, 6);
+    for (let k = 0; k < s.n; k++) {
+      const t = (k + 0.5) / s.n;
+      mesh.setMatrixAt(i, m.makeTranslation(s.a.x + (s.b.x - s.a.x) * t, sagY(s, t) - 0.09, s.a.z + (s.b.z - s.a.z) * t));
+      mesh.setColorAt(i++, warm);
     }
   }
+  scene.add(mesh);
 }
 
 export function renderChinatown(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
-  renderChinatownShops(q, city, scene, ctx);
+  const shops = renderChinatownShops(q, city, scene, ctx);
+  const extra = chinatownExtra(q);
+  const night = ctx.night && extra;
+  const festival = night && extra.festival;
   const snowy = ctx.climate.snowRoofs;
   const geos: THREE.BufferGeometry[] = [];
   const boards: THREE.Matrix4[] = [];
@@ -150,19 +174,35 @@ export function renderChinatown(q: District, city: CityData, scene: THREE.Scene,
     boards.push(frame.clone().multiply(new THREE.Matrix4().makeTranslation(0, d.beam + 1.0, 0)));
   }
 
-  // Lantern strings.
+  // Lantern strings (on a festival night, the festival's too, every other lantern on them gold),
+  // and the night market's bulbs.
+  const all = [...q.dressing.overhead.filter((o) => o.kind === 'lanterns'), ...(festival ? extra.festivalStrings : [])];
+  const isGold = (d: LanternData, k: number) => !!d.festival && k % 2 === 1;
+  const golds = all.reduce((n, o) => n + (o.data as unknown as LanternData).at.filter((_, k) => isGold(o.data as unknown as LanternData, k)).length, 0);
+  const reds = all.reduce((n, o) => n + (o.data as unknown as LanternData).at.length, 0) - golds;
+  // The props' instanced material settings; they glow at night (an emissive uniform: no new program).
+  const lanternMaterial = (glow: number) => new THREE.MeshStandardMaterial({
+    vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.2, emissive: glow, emissiveIntensity: ctx.lampGlow * 1.4,
+  });
+  const meshes = [
+    new THREE.InstancedMesh(lanternGeometry(), lanternMaterial(0xff3020), reds),
+    new THREE.InstancedMesh(lanternGeometry(0xe8b830), lanternMaterial(0xffb030), golds),
+  ];
   const strings: StringState[] = [];
-  let count = 0;
-  for (const o of q.dressing.overhead) {
-    if (o.kind !== 'lanterns') continue;
+  const next = [0, 0];
+  for (const o of all) {
     const d = o.data as unknown as LanternData;
     const [a, b] = o.points;
     const pivots = d.at.map((t) => new THREE.Vector3(a.x + (b.x - a.x) * t, wireY(d, t), a.z + (b.z - a.z) * t));
     const axis = new THREE.Vector3(b.x - a.x, d.yb - d.ya, b.z - a.z).normalize();
-    strings.push({ o, d, mid: new THREE.Vector3((a.x + b.x) / 2, wireY(d, 0.5), (a.z + b.z) / 2), axis, pivots, first: count, kick: 0, phase: strings.length * 1.7 });
-    count += pivots.length;
+    const slots = d.at.map((_, k): [THREE.InstancedMesh, number] => {
+      const which = isGold(d, k) ? 1 : 0;
+      return [meshes[which], next[which]++];
+    });
+    strings.push({ o, d, mid: new THREE.Vector3((a.x + b.x) / 2, wireY(d, 0.5), (a.z + b.z) / 2), axis, pivots, slots, kick: 0, phase: strings.length * 1.7 });
+    wire(geos, a, b, d);
   }
-  wires(strings, geos);
+  if (night) bulbs(extra.bulbs, scene, geos);
 
   if (geos.length) {
     const mesh = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 }));
@@ -175,22 +215,38 @@ export function renderChinatown(q: District, city: CityData, scene: THREE.Scene,
     boards.forEach((m, i) => plate.setMatrixAt(i, m));
     scene.add(plate);
   }
-  if (!count) return {};
+  // Fireworks over the pagoda on a festival night, while the camera is in range.
+  const sky = festival && extra.fireworks && ctx.firework ? extra.fireworks : undefined;
+  const burstAt = sky && new THREE.Vector3(sky.x, ctx.ground(sky.x, sky.z), sky.z);
+  let nextBurst = 1;
+  let colour = 0;
+  const fireworks = (dt: number, camera: THREE.Camera) => {
+    if (!burstAt || (nextBurst -= dt) > 0) return;
+    nextBurst = CHINATOWN.fireworks[0] + Math.random() * (CHINATOWN.fireworks[1] - CHINATOWN.fireworks[0]);
+    if (camera.position.distanceTo(burstAt) > CHINATOWN.fireworksRange) return;
+    const at = burstAt.clone().add(new THREE.Vector3((Math.random() - 0.5) * 24, 20 + Math.random() * 10, (Math.random() - 0.5) * 24));
+    ctx.firework!(at, colour++);
+  };
+  if (!strings.length) {
+    return { update: (dt, time, camera) => { shops.update?.(dt, time, camera); fireworks(dt, camera); } };
+  }
 
-  // Lanterns: the props' instanced material settings. Each string swings about its wire in the
-  // breeze, and harder for a few seconds after a fast car (the camera) passes under it.
-  const lanterns = new THREE.InstancedMesh(lanternGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.2 }), count);
-  lanterns.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  lanterns.castShadow = true;
-  lanterns.frustumCulled = false;
-  scene.add(lanterns);
+  // Lanterns: each string swings about its wire in the breeze, and harder for a few seconds after a
+  // fast car (the camera) passes under it.
+  for (const mesh of meshes) {
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.castShadow = true;
+    mesh.frustumCulled = false;
+    if (mesh.count) scene.add(mesh);
+  }
   const m = new THREE.Matrix4();
   const rot = new THREE.Quaternion();
   const one = new THREE.Vector3(1, 1, 1);
   const place = (s: StringState, angle: number) => {
     s.pivots.forEach((p, k) => {
       rot.setFromAxisAngle(s.axis, angle * (0.8 + 0.2 * Math.sin(k * 2.3)));
-      lanterns.setMatrixAt(s.first + k, m.compose(p, rot, one));
+      const [mesh, i] = s.slots[k];
+      mesh.setMatrixAt(i, m.compose(p, rot, one));
     });
   };
   for (const s of strings) place(s, 0);
@@ -199,6 +255,8 @@ export function renderChinatown(q: District, city: CityData, scene: THREE.Scene,
   const NEAR = 160; // only swing strings this near the camera
   return {
     update(dt, time, camera) {
+      shops.update?.(dt, time, camera);
+      fireworks(dt, camera);
       const cam = camera.position;
       const speed = primed && dt > 0 ? cam.distanceTo(lastCam) / dt : 0;
       lastCam.copy(cam);
@@ -214,7 +272,7 @@ export function renderChinatown(q: District, city: CityData, scene: THREE.Scene,
         place(s, (0.05 + s.kick) * Math.sin(time * 2.1 + s.phase));
         touched = true;
       }
-      if (touched) lanterns.instanceMatrix.needsUpdate = true;
+      if (touched) for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;
     },
   };
 }

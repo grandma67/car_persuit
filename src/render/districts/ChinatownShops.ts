@@ -13,14 +13,15 @@ import type { District } from '../../world/districts/District';
 import { ARCADE_DEPTH } from '../../world/districts/trims';
 import { inRect } from '../../world/lots';
 import { groundBase } from '../../world/Terrain';
-import { glyphAtlas, glyphPlate, NEON, type GlyphCell, type Signboard } from './glyphs';
-import type { DistrictRenderContext } from './index';
+import { glyphAtlas, glyphPlate, NEON, swatched, type GlyphCell, type Signboard, type Swatch } from './glyphs';
+import type { DistrictRenderContext, DistrictView } from './index';
 
 const FLOOR = 3.5; // as CityBuilder's FLOOR_HEIGHT
 const RED = 0xb0221e;
 const GOLD = 0xd6a637;
 const WOOD = 0x4a2c1c;
 const DARK = 0x1e1a18;
+const SNOW = 0xeef2f6;
 const AWNINGS = [0xc8302a, 0x2f7a55, 0xd8a637, 0x2f5f80, 0xe8e0cc];
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 const cyl = (r: number, h: number, seg = 8) => new THREE.CylinderGeometry(r, r, h, seg);
@@ -61,10 +62,23 @@ function duckGeometry(): THREE.BufferGeometry {
   ]);
 }
 
-export function renderChinatownShops(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): void {
+/** A lit piece for the signs mesh: white vertex colours, its UVs on a swatch. */
+const lit = (geo: THREE.BufferGeometry, swatch: Swatch, x: number, y: number, z: number) => swatched(part(geo, 0xffffff, x, y, z), swatch);
+
+/** Is a flickering neon sign lit at `time`? Mostly on, with short stutters (a hash of the 1/12 s tick). */
+export function neonOn(time: number, seed: number): boolean {
+  const tick = Math.floor(time * 12);
+  const h = Math.sin(tick * 12.9898 + seed * 78.233) * 43758.5453;
+  const burst = Math.sin(Math.floor(time / 3) * 4.1 + seed) > 0.4; // stutters come in spells
+  return !burst || h - Math.floor(h) > 0.35;
+}
+
+export function renderChinatownShops(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
   const rng = new Rng(city.seed ^ 0x5409);
   const solid: THREE.BufferGeometry[] = [];
   const signs: THREE.BufferGeometry[] = [];
+  const flickering: THREE.BufferGeometry[] = []; // a few neon signs that stutter at night
+  const snowy = ctx.climate.snowRoofs;
   const ducks: THREE.Matrix4[] = [];
   const restaurantBoards: Signboard[] = ['restaurant', 'restaurant2', 'restaurant3'];
   let nextBoard = 0;
@@ -103,16 +117,18 @@ export function renderChinatownShops(q: District, city: CityData, scene: THREE.S
       // Under the signboard (its bottom is ~1.3 m below the floor line).
       add(solid, f, part(box(w, 0.08, 1.4).rotateX(0.32), color, x, floor - 1.5, 0.68));
       add(solid, f, part(box(w, 0.32, 0.05), color, x, floor - 1.87, 1.34));
+      // Snow lying on it, 3 cm proud of the canvas.
+      if (snowy) add(solid, f, part(box(w - 0.1, 0.05, 1.3).rotateX(0.32), SNOW, x, floor - 1.5 + 0.065 * Math.cos(0.32), 0.68 - 0.065 * Math.sin(0.32)));
     };
     const lantern = (f: Face, x: number, y: number, z: number) => {
-      add(solid, f, part(new THREE.SphereGeometry(0.28, 8, 6).scale(1, 0.85, 1), 0xd62a22, x, y, z));
+      add(signs, f, lit(new THREE.SphereGeometry(0.28, 8, 6).scale(1, 0.85, 1), 'lantern', x, y, z));
       for (const dy of [-0.24, 0.24]) add(solid, f, part(cyl(0.11, 0.05), GOLD, x, y + dy, z));
       add(solid, f, part(box(0.04, 0.3, 0.04), 0xe8b02a, x, y - 0.42, z));
       add(solid, f, part(box(0.03, 0.03, z), DARK, x, y + 0.45, z / 2)); // bracket to the wall
     };
     // A shallow lit display window proud of the wall, w × h, its sill at `y`.
-    const display = (f: Face, x: number, w: number, y: number, h: number, back: number) => {
-      add(solid, f, part(box(w, h, 0.06), back, x, y + h / 2, 0.04));
+    const display = (f: Face, x: number, w: number, y: number, h: number, back: Swatch) => {
+      add(signs, f, lit(box(w, h, 0.06), back, x, y + h / 2, 0.04));
       for (const sx of [-1, 1]) add(solid, f, part(box(0.1, h + 0.1, 0.45), WOOD, x + (sx * (w + 0.1)) / 2, y + h / 2, 0.22));
       add(solid, f, part(box(w + 0.3, 0.12, 0.5), WOOD, x, y - 0.06, 0.24));
       add(solid, f, part(box(w + 0.3, 0.1, 0.5), WOOD, x, y + h + 0.05, 0.24));
@@ -126,11 +142,11 @@ export function renderChinatownShops(q: District, city: CityData, scene: THREE.S
         // Roast ducks in the window on one side of the door, a fish tank on the other.
         const side = rng.next() < 0.5 ? -1 : 1;
         const wx = side * Math.min(front.len / 2 - 1.6, 3);
-        display(front, wx, 2.0, 0.9, 1.4, 0xf2c27a);
+        display(front, wx, 2.0, 0.9, 1.4, 'warm');
         add(solid, front, part(box(1.9, 0.04, 0.04), 0x9a9aa0, wx, 2.15, 0.22)); // the rail
         for (let k = 0; k < 5; k++) ducks.push(front.frame.clone().multiply(new THREE.Matrix4().makeTranslation(wx - 0.76 + k * 0.38, 2.13, 0.22)));
         const tx = -side * Math.min(front.len / 2 - 1.6, 3);
-        display(front, tx, 1.6, 0.9, 1.1, 0x3a8aa0);
+        display(front, tx, 1.6, 0.9, 1.1, 'tank');
         for (let k = 0; k < 4; k++) add(solid, front, part(box(0.16, 0.07, 0.04), 0xff8a2a, tx - 0.5 + k * 0.3 + rng.range(-0.08, 0.08), 1.2 + rng.range(0, 0.6), 0.12));
         if (b.lot === 'banquetHall' && floors >= 3) {
           // A round moon window on the floor above the balcony.
@@ -157,7 +173,7 @@ export function renderChinatownShops(q: District, city: CityData, scene: THREE.S
         board(front, 'herbalShop');
         // A wall of little drawers in the window, jars on the sill.
         const x = rng.next() < 0.5 ? -1.6 : 1.6;
-        display(front, x, 2.2, 0.8, 1.5, 0x6a4028);
+        display(front, x, 2.2, 0.8, 1.5, 'warm');
         for (let r = 0; r < 4; r++) {
           for (let c = 0; c < 6; c++) {
             add(solid, front, part(box(0.32, 0.3, 0.05), 0x8a5a36, x - 0.9 + c * 0.36, 0.98 + r * 0.36, 0.1));
@@ -171,7 +187,7 @@ export function renderChinatownShops(q: District, city: CityData, scene: THREE.S
         board(front, 'bakery');
         awning(front, Math.min(front.len - 1, 5), 0, rng.pick(AWNINGS));
         const x = rng.next() < 0.5 ? -1.8 : 1.8;
-        display(front, x, 2.2, 0.8, 1.2, 0xf4e2c0);
+        display(front, x, 2.2, 0.8, 1.2, 'cream');
         for (const [y, color] of [[0.86, 0xf2c23a], [1.3, 0x9a5a22], [1.74, 0xf2c23a]] as const) {
           add(solid, front, part(box(2.1, 0.03, 0.35), WOOD, x, y - 0.03, 0.2));
           for (let k = 0; k < 6; k++) add(solid, front, part(cyl(0.12, 0.07, 10), color, x - 0.85 + k * 0.34, y + 0.03, 0.2));
@@ -212,7 +228,9 @@ export function renderChinatownShops(q: District, city: CityData, scene: THREE.S
         const y = floor * 1.2 + h / 2 + rng.range(0, floor);
         // Edge-on to the wall, so it reads up and down the street; on brackets 0.4 m out.
         add(solid, f, part(box(0.1, h + 0.1, 0.95), DARK, x, y, 0.4 + 0.48));
-        sign(f, cell, 0.9, h, x, y, 0.88, 0.14, Math.PI / 2);
+        // One in four stutters at night.
+        const into = rng.next() < 0.25 ? flickering : signs;
+        add(into, f, plate(0.9, h, cell, 0.14).rotateY(Math.PI / 2).translate(x, y, 0.88));
         for (const dy of [-h / 2 + 0.3, h / 2 - 0.3]) add(solid, f, part(box(0.05, 0.05, 0.4), DARK, x, y + dy, 0.2));
       }
       for (let k = 0; k < floors - 1; k++) {
@@ -240,21 +258,33 @@ export function renderChinatownShops(q: District, city: CityData, scene: THREE.S
     mesh.castShadow = mesh.receiveShadow = true;
     scene.add(mesh);
   }
-  if (signs.length) {
-    // The facade walls' material settings (vertex colours and four maps), so the same program;
-    // the signs glow a little by day and brightly at night.
-    const atlas = glyphAtlas();
-    const surface = new THREE.DataTexture(new Uint8Array([0, 150, 0, 255]), 1, 1);
-    surface.needsUpdate = true;
-    const material = new THREE.MeshStandardMaterial({
-      vertexColors: true, map: atlas, emissiveMap: atlas, emissive: 0xffffff, emissiveIntensity: 0.25 + ctx.lampGlow * 1.1,
-      roughnessMap: surface, metalnessMap: surface, roughness: 1, metalness: 1,
-    });
-    scene.add(new THREE.Mesh(mergeGeometries(signs), material));
+  // The signs, lit windows and door lanterns: the facade walls' material settings (vertex colours
+  // and four maps), so the same program; they glow a little by day and brightly at night.
+  const atlas = glyphAtlas();
+  const surface = new THREE.DataTexture(new Uint8Array([0, 150, 0, 255]), 1, 1);
+  surface.needsUpdate = true;
+  const glow = 0.25 + ctx.lampGlow * 1.3;
+  const material = new THREE.MeshStandardMaterial({
+    vertexColors: true, map: atlas, emissiveMap: atlas, emissive: 0xffffff, emissiveIntensity: glow,
+    roughnessMap: surface, metalnessMap: surface, roughness: 1, metalness: 1,
+  });
+  if (signs.length) scene.add(new THREE.Mesh(mergeGeometries(signs), material));
+  // The stuttering neon: the same material settings, its glow switched by a uniform at night.
+  let flicker: THREE.MeshStandardMaterial | undefined;
+  if (flickering.length) {
+    flicker = material.clone();
+    scene.add(new THREE.Mesh(mergeGeometries(flickering), flicker));
   }
   if (ducks.length) {
     const mesh = new THREE.InstancedMesh(duckGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.2 }), ducks.length);
     ducks.forEach((m, i) => mesh.setMatrixAt(i, m));
     scene.add(mesh);
   }
+  if (!flicker || ctx.lampGlow < 0.5) return {};
+  const f = flicker;
+  return {
+    update(_dt, time) {
+      f.emissiveIntensity = neonOn(time, city.seed) ? glow : 0.08;
+    },
+  };
 }

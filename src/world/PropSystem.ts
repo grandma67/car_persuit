@@ -324,7 +324,8 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
 }
 
 /** Chinatown's street furniture. */
-type ChinatownKind = 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan';
+type ChinatownKind = 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan'
+  | 'lionDance' | 'dragonFloat';
 function chinatownModels(): Record<ChinatownKind, THREE.BufferGeometry> {
   const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
   const cyl = (rt: number, rb: number, h: number, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
@@ -431,7 +432,46 @@ function chinatownModels(): Record<ChinatownKind, THREE.BufferGeometry> {
     ...[-0.98, 0.98].flatMap((x) => [-1.7, 1.7].map((z) => part(cyl(0.38, 0.38, 0.25, 12).rotateZ(Math.PI / 2), 0x151515, x, 0.38, z))),
     ...[-0.7, 0.7].map((x) => part(box(0.3, 0.15, 0.04), 0xfff2cc, x, 0.9, 2.47)),
   ]);
-  return { dragonLamp, produceStall, lanternStand, dimSumCart, fishCrate, mahjongTable, menuBoard, firecrackerCrate, parkedVan };
+  // A lion-dance costume on its stand, facing +Z: a big-eyed head with a horn and a mirror, a
+  // red-and-gold fringed body behind it.
+  const lionDance = mergeGeometries([
+    part(box(0.9, 0.08, 2.2), wood, 0, 0.04),
+    ...[-0.25, 0.25].map((x) => part(box(0.06, 0.75, 0.06), wood, x, 0.45, 0.65)),
+    part(box(0.95, 0.85, 0.85), red, 0, 1.25, 0.75),
+    part(box(1.05, 0.2, 0.3), gold, 0, 1.75, 0.95), // brow
+    ...[-0.25, 0.25].flatMap((x) => [part(new THREE.SphereGeometry(0.15, 8, 6), 0xf6f2e8, x, 1.5, 1.2), part(new THREE.SphereGeometry(0.07, 6, 4), 0x141414, x, 1.5, 1.33)]),
+    part(box(0.75, 0.22, 0.25), 0xf6f2e8, 0, 0.98, 1.12), // teeth
+    part(cyl(0.02, 0.08, 0.35, 6).rotateX(0.4), gold, 0, 1.88, 1.0), // horn
+    part(cyl(0.09, 0.09, 0.03, 10).rotateX(Math.PI / 2), 0xd8e0e8, 0, 1.6, 1.19), // mirror
+    ...[-0.5, 0.5].map((x) => part(box(0.08, 0.35, 0.6), 0xf6f2e8, x, 1.1, 0.75)), // fur trim
+    part(box(0.85, 0.6, 1.3), 0xd8302a, 0, 0.95, -0.35).rotateX(0.05),
+    part(box(0.9, 0.12, 1.35), gold, 0, 0.62, -0.35),
+    part(box(0.2, 0.25, 0.3), gold, 0, 1.05, -1.05), // tail
+  ]);
+  // A dragon float: a low wheeled cart along Z with a long green-and-gold dragon coiling over it,
+  // head at +Z on poles.
+  const scales = 0x2f8a4a;
+  const dragonFloat = mergeGeometries([
+    part(box(1.6, 0.35, 8.2), 0x6a1a16, 0, 0.45),
+    part(box(1.7, 0.08, 8.3), gold, 0, 0.66),
+    ...[-0.75, 0.75].flatMap((x) => [-3.2, 0, 3.2].map((z) => part(cyl(0.25, 0.25, 0.15, 10).rotateZ(Math.PI / 2), 0x1e1a18, x, 0.26, z))),
+    ...Array.from({ length: 9 }, (_, k) => {
+      const z = -3.6 + k * 0.85;
+      const y = 1.45 + Math.sin(k * 1.1) * 0.35;
+      return mergeGeometries([
+        part(cyl(0.03, 0.03, y - 0.7, 5), wood, 0, 0.7 + (y - 0.7) / 2, z),
+        part(new THREE.SphereGeometry(0.36, 8, 6).scale(0.9, 0.85, 1.3), k % 2 ? scales : 0x3aa05a, 0, y, z),
+        part(box(0.08, 0.22, 0.4), gold, 0, y + 0.36, z), // spine fin
+      ]);
+    }),
+    part(box(0.75, 0.6, 0.9), scales, 0, 1.95, 3.9), // head
+    part(box(0.6, 0.2, 0.55), 0xd8302a, 0, 1.68, 4.35), // open jaw
+    ...[-0.22, 0.22].map((x) => part(new THREE.SphereGeometry(0.1, 6, 4), 0xf2d23a, x, 2.15, 4.3)),
+    ...[-0.25, 0.25].map((x) => part(cyl(0.02, 0.05, 0.5, 5).rotateX(-0.6), gold, x, 2.4, 3.7)), // horns
+    part(box(0.6, 0.06, 0.06), 0xf6f2e8, 0, 1.92, 4.38), // whiskers
+    part(new THREE.SphereGeometry(0.2, 8, 6), 0xd8302a, 0, 1.0, -4.0), // the pearl at its tail
+  ]);
+  return { dragonLamp, produceStall, lanternStand, dimSumCart, fishCrate, mahjongTable, menuBoard, firecrackerCrate, parkedVan, lionDance, dragonFloat };
 }
 
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
@@ -651,7 +691,7 @@ function signTexture(variant: SignVariant): THREE.Texture {
 
 /** District props: their meshes are only built in a city that has some. */
 const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp', 'dragonLamp',
-  'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan']);
+  'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel

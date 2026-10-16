@@ -149,6 +149,17 @@ export const CHINATOWN = {
   vanOnKerb: 0.6, // how far a parked van stands up on the kerb (its inner side then clears the widest bus in the lane)
   /** How many of each small shop, at most (from the lots fronting a street). */
   shops: { teaHouse: 2, bubbleTea: 2, herbalShop: 2, bakery: 2 },
+  /** Lunar New Year: rolled per seed on the district's stream, shown at night. */
+  festivalChance: 0.25,
+  /** Glowing pieces at night, at most: string lanterns (festival ones included) plus night-market bulbs. */
+  maxGlow: 1100,
+  nightStalls: [3.5, 6] as [number, number], // metres between night-market stalls on the main street
+  bulbHeight: 4.4, // bare-bulb strings tie to the shopfronts this high
+  bulbSpan: 6, // between ties
+  bulbSag: 0.45,
+  bulbSpacing: 0.75, // between bulbs
+  fireworks: [1.2, 3] as [number, number], // seconds between bursts over the pagoda (festival nights)
+  fireworksRange: 350, // only while the camera is this near
 };
 
 /** Chinatown's paifang, lions and lantern strings (world/districts/ChinatownGates.ts), metres. */

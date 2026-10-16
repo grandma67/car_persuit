@@ -333,13 +333,14 @@ export class Landmarks {
       lion: lion(), incense: incense(),
     };
 
+    const plain = new Map<string, THREE.Matrix4[]>(); // district pieces by kind, drawn instanced
     for (const l of landmarks) {
       if (l.kind === 'ramp') {
         this.addRamp(l, terrain, scene, world, solid, metal);
         continue;
       }
       if (NO_PAD.has(l.kind)) {
-        this.addPlain(l, terrain, scene, world, models[l.kind as keyof typeof models], solid);
+        this.addPlain(l, terrain, world, plain);
         continue;
       }
       // A circle of darker paving under the centrepiece; on a slope it's a level terrace, its top
@@ -373,20 +374,26 @@ export class Landmarks {
           : RAPIER.ColliderDesc.cuboid(l.radius * 0.8, 3, l.radius * 0.8).setTranslation(l.x, y + 3, l.z);
       this.colliders.add(world.createCollider(desc).handle);
     }
+    // One instanced mesh per district piece kind (lions, cannons …), snow-capped in a snowy city.
+    for (const [kind, matrices] of plain) {
+      const model = models[kind as keyof typeof models];
+      const cap = this.snowy ? SNOW_CAPS[kind as keyof typeof SNOW_CAPS]?.() : undefined;
+      const mesh = new THREE.InstancedMesh(cap ? mergeGeometries([model, cap]) : model, solid, matrices.length);
+      matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
+      mesh.computeBoundingSphere();
+      mesh.castShadow = mesh.receiveShadow = true;
+      scene.add(mesh);
+    }
     scene.add(this.spray.points);
   }
 
   /** An Old City piece: on its lowest ground, with a box collider round its footprint. */
-  private addPlain(l: Landmark, terrain: Terrain, scene: THREE.Scene, world: RAPIER.World, model: THREE.BufferGeometry, solid: THREE.Material): void {
+  private addPlain(l: Landmark, terrain: Terrain, world: RAPIER.World, plain: Map<string, THREE.Matrix4[]>): void {
     const y = groundBase(terrain, l.x, l.z, l.radius) - 0.05;
-    const cap = this.snowy ? SNOW_CAPS[l.kind as keyof typeof SNOW_CAPS]?.() : undefined;
-    const mesh = new THREE.Mesh(cap ? mergeGeometries([model, cap]) : model, solid);
-    mesh.position.set(l.x, y, l.z);
-    mesh.rotation.y = l.yaw;
-    mesh.castShadow = mesh.receiveShadow = true;
-    scene.add(mesh);
-    const r = l.radius * 0.8;
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), l.yaw);
+    if (!plain.has(l.kind)) plain.set(l.kind, []);
+    plain.get(l.kind)!.push(new THREE.Matrix4().compose(new THREE.Vector3(l.x, y, l.z), q, new THREE.Vector3(1, 1, 1)));
+    const r = l.radius * 0.8;
     const desc = RAPIER.ColliderDesc.cuboid(r, 2, r).setTranslation(l.x, y + 2, l.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
     this.colliders.add(world.createCollider(desc).handle);
   }

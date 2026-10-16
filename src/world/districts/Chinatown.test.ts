@@ -4,7 +4,7 @@ import { inRect } from '../lots';
 import { CHINATOWN, CHINATOWN_GATES, DISTRICTS } from '../../gameplay/balance';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
 import { groundHeight } from '../Terrain';
-import { CHINATOWN_DEF, squareBlock } from './Chinatown';
+import { CHINATOWN_DEF, chinatownExtra, lanternCount, squareBlock } from './Chinatown';
 import { wireY, type LanternData, type PaifangData } from './ChinatownGates';
 import { inDistrict, isJunctionControl } from './apply';
 
@@ -268,6 +268,79 @@ describe('Chinatown shops, props and vans', () => {
       expect(look.facade).toBe('shophouse');
       expect(look.ground).toBe('storefront');
       expect(look.roof === 'pagoda').toBe(['restaurant', 'banquetHall', 'teaHouse', 'temple'].includes(lot));
+    }
+  });
+});
+
+describe('Chinatown at night', () => {
+  const extra = (q: (typeof placed)[number][2]) => chinatownExtra(q)!;
+  const roadsOf = (c: (typeof placed)[number][1]) => [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
+
+  it('the festival roll is stable per seed, on about a quarter of seeds', () => {
+    for (const [seed, , q] of placed.slice(0, 12)) {
+      const again = city(seed).districts.find((d) => d.kind === 'chinatown')!;
+      expect(chinatownExtra(again)).toEqual(extra(q));
+    }
+    const festive = placed.filter(([, , q]) => extra(q).festival).length;
+    expect(festive).toBeGreaterThan(placed.length * 0.1);
+    expect(festive).toBeLessThan(placed.length * 0.45);
+  });
+
+  it.each(placed)('seed %i: lanterns and bulbs stay within maxGlow; festival strings only on a festival seed, clear of the road', (_seed, c, q) => {
+    const e = extra(q);
+    const glow = lanternCount(q.dressing.overhead.filter((o) => o.kind === 'lanterns')) + lanternCount(e.festivalStrings) + e.bulbs.reduce((n, b) => n + b.n, 0);
+    expect(glow).toBeLessThanOrEqual(CHINATOWN.maxGlow);
+    if (!e.festival) expect(e.festivalStrings).toEqual([]);
+    const ground = (x: number, z: number) => groundHeight(c.terrain, x, z);
+    for (const o of e.festivalStrings) {
+      const d = o.data as unknown as LanternData;
+      expect(d.festival).toBe(true);
+      const [a, b] = o.points;
+      for (const t of d.at) {
+        expect(wireY(d, t) - CHINATOWN_GATES.lanternDrop - ground(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+      }
+    }
+  });
+
+  it.each(placed)('seed %i: bulb strings hang over the main street\'s sidewalks, never the roadway', (_seed, c, q) => {
+    const roads = roadsOf(c);
+    for (const s of extra(q).bulbs) {
+      for (let t = 0; t <= 1; t += 0.25) {
+        const p = { x: s.a.x + (s.b.x - s.a.x) * t, z: s.a.z + (s.b.z - s.a.z) * t, hx: 0.05, hz: 0.05, yaw: 0 };
+        expect(roads.filter((r) => footprintsOverlap(p, r))).toEqual([]);
+        expect(inRect(q.bounds, p)).toBe(true);
+      }
+      expect(s.n).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('the night market has stalls on every seed', () => {
+    for (const [, , q] of placed) expect(extra(q).nightProps.length).toBeGreaterThan(0);
+  });
+
+  it.each(placed)('seed %i: night props keep the kerb rules, off buildings, solids and every other prop; never in the day\'s props', (_seed, c, q) => {
+    const night = extra(q).nightProps;
+    const buildings = c.buildings.filter((b) => inRect(q.bounds, b)).map(rectFootprint);
+    const day = c.streetProps.filter((p) => inRect(q.bounds, p, 2));
+    const solids = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
+    const roads = roadsOf(c);
+    for (const [i, p] of night.entries()) {
+      const fp = propFootprint(p);
+      expect(day.includes(p)).toBe(false);
+      expect(buildings.filter((b) => footprintsOverlap(fp, b))).toEqual([]);
+      expect(solids.filter((f) => footprintsOverlap(fp, f))).toEqual([]);
+      expect(day.filter((o) => footprintsOverlap(fp, propFootprint(o)))).toEqual([]);
+      expect(night.slice(i + 1).filter((o) => footprintsOverlap(fp, propFootprint(o)))).toEqual([]);
+      if (p.kind === 'dragonFloat' || p.kind === 'lionDance') {
+        expect(extra(q).festival).toBe(true);
+        expect(roads.filter((r) => footprintsOverlap(fp, r))).toEqual([]);
+        continue;
+      }
+      const reach = Math.hypot(fp.hx, fp.hz);
+      for (const { rect } of c.roads.filter((r) => footprintsOverlap(rectFootprint({ ...r.rect, w: r.rect.w + 10, d: r.rect.d + 10 }), fp))) {
+        const lateral = rect.w > rect.d ? Math.abs(p.z - rect.z) : Math.abs(p.x - rect.x);
+        expect(lateral - reach).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
+      }
     }
   });
 });

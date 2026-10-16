@@ -209,7 +209,7 @@ export class SoundEffects {
       for (let k = 0; k < 14; k++) this.burst(k * 0.035 + Math.random() * 0.02, 0.04, 'bandpass', 1800 + Math.random() * 1500, 1, gain * 0.9);
       return;
     }
-    if (kind === 'lanternStand' || kind === 'menuBoard') {
+    if (kind === 'lanternStand' || kind === 'menuBoard' || kind === 'lionDance' || kind === 'dragonFloat') {
       this.burst(0, 0.2, 'highpass', 2200, 0.6, gain * 0.7); // paper and thin wood
       return;
     }

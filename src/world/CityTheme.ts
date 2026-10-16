@@ -22,6 +22,21 @@ const OLD_CITY_WHITEWASH: Record<string, Partial<LotLook>> = {
   arcade: { palette: [0xf0ece2, 0xf4f0e8] },
 };
 
+/** Chinatown sun-bleached in the desert: faded reds, chalky pastels, weathered tiles. */
+const CHINATOWN_FADED: Record<string, Partial<LotLook>> = {
+  shophouse: { palette: [0xe6d0c2, 0xd6d4bc, 0xeadab6, 0xd0d2c8, 0xe2d2d6] },
+  restaurant: { palette: [0xb8645a, 0xa85e52, 0xc27262, 0xc4a678], roofTiles: [0x6a9478, 0x5e866c] },
+  banquetHall: { palette: [0xb8645a, 0xc27262], roofTiles: [0xc4a86a] },
+  temple: { palette: [0xb06a5a, 0xa86454], roofTiles: [0xc4a86a] },
+  teaHouse: { palette: [0x9a7458, 0x8e6a50], roofTiles: [0x6a9478] },
+};
+/** Chinatown by the beach: brighter pastel shophouses and shops. */
+const CHINATOWN_BRIGHT: Record<string, Partial<LotLook>> = {
+  shophouse: { palette: [0xffc4d0, 0xb4eed4, 0xfff09a, 0xb4d8ff, 0xf6c4f0, 0xffdcb0, 0xc8f4b8] },
+  bubbleTea: { palette: [0xffb0d8, 0xa8f0ff, 0xfff08a] },
+  bakery: { palette: [0xffe0a8, 0xfff0c8] },
+};
+
 export interface CityTheme {
   name: string;
   buildings: Record<Zone, number[]>;
@@ -141,7 +156,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xa08c70, 0x8f7f68, 0xb39c7c, 0x7d705e],
     },
     asphalt: 0x3a3835, sidewalk: 0xc2b49a, plaza: 0xb08f6a, quay: 0x9a8a72, seaWall: 0xcbbd9f, planter: 0xa38a6a,
-    districts: { oldtown: OLD_CITY_SANDSTONE },
+    districts: { oldtown: OLD_CITY_SANDSTONE, chinatown: CHINATOWN_FADED },
     grass: 0x6b7a3e, leaves: [0x5f6e34, 0x6f7a3c, 0x55642f, 0x7a8240], trunk: 0x5a4632,
     centerLine: 0xe0b84a, edgeLine: 0xe6e2d8,
   },
@@ -156,7 +171,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xc4b8a4, 0xb0a894, 0xd0c4ae, 0x9c9484],
     },
     asphalt: 0x36383d, sidewalk: 0xcfc6b4, plaza: 0xc8bca6, quay: 0xa0988a, seaWall: 0xe8e2d6, planter: 0xc0a888,
-    districts: { oldtown: OLD_CITY_WHITEWASH },
+    districts: { oldtown: OLD_CITY_WHITEWASH, chinatown: CHINATOWN_BRIGHT },
     grass: 0x5d8a3e, leaves: [0x4f8a3a, 0x5c9440, 0x467a34, 0x6a9a48], trunk: 0x8a6a48,
     centerLine: 0xe0b84a, edgeLine: 0xeeeeea,
   },

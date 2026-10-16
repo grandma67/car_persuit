@@ -24,7 +24,11 @@ export type Signboard = keyof typeof SIGNBOARDS;
 /** Vertical neon signs: one word each, in a neon colour. */
 export const NEON: [string, string][] = [['飯店', '#ff3a4a'], ['茶', '#4aff9a'], ['海鮮', '#3ad8ff'], ['珠寶', '#ffd23a'], ['酒家', '#ff5ad8'], ['麵', '#ffa03a'], ['金行', '#ffe25a'], ['旅館', '#7a8aff']];
 
-export type GlyphCell = 'board' | 'fu' | 'chun' | Signboard | `neon${number}`;
+/** Flat colour swatches for lit pieces on the signs mesh (door lanterns, shop windows): they glow at night with the signs. */
+export const SWATCHES = { lantern: '#d8281e', warm: '#ffc070', tank: '#48c8e0', cream: '#ffeec4' } as const;
+export type Swatch = keyof typeof SWATCHES;
+
+export type GlyphCell = 'board' | 'fu' | 'chun' | Signboard | `neon${number}` | Swatch;
 
 /** Each cell's rectangle in atlas pixels (top-left origin). */
 const CELLS: Record<string, { x: number; y: number; w: number; h: number }> = {
@@ -36,6 +40,8 @@ const CELLS: Record<string, { x: number; y: number; w: number; h: number }> = {
 (Object.keys(SIGNBOARDS) as Signboard[]).forEach((k, i) => (CELLS[k] = { x: (i % 2) * 512, y: 1024 + Math.floor(i / 2) * 128, w: 512, h: 128 }));
 // Neon strips: 128 × 512, four beside the banners and four below the signboards.
 NEON.forEach((_, i) => (CELLS[`neon${i}`] = i < 4 ? { x: 512 + i * 128, y: 256, w: 128, h: 512 } : { x: (i - 4) * 128, y: 1536, w: 128, h: 512 }));
+// Swatches: 64 × 64 from y 768.
+(Object.keys(SWATCHES) as Swatch[]).forEach((k, i) => (CELLS[k] = { x: i * 64, y: 768, w: 64, h: 64 }));
 
 const RED = '#a8191c';
 const GOLD = '#e0b13e';
@@ -102,6 +108,11 @@ function draw(g: CanvasRenderingContext2D): void {
     chars.forEach((ch, k) => g.fillText(ch, c.x + c.w / 2, c.y + 30 + step * (k + 0.5)));
     g.shadowBlur = 0;
   });
+  for (const [k, color] of Object.entries(SWATCHES)) {
+    const c = CELLS[k];
+    g.fillStyle = color;
+    g.fillRect(c.x, c.y, c.w, c.h);
+  }
 }
 
 let atlas: THREE.Texture | null = null;
@@ -130,6 +141,15 @@ function toCell(geo: THREE.BufferGeometry, cell: GlyphCell): THREE.BufferGeometr
   const c = CELLS[cell];
   const uv = geo.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, (c.x + uv.getX(i) * c.w) / W, 1 - (c.y + (1 - uv.getY(i)) * c.h) / H);
+  return geo;
+}
+
+/** Give a part (white vertex colours) UVs all on a swatch's middle, for the signs mesh. */
+export function swatched(geo: THREE.BufferGeometry, swatch: Swatch): THREE.BufferGeometry {
+  const c = CELLS[swatch];
+  const u = (c.x + c.w / 2) / W, v = 1 - (c.y + c.h / 2) / H;
+  const n = geo.attributes.position.count;
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(Array.from({ length: n * 2 }, (_, i) => (i % 2 ? v : u)), 2));
   return geo;
 }
 

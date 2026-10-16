@@ -10,7 +10,8 @@ export type PropKind =
   // Old City
   | 'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp'
   // Chinatown
-  | 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan';
+  | 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan'
+  | 'lionDance' | 'dragonFloat';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -74,6 +75,9 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   firecrackerCrate: { hx: 0.4, hz: 0.4, height: 0.6, mass: 15, breakSpeed: 1, slowdown: 0.02 },
   // A delivery van double-parked in the kerb lane: heavy, and it takes a real hit to shove.
   parkedVan: { hx: 1.0, hz: 2.5, height: 2.3, mass: 1600, breakSpeed: 9, slowdown: 0.35 },
+  // Lunar New Year (festival nights): a lion-dance costume on its stand and a dragon on a wheeled float.
+  lionDance: { hx: 0.6, hz: 1.2, height: 1.9, mass: 30, breakSpeed: 1.5, slowdown: 0.03 },
+  dragonFloat: { hx: 0.9, hz: 4.2, height: 2.4, mass: 150, breakSpeed: 2, slowdown: 0.08 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */

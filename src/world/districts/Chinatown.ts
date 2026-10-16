@@ -10,8 +10,9 @@ import { inRect } from '../lots';
 import { keepOf } from '../driveSide';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../StreetProps';
 import { inDistrict, isJunctionControl, kerbClutter } from './apply';
-import { lanternStrings, paifangs } from './ChinatownGates';
-import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook } from './District';
+import { lanternStrings, paifangs, type LanternData } from './ChinatownGates';
+import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook, type Overhead, type Structure } from './District';
+import { groundHeight } from '../Terrain';
 
 export type ChinatownLot = 'shophouse' | 'restaurant' | 'banquetHall' | 'teaHouse' | 'bubbleTea' | 'herbalShop' | 'bakery' | 'temple';
 
@@ -219,7 +220,131 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const crates = kerbClutter({ ...q, streets: side }, { ...around, streetProps: [...around.streetProps, ...stalls] }, SIDE_CLUTTER, rng);
   const clutter = [...stalls, ...crates].filter((p) => !blocked(p, []) && !built.some((b) => footprintsOverlap(propFootprint(p), rectFootprint(b))));
   out.props = [...kept, ...clutter];
+
+  // Night-only extras, drawn last on the district's stream so nothing above moves.
+  out.extra = nightExtras(q, city, built, gates.structures, out, solid, rng) as unknown as Record<string, unknown>;
   return out;
+}
+
+/** A string of bare bulbs swagged along a shopfront (Chinatown's night market). */
+export interface BulbString {
+  a: { x: number; z: number };
+  b: { x: number; z: number };
+  ya: number; // tie heights, world
+  yb: number;
+  sag: number;
+  n: number; // bulbs on it
+}
+
+/** Chinatown's dressing.extra: what only shows at night. */
+export interface ChinatownExtra {
+  /** Lunar New Year (CHINATOWN.festivalChance per seed). */
+  festival: boolean;
+  /** Night-market stalls (and on a festival seed the lion dance and dragon float): street props only at night. */
+  nightProps: StreetProp[];
+  bulbs: BulbString[];
+  /** The festival's extra lantern strings, between the everyday ones on the main street. */
+  festivalStrings: Overhead[];
+  /** Where the festival's fireworks burst over (the pagoda, else the main street's middle). */
+  fireworks?: { x: number; z: number };
+}
+
+export const chinatownExtra = (q: District): ChinatownExtra | undefined => q.dressing.extra as unknown as ChinatownExtra | undefined;
+
+/** Lanterns on a set of strings. */
+export const lanternCount = (strings: Overhead[]) => strings.reduce((n, o) => n + (o.data as unknown as LanternData).at.length, 0);
+
+const NIGHT_STALLS: PropKind[] = ['produceStall', 'produceStall', 'dimSumCart', 'lanternStand', 'produceStall', 'menuBoard'];
+
+/**
+ * The festival roll, its lanterns, lion dance, dragon float and fireworks spot; then the night
+ * market: more stalls on the main street's sidewalks and bulb strings along its shopfronts. Lanterns
+ * and bulbs together stay within CHINATOWN.maxGlow (festival strings, then bulb strings, are left out
+ * past it).
+ */
+function nightExtras(q: District, city: CityData, built: Building[], paifang: Structure[], out: DistrictDressing, solid: Footprint[], rng: Rng): ChinatownExtra {
+  const { roadWidth: rw, sidewalk: s } = city.config;
+  const festival = rng.next() < CHINATOWN.festivalChance;
+  let glow = lanternCount(out.overhead.filter((o) => o.kind === 'lanterns'));
+  const festivalStrings: Overhead[] = [];
+  const nightProps: StreetProp[] = [];
+  const taken = () => [...city.streetProps.filter((p) => inRect(q.bounds, p, 2)), ...out.props, ...nightProps].map((p) => propFootprint(p, 0.3));
+  const free = (p: StreetProp) => {
+    const fp = propFootprint(p, 0.2);
+    return !solid.some((f) => footprintsOverlap(fp, f)) && !taken().some((f) => footprintsOverlap(fp, f)) && !built.some((b) => footprintsOverlap(fp, rectFootprint(b)));
+  };
+  let fireworks: ChinatownExtra['fireworks'];
+  // The festival pieces stand wholly off the road.
+  const roads = [...city.roads.map((r) => rectFootprint(r.rect)), ...city.intersections.map(rectFootprint)];
+  const offRoad = (p: StreetProp) => free(p) && !roads.some((r) => footprintsOverlap(propFootprint(p, 0.2), r));
+  if (festival) {
+    for (const o of lanternStrings(q, city, built, paifang, rng, { festival: true })) {
+      const n = lanternCount([o]);
+      if (glow + n > CHINATOWN.maxGlow) break;
+      festivalStrings.push(o);
+      glow += n;
+    }
+    // The lion dance and the dragon float on the square, round the pagoda, along its circle.
+    const pagoda = out.landmarks.find((l) => l.kind === 'pagoda');
+    if (pagoda) {
+      fireworks = { x: pagoda.x, z: pagoda.z };
+      const start = rng.range(0, Math.PI * 2);
+      for (const kind of ['dragonFloat', 'lionDance'] as const) {
+        for (let k = 0; k < 12; k++) {
+          const a = start + (k / 12) * Math.PI * 2 + (kind === 'lionDance' ? Math.PI : 0);
+          const r = pagoda.radius + 4.5;
+          const p: StreetProp = { kind, x: pagoda.x + Math.sin(a) * r, z: pagoda.z + Math.cos(a) * r, yaw: a + Math.PI / 2 };
+          if (!offRoad(p)) continue;
+          nightProps.push(p);
+          break;
+        }
+      }
+    } else {
+      // No square: the lion dance performs on a main-street sidewalk, the fireworks over the street.
+      const [a] = q.mainStreet[Math.floor(q.mainStreet.length / 2)].split('>').map(Number);
+      fireworks = { x: city.graph.nodes[a].x, z: city.graph.nodes[a].z };
+      const main = new Set(q.mainStreet.flatMap((k) => [k, k.split('>').reverse().join('>')]));
+      const around = { ...city, streetProps: [...city.streetProps, ...out.props] };
+      const lion = kerbClutter({ ...q, streets: main }, around, ['lionDance'], rng, { step: [15, 30] }).map((p) => faceStreet(p, q, city)).find(offRoad);
+      if (lion) nightProps.push({ ...lion, color: undefined });
+    }
+  }
+
+  // The night market: stalls between the day's on the main street's sidewalks.
+  const main = new Set(q.mainStreet.flatMap((k) => [k, k.split('>').reverse().join('>')]));
+  const around = { ...city, streetProps: [...city.streetProps, ...out.props, ...nightProps] };
+  for (const p of kerbClutter({ ...q, streets: main }, around, NIGHT_STALLS, rng, { step: CHINATOWN.nightStalls })) {
+    const stall = faceStreet(p, q, city);
+    if (free(stall)) nightProps.push(stall);
+  }
+
+  // Bulb strings swagged along the main street's shopfronts, tied where a building fronts it.
+  const bulbs: BulbString[] = [];
+  const line = rw / 2 + s - 0.5; // just off the building line
+  const fronts = (x: number, z: number) => built.some((b) => b.h >= CHINATOWN.bulbHeight + 1 && Math.abs(x - b.x) <= b.w / 2 + 0.8 && Math.abs(z - b.z) <= b.d / 2 + 0.8);
+  for (const key of q.mainStreet) {
+    const [ia, ib] = key.split('>').map(Number);
+    const A = city.graph.nodes[ia], B = city.graph.nodes[ib];
+    const len = Math.hypot(B.x - A.x, B.z - A.z);
+    const dx = (B.x - A.x) / len, dz = (B.z - A.z) / len;
+    const t0 = rw / 2 + s + 1, t1 = len - rw / 2 - s - 1;
+    const spans = Math.max(1, Math.round((t1 - t0) / CHINATOWN.bulbSpan));
+    const step = (t1 - t0) / spans;
+    for (const side of [-1, 1]) {
+      const at = (t: number, lateral: number) => ({ x: A.x + dx * t - dz * lateral * side, z: A.z + dz * t + dx * lateral * side });
+      for (let k = 0; k < spans; k++) {
+        const a = at(t0 + k * step, line), b = at(t0 + (k + 1) * step, line);
+        const ta = at(t0 + k * step, line + 1), tb = at(t0 + (k + 1) * step, line + 1); // the walls they tie to
+        if (!fronts(ta.x, ta.z) || !fronts(tb.x, tb.z)) continue;
+        const n = Math.max(2, Math.round(step / CHINATOWN.bulbSpacing));
+        if (glow + n > CHINATOWN.maxGlow) continue;
+        glow += n;
+        const h = (p: { x: number; z: number }) => groundHeight(city.terrain, p.x, p.z) + CHINATOWN.bulbHeight;
+        bulbs.push({ a, b, ya: h(a), yb: h(b), sag: CHINATOWN.bulbSag, n });
+      }
+    }
+  }
+  return { festival, nightProps, bulbs, festivalStrings, fireworks };
 }
 
 const AWNINGS = [0xc8302a, 0x2f7a55, 0xd8a637, 0x2f5f80, 0xe8e0cc, 0xd86a2a];

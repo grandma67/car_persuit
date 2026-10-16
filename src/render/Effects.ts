@@ -71,6 +71,10 @@ export class Effects {
   private steam = new TireSmoke({ color: 0xf6f6f2, maxAlpha: 0.45, additive: false, startSize: 0.7, growth: 2.5, lift: [1, 2.2], spread: 1.2, life: [0.8, 1.3] });
   private tiles = new TireSmoke({ color: 0xf2ead8, maxAlpha: 0.95, additive: false, startSize: 0.14, growth: 0, lift: [2, 4.5], gravity: 9.8, spread: 4, life: [0.6, 0.9], carry: 0.3 });
   private sparks = new TireSmoke({ color: 0xffc040, maxAlpha: 0.9, additive: true, startSize: 0.18, growth: 0.1, lift: [2, 7], gravity: 6, spread: 6, life: [0.3, 0.7] });
+  // Lunar New Year: gold confetti with the red paper (red envelopes), and firework bursts high up.
+  private confetti = new TireSmoke({ color: 0xf2c23a, maxAlpha: 0.95, additive: false, startSize: 0.16, growth: 0, lift: [2, 6], gravity: 2.5, spread: 5, life: [1.2, 2], carry: 0.3 });
+  private fireworks = [0xff4a3a, 0xffd04a, 0x6ad8ff].map((color) =>
+    new TireSmoke({ color, maxAlpha: 1, additive: true, startSize: 0.9, growth: -0.6, lift: [-1, 1], gravity: 2.5, spread: 0, life: [1.1, 1.7], jitter: 0, carry: 1, carryUp: true, nearFade: [0, 0.01] }));
   private exhaustBudget = 0;
   private sootBudget = 0;
   private exhaustTime = 0;
@@ -90,7 +94,8 @@ export class Effects {
     scene.add(this.skidMarks.mesh, this.smoke.points);
     scene.add(this.exhaust.points, this.soot.points, this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points, this.flash);
     scene.add(this.chips.points, this.straw.points, this.cloth.points, this.shards.points);
-    scene.add(this.fruit.points, this.paper.points, this.steam.points, this.tiles.points, this.sparks.points);
+    scene.add(this.fruit.points, this.paper.points, this.steam.points, this.tiles.points, this.sparks.points, this.confetti.points);
+    for (const f of this.fireworks) scene.add(f.points);
   }
 
   /** A car blowing up at `at`: fireball, smoke, flames and a flash of light above it. */
@@ -114,6 +119,16 @@ export class Effects {
     }
   }
 
+  /** A firework burst at `at`: a sphere of sparks in one of three colours (festival nights in Chinatown). */
+  firework(at: THREE.Vector3, colour: number): void {
+    const f = this.fireworks[colour % this.fireworks.length];
+    const speed = 9 + Math.random() * 4;
+    for (let i = 0; i < 80; i++) {
+      const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = Math.sqrt(1 - u * u);
+      f.emit(at, this.tmpVel.set(Math.cos(a) * r * speed, u * speed, Math.sin(a) * r * speed), 0);
+    }
+  }
+
   /** Lamps and signals spark; hydrants start a geyser; wood splinters, straw bursts, pots shatter. */
   propBreak(b: PropBreak): void {
     const burst = (emitter: TireSmoke, n: number) => {
@@ -134,6 +149,8 @@ export class Effects {
       case 'menuBoard': return burst(this.chips, 10);
       case 'firecrackerCrate': burst(this.sparks, 60); return burst(this.paper, 20);
       case 'parkedVan': return burst(this.shards, 10);
+      case 'lionDance': burst(this.paper, 40); burst(this.confetti, 40); return burst(this.cloth, 6);
+      case 'dragonFloat': burst(this.paper, 60); burst(this.confetti, 60); return burst(this.chips, 16);
     }
     if (b.kind === 'lamp' || b.kind === 'signal') {
       for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0);
@@ -190,7 +207,7 @@ export class Effects {
     this.chips.update(dt);
     this.straw.update(dt);
     this.cloth.update(dt);
-    for (const e of [this.fruit, this.paper, this.steam, this.tiles, this.sparks]) e.update(dt);
+    for (const e of [this.fruit, this.paper, this.steam, this.tiles, this.sparks, this.confetti, ...this.fireworks]) e.update(dt);
     this.shards.update(dt);
     this.flash.intensity *= Math.exp(-6 * dt);
 
@@ -254,6 +271,6 @@ export class Effects {
   }
 
   resize(viewportHeight: number, fov: number): void {
-    for (const p of [this.exhaust, this.soot, this.smoke, this.engineSmoke, this.fire, this.water, this.fireball]) p.resize(viewportHeight, fov);
+    for (const p of [this.exhaust, this.soot, this.smoke, this.engineSmoke, this.fire, this.water, this.fireball, ...this.fireworks]) p.resize(viewportHeight, fov);
   }
 }

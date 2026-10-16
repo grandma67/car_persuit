@@ -91,7 +91,8 @@ The framework (Q0) lives in `src/world/districts/`:
   stream, drop/swap props, zebras, dressing), plus helpers `kerbClutter`, `perimeterWall`,
   `isJunctionControl`, `inDistrict`.
 - `runtime.ts`: what the game systems read: `districtTraffic` (speed caps, no-heavy streets, spawn
-  mix), `copSpawnSkips`, `roadblockGates`, `districtOfNode`.
+  mix), `copSpawnSkips`, `roadblockGates`, `districtOfNode`, `nightProps` (`dressing.extra.nightProps`,
+  joined to `city.streetProps` by `Game` on a night run only; generation never depends on the time).
 - `index.ts`: `DISTRICT_DEFS`, the registry in placement order.
 - `render/districts/index.ts`: `DISTRICT_RENDERERS[kind]` draws structures, overhead and ground patches.
 

@@ -29,6 +29,8 @@ export interface LanternData {
   sag: number;
   /** Lantern positions along the wire, 0..1. */
   at: number[];
+  /** A Lunar New Year string (shown at night on a festival seed): gold lanterns among the red. */
+  festival?: boolean;
 }
 
 /** Where along a lantern wire (0..1) its lowest point is, and the wire's height there. */
@@ -88,8 +90,11 @@ export function paifangs(q: District, city: CityData, rng: Rng): { structures: S
  * Red lanterns on wires across the streets, tied to the buildings on either side: every
  * G.lanternPitch along the main street, a few on the side streets. A string goes up only where a
  * tall enough building stands at both ends, clear of the paifang and of the junction mouths.
+ * `festival`: the main street only, half a pitch along (between the everyday strings), no draws.
  */
-export function lanternStrings(q: District, city: CityData, buildings: Building[], paifang: Structure[], rng: Rng): Overhead[] {
+export function lanternStrings(
+  q: District, city: CityData, buildings: Building[], paifang: Structure[], rng: Rng, { festival = false } = {},
+): Overhead[] {
   const { roadWidth: rw, sidewalk: s } = city.config;
   const nodes = city.graph.nodes;
   const line = rw / 2 + s; // the building line, from the centre line
@@ -99,7 +104,7 @@ export function lanternStrings(q: District, city: CityData, buildings: Building[
   // The building a wire end ties to: its face on the line at that point, and tall enough.
   const anchored = (x: number, z: number) =>
     buildings.some((b) => b.h >= G.wireHeight + 1 && Math.abs(x - b.x) <= b.w / 2 + 0.6 && Math.abs(z - b.z) <= b.d / 2 + 0.6);
-  for (const key of [...q.mainStreet, ...[...q.streets].sort()]) {
+  for (const key of festival ? q.mainStreet : [...q.mainStreet, ...[...q.streets].sort()]) {
     const [a, b] = key.split('>').map(Number);
     if (done.has(key) || done.has(edgeKey(b, a))) continue;
     done.add(key);
@@ -111,7 +116,7 @@ export function lanternStrings(q: District, city: CityData, buildings: Building[
     let spots: number[] = [];
     if (main.has(key)) {
       // Evenly along it, centred between the junctions.
-      const n = Math.floor((t1 - t0) / G.lanternPitch) + 1;
+      const n = Math.floor((t1 - t0) / G.lanternPitch) + (festival ? 0 : 1);
       for (let k = 0; k < n; k++) spots.push((t0 + t1) / 2 + (k - (n - 1) / 2) * G.lanternPitch);
     } else spots = Array.from({ length: rng.int(G.sideStrings[0], G.sideStrings[1]) }, () => rng.range(t0, t1));
     for (const t of spots) {
@@ -123,7 +128,7 @@ export function lanternStrings(q: District, city: CityData, buildings: Building[
       // Clear of the paifang roofs.
       if (paifang.some((p) => Math.hypot(p.x - cx, p.z - cz) < G.lanternGap + 2)) continue;
       if (out.some((o) => Math.hypot((o.points[0].x + o.points[1].x) / 2 - cx, (o.points[0].z + o.points[1].z) / 2 - cz) < G.lanternPitch * 0.6)) continue;
-      const data: LanternData = { ya: ground(city, pa.x, pa.z) + G.wireHeight, yb: ground(city, pb.x, pb.z) + G.wireHeight, sag: G.sag, at: [] };
+      const data: LanternData = { ya: ground(city, pa.x, pa.z) + G.wireHeight, yb: ground(city, pb.x, pb.z) + G.wireHeight, sag: G.sag, at: [], ...(festival && { festival }) };
       // Lanterns over the roadway and the sidewalks' outer half, evenly spaced.
       const n = Math.max(2, Math.round((2 * (rw / 2 + s / 2)) / G.lanternSpacing));
       for (let k = 0; k <= n; k++) data.at.push(0.5 + ((k / n - 0.5) * (rw + s)) / (2 * line - 0.3));
