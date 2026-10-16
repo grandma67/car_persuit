@@ -38,6 +38,10 @@ export interface ClockTowerFrame {
 export function clockTowerFrame(b: Rect & { h: number }, roof: RoofShape): ClockTowerFrame {
   const half = Math.max(1.8, Math.min(3, Math.min(b.w, b.d) * 0.18));
   const ridge = b.h + roofRise(roof, b);
-  const top = ridge + 4.5;
-  return { x: b.x, z: b.z, half, base: b.h - 1, top, dialY: top - 1.8, dialR: half * 0.72 };
+  const dialR = half * 0.72;
+  const ring = dialR + 0.18; // the dark ring round the face
+  // A shaft clear of the ridge, the dial, then wall above it so the cornice and spire stay off the ring.
+  const dialY = ridge + 4 + ring;
+  const top = dialY + ring + 1.2;
+  return { x: b.x, z: b.z, half, base: b.h - 1, top, dialY, dialR };
 }
