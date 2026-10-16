@@ -71,7 +71,7 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
 
 type PlainKind = Exclude<PropKind, 'sign' | 'tree'>;
 type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old';
-const modelKey = (p: StreetProp): ModelKey => {
+export const modelKey = (p: StreetProp): ModelKey => {
   const key: ModelKey =
     p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
@@ -92,6 +92,102 @@ export interface PropBreak {
   tree?: TreeKind; // trees: which kind (cacti don't sound like wood)
   position: THREE.Vector3;
   strength: number; // 0..1 from impact speed
+}
+
+/**
+ * Extra collider for debris: a piece of the model that reaches past the pole's box (lamp head, sign
+ * plate, signal arm). Prop space, centre and half-extents; `round` is an upright cylinder of radius
+ * hx. Without these a fallen prop rests on its pole and the top sinks into the ground.
+ */
+export interface DebrisPart {
+  x: number;
+  y: number;
+  z: number;
+  hx: number;
+  hy: number;
+  hz: number;
+  yaw?: number;
+  round?: boolean;
+}
+
+const plateBoxes = new Map<SignShape, THREE.Box3>();
+function plateBox(shape: SignShape): THREE.Box3 {
+  let b = plateBoxes.get(shape);
+  if (!b) {
+    const geo = plateGeometry(shape, 0.02);
+    geo.computeBoundingBox();
+    plateBoxes.set(shape, (b = geo.boundingBox!));
+    geo.dispose();
+  }
+  return b;
+}
+
+/** The pieces of a knocked-loose prop the ground must hold up besides its pole (see `DebrisPart`). */
+export function debrisParts(def: StreetProp): DebrisPart[] {
+  switch (def.kind) {
+    case 'lamp':
+      return [
+        { x: 0, y: 5.95, z: 0.65, hx: 0.035, hy: 0.035, hz: 0.7 }, // arm
+        { x: 0, y: 5.9, z: 1.3, hx: 0.225, hy: 0.06, hz: 0.16 }, // head
+      ];
+    case 'sign': {
+      const b = plateBox(SIGN_SHAPE[def.variant ?? 'stop']);
+      const c = b.getCenter(new THREE.Vector3());
+      const h = b.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+      const plate = { x: -c.x, y: SIGN_FACE_Y + c.y, z: 0.05, hx: h.x, hy: h.y, hz: 0.02 }; // plate is turned round
+      if (def.style !== 'old') return [plate];
+      return [plate, { x: 0, y: 0.18, z: 0, hx: 0.16, hy: 0.18, hz: 0.16, round: true }, { x: 0, y: SIGN_FACE_Y + 0.35, z: 0, hx: 0.1, hy: 0.2, hz: 0.1, round: true }]; // foot, finial
+    }
+    case 'signal': {
+      const headX = def.armRight ? -SIGNAL_HEAD_X : SIGNAL_HEAD_X;
+      return [
+        { x: headX / 2, y: 5.45, z: 0, hx: 1.95, hy: 0.06, hz: 0.06 }, // arm
+        { x: headX, y: 4.85, z: -0.05, hx: 0.26, hy: 0.625, hz: 0.17 }, // housing + backboard
+        ...(def.style === 'old'
+          ? [
+              { x: 0, y: 0.36, z: 0, hx: 0.3, hy: 0.36, hz: 0.3, round: true }, // foot
+              { x: 0, y: 5.75, z: 0, hx: 0.16, hy: 0.16, hz: 0.16, round: true }, // finial
+              { x: headX < 0 ? 0.25 : -0.25, y: 5.2, z: 0, hx: 0.25, hy: 0.25, hz: 0.04 }, // scroll bracket
+            ]
+          : []),
+      ];
+    }
+    case 'signpost': {
+      // The three finger boards: shifted along their length, then turned about the post.
+      const board = (w: number, y: number, along: number, yaw: number): DebrisPart => ({
+        x: along * Math.cos(yaw), y, z: 0.1 - along * Math.sin(yaw), hx: w / 2, hy: 0.12, hz: 0.025, yaw,
+      });
+      return [board(1.1, 2.45, 0.45, 0), board(1.0, 2.1, -0.4, 0.6), board(0.9, 1.78, 0.38, -1.9)];
+    }
+    case 'oilLamp':
+      return [
+        { x: 0, y: 0.25, z: 0, hx: 0.28, hy: 0.25, hz: 0.28, round: true }, // foot
+        { x: 0, y: 3.95, z: 0, hx: 0.3, hy: 0.45, hz: 0.3, round: true }, // lantern + cap
+      ];
+    case 'dragonLamp':
+      return [
+        { x: 0, y: 0.38, z: 0, hx: 0.4, hy: 0.38, hz: 0.4, round: true }, // base
+        { x: 0, y: 2.97, z: 0, hx: 0.65, hy: 2.07, hz: 0.65, round: true }, // coiling dragons up to the finial
+        { x: 0, y: 4.48, z: 0, hx: 0.76, hy: 0.14, hz: 0.76, round: true }, // the pagoda roof's upturned eaves
+      ];
+    case 'umbrella':
+      return [{ x: 0, y: 2.55, z: 0, hx: 1.7, hy: 0.35, hz: 1.7, round: true }]; // canopy
+    default:
+      return [];
+  }
+}
+/** Each debris part's share of the prop's mass. */
+const DEBRIS_PART_MASS = 0.15;
+
+/** Give a knocked-loose prop's body its `debrisParts` colliders (the pole's box is already on it). */
+export function addDebrisColliders(world: RAPIER.World, body: RAPIER.RigidBody, def: StreetProp): void {
+  const mass = propSpec(def).mass * DEBRIS_PART_MASS;
+  const q = new THREE.Quaternion();
+  for (const d of debrisParts(def)) {
+    const desc = d.round ? RAPIER.ColliderDesc.cylinder(d.hy, d.hx) : RAPIER.ColliderDesc.cuboid(d.hx, d.hy, d.hz);
+    q.setFromAxisAngle(UP, d.yaw ?? 0);
+    world.createCollider(desc.setTranslation(d.x, d.y, d.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }).setMass(mass).setFriction(0.6), body);
+  }
 }
 
 /** A part drawn by another instanced mesh that rides along with the prop (bulb, sign face, lens). */
@@ -149,7 +245,7 @@ function treeModels(look: Greenery): Record<`tree-${TreeKind}`, THREE.BufferGeom
   };
 }
 
-function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
+export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
   const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
   const cyl = (r: number, h: number, seg = 8) => new THREE.CylinderGeometry(r, r, h, seg);
   const metal = 0x3a3f47;
@@ -893,6 +989,7 @@ export class PropSystem {
     );
   }
 
+
   /** Visit each prop index in the grid cells within `radius` of a point. */
   private near(x: number, z: number, radius: number, visit: (i: number) => void): void {
     for (let cx = Math.floor((x - radius) / GRID_CELL); cx <= Math.floor((x + radius) / GRID_CELL); cx++) {
@@ -955,6 +1052,7 @@ export class PropSystem {
     this.resting.delete(i);
     p.body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(t.x, t.y, t.z).setRotation(r).setSleeping(true));
     this.addCollider(p);
+    addDebrisColliders(this.world, p.body, p.def);
     this.debris.add(i);
   }
 
@@ -1039,6 +1137,8 @@ export class PropSystem {
     this.active.delete(i);
     this.debris.add(i); // debris keeps its body while a vehicle is near
     body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+    // Only now: an intact prop is a plain pole to drive into, its arm and head out of reach.
+    addDebrisColliders(this.world, body, p.def);
 
     // Thrown ahead of the car, slightly up, tumbling over the axis across the car's path.
     const lv = vehicle.body.linvel();
