@@ -21,13 +21,14 @@ describe('Chinatown placement', () => {
     expect(placed.length).toBeGreaterThan(SEEDS.length * 0.7);
   });
 
-  it.each(placed)('seed %i: a valid cluster in the busy rings', (seed, c, q) => {
-    const { w, h } = q.grid;
-    expect([[2, 2], [2, 3], [3, 2]]).toContainEqual([w, h]);
-    expect(q.blocks.every((k) => ['downtown', 'midtown'].includes(c.blocks[k].zone))).toBe(true);
-    // No town square of the city's own inside; a square there is the district's.
-    const plain = generateCity(seed, undefined, { defs: [] });
-    expect(q.blocks.some((k) => plain.blocks[k].square)).toBe(false);
+  it.each(placed)('seed %i: a valid cluster in the inner city', (_seed, c, q) => {
+    const { i0, j0, w, h } = q.grid;
+    expect([[2, 2], [3, 3], [4, 4]]).toContainEqual([w, h]);
+    const n = c.config.blocks, ring = DISTRICTS.outerRing;
+    expect(i0 >= ring && j0 >= ring && i0 + w <= n - ring && j0 + h <= n - ring).toBe(true);
+    const zones = q.blocks.map((k) => c.blocks[k].zone);
+    expect(zones.filter((z) => z === 'midtown' || z === 'downtown').length).toBeGreaterThanOrEqual(zones.length / 2);
+    // A town square inside is taken over: the only square left is the district's own.
     const sq = squareBlock(q);
     expect(q.blocks.filter((k) => c.blocks[k].square)).toEqual(sq === undefined ? [] : [sq]);
     expect(q.roles.size).toBeLessThanOrEqual(1);
@@ -46,6 +47,12 @@ describe('Chinatown placement', () => {
     expect(ends.length).toBe(2);
     expect(q.gates.length).toBeLessThanOrEqual(3);
   });
+});
+
+it('Chinatown comes in every size, in many places', () => {
+  const sizes = new Set(placed.map(([, , q]) => q.grid.w));
+  expect([...sizes].sort()).toEqual([2, 3, 4]);
+  expect(new Set(placed.map(([, , q]) => `${q.grid.i0},${q.grid.j0}`)).size).toBeGreaterThan(placed.length / 3);
 });
 
 describe('Chinatown lots', () => {

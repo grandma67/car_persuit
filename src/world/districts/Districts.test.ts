@@ -127,7 +127,6 @@ describe('district placement', () => {
     const n = city.config.blocks;
     const nodes = city.graph.nodes;
     const fast = fastStreets(city.graph, city.streetProps);
-    const spawnNode = city.graph.nearest(city.spawn.x, city.spawn.z);
     for (const q of city.districts) {
       const { i0, j0, w, h } = q.grid;
       // A full rectangle of blocks, marked, in the right zones.
@@ -144,7 +143,6 @@ describe('district placement', () => {
       for (const id of all) {
         const nd = nodes[id];
         expect(city.terrain.canals.some((c) => Math.abs((c.axis === 'x' ? nd.z : nd.x) - c.at) < c.half + 6)).toBe(false);
-        expect(id).not.toBe(spawnNode.id);
       }
       for (const key of q.streets) expect(fast.has(key)).toBe(false);
       expect(city.landmarks.some((l) => l.kind === 'ramp' && inRect(q.bounds, l, 12))).toBe(false);
@@ -244,7 +242,7 @@ describe('district placement', () => {
   });
 
   it('with no definitions the city has no districts', () => {
-    expect(generateCity(42).districts).toEqual([]);
+    expect(generateCity(42, undefined, { defs: [] }).districts).toEqual([]);
   });
 });
 

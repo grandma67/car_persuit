@@ -50,10 +50,11 @@ export function facingSquare(q: District, city: CityData, buildings: Building[])
 }
 
 function roles(q: District, city: CityData, rng: Rng): Map<number, BlockRole> {
-  // A 3×3 has its square in the middle; a 2×2 in any of its blocks.
+  // A 3×3 has its square in the middle, a 4×4 in one of its four middle blocks, a 2×2 in any block.
   const { i0, j0, w, h } = q.grid;
   const n = city.config.blocks;
-  const square = w === 3 && h === 3 ? (j0 + 1) * n + (i0 + 1) : rng.pick(q.blocks);
+  const middle = q.blocks.filter((k) => { const i = k % n, j = Math.floor(k / n); return i > i0 && i < i0 + w - 1 && j > j0 && j < j0 + h - 1; });
+  const square = w === 3 && h === 3 ? (j0 + 1) * n + (i0 + 1) : rng.pick(middle.length ? middle : q.blocks);
   return new Map([[square, 'square']]);
 }
 
@@ -90,9 +91,9 @@ export const OLD_CITY_DEF: DistrictDef = {
   salt: 0x01dc17,
   chance: OLD_CITY.chance,
   site: 'inland',
-  shapes: [[2, 2], [3, 3]],
-  rings: ['midtown', 'downtown'],
-  minShare: { midtown: 0.5 },
+  shapes: [[2, 2], [3, 3], [4, 4]],
+  rings: ['midtown', 'downtown', 'residential', 'industrial'], // any inner block; minCore keeps it central
+  minCore: 0.5,
   gates: 'all',
   buildingStyle: { lots: [3, 5], height: [6, 14], gap: [0, 0.5], empty: 0 },
   looks: OLD_CITY_LOOKS(),

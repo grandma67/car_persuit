@@ -96,8 +96,9 @@ export const CHINATOWN_DEF: DistrictDef = {
   salt: 0xc417a7,
   chance: CHINATOWN.chance,
   site: 'inland',
-  shapes: [[2, 2], [2, 3]],
-  rings: ['downtown', 'midtown'],
+  shapes: [[2, 2], [3, 3], [4, 4]],
+  rings: ['downtown', 'midtown', 'residential', 'industrial'], // any inner block; minCore keeps it central
+  minCore: 0.5,
   gates: 'mainStreet',
   extraGates: 1,
   minMainStreet: 2,

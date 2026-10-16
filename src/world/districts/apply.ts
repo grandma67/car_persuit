@@ -37,6 +37,7 @@ function overlay(def: DistrictDef, q: District, city: CityData, rng: Rng): void 
   for (const k of q.blocks) {
     city.blocks[k].district = def.kind;
     city.blocks[k].park = false;
+    city.blocks[k].square = false; // a town square taken over (the district may make its own)
   }
   q.roles = def.roles(q, city, rng);
   // 2. Clear the blocks (park centrepieces too) and refill the ordinary ones from the district's stream.

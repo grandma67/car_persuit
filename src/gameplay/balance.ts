@@ -109,6 +109,7 @@ export const DISTRICTS = {
   overheadClearance: Math.max(...ALL_SPECS.map(vehicleTop)) + 1.5,
   frontageSea: 50, // metres of sea a coast district's frontage reaches out
   clutterGap: 8, // metres kept clear at junction mouths and gate approaches
+  outerRing: 2, // rows of blocks round the edge kept for the outer districts (Harbor, Farm)
 };
 
 /** The Old City: a walled medieval core in the middle ring (world/districts/OldCity.ts). */

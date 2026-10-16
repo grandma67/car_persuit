@@ -408,7 +408,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
         a: e.a, b: e.b, horizontal: e.horizontal, i: e.i, j: e.j,
         kind: e.canal ? 'canal' : quaySquares.includes(e) ? 'quay' : e.removed ? 'plaza' : 'road',
       })),
-      blockedNodes: new Set([centre.id, ...centre.neighbors, ...rampNodes]),
+      blockedNodes: new Set(rampNodes), // the spawn may be inside a district
       works: works.sites.map((w) => ({ node: w.node, edge: w.edge })),
       fast: fastStreets(graph, traffic.props),
     };

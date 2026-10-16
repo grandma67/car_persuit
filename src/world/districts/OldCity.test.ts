@@ -17,20 +17,27 @@ describe('Old City placement', () => {
     expect(placed).toBeGreaterThan(SEEDS.length * 0.7);
   });
 
-  it.each(SEEDS)('seed %i: a valid cluster in the middle ring', (seed) => {
+  it.each(SEEDS)('seed %i: a valid cluster in the inner city', (seed) => {
     const c = city(seed);
     const q = c.districts.find((d) => d.kind === 'oldtown');
     if (!q) return;
-    const { w, h } = q.grid;
-    expect([[2, 2], [3, 3]]).toContainEqual([w, h]);
+    const { i0, j0, w, h } = q.grid;
+    expect([[2, 2], [3, 3], [4, 4]]).toContainEqual([w, h]);
+    // Clear of the outer ring, at least half downtown or midtown.
+    const n = c.config.blocks, ring = DISTRICTS.outerRing;
+    expect(i0 >= ring && j0 >= ring && i0 + w <= n - ring && j0 + h <= n - ring).toBe(true);
     const zones = q.blocks.map((k) => c.blocks[k].zone);
-    expect(zones.every((z) => z === 'midtown' || z === 'downtown')).toBe(true);
-    expect(zones.filter((z) => z === 'midtown').length).toBeGreaterThanOrEqual(zones.length / 2);
-    // No town square of the city's own inside; the market square is the district's.
-    const plain = generateCity(seed, undefined, { defs: [] });
-    expect(q.blocks.some((k) => plain.blocks[k].square)).toBe(false);
+    expect(zones.filter((z) => z === 'midtown' || z === 'downtown').length).toBeGreaterThanOrEqual(zones.length / 2);
+    // A town square inside is taken over: the only square left is the market square.
     expect(q.blocks.filter((k) => c.blocks[k].square)).toEqual([squareBlock(q)]);
     expect(q.gates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('comes in every size, in many places', () => {
+    const qs = SEEDS.map(oldCity).filter((q) => q !== undefined);
+    const sizes = new Set(qs.map((q) => q.grid.w));
+    expect([...sizes].sort()).toEqual([2, 3, 4]);
+    expect(new Set(qs.map((q) => `${q.grid.i0},${q.grid.j0}`)).size).toBeGreaterThan(qs.length / 3);
   });
 });
 

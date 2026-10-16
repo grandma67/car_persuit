@@ -120,10 +120,16 @@ export interface DistrictDef {
   kind: DistrictKind;
   salt: number; // RNG stream: seed ^ salt
   chance: number; // independent roll per seed
-  site: 'inland' | 'coast';
-  shapes: [number, number][]; // cluster sizes in blocks; both orientations are tried
+  /**
+   * inland: clear of the outer ring (DISTRICTS.outerRing rows of blocks round the edge, kept for the
+   * outer districts); edge: in the outer zones and touching the island's edge; coast: an edge
+   * cluster with its long side on the sea and a frontage.
+   */
+  site: 'inland' | 'edge' | 'coast';
+  shapes: [number, number][]; // cluster sizes in blocks; both orientations are tried. One is rolled per seed, the rest are fallbacks
   rings: Zone[]; // zones its blocks may sit in
   minShare?: Partial<Record<Zone, number>>; // e.g. { midtown: 0.5 }
+  minCore?: number; // least share of downtown + midtown blocks
   gates: 'all' | 'mainStreet';
   extraGates?: number; // with 'mainStreet': up to this many more
   minMainStreet?: number; // the main street's least length in edges (default 1)
