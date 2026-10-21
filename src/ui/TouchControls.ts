@@ -24,7 +24,9 @@ export class TouchControls {
         <button data-hold="right" aria-label="Steer right">▶</button>
       </div>
       <div class="touch-pedals">
-        <button data-hold="handbrake" class="touch-small" aria-label="Handbrake">HB</button>
+        <button data-hold="handbrake" class="touch-small" aria-label="Handbrake">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M8 20l9-13"/><circle cx="18" cy="5.5" r="2.5"/></svg>HB
+        </button>
         <button data-hold="brake" class="touch-brake" aria-label="Brake / reverse">BRAKE/<br>REVERSE</button>
         <button data-hold="gas" class="touch-gas" aria-label="Gas">GAS</button>
       </div>

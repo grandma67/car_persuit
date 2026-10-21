@@ -18,7 +18,7 @@ export interface EndScreenInfo {
 
 export type SteerMode = 'buttons' | 'tilt';
 
-/** Phones with a tilt sensor: steer with the buttons or by turning the phone. */
+/** Phones with a tilt sensor: steer with the on-screen buttons or by turning the phone. */
 export interface SteerChoice {
   mode: SteerMode;
   /** Resolves the mode in effect: tilt can fall back to buttons when the sensor is refused. */
@@ -121,21 +121,18 @@ export class Screens {
     }
   }
 
-  /** The Buttons / Tilt choice; adds its actions. Empty without a choice to offer. */
-  private steerChoices(steering: SteerChoice | null | undefined, actions: Record<string, () => void>): string {
+  /** The steering button: shows the mode, a tap switches it. Empty without a choice to offer. */
+  private steerButton(steering: SteerChoice | null | undefined, actions: Record<string, () => void>): string {
     if (!steering) return '';
-    const modes: [SteerMode, string][] = [
-      ['buttons', 'Steer: buttons'],
-      ['tilt', 'Steer: tilt'],
-    ];
-    const select = (mode: SteerMode) => {
-      for (const [m] of modes) this.el.querySelector(`[data-action="steer-${m}"]`)?.classList.toggle('selected', m === mode);
-    };
-    for (const [mode] of modes) actions[`steer-${mode}`] = () => void steering.onChange(mode).then(select);
-    const buttons = modes
-      .map(([m, label]) => `<button data-action="steer-${m}" class="choice${m === steering.mode ? ' selected' : ''}">${label}</button>`)
-      .join('');
-    return `<div><div class="screen-choices" role="group" aria-label="Steering">${buttons}</div></div>`;
+    let mode = steering.mode;
+    const label = () => `Steer: ${mode === 'tilt' ? 'Tilt' : 'Buttons'}`;
+    actions.steer = () =>
+      void steering.onChange(mode === 'tilt' ? 'buttons' : 'tilt').then((m) => {
+        mode = m;
+        const button = this.el.querySelector('[data-action="steer"]');
+        if (button) button.textContent = label();
+      });
+    return `<button data-action="steer" class="secondary">${label()}</button>`;
   }
 
   menu(info: MenuInfo, onStart: () => void, onDifficulty: (id: string) => void): void {
@@ -159,10 +156,10 @@ export class Screens {
         <li><kbd>P</kbd> pause · <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen</li>
       </ul>
       <div class="screen-choices" role="group" aria-label="Difficulty">${choices}</div>
-      ${this.steerChoices(info.steering, actions)}
       <div class="screen-buttons">
         <button data-action="start">Start <kbd>Enter</kbd></button>
         <button data-action="share" class="secondary">Share this game</button>
+        ${this.steerButton(info.steering, actions)}
         ${this.fullscreenButton()}
       </div>
       <p class="screen-seed">City #${info.seed} · ${info.look}${info.best ? ` · Best ${info.best}` : ''}</p>
@@ -190,12 +187,12 @@ export class Screens {
     }
     this.show(
       `<h2>PAUSED</h2>
-      ${this.steerChoices(touch?.steering, actions)}
       <div class="screen-buttons">
         <button data-action="resume">Resume <kbd>P</kbd></button>
         <button data-action="retry" class="secondary">Retry <kbd>Enter</kbd></button>
         <button data-action="share" class="secondary">Share this game</button>
         ${touch ? `<button data-action="mute" class="secondary">${muteLabel(touch.muted)}</button>` : ''}
+        ${this.steerButton(touch?.steering, actions)}
         ${touch ? this.fullscreenButton() : ''}
       </div>`,
       actions,
