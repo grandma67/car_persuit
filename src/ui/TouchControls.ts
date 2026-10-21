@@ -25,7 +25,7 @@ export class TouchControls {
       </div>
       <div class="touch-pedals">
         <button data-hold="handbrake" class="touch-small" aria-label="Handbrake">HB</button>
-        <button data-hold="brake" class="touch-brake" aria-label="Brake / reverse">BRAKE</button>
+        <button data-hold="brake" class="touch-brake" aria-label="Brake / reverse">BRAKE/<br>REVERSE</button>
         <button data-hold="gas" class="touch-gas" aria-label="Gas">GAS</button>
       </div>
       <div class="touch-top">

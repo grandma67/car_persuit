@@ -1118,7 +1118,9 @@ kbd {
   width: 84px;
   height: 84px;
   border-radius: 18px;
-  font-size: 14px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.2;
   background: rgb(200 50 40 / 0.5);
 }
 
@@ -1216,6 +1218,7 @@ kbd {
   .touch-pedals .touch-brake {
     width: 64px;
     height: 56px;
+    font-size: 11px;
   }
 
   .touch-pedals .touch-small {
