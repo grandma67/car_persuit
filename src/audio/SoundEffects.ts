@@ -363,24 +363,26 @@ export class SoundEffects {
   /**
    * A car flashing past (see PassBy): a noise swish swept from bright to dull as it goes by (the
    * Doppler drop), panned to its side, with a low buffet from the bow wave of a bus or truck.
+   * `speed` is the closing speed in m/s: the faster, the shorter, brighter and steeper the sweep.
    */
-  whoosh(strength: number, pan: number, heavy: number): void {
+  whoosh(strength: number, pan: number, heavy: number, speed: number): void {
     const ctx = this.ctx;
     const now = ctx.currentTime;
+    const fast = Math.max(0, Math.min(1, (speed - 14) / 26)); // ~50 .. ~145 km/h
+    const peak = now + 0.12; // PassBy's LEAD: the peak lands as the car draws level
+    const end = peak + Math.max(0.18, Math.min(0.6, 8 / Math.max(speed, 1))); // ~8 m of travel
     const panner = ctx.createStereoPanner();
     panner.pan.setValueAtTime(pan * 0.8, now);
-    panner.pan.linearRampToValueAtTime(pan * 0.5, now + 0.5); // drifting behind
+    panner.pan.linearRampToValueAtTime(pan * 0.5, end); // drifting behind
     panner.connect(this.master);
-    const peak = now + 0.12;
-    const end = now + 0.55;
 
     const swish = ctx.createBufferSource();
     swish.buffer = this.noise;
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
     band.Q.value = 0.9;
-    band.frequency.setValueAtTime(1400 + 900 * strength, now);
-    band.frequency.exponentialRampToValueAtTime(500, end);
+    band.frequency.setValueAtTime(1100 + 1500 * fast + 400 * strength, now);
+    band.frequency.exponentialRampToValueAtTime(650 - 200 * fast, end); // bigger Doppler drop when fast
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(0.32 * strength, peak);

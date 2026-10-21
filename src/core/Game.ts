@@ -1047,7 +1047,7 @@ export class Game {
       if (rx * rx + rz * rz > 50 * 50) continue;
       const ov = v.body.linvel();
       const w = this.passBy.check(v, rx, rz, ov.x - pv.x, ov.z - pv.z, right.x, right.z, v.spec.mass);
-      if (w) this.audio.whoosh(w.strength, w.pan, w.heavy);
+      if (w) this.audio.whoosh(w.strength, w.pan, w.heavy, w.speed);
     }
   }
 }

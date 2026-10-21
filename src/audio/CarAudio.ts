@@ -311,8 +311,8 @@ export class CarAudio {
   }
 
   /** A car flashing past close (see PassBy). */
-  whoosh(strength: number, pan: number, heavy: number): void {
-    if (!this.engineOff) this.sfx?.whoosh(strength, pan, heavy);
+  whoosh(strength: number, pan: number, heavy: number, speed: number): void {
+    if (!this.engineOff) this.sfx?.whoosh(strength, pan, heavy, speed);
   }
 
   /** The Old City's clock striking: volume falls off with distance (0..1). */

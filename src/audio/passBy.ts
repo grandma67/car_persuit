@@ -14,6 +14,7 @@ export interface Whoosh {
   strength: number; // 0..1
   pan: number; // -1 left .. 1 right (where the other car passes)
   heavy: number; // 0..1, a bus or truck: more low buffeting
+  speed: number; // m/s closing speed (both cars' speeds added head-on): shapes the sweep
 }
 
 export class PassBy {
@@ -42,6 +43,7 @@ export class PassBy {
       strength: (0.3 + 0.7 * fast) * close * close,
       pan: Math.max(-1, Math.min(1, side / 2.5)),
       heavy: Math.max(0, Math.min(1, (mass - 1500) / 3500)),
+      speed,
     };
   }
 }

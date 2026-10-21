@@ -38,6 +38,14 @@ describe('pass-by whoosh', () => {
     expect(pass(-0.5, 40)).toHaveLength(0);
   });
 
+  it('head-on, both speeds add up: 40 + 40 km/h is an 80 km/h pass', () => {
+    const kmh = 40 / 3.6;
+    const w = pass(-3, 2 * kmh);
+    expect(w).toHaveLength(1);
+    expect(w[0].speed).toBeCloseTo(2 * kmh, 5);
+    expect(pass(-3, kmh)).toHaveLength(0); // one car at 40 alone is too slow to swish
+  });
+
   it('heavy vehicles buffet more', () => {
     expect(pass(-3, 30, 5000)[0].heavy).toBe(1);
     expect(pass(-3, 30, 1200)[0].heavy).toBe(0);
