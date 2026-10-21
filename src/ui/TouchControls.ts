@@ -1,4 +1,4 @@
-// On-screen controls for touch devices: steering on the left, pedals and handbrake on the right,
+// On-screen controls for touch devices: steering on the left (unless steering by tilt), pedals and handbrake on the right,
 // pause/reset at the top. Each button is held independently, so multi-touch works naturally.
 import type { TouchDrive } from '../core/Input';
 
@@ -59,6 +59,12 @@ export class TouchControls {
         actions[action]();
       });
     }
+  }
+
+  /** Tilt steering hides the steer buttons. */
+  setTilt(tilt: boolean): void {
+    this.el.classList.toggle('tilt', tilt);
+    this.state.left = this.state.right = false;
   }
 
   setVisible(visible: boolean): void {

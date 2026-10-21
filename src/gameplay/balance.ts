@@ -194,3 +194,10 @@ export const OLD_CITY_WALLS = {
   postHalf: 1.2, // plain posts where a plaza crosses the wall line
   archAbove: 0.6, // extra headroom over overheadClearance under arches
 };
+
+/** Tilt steering on phones: the phone turned like a wheel, measured in the screen's plane. */
+export const TILT = {
+  deadZone: 3, // degrees of roll that do nothing, so a hand's tremble doesn't wander the car
+  fullLock: 25, // degrees of roll for full steer
+  smoothing: 12, // 1/s low-pass on the sensor (it updates ~60 Hz and jitters)
+};

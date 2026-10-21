@@ -26,7 +26,7 @@ import { NavGrid } from '../ai/NavGrid';
 import { PropSystem, type PropBreak } from '../world/PropSystem';
 import { RoadworksSite } from '../world/RoadworksSite';
 import { Hud, formatTime } from '../ui/Hud';
-import { Screens } from '../ui/Screens';
+import { Screens, type SteerChoice, type SteerMode } from '../ui/Screens';
 import { toggleFullscreen } from '../ui/fullscreen';
 import { CarAudio } from '../audio/CarAudio';
 import { Effects } from '../render/Effects';
@@ -55,6 +55,8 @@ import { DISTRICT_DEFS } from '../world/districts/index';
 import { copSpawnSkips, districtOfNode, districtTraffic, nightProps, roadblockGates } from '../world/districts/runtime';
 import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
+import { TiltInput, requestTiltPermission, tiltSupported } from './tilt';
+import { getPref, setPref } from './idbPrefs';
 import { COP_RAM, DAMAGE } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
 
@@ -65,6 +67,7 @@ const CIVILIAN_PROP_RANGE = 90; // metres: civilians nearer the player than this
 const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
 const SINK_DEPTH = 3; // metres under the surface a car in the water comes to rest
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+const STEER_PREF = 'steering'; // IndexedDB key: 'buttons' | 'tilt'
 const SHADOW_HALF = 125; // metres: half the width of the sun's shadow map
 const SHADOW_LEAD = 60; // metres ahead of the car to centre the shadow map, towards what the camera sees
 /** On phones, other cars further than this cast no shadow (switched back on 10 m nearer, so it doesn't flicker). */
@@ -105,6 +108,8 @@ export class Game {
   private policeOff = false; // debug: O switches the police off and on
   private records = new Records(safeStorage());
   private touch: TouchControls | null = null;
+  private tilt: TiltInput | null = null; // phones with a tilt sensor; steering mode kept in IndexedDB
+  private steerMode: SteerMode = 'buttons';
   private destinations: ReturnType<typeof pickDestinations>;
   private look = '';
   private props: PropSystem;
@@ -275,7 +280,6 @@ export class Game {
     this.look = [england, climate.name === 'temperate' ? null : climate.label, theme.name, time.label, weatherLabel(weather) || null]
       .filter(Boolean)
       .join(' · ');
-    this.showMenu();
     if (mobile) {
       this.touch = new TouchControls(document.body, {
         pause: () => this.setPaused(this.state === 'playing'),
@@ -283,7 +287,18 @@ export class Game {
       });
       this.input.touch = this.touch.state;
       document.body.classList.add('is-touch');
+      if (tiltSupported()) {
+        this.tilt = new TiltInput();
+        this.input.tilt = this.tilt;
+        // iOS only reads the sensor after a tap allows it: Start asks again (see startMission).
+        void getPref<SteerMode>(STEER_PREF).then((mode) => {
+          if (mode !== 'tilt') return;
+          this.applySteerMode('tilt');
+          if (this.state === 'menu') this.showMenu();
+        });
+      }
     }
+    this.showMenu();
 
     const onResize = () => {
       this.chase.resize(window.innerWidth / window.innerHeight);
@@ -321,6 +336,7 @@ export class Game {
         difficulties: DIFFICULTIES,
         difficulty: this.difficulty.id,
         best: best ? formatTime(best.seconds) : null,
+        steering: this.steerChoice(),
       },
       () => this.startMission(),
       (id) => this.setDifficulty(id),
@@ -337,8 +353,31 @@ export class Game {
     this.showMenu();
   }
 
+  private steerChoice(): SteerChoice | null {
+    return this.tilt && { mode: this.steerMode, onChange: (mode) => this.setSteerMode(mode) };
+  }
+
+  private applySteerMode(mode: SteerMode): void {
+    this.steerMode = mode;
+    this.tilt?.setEnabled(mode === 'tilt');
+    this.touch?.setTilt(mode === 'tilt');
+  }
+
+  /** Menu choice: tilt asks for the sensor first and stays on buttons if refused. */
+  private async setSteerMode(mode: SteerMode): Promise<SteerMode> {
+    if (mode === 'tilt' && !(await requestTiltPermission())) {
+      this.hud.toast('TILT NOT ALLOWED', 1.5);
+      mode = 'buttons';
+    }
+    this.applySteerMode(mode);
+    void setPref(STEER_PREF, mode);
+    return mode;
+  }
+
   private startMission(): void {
     if (this.state !== 'menu') return;
+    // A tap on Start is the gesture iOS needs to grant the sensor saved as the steering choice.
+    if (this.steerMode === 'tilt') void requestTiltPermission().then((ok) => ok || this.applySteerMode('buttons'));
     this.state = 'playing';
     const d = this.difficulty;
     this.health = new Health({ ...DAMAGE, maxHealth: d.maxHealth, impactThreshold: d.armor, impactScale: DAMAGE.impactScale * d.damageScale });
@@ -402,6 +441,7 @@ export class Game {
       const touchExtras = this.touch && {
         muted: this.audio.isMuted,
         onMute: () => this.toggleMute(),
+        steering: this.steerChoice(),
       };
       this.screens.pause(this.city.seed, () => this.setPaused(false), () => this.restart(this.city.seed), touchExtras);
     } else if (!paused && this.state === 'paused') {

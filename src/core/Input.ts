@@ -1,4 +1,5 @@
-// Keyboard state, merged with on-screen touch controls into one DriveInput.
+// Keyboard state, merged with on-screen touch controls and tilt steering into one DriveInput.
+import type { TiltInput } from './tilt';
 
 export interface DriveInput {
   throttle: number; // 0..1
@@ -19,6 +20,7 @@ export interface TouchDrive {
 export class Input {
   private down = new Set<string>();
   touch: TouchDrive | null = null;
+  tilt: TiltInput | null = null;
   private pressed = new Set<string>();
 
   constructor() {
@@ -42,7 +44,7 @@ export class Input {
     return {
       throttle: this.any('KeyW', 'ArrowUp') || t?.gas ? 1 : 0,
       brake: this.any('KeyS', 'ArrowDown') || t?.brake ? 1 : 0,
-      steer: (right ? 1 : 0) - (left ? 1 : 0),
+      steer: Math.max(-1, Math.min(1, (right ? 1 : 0) - (left ? 1 : 0) + (this.tilt?.steer() ?? 0))),
       handbrake: this.any('Space') || !!t?.handbrake,
     };
   }
