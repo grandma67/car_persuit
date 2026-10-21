@@ -66,7 +66,9 @@ if (!url) {
 
 const chrome = spawn(CHROME, [
   '--headless=new', '--mute-audio', `--remote-debugging-port=${debugPort}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), 'cp-chrome-'))}`,
-  `--window-size=${w},${h}`, '--enable-gpu', '--ignore-gpu-blocklist', 'about:blank',
+  `--window-size=${w},${h}`, '--enable-gpu', '--ignore-gpu-blocklist',
+  '--ignore-certificate-errors', // `npm run dev:https` serves a self-signed certificate
+  'about:blank',
 ], { stdio: 'ignore' });
 children.push(chrome);
 
