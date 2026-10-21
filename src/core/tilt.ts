@@ -27,8 +27,27 @@ export function tiltSteer(rollDeg: number, cfg = TILT): number {
 
 type PermissionEvent = typeof DeviceOrientationEvent & { requestPermission?: () => Promise<'granted' | 'denied'> };
 
-export function tiltSupported(): boolean {
-  return typeof window !== 'undefined' && 'DeviceOrientationEvent' in window;
+/**
+ * Whether this device can steer by tilt, from what the sensor sends. The interface alone isn't
+ * enough: it only exists on secure pages (HTTPS or localhost, so not the dev server opened by LAN
+ * IP over http), and desktop Chrome has it without a sensor, firing one event with null angles.
+ * Silence is the browser waiting for the player to allow it (iOS; requestPermission from a tap):
+ * a sensor, if that ask exists. Chrome 151 has requestPermission too, but sends its readings (or
+ * the null event) without asking, so the method alone says nothing about the sensor.
+ */
+export function detectTilt(timeoutMs = 1000): Promise<boolean> {
+  const ev = (window as { DeviceOrientationEvent?: PermissionEvent }).DeviceOrientationEvent;
+  if (!ev) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const done = (ok: boolean) => {
+      window.removeEventListener('deviceorientation', onEvent);
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const onEvent = (e: DeviceOrientationEvent) => done(e.beta !== null && e.gamma !== null);
+    const timer = setTimeout(() => done(typeof ev.requestPermission === 'function'), timeoutMs);
+    window.addEventListener('deviceorientation', onEvent);
+  });
 }
 
 /**

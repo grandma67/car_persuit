@@ -55,7 +55,7 @@ import { DISTRICT_DEFS } from '../world/districts/index';
 import { copSpawnSkips, districtOfNode, districtTraffic, nightProps, roadblockGates } from '../world/districts/runtime';
 import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
-import { TiltInput, requestTiltPermission, tiltSupported } from './tilt';
+import { TiltInput, detectTilt, requestTiltPermission } from './tilt';
 import { getPref, setPref } from './idbPrefs';
 import { COP_RAM, DAMAGE } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
@@ -287,16 +287,15 @@ export class Game {
       });
       this.input.touch = this.touch.state;
       document.body.classList.add('is-touch');
-      if (tiltSupported()) {
+      // The tilt option appears once a sensor answers. iOS only reads it after a tap allows it:
+      // Start asks again (see startMission).
+      void detectTilt().then(async (ok) => {
+        if (!ok) return;
         this.tilt = new TiltInput();
         this.input.tilt = this.tilt;
-        // iOS only reads the sensor after a tap allows it: Start asks again (see startMission).
-        void getPref<SteerMode>(STEER_PREF).then((mode) => {
-          if (mode !== 'tilt') return;
-          this.applySteerMode('tilt');
-          if (this.state === 'menu') this.showMenu();
-        });
-      }
+        if ((await getPref<SteerMode>(STEER_PREF)) === 'tilt') this.applySteerMode('tilt');
+        if (this.state === 'menu') this.showMenu();
+      });
     }
     this.showMenu();
 
