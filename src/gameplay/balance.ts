@@ -163,6 +163,35 @@ export const CHINATOWN = {
   fireworksRange: 350, // only while the camera is this near
 };
 
+/** The Harbor: a cargo port on the coast (world/districts/Harbor.ts), metres where not said. */
+export const HARBOR = {
+  chance: 0.45,
+  density: 0.9,
+  boxTruckWeight: 3, // spawn weight multipliers inside
+  vanWeight: 1.5,
+  yards: [1, 2] as [number, number], // container-yard blocks on the quay row
+  cranes: [1, 3] as [number, number], // gantry cranes over the seafront road
+  /** Containers drawn, at most (yard stacks, flatcars, the ship's deck): the top tiers go first. */
+  maxContainers: 900,
+  maxGlow: 140, // floodlights, aviation lights, ship lights at night
+  stackRows: [3, 4] as [number, number], // container rows across a yard block
+  stackWide: [2, 3] as [number, number], // containers side by side in a row
+  stackHigh: [1, 4] as [number, number], // tiers per column
+  crossCorridor: 8, // the corridor across the rows, through the middle of the block
+  stackMargin: 0.6, // stacks stand this far in from the sidewalk line
+  transitShedShare: 0.5, // quay-row lots that are open transit sheds
+  coldStores: [0, 2] as [number, number],
+  officeHeight: [16, 22] as [number, number],
+  officeSide: 22, // the harbor office's footprint, at most, each way
+  siloChance: 0.5,
+  siloHeight: [22, 30] as [number, number],
+  tankFarmChance: 0.4,
+  bund: 1.2, // bund wall height round the tank farm
+};
+
+/** ISO containers, metres. */
+export const CONTAINER = { w: 2.44, h: 2.59, l20: 6.06, l40: 12.19, gap: 0.25 };
+
 /** Chinatown's paifang, lions and lantern strings (world/districts/ChinatownGates.ts), metres. */
 export const CHINATOWN_GATES = {
   setIn: [4.5, 6.5, 8.5], // paifang in from the gate line (further in if a column would touch a junction control)

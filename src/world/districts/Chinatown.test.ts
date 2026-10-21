@@ -93,12 +93,12 @@ describe('Chinatown lots', () => {
   });
 });
 
-describe('Chinatown with the Old City', () => {
+describe('Chinatown with the Old City (no Harbor)', () => {
   const alone = (seed: number, kind: 'oldtown' | 'chinatown') =>
-    generateCity(seed, undefined, { force: { oldtown: kind === 'oldtown', chinatown: kind === 'chinatown' } });
+    generateCity(seed, undefined, { force: { oldtown: kind === 'oldtown', chinatown: kind === 'chinatown', harbor: false } });
 
   it.each(SEEDS)('seed %i: the first placed sits as alone, the second keeps clear or drops cleanly', (seed) => {
-    const both = generateCity(seed, undefined, { force: { oldtown: true, chinatown: true } });
+    const both = generateCity(seed, undefined, { force: { oldtown: true, chinatown: true, harbor: false } });
     expect(both.districts.length).toBeGreaterThan(0);
     const [first, second] = both.districts; // placement order
     const solo = alone(seed, first.kind as 'oldtown' | 'chinatown');
@@ -118,7 +118,7 @@ describe('Chinatown with the Old City', () => {
   });
 
   it('either one may go first', () => {
-    const firsts = new Set(SEEDS.map((seed) => generateCity(seed, undefined, { force: { oldtown: true, chinatown: true } }).districts[0]?.kind));
+    const firsts = new Set(SEEDS.map((seed) => generateCity(seed, undefined, { force: { oldtown: true, chinatown: true, harbor: false } }).districts[0]?.kind));
     expect(firsts).toEqual(new Set(['oldtown', 'chinatown']));
   });
 });

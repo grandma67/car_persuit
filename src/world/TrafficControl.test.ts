@@ -95,7 +95,7 @@ describe('generateTrafficControl', () => {
   });
 
   it.each([1, 42, 1234])('seed %i: T-junctions on the ring road: zebras on every leg, edge line across the top of the T', (seed) => {
-    const city = generateCity(seed);
+    const city = generateCity(seed, undefined, { defs: [] }); // a coast district may take a ring road's zebras
     const rw = city.config.roadWidth;
     const ring = city.size / 2 - rw / 2;
     const near = (m: { x: number; z: number }, x: number, z: number, r: number) => Math.abs(m.x - x) <= r && Math.abs(m.z - z) <= r;
