@@ -189,6 +189,30 @@ export const HARBOR = {
   bund: 1.2, // bund wall height round the tank farm
 };
 
+/** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */
+export const HARBOR_QUAY = {
+  bollardSpacing: 15,
+  bollardInset: 1.0, // bollard centres in from the quay edge (the sea wall's inner face is 0.6 in)
+  bollard: 0.35, // radius
+  leg: 0.65, // half side of a crane leg's footprint
+  gauge: 16, // between a crane's legs along the rail
+  cornerClear: 6, // crane legs this far from a block's corner (the junction mouth)
+  craneGap: 12, // between neighbouring cranes' nearest legs
+  waterLeg: 1.4, // waterside leg centres in from the quay edge
+  portal: 17, // portal girders' underside above the crane's footing
+  boom: 33, // boom height above the footing
+  outreach: 42, // the boom's reach past the waterside legs
+  backreach: 16, // and behind the landside legs
+  truckLength: 16.2, // a terminal truck parked on the apron under a working crane (chassis and cab)
+  truckWidth: 2.5,
+  shipGap: 2.2, // fenders between the quay face and the hull
+  shipLength: [120, 180] as [number, number], // fitted to the frontage
+  shipEnds: 8, // the ship keeps this far in from the frontage's ends
+  tugChance: 0.4,
+  /** Ship types per seed: container ships work the cranes; the others leave them idle, booms up. */
+  shipOdds: { container: 0.5, bulk: 0.25, general: 0.25 },
+};
+
 /** ISO containers, metres. */
 export const CONTAINER = { w: 2.44, h: 2.59, l20: 6.06, l40: 12.19, gap: 0.25 };
 

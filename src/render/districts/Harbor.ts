@@ -11,6 +11,7 @@ import { GeometryBuilder } from '../../world/CityBuilder';
 import type { District } from '../../world/districts/District';
 import type { TankFarmData } from '../../world/districts/Harbor';
 import { containersOf } from '../../world/districts/HarborYard';
+import { renderQuay } from './HarborQuay';
 import type { DistrictRenderContext, DistrictView } from './index';
 
 const CONCRETE = 0xb4b2aa;
@@ -114,5 +115,5 @@ export function renderHarbor(q: District, city: CityData, scene: THREE.Scene, ct
     mesh.castShadow = mesh.receiveShadow = true;
     scene.add(mesh);
   }
-  return {};
+  return renderQuay(q, city, scene, ctx);
 }

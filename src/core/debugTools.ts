@@ -16,6 +16,8 @@ interface Internals {
   player: { teleport(x: number, y: number, z: number, yaw: number, speed?: number): void; position: P & { y: number }; speed: number };
   ground: (x: number, z: number) => number;
   renderer: { info: { programs: unknown[] | null; render: { calls: number; triangles: number } } };
+  overview: boolean;
+  overviewCamera(): { position: { set(x: number, y: number, z: number): void }; lookAt(x: number, y: number, z: number): void };
   scene: { traverse(f: (o: { isMesh?: boolean; isInstancedMesh?: boolean; geometry?: { index: { count: number } | null; attributes: { position: { count: number } } } }) => void): void };
 }
 
@@ -82,6 +84,20 @@ export function debugTools(game: Game) {
         return { x: Math.round(p.x), z: Math.round(p.z), dist: Math.round(d) };
       }
       return null;
+    },
+    /**
+     * Look at a point from above (the overview camera, C), from `dist` m away on the side `from`
+     * (a heading, default the camera's south-west) and `height` m up. `false` goes back to the chase.
+     */
+    async aerial(target: P | [number, number] | false, { dist = 90, height = 60, from = Math.PI * 1.25, wait = 600 } = {}) {
+      const on = target !== false;
+      if (g.overview !== on) await api.hold('KeyC', 50);
+      if (!on) return;
+      const t = at(target);
+      const cam = g.overviewCamera();
+      cam.position.set(t.x + Math.sin(from) * dist, g.ground(t.x, t.z) + height, t.z + Math.cos(from) * dist);
+      cam.lookAt(t.x, g.ground(t.x, t.z) + 8, t.z);
+      await sleep(wait);
     },
     /** Line up `back` m outside a district gate, facing in (optionally moving). */
     async gate(i = 0, { back = 30, speed = 0, lateral = 0, kind = undefined as DistrictKind | undefined, wait = 1200 } = {}) {

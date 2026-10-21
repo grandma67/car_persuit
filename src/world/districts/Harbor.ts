@@ -7,7 +7,8 @@ import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect } from '../lots';
 import type { Footprint, StreetProp } from '../StreetProps';
 import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook, type Structure } from './District';
-import { capContainers, yardLayout } from './HarborYard';
+import { capContainers, containersOf, yardLayout } from './HarborYard';
+import { clearQuay, quay } from './HarborQuay';
 
 export type HarborLot = 'warehouse' | 'transitShed' | 'coldStore' | 'harborOffice' | 'silo' | 'tankFarm';
 
@@ -120,7 +121,8 @@ function lots(q: District, buildings: Building[], city: CityData, rng: Rng): voi
 
 /** Street furniture that doesn't suit a working port (junction controls, hydrants and bus stops stay). */
 const DROP_SIGNS = new Set(['noSmoking', 'children']);
-const drop = (p: StreetProp) => p.kind === 'bench' || p.kind === 'umbrella' || (p.kind === 'sign' && DROP_SIGNS.has(p.variant ?? ''));
+const drop = (p: StreetProp) =>
+  p.kind === 'bench' || p.kind === 'umbrella' || (p.kind === 'fence' && !p.style) || (p.kind === 'sign' && DROP_SIGNS.has(p.variant ?? ''));
 
 /** Sheds and stores in corrugated steel and concrete; the office in glass. */
 function HARBOR_LOOKS(): Record<Exclude<HarborLot, 'tankFarm'>, LotLook> {
@@ -214,5 +216,13 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
     out.solids.push(...t.footprints);
   }
   capContainers(out.structures, HARBOR.maxContainers);
+  // The quay: apron, cranes over the seafront road, bollards and the ship.
+  const qy = quay(q, city, quayRow(q, city), containersOf(out.structures).length, rng);
+  out.landmarks.push(...qy.landmarks);
+  out.structures.push(...qy.structures);
+  out.solids.push(...qy.solids);
+  out.ground.push(...qy.ground);
+  out.overhead.push(...qy.overhead);
+  clearQuay(q, city, out.solids);
   return out;
 }
