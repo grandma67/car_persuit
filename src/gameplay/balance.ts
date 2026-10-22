@@ -192,6 +192,31 @@ export const HARBOR = {
   bund: 1.2, // bund wall height round the tank farm
 };
 
+/** The Farm: fields and a farmyard on the island's edge (world/districts/Farm.ts), metres where not said. */
+export const FARM = {
+  chance: 0.4,
+  density: 0.4,
+  pickupWeight: 3, // spawn weight multipliers inside
+  tractorWeight: 2,
+  copSpawnSkip: 0.4,
+  maxCrop: 6000, // crop row-strip instances drawn, at most
+  trampleRes: 64, // trample texture per field, texels a side
+  mazeChance: 0.3, // a corn maze in one corn field
+  harvestChance: 0.25, // harvest night (night runs only)
+  fieldGrip: 0.7, // tyre grip multiplier on soft ground
+  fieldDrag: 0.6, // extra rolling drag on soft ground, m/s² at speed
+  maxGlow: 60, // windows, yard lights, lanterns, fireflies at night
+  /** Largest footprint per farmyard lot kind, each way (the rest of the lot is yard). */
+  lotSize: {
+    farmhouse: [14, 11], barn: [24, 16], machineShed: [22, 12], granary: [8, 6], henhouse: [9, 6],
+  } as Record<string, [number, number]>,
+  farmhouseHeight: [7, 9] as [number, number], // two storeys
+  barnHeight: [8, 10] as [number, number],
+  lowHeight: [3.5, 5] as [number, number], // granary and henhouse
+  cornerInset: 3, // a granary or henhouse put in a free yard corner stands this far in from the sidewalk line
+  yardGap: 4, // and at least this far from the other buildings
+};
+
 /** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */
 export const HARBOR_QUAY = {
   bollardSpacing: 15,
