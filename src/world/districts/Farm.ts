@@ -11,6 +11,7 @@ import { emptyDressing, type BlockRole, type District, type DistrictDef, type Di
 import { inDistrict, isJunctionControl, kerbClutter } from './apply';
 import { cattleGrid, fieldFence, ranchGateAt, yardPieces } from './FarmGate';
 import { cornMaze, dressFields, gapLane, gapMouth, put, yardClutter, type FenceGap } from './FarmFields';
+import { centrePivot, harvestNight } from './FarmNight';
 import { clearOf } from './HarborYard';
 import { shuffle } from './place';
 import { frontMask } from './Harbor';
@@ -184,7 +185,7 @@ export const FARM_DEF: DistrictDef = {
   salt: 0x5f4a12,
   chance: FARM.chance,
   site: 'edge',
-  shapes: [[2, 2], [3, 3], [4, 4]],
+  shapes: [[2, 2], [2, 3], [2, 4], [3, 3], [3, 4], [4, 4]],
   rings: ['residential', 'industrial'],
   minShare: { residential: 0.5 },
   gates: 'mainStreet',
@@ -284,6 +285,13 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const blocking = new FootprintIndex([...kept.map((p) => propFootprint(p, 0.1)), ...out.solids, ...pieces]);
   city.streetProps = city.streetProps.filter((p) => !inDistrict(q, p) || isJunctionControl(p) || !blocking.hits(propFootprint(p)));
   out.props = kept;
-  out.extra = { fields, gaps };
+  // Joined in by the game on some runs: harvest night (night runs, on a roll) and the desert's irrigator.
+  const standing = [...out.solids, ...pieces, ...buildings.map(rectFootprint), ...kept.map((p) => propFootprint(p, 0.3))];
+  const harvest = rng.next() < FARM.harvestChance;
+  const night = harvest ? harvestNight(fields, kept, standing, shrink(yard, sw), ranch, rng) : undefined;
+  const desert = centrePivot(fields, gaps, standing, rng);
+  // In the snow, the pumpkins are long in (the patch is a snowy field).
+  const snow = { drop: ['pumpkin', 'jackOLantern'] as PropKind[] };
+  out.extra = { fields, gaps, harvest, nightProps: night?.props ?? [], night, byClimate: { desert, snow } };
   return out;
 }

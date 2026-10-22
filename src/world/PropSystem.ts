@@ -17,9 +17,10 @@ const cellKey = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096);
 const LAMP_HEAD = new THREE.Vector3(0, 5.8, 1.3); // bulb position in lamp space
 const OIL_LAMP_HEAD = new THREE.Vector3(0, 3.75, 0); // the lantern's flame, on top of its post
 const DRAGON_LAMP_HEAD = new THREE.Vector3(0, 4.12, 0); // the pagoda lantern's glass
-const LAMP_HEADS: Partial<Record<PropKind, THREE.Vector3>> = { lamp: LAMP_HEAD, woodLamp: LAMP_HEAD, oilLamp: OIL_LAMP_HEAD, dragonLamp: DRAGON_LAMP_HEAD };
+const JACK_GLOW = new THREE.Vector3(0, 0.22, 0.2); // the candle behind a jack-o'-lantern's face
+const LAMP_HEADS: Partial<Record<PropKind, THREE.Vector3>> = { lamp: LAMP_HEAD, woodLamp: LAMP_HEAD, oilLamp: OIL_LAMP_HEAD, dragonLamp: DRAGON_LAMP_HEAD, jackOLantern: JACK_GLOW };
 /** Props that light up at night: a bulb (or flame) and a pool of light under it. */
-const LIGHTS = new Set<PropKind>(['lamp', 'woodLamp', 'oilLamp', 'dragonLamp']);
+const LIGHTS = new Set<PropKind>(['lamp', 'woodLamp', 'oilLamp', 'dragonLamp', 'jackOLantern']);
 /** A dragon lamp's banner: hung from the brackets on its street side, edge-on to the kerb. */
 const BANNER = { w: 0.5, h: 1.05, y: 2.45, z: 0.42 };
 const LIGHT_POOL_RADIUS = 7;
@@ -688,7 +689,7 @@ function harborModels(): Record<HarborKind | 'fence-chainlink', THREE.BufferGeom
   return { pallet, crates, drums, cableReel, lifebuoy, forklift, boomGate, crossbuck, 'fence-chainlink': fenceChainlink };
 }
 
-type FarmKind = 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
+type FarmKind = 'jackOLantern' | 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
   | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon';
 /** The Farm's breakables: fencing, the gate's mailbox, timber lamps, yard clutter, crops' furniture and machinery. */
 function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
@@ -840,7 +841,15 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
     ...[-0.55, 0.55].flatMap((x) => [-2.0, -1.4, -0.8, -0.2, 0.4, 1.0, 1.6, 2.2].map((z) => bale(x, 1.23, z))),
     ...[-0.55, 0.55].flatMap((x) => [-1.4, -0.8, -0.2, 0.4, 1.0].map((z) => bale(x, 1.74, z))),
   ]);
+  // A jack-o'-lantern: a pumpkin with a carved face (the glow behind it is the lamp bulb).
+  const jackOLantern = mergeGeometries([
+    ...Array.from({ length: 6 }, (_, k) => part(new THREE.SphereGeometry(0.2, 8, 6).scale(1, 0.8, 1), 0xe0741a, Math.cos(k) * 0.12, 0.2, Math.sin(k) * 0.12 - 0.04)),
+    part(cyl(0.03, 0.04, 0.12, 5), 0x4a6a2a, 0, 0.43),
+    ...[-0.08, 0.08].map((x) => part(box(0.07, 0.06, 0.04), 0x1a0e04, x, 0.27, 0.24)), // eyes
+    part(box(0.18, 0.04, 0.04), 0x1a0e04, 0, 0.15, 0.24), // the grin
+  ]);
   return {
+    jackOLantern,
     'fence-rail': fenceRail, mailbox, woodLamp, milkChurn, feedSacks, wheelbarrow, waterTrough, fruitBin, pumpkin, farmStand, scarecrow,
     toolRack, parkedTractor, hayRake, plough, seedDrill, baler, hayWagon,
   };
@@ -1066,7 +1075,7 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat',
   'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink',
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
-  'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'tree-fruit', 'tree-fruit-pear']);
+  'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
@@ -1121,7 +1130,7 @@ export class PropSystem {
     };
 
     // Lamp bulbs (unlit, so they glow) and soft light pools on the ground beneath them.
-    const lamps = counts.lamp + counts.woodLamp + counts.oilLamp + counts.dragonLamp;
+    const lamps = counts.lamp + counts.woodLamp + counts.oilLamp + counts.dragonLamp + counts.jackOLantern;
     this.bulbs = addAttachmentMesh(new THREE.BoxGeometry(0.38, 0.05, 0.24), new THREE.MeshBasicMaterial({ toneMapped: false }), lamps);
     this.pools = addAttachmentMesh(
       new THREE.PlaneGeometry(LIGHT_POOL_RADIUS * 2, LIGHT_POOL_RADIUS * 2).rotateX(-Math.PI / 2),
@@ -1200,6 +1209,7 @@ export class PropSystem {
         const local = new THREE.Matrix4().makeTranslation(at);
         if (def.kind === 'oilLamp') local.multiply(new THREE.Matrix4().makeScale(0.55, 6, 0.9));
         if (def.kind === 'dragonLamp') local.multiply(new THREE.Matrix4().makeScale(1.1, 11, 1.8));
+        if (def.kind === 'jackOLantern') local.multiply(new THREE.Matrix4().makeScale(0.75, 3, 0.4)); // its carved face
         attach(this.bulbs, li, local, warm);
         if (def.banner && banners) {
           // Edge-on to the kerb, so it faces along the street.

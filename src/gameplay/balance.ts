@@ -206,7 +206,12 @@ export const FARM = {
   harvestChance: 0.25, // harvest night (night runs only)
   fieldGrip: 0.7, // tyre grip multiplier on soft ground
   fieldDrag: 2.5, // extra rolling drag on soft ground, m/s²
-  maxGlow: 60, // windows, yard lights, lanterns, fireflies at night
+  maxGlow: 110, // at night: timber street lamps, the yard light, the barn lantern, jack-o'-lanterns, fireflies
+  jackOLanterns: 24, // on a harvest night, at most
+  fireflies: 36, // on a warm night, at most (within maxGlow)
+  pivotInset: 3, // the irrigator's reach stops this far inside its field
+  pivotTower: 0.6, // a tower's solid footprint, half side
+  pivotHeight: 3.2, // the truss above the ground
   /** Largest footprint per farmyard lot kind, each way (the rest of the lot is yard). */
   lotSize: {
     farmhouse: [14, 11], barn: [24, 16], machineShed: [22, 12], granary: [8, 6], henhouse: [9, 6],

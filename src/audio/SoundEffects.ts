@@ -243,7 +243,7 @@ export class SoundEffects {
       this.impact(Math.min(1, strength + (kind === 'parkedTractor' || kind === 'baler' ? 0.3 : 0.15)));
       return;
     }
-    if (kind === 'pumpkin' || kind === 'fruitBin') {
+    if (kind === 'pumpkin' || kind === 'jackOLantern' || kind === 'fruitBin') {
       this.burst(0, 0.12, 'lowpass', 500, 1, gain * 1.5); // a wet squash
       this.burst(0.01, 0.08, 'bandpass', 1600, 1.2, gain * 0.6);
       if (kind === 'fruitBin') this.woodBreak(0.5, gain);

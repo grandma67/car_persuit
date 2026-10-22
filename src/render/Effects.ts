@@ -165,6 +165,7 @@ export class Effects {
       case 'forklift': burst(this.sparks, 24); return burst(this.shards, 10);
       // Farm
       case 'pumpkin': return burst(this.fruit, 22);
+      case 'jackOLantern': burst(this.fruit, 22); return burst(this.fire, 6);
       case 'fruitBin': burst(this.fruit, 30); return burst(this.chips, 12);
       case 'farmStand': burst(this.fruit, 14); return burst(this.chips, 20);
       case 'feedSacks': burst(this.straw, 24); return burst(this.steam, 10); // a cloud of grain dust

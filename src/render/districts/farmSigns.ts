@@ -6,10 +6,21 @@ import { FARM_NAMES } from '../../world/districts/FarmGate';
 
 const W = 1024;
 const CELL_H = 128;
-const H = 1024;
+const H = 1056; // eight names, and a strip below them for the swatch
 const SERIF = 'Georgia, "Times New Roman", serif';
 
 let atlas: THREE.Texture | null = null;
+const SWATCH = { x: 0, y: 1032, s: 16 };
+
+/** A box (or anything) all on the warm swatch, white vertex colours: glows with the plates' material. */
+export function onWarm(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  geo = geo.index ? geo.toNonIndexed() : geo;
+  const n = geo.attributes.position.count;
+  const u = (SWATCH.x + SWATCH.s / 2) / W, v = 1 - (SWATCH.y + SWATCH.s / 2) / H;
+  geo.setAttribute('uv', new THREE.BufferAttribute(Float32Array.from({ length: n * 2 }, (_, i) => (i % 2 ? v : u)), 2));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  return geo;
+}
 
 function farmAtlas(): THREE.Texture {
   if (atlas) return atlas;
@@ -35,6 +46,9 @@ function farmAtlas(): THREE.Texture {
     g.font = `bold 76px ${SERIF}`;
     g.fillText(name.toUpperCase(), W / 2, y + CELL_H / 2 + 4, W - 60);
   });
+  // A warm swatch for lit glass (the barn lantern), below the names.
+  g.fillStyle = '#ffd898';
+  g.fillRect(SWATCH.x, SWATCH.y, SWATCH.s, SWATCH.s);
   atlas = new THREE.CanvasTexture(canvas);
   atlas.colorSpace = THREE.SRGBColorSpace;
   atlas.anisotropy = 4;

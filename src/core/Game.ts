@@ -52,7 +52,7 @@ import { Airtime, type Takeoff } from '../gameplay/Airtime';
 import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { DISTRICT_DEFS } from '../world/districts/index';
-import { copSpawnSkips, districtOfNode, districtTraffic, nightProps, roadblockGates } from '../world/districts/runtime';
+import { copSpawnSkips, districtOfNode, districtTraffic, joinRunDressing, nightProps, roadblockGates } from '../world/districts/runtime';
 import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { TiltInput, detectTilt, requestTiltPermission } from './tilt';
@@ -202,6 +202,8 @@ export class Game {
     // Night-only street props (Chinatown's night market and festival) join the city on a night run.
     const night = time.name === 'night';
     if (night) this.city.streetProps.push(...nightProps(this.city));
+    // Dressing for this run's night and climate (the Farm's harvest night, its desert irrigator).
+    joinRunDressing(this.city, { night, climate: climate.name });
     const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
     this.canalWater = built.canalWater;
     this.walls = built.walls;

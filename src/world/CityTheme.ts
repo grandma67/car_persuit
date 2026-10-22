@@ -51,6 +51,20 @@ const HARBOR_BRIGHT: Record<string, Partial<LotLook>> = {
   harborOffice: { palette: [0xf4f0e8, 0xe8f2f6] },
 };
 
+/** The Farm in the desert: sun-bleached barns, a faded farmhouse. */
+const FARM_DUSTY: Record<string, Partial<LotLook>> = {
+  barn: { palette: [0xf2e2d2, 0xe8d6c4, 0xf6eadc], roofTiles: [0x8a7e6c, 0x9a8a74] },
+  granary: { palette: [0xf2e2d2, 0xe8d6c4] },
+  henhouse: { palette: [0xf2e2d2, 0xe8d6c4] },
+  farmhouse: { palette: [0xe8dcc4, 0xdcccb0, 0xf0e4cc], roofTiles: [0x8a7a64, 0x7a6e5c] },
+  machineShed: { palette: [0xb8aa94, 0xa89c88] },
+};
+/** The Farm by the beach: bright paint on the farmhouse and sheds. */
+const FARM_BRIGHT: Record<string, Partial<LotLook>> = {
+  farmhouse: { palette: [0xf8e8a0, 0xa8d8e8, 0xf4c0c8, 0xffffff], roofTiles: [0x3a6a8a, 0x8a3a30, 0x4a7a5a] },
+  machineShed: { palette: [0x5a9ad0, 0x4ab08a, 0xe8c24a] },
+};
+
 export interface CityTheme {
   name: string;
   buildings: Record<Zone, number[]>;
@@ -170,7 +184,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xa08c70, 0x8f7f68, 0xb39c7c, 0x7d705e],
     },
     asphalt: 0x3a3835, sidewalk: 0xc2b49a, plaza: 0xb08f6a, quay: 0x9a8a72, seaWall: 0xcbbd9f, planter: 0xa38a6a,
-    districts: { oldtown: OLD_CITY_SANDSTONE, chinatown: CHINATOWN_FADED, harbor: HARBOR_DUSTY },
+    districts: { oldtown: OLD_CITY_SANDSTONE, chinatown: CHINATOWN_FADED, harbor: HARBOR_DUSTY, farm: FARM_DUSTY },
     grass: 0x6b7a3e, leaves: [0x5f6e34, 0x6f7a3c, 0x55642f, 0x7a8240], trunk: 0x5a4632,
     centerLine: 0xe0b84a, edgeLine: 0xe6e2d8,
   },
@@ -185,7 +199,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xc4b8a4, 0xb0a894, 0xd0c4ae, 0x9c9484],
     },
     asphalt: 0x36383d, sidewalk: 0xcfc6b4, plaza: 0xc8bca6, quay: 0xa0988a, seaWall: 0xe8e2d6, planter: 0xc0a888,
-    districts: { oldtown: OLD_CITY_WHITEWASH, chinatown: CHINATOWN_BRIGHT, harbor: HARBOR_BRIGHT },
+    districts: { oldtown: OLD_CITY_WHITEWASH, chinatown: CHINATOWN_BRIGHT, harbor: HARBOR_BRIGHT, farm: FARM_BRIGHT },
     grass: 0x5d8a3e, leaves: [0x4f8a3a, 0x5c9440, 0x467a34, 0x6a9a48], trunk: 0x8a6a48,
     centerLine: 0xe0b84a, edgeLine: 0xeeeeea,
   },

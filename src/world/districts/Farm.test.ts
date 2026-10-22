@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity, type CityData, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
-import { footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
+import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type StreetProp } from '../StreetProps';
 import type { District } from './District';
 import { isJunctionControl } from './apply';
-import { DISTRICTS, FARM_FIELDS, FARM_GATE } from '../../gameplay/balance';
+import { DISTRICTS, FARM, FARM_FIELDS, FARM_GATE } from '../../gameplay/balance';
+import { joinRunDressing } from './runtime';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 import { gapLane } from './FarmFields';
 import { CROPS, FARM_DEF, cropCap, farmFields, farmyardBlock, fenceGaps, ranchGate } from './Farm';
@@ -253,6 +254,64 @@ describe('Farm crops, equipment and props', () => {
     expect(seen.size).toBe(paths.length);
     const reached = fenceGaps(q)[f.block].filter((g) => paths.some((r) => inRect(r, g, 0.01)));
     expect(reached.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('Farm runs: harvest night, climate, glow', () => {
+  type Run = { structures: { kind: string; footprints: Footprint[] }[]; solids: Footprint[] };
+  const extraOf = (q: District) => q.dressing.extra as { harvest: boolean; nightProps: StreetProp[]; night?: Run; byClimate: { desert: Run; snow: { drop: string[] } } };
+
+  it('the maze and harvest-night rolls are stable per seed, and come up on some seeds', () => {
+    let harvests = 0;
+    for (const [seed, , q] of placed.slice(0, 20)) {
+      const again = city(seed).districts.find((d) => d.kind === 'farm')!;
+      expect(extraOf(again).harvest).toBe(extraOf(q).harvest);
+      expect(farmFields(again).map((f) => !!f.maze)).toEqual(farmFields(q).map((f) => !!f.maze));
+      expect(extraOf(again).nightProps).toEqual(extraOf(q).nightProps);
+      if (extraOf(q).harvest) harvests++;
+    }
+    expect(harvests).toBeGreaterThan(0);
+    expect(harvests).toBeLessThan(20);
+  });
+
+  it.each(placed)('seed %i: night glow stays within the cap; harvest night only adds to night runs', (_seed, c, q) => {
+    const x = extraOf(q);
+    const lamps = c.streetProps.filter((p) => p.kind === 'woodLamp' && inRect(q.bounds, p)).length;
+    expect(lamps + x.nightProps.length + 1).toBeLessThanOrEqual(FARM.maxGlow);
+    expect(x.nightProps.length).toBeLessThanOrEqual(FARM.jackOLanterns);
+    if (!x.harvest) expect(x.nightProps).toHaveLength(0);
+    // Night-only things aren't in the city until a night run joins them.
+    expect(c.streetProps.some((p) => p.kind === 'jackOLantern')).toBe(false);
+    expect(q.dressing.structures.some((st) => st.kind === 'balePyramid' || st.kind === 'pivot')).toBe(false);
+    const solids = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
+    for (const p of x.nightProps) for (const fp of solids) expect(footprintsOverlap(propFootprint(p), fp)).toBe(false);
+  });
+
+  it.each(placed)('seed %i: the desert irrigator stands clear of the roads, gates and everything in its field', (_seed, c, q) => {
+    const run = extraOf(q).byClimate.desert;
+    if (!run.structures.length) return;
+    const roads = roadsOf(c);
+    const lanes = Object.values(fenceGaps(q)).flat().map((g) => gapLane(g));
+    const others = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 })), ...q.dressing.props.map((p) => propFootprint(p))];
+    for (const fp of run.solids) {
+      for (const r of [...roads, ...lanes, ...others]) expect(footprintsOverlap(fp, r)).toBe(false);
+    }
+    expect(run.structures[0].kind).toBe('pivot');
+  });
+
+  it('joining a desert night run adds the irrigator and the pyramid; snow takes the pumpkins', () => {
+    const [seed] = placed.find(([, , q]) => extraOf(q).harvest && extraOf(q).byClimate.desert.structures.length) ?? placed[0];
+    const desert = city(seed);
+    const q = desert.districts.find((d) => d.kind === 'farm')!;
+    const before = q.dressing.solids.length;
+    joinRunDressing(desert, { night: true, climate: 'desert' });
+    expect(q.dressing.structures.some((st) => st.kind === 'pivot')).toBe(extraOf(q).byClimate.desert.structures.length > 0);
+    expect(q.dressing.solids.length).toBe(before + (extraOf(q).night?.solids.length ?? 0) + extraOf(q).byClimate.desert.solids.length);
+    const snow = city(seed);
+    joinRunDressing(snow, { night: false, climate: 'snow' });
+    const sq = snow.districts.find((d) => d.kind === 'farm')!;
+    expect(snow.streetProps.some((p) => p.kind === 'pumpkin' && inRect(sq.bounds, p))).toBe(false);
+    expect(sq.dressing.props.some((p) => p.kind === 'pumpkin')).toBe(false);
   });
 });
 

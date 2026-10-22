@@ -4,6 +4,7 @@
 // and break off. Cars stamp the texture as they drive through the fields. One shader program for
 // both crops; no shadows (the alpha cut would be lost in the shadow pass).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { FARM } from '../../gameplay/balance';
 import type { CityData, Rect } from '../../world/CityGenerator';
 import type { District } from '../../world/districts/District';
@@ -93,17 +94,17 @@ export interface CropUniforms {
  * over by the trample map, its fragments cut by alpha (a cut that rises with height for the wheat's
  * shells, so the stalks taper) and broken off where trampled.
  */
-function cropMaterial(map: THREE.Texture, color: number, shared: CropUniforms, opts: { sway: number; cut: number; cutRise: number; height: number; bend: number }): THREE.MeshLambertMaterial {
+function cropMaterial(map: THREE.Texture, color: number, shared: CropUniforms, opts: { sway: number; cut: number; cutRise: number; height: number; bend: number; thin?: number }): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ map, color, side: THREE.DoubleSide });
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, shared, {
-      uSway: { value: opts.sway }, uCut: { value: opts.cut }, uCutRise: { value: opts.cutRise }, uHeight: { value: opts.height }, uBend: { value: opts.bend },
+      uSway: { value: opts.sway }, uCut: { value: opts.cut }, uCutRise: { value: opts.cutRise }, uHeight: { value: opts.height }, uBend: { value: opts.bend }, uThin: { value: opts.thin ?? 0 },
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D uTrample;
 uniform vec4 uRect;
-uniform float uTime, uSway, uHeight, uBend;
+uniform float uTime, uSway, uHeight, uBend, uThin;
 attribute float aH;
 varying float vH;
 varying float vTrample;
@@ -111,6 +112,10 @@ varying float vCropDist;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
 vCropDist = -mvPosition.z;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+// Far off, some strips go (the rest still read as a field): collapsed to nothing.
+vec3 cropAt = (modelMatrix * instanceMatrix[3]).xyz;
+float cropHash = fract(sin(dot(cropAt.xz, vec2(12.9898, 78.233))) * 43758.5453);
+if (cropHash < uThin * smoothstep(90.0, 170.0, distance(cropAt, cameraPosition))) transformed = vec3(0.0);
 vec4 cropWorld = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
 float cropT = texture2D(uTrample, (cropWorld.xz - uRect.xy) / uRect.zw).r;
 float cropK = aH / uHeight;
@@ -298,7 +303,15 @@ function cutPaths(geo: THREE.BufferGeometry, paths: Rect[]): THREE.BufferGeometr
  * Corn and wheat for every field that grows them. Corn strips skip a maze's paths and anything
  * solid standing in the field; past FARM.maxCrop strips, every other row goes.
  */
-export function buildCrops(q: District, city: CityData, fields: Field[], scene: THREE.Scene, ground: GroundHeight, dry: boolean): { trample: Trample; uniforms: CropUniforms } {
+/** How the crops look in a climate: dry stalks in the snow; tints (multiplying the textures) for corn and wheat. */
+export interface CropLook {
+  dry: boolean;
+  corn: number;
+  wheat: number;
+}
+
+export function buildCrops(q: District, city: CityData, fields: Field[], scene: THREE.Scene, ground: GroundHeight, look: CropLook): { trample: Trample; uniforms: CropUniforms } {
+  const dry = look.dry;
   const trample = new Trample(q.bounds, fields.filter((f) => f.crop === 'corn' || f.crop === 'wheat').map((f) => f.rect), city.config.blockSize);
   const uniforms: CropUniforms = { uTrample: { value: trample.texture }, uRect: { value: trample.rect }, uTime: { value: 0 } };
   const blockers: Footprint[] = [
@@ -331,35 +344,33 @@ export function buildCrops(q: District, city: CityData, fields: Field[], scene: 
   let all = strips.flat();
   if (all.length > FARM.maxCrop) all = all.filter((_, i) => i % Math.ceil(all.length / FARM.maxCrop) === 0);
   if (all.length) {
-    const mat = cropMaterial(cornTexture(dry), 0xffffff, uniforms, { sway: 0.12, cut: 0.5, cutRise: 0, height: CORN_HEIGHT, bend: 0.5 });
+    const mat = cropMaterial(cornTexture(dry), look.corn, uniforms, { sway: 0.12, cut: 0.5, cutRise: 0, height: CORN_HEIGHT, bend: 0.5, thin: 1 });
     const mesh = new THREE.InstancedMesh(cornStrip(), mat, all.length);
     all.forEach((m, i) => mesh.setMatrixAt(i, m));
     mesh.computeBoundingSphere();
     mesh.receiveShadow = true;
     scene.add(mesh);
     // The canopy over each corn field (a maze's paths show through it: the canopy's cut there).
-    const leaves = cropMaterial(canopyTexture(dry), 0xffffff, uniforms, { sway: 0.08, cut: 0.5, cutRise: 0, height: CORN_HEIGHT, bend: 0.3 });
-    for (const f of fields) {
-      if (f.crop !== 'corn') continue;
+    const leaves = cropMaterial(canopyTexture(dry), look.corn, uniforms, { sway: 0.08, cut: 0.5, cutRise: 0, height: CORN_HEIGHT, bend: 0.3 });
+    const canopies = fields.filter((f) => f.crop === 'corn').map((f) => {
       const geo = shells(f.rect, ground, CORN_CANOPY, 2.2);
-      const canopy = new THREE.InstancedMesh(f.maze ? cutPaths(geo, f.maze) : geo, leaves, 1);
-      canopy.setMatrixAt(0, new THREE.Matrix4());
-      canopy.computeBoundingSphere();
-      canopy.receiveShadow = true;
-      scene.add(canopy);
-    }
+      return f.maze ? cutPaths(geo, f.maze) : geo;
+    });
+    const canopy = new THREE.InstancedMesh(mergeGeometries(canopies), leaves, 1);
+    canopy.setMatrixAt(0, new THREE.Matrix4());
+    canopy.computeBoundingSphere();
+    canopy.receiveShadow = true;
+    scene.add(canopy);
   }
-  // Wheat: one shell stack per field, drawn as a single instance (the corn's program).
+  // Wheat: every field's shells in one mesh, drawn as a single instance (the corn's program).
   const wheat = fields.filter((f) => f.crop === 'wheat');
   if (wheat.length) {
-    const mat = cropMaterial(wheatTexture(), dry ? 0xe8e0c8 : 0xffffff, uniforms, { sway: 0.06, cut: 0.35, cutRise: 0.6, height: WHEAT_HEIGHT + 0.08, bend: 0.2 });
-    for (const f of wheat) {
-      const mesh = new THREE.InstancedMesh(shells(f.rect, ground, WHEAT_SHELLS, 1.6), mat, 1);
-      mesh.setMatrixAt(0, new THREE.Matrix4());
-      mesh.computeBoundingSphere();
-      mesh.receiveShadow = true;
-      scene.add(mesh);
-    }
+    const mat = cropMaterial(wheatTexture(), look.wheat, uniforms, { sway: 0.06, cut: 0.35, cutRise: 0.6, height: WHEAT_HEIGHT + 0.08, bend: 0.2 });
+    const mesh = new THREE.InstancedMesh(mergeGeometries(wheat.map((f) => shells(f.rect, ground, WHEAT_SHELLS, 1.6))), mat, 1);
+    mesh.setMatrixAt(0, new THREE.Matrix4());
+    mesh.computeBoundingSphere();
+    mesh.receiveShadow = true;
+    scene.add(mesh);
   }
   return { trample, uniforms };
 }

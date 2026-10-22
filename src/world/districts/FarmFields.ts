@@ -275,6 +275,8 @@ export function yardClutter(yard: Rect, shed: Building | undefined, taken: Footp
     const yaw = nx || nz ? Math.atan2(nx, nz) : undefined;
     add('parkedTractor', { color: rng.pick(colours) }, mouth, yaw);
   }
+  // The yard light: a lamp on a timber pole, lit at night.
+  add('woodLamp');
   add('plough');
   add('seedDrill');
   add('waterTrough');

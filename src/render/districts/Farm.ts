@@ -13,7 +13,9 @@ import { farmFields, type Crop } from '../../world/districts/Farm';
 import type { RanchGateData } from '../../world/districts/FarmGate';
 import type { RoundBaleData } from '../../world/districts/FarmFields';
 import { buildCrops } from './farmCrops';
-import { farmSignMaterial, namePlate } from './farmSigns';
+import type { PivotData } from '../../world/districts/FarmNight';
+import { FARM } from '../../gameplay/balance';
+import { farmSignMaterial, namePlate, onWarm } from './farmSigns';
 import { WINDMILL } from '../Landmarks';
 import { groundBase } from '../../world/Terrain';
 import type { DistrictRenderContext, DistrictView } from './index';
@@ -40,10 +42,17 @@ const GROUND: Record<Crop, [number, number]> = {
 };
 
 /** A field's ground and its rows along them, ~0.75 m apart (vines and mown strips wider). */
-function soil(flat: GeometryBuilder, p: GroundPatch, city: CityData, snowy: boolean, crop: Crop): void {
+function soil(flat: GeometryBuilder, p: GroundPatch, city: CityData, snowy: boolean, crop: Crop, climate: string): void {
   const [b, r] = GROUND[crop];
-  const base = new THREE.Color(snowy ? 0xe4e8ec : b);
-  const furrow = new THREE.Color(snowy ? 0xc8d0d8 : r);
+  // Bleached in the desert, greener by the beach.
+  const tint = (hex: number) => {
+    const c = new THREE.Color(hex);
+    if (climate === 'desert') c.lerp(new THREE.Color(0xd8c8a0), 0.35);
+    if (climate === 'beach' && crop !== 'wheat' && crop !== 'hay') c.lerp(new THREE.Color(0x5aa03a), 0.25);
+    return c;
+  };
+  const base = snowy ? new THREE.Color(0xe4e8ec) : tint(b);
+  const furrow = snowy ? new THREE.Color(0xc8d0d8) : tint(r);
   const pitch = crop === 'pumpkin' ? 1.5 : crop === 'orchard' ? 3 : 0.75;
   const width = crop === 'pumpkin' ? 0.6 : crop === 'orchard' ? 1.4 : 0.28;
   flat.drape(p, 0.055, base, city.terrain);
@@ -191,14 +200,101 @@ function windmillWheel(): { wheel: THREE.BufferGeometry; tail: THREE.BufferGeome
   return { wheel, tail };
 }
 
+/** A harvest night's pyramid of square bales by the ranch gate: three, two, one. */
+function balePyramid(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+  const straw = 0xd8b860;
+  const g: THREE.BufferGeometry[] = [];
+  [3, 2, 1].forEach((n, row) => {
+    for (let k = 0; k < n; k++) {
+      g.push(part(box(1.1, 0.55, 2.4), straw, (k - (n - 1) / 2) * 1.15, 0.28 + row * 0.56, 0));
+      g.push(part(box(1.12, 0.04, 2.42), 0xa8823a, (k - (n - 1) / 2) * 1.15, 0.28 + row * 0.56 + 0.1, 0));
+    }
+  });
+  if (snowy) g.push(part(box(1.1, 0.05, 2.3), SNOW, 0, 1.7, 0));
+  const m = frameOf(s.x, y, s.z, s.yaw);
+  out.push(...g.map((p) => p.applyMatrix4(m)));
+}
+
+/** The parked centre-pivot irrigator: a centre tower, the truss out along its yaw, A-frame towers on wheels, drop hoses. */
+function pivot(s: Structure, city: CityData, out: THREE.BufferGeometry[]): void {
+  const d = s.data as unknown as PivotData;
+  const galv = 0xb8c0c4, dark = 0x2a2a2a;
+  const g: THREE.BufferGeometry[] = [];
+  const y = (dist: number) => groundBase(city.terrain, s.x + Math.sin(s.yaw) * dist, s.z + Math.cos(s.yaw) * dist, 1) - 0.05;
+  const y0 = y(0);
+  // Centre tower: four legs and a riser pipe.
+  for (const [x, z] of [[-0.8, -0.8], [0.8, -0.8], [0.8, 0.8], [-0.8, 0.8]]) g.push(part(box(0.12, d.height + 1, 0.12).rotateX(-z * 0.12).rotateZ(x * 0.12), galv, x * 0.6, (d.height + 1) / 2, z * 0.6));
+  g.push(part(cyl(0.15, 0.15, d.height + 1.4, 8), galv, 0, (d.height + 1.4) / 2, 0));
+  // The truss: a pipe along the top with a lattice under it, tower to tower.
+  g.push(part(cyl(0.12, 0.12, d.r, 8).rotateX(Math.PI / 2), galv, 0, d.height, d.r / 2));
+  for (let z = 1; z < d.r; z += 2.5) g.push(part(box(0.05, 0.9, 0.05).rotateX(((z / 2.5) % 2 ? 1 : -1) * 0.9), galv, 0, d.height - 0.45, z));
+  g.push(part(box(0.06, 0.06, d.r), galv, 0, d.height - 0.9, d.r / 2));
+  for (let z = 3; z < d.r; z += 3) g.push(part(box(0.03, 1.8, 0.03), dark, 0, d.height - 1.6, z)); // drop hoses
+  for (const t of d.towers.slice(1)) {
+    const dy = y(t) - y0;
+    for (const side of [-1, 1]) g.push(part(box(0.1, d.height + 0.3, 0.1).rotateZ(side * 0.32), galv, side * 0.55, dy + d.height / 2, t));
+    for (const side of [-1, 1]) g.push(part(cyl(0.55, 0.55, 0.35, 12).rotateZ(Math.PI / 2), dark, side * 1.15, dy + 0.55, t));
+    g.push(part(box(2.4, 0.12, 0.12), galv, 0, dy + 0.55, t));
+  }
+  const m = frameOf(s.x, y0, s.z, s.yaw);
+  out.push(...g.map((p) => p.applyMatrix4(m)));
+}
+
+/** Fireflies drifting low over the fields at night, each blinking on its own phase (in the shader). */
+function fireflies(q: District, city: CityData, fields: { rect: { x: number; z: number; w: number; d: number } }[], scene: THREE.Scene, ground: (x: number, z: number) => number): { value: number } {
+  // Within the glow budget: what the district already lights (timber lamps, jack-o'-lanterns, the lantern).
+  const lit = city.streetProps.filter((p) => (p.kind === 'woodLamp' || p.kind === 'jackOLantern') && Math.abs(p.x - q.bounds.x) <= q.bounds.w / 2 && Math.abs(p.z - q.bounds.z) <= q.bounds.d / 2).length + 1;
+  const n = Math.max(0, Math.min(FARM.fireflies, FARM.maxGlow - lit));
+  const time = { value: 0 };
+  if (!n || !fields.length) return time;
+  const pos = new Float32Array(n * 3), phase = new Float32Array(n);
+  let seed = city.seed % 2147483647 || 1;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < n; i++) {
+    const f = fields[i % fields.length].rect;
+    const x = f.x + (rnd() - 0.5) * f.w, z = f.z + (rnd() - 0.5) * f.d;
+    pos.set([x, ground(x, z) + 0.6 + rnd() * 1.6, z], i * 3);
+    phase[i] = rnd();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+  const mat = new THREE.PointsMaterial({ color: 0xd8ff6a, size: 0.35, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = time;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nattribute float aPhase;\nvarying float vBlink;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+transformed.x += sin(uTime * 0.5 + aPhase * 7.0) * 0.8;
+transformed.z += cos(uTime * 0.43 + aPhase * 11.0) * 0.8;
+transformed.y += sin(uTime * 0.7 + aPhase * 5.0) * 0.3;
+vBlink = smoothstep(0.55, 1.0, sin(uTime * 1.6 + aPhase * 6.2832));`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vBlink;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vBlink;');
+  };
+  mat.customProgramCacheKey = () => 'farmFireflies';
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  scene.add(points);
+  return time;
+}
+
 export function renderFarm(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
   const snowy = ctx.climate.snowRoofs;
   const flat = new GeometryBuilder();
   const fields = farmFields(q);
   const cropAt = (p: GroundPatch) => fields.find((f) => Math.abs(f.rect.x - p.x) < 0.5 && Math.abs(f.rect.z - p.z) < 0.5)?.crop ?? 'corn';
   for (const p of q.dressing.ground) {
-    if (p.kind === 'soil') soil(flat, p, city, snowy, cropAt(p));
+    if (p.kind === 'soil') soil(flat, p, city, snowy, cropAt(p), ctx.climate.name);
     else if (p.kind === 'cattleGrid') cattleGrid(flat, p, city);
+  }
+  // The irrigator's circle: watered green (the desert only has one).
+  for (const s of q.dressing.structures) {
+    if (s.kind !== 'pivot') continue;
+    const r = (s.data as unknown as PivotData).r;
+    const green = new THREE.Color(0x6a9a3a);
+    for (let x = -r; x < r; x += 2) for (let z = -r; z < r; z += 2) if (Math.hypot(x + 1, z + 1) < r) flat.drape({ x: s.x + x + 1, z: s.z + z + 1, w: 2, d: 2 }, 0.1, green, city.terrain);
   }
   // A maze's paths: trodden earth through the corn.
   for (const f of fields) for (const r of f.maze ?? []) flat.drape(r, 0.1, new THREE.Color(snowy ? 0xd8dce0 : 0x8a6a48), city.terrain);
@@ -215,6 +311,19 @@ export function renderFarm(q: District, city: CityData, scene: THREE.Scene, ctx:
     else if (s.kind === 'roundBale') roundBale(s, y, snowy, solid);
     else if (s.kind === 'combine') combine(s, y, snowy, solid);
     else if (s.kind === 'headerTrailer') headerTrailer(s, y, snowy, solid);
+    else if (s.kind === 'balePyramid') balePyramid(s, y, snowy, solid);
+    else if (s.kind === 'pivot') pivot(s, city, solid);
+  }
+  // A lantern by the barn's doors, lit at night (its glass on the sign plates' material).
+  const barn = city.buildings.find((b) => b.district === 'farm' && b.lot === 'barn' && Math.abs(b.x - q.bounds.x) <= q.bounds.w / 2 && Math.abs(b.z - q.bounds.z) <= q.bounds.d / 2);
+  if (barn && ctx.lampGlow > 0.3) {
+    const bits: [number, number, number][] = [[1, 0, 1], [2, 0, -1], [4, 1, 0], [8, -1, 0]];
+    const [, nx, nz] = bits.find(([bit]) => (barn.street ?? 1) & bit) ?? bits[0];
+    const x = barn.x + nx * (barn.w / 2 + 0.2), z = barn.z + nz * (barn.d / 2 + 0.2);
+    const y = groundBase(city.terrain, barn.x, barn.z, Math.max(barn.w, barn.d) / 2) - 0.3 + 3.1;
+    solid.push(part(box(0.32, 0.45, 0.32), IRON, x, y, z), part(box(0.08, 0.08, 0.5), IRON, x - nx * 0.25, y + 0.3, z - nz * 0.25));
+    const glass = onWarm(new THREE.BoxGeometry(0.24, 0.32, 0.24)).translate(x, y, z);
+    scene.add(new THREE.Mesh(glass, farmSignMaterial(2.5)));
   }
   if (solid.length) {
     const mesh = new THREE.Mesh(mergeGeometries(solid), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 }));
@@ -247,7 +356,11 @@ export function renderFarm(q: District, city: CityData, scene: THREE.Scene, ctx:
     }
   }
   // Crops, and fallen fruit under the orchard trees (the props' instanced, tinted settings).
-  const crops = buildCrops(q, city, fields, scene, ctx.ground, snowy);
+  const climate = ctx.climate.name;
+  const look = snowy ? { dry: true, corn: 0xffffff, wheat: 0xe8e0c8 } : climate === 'desert' ? { dry: false, corn: 0xe8e0b0, wheat: 0xf8f0d8 } : climate === 'beach' ? { dry: false, corn: 0xe0ffd8, wheat: 0xffffff } : { dry: false, corn: 0xffffff, wheat: 0xffffff };
+  const crops = buildCrops(q, city, fields, scene, ctx.ground, look);
+  // Fireflies over the fields on warm nights: blinking in the shader, within the glow budget.
+  const flies = ctx.night && (climate === 'temperate' || climate === 'beach') ? fireflies(q, city, fields, scene, ctx.ground) : null;
   const trees = q.dressing.props.filter((p) => p.kind === 'tree' && p.tree === 'fruit');
   if (trees.length && !snowy) {
     const per = 4;
@@ -272,6 +385,7 @@ export function renderFarm(q: District, city: CityData, scene: THREE.Scene, ctx:
       const spin = 1.4 + 0.6 * Math.sin(time * 0.31) + 0.3 * Math.sin(time * 1.13);
       for (const w of wheels) w.rotation.z -= spin * dt;
       crops.uniforms.uTime.value = time;
+      if (flies) flies.value = time;
       if (movers) for (const v of movers()) crops.trample.stamp(v.position.x, v.position.z);
       crops.trample.update(dt);
     },
