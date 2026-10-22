@@ -8,7 +8,7 @@ import type { ApproachControl } from '../world/TrafficControl';
 import { FLAT, type GroundHeight } from '../world/Terrain';
 import { SUNK_BELOW } from '../render/Sea';
 
-import { Vehicle } from '../vehicles/Vehicle';
+import { CAR_GROUPS, Vehicle } from '../vehicles/Vehicle';
 import {
   PLAYER_SPEC,
   COP_SUV_SPEC,
@@ -150,7 +150,7 @@ export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: nu
       ray.origin = { x: from.x - dz * reach * side, y, z: from.z + dx * reach * side };
       ray.dir = { x: dx, y: dy, z: dz };
       const limit = best ? best.distance - travelled : legLen;
-      const hit = world.castRay(ray, limit, true, RAPIER.QueryFilterFlags.EXCLUDE_FIXED, undefined, vehicle.collider, vehicle.body);
+      const hit = world.castRay(ray, limit, true, RAPIER.QueryFilterFlags.EXCLUDE_FIXED, CAR_GROUPS, vehicle.collider, vehicle.body);
       if (!hit) continue;
       best = { distance: travelled + hit.timeOfImpact, aligned: true, moving: false, side };
       blocker = hit.collider;

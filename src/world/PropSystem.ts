@@ -4,7 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { part } from '../render/geometry';
 import { SUNK_BELOW } from '../render/Sea';
 import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
-import type { Vehicle } from '../vehicles/Vehicle';
+import { CAR_PASSES, type Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
 import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
 import type { TreeKind } from './Climate';
@@ -114,6 +114,7 @@ export interface DebrisPart {
   hz: number;
   yaw?: number;
   round?: boolean;
+  carPasses?: boolean; // rests on the ground, but cars drive through it (CAR_PASSES)
 }
 
 const plateBoxes = new Map<SignShape, THREE.Box3>();
@@ -178,6 +179,13 @@ export function debrisParts(def: StreetProp): DebrisPart[] {
       ];
     case 'umbrella':
       return [{ x: 0, y: 2.55, z: 0, hx: 1.7, hy: 0.35, hz: 1.7, round: true }]; // canopy
+    case 'boomGate':
+      // The 7 m arm and the fork it rests on (the post is the intact collider). Cars pass through
+      // them: wedged between a straddle carrier's legs, the arm stood like a wall.
+      return [
+        { x: 0.225, y: 1.0, z: 0, hx: 3.4, hy: 0.06, hz: 0.06, carPasses: true }, // arm
+        { x: 3.4, y: 0.49, z: 0, hx: 0.15, hy: 0.49, hz: 0.06, carPasses: true }, // fork
+      ];
     default:
       return [];
   }
@@ -192,7 +200,9 @@ export function addDebrisColliders(world: RAPIER.World, body: RAPIER.RigidBody, 
   for (const d of debrisParts(def)) {
     const desc = d.round ? RAPIER.ColliderDesc.cylinder(d.hy, d.hx) : RAPIER.ColliderDesc.cuboid(d.hx, d.hy, d.hz);
     q.setFromAxisAngle(UP, d.yaw ?? 0);
-    world.createCollider(desc.setTranslation(d.x, d.y, d.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }).setMass(mass).setFriction(0.6), body);
+    desc.setTranslation(d.x, d.y, d.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }).setMass(mass).setFriction(0.6);
+    if (d.carPasses) desc.setCollisionGroups(((CAR_PASSES << 16) | (0xffff & ~CAR_PASSES)) >>> 0);
+    world.createCollider(desc, body);
   }
 }
 
@@ -1070,8 +1080,8 @@ export class PropSystem {
   private addCollider(p: PropState): void {
     const spec = propSpec(p.def);
     if (p.def.kind === 'boomGate') {
-      // Only the post is solid: its arm, knocked loose, would wedge across a corridor (it still
-      // breaks on its whole footprint, see checkVehicle).
+      // Only the post is solid while it stands (it still breaks on its whole footprint, see
+      // checkVehicle); knocked loose, the arm and fork rest on the ground (debrisParts).
       this.world.createCollider(RAPIER.ColliderDesc.cuboid(0.25, 0.6, 0.25).setTranslation(-3.4, 0.6, 0).setMass(spec.mass).setFriction(0.6), p.body!);
       return;
     }
