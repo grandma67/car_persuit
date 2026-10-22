@@ -3,7 +3,7 @@
 // of square ones, scarecrows, the parked combine and the farm's tractors and implements, and the
 // farmyard's clutter. Pure data; crops are drawn by render/districts/farmCrops.ts.
 import type { Rng } from '../../core/Rng';
-import { FARM_FIELDS as FF } from '../../gameplay/balance';
+import { FARM_FIELDS as FF, FARM_GATE } from '../../gameplay/balance';
 import type { Building, Rect } from '../CityGenerator';
 import { shrink } from '../lots';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../StreetProps';
@@ -141,7 +141,7 @@ export function orchardTrees(field: Rect, pears: boolean, rng: Rng): StreetProp[
 
 /** What each field holds. `taken`: buildings, yard pieces and the fences, kept clear of. */
 export function dressFields(
-  fields: Field[], gaps: Record<number, FenceGap[]>, taken: Footprint[], rng: Rng,
+  fields: Field[], gaps: Record<number, FenceGap[]>, taken: Footprint[], sidewalk: number, rng: Rng,
 ): FieldDressing {
   const out: FieldDressing = { props: [], structures: [], solids: [], ground: [] };
   const pears = rng.next() < 0.5;
@@ -169,6 +169,14 @@ export function dressFields(
       }
       case 'pumpkin': {
         out.ground.push({ kind: 'vines', ...f.rect, yaw: f.rowsAlongX ? 0 : Math.PI / 2 });
+        // The farm stand on the sidewalk beside a gate, facing the road, clear of the gate's mouth.
+        const g = (gaps[f.block] ?? [])[0];
+        if (g) {
+          const out_ = sidewalk - FF.standIn; // from the sidewalk line out towards the kerb
+          const along = (FF.gapWidth / 2 + FF.standAlong) * (rng.next() < 0.5 ? -1 : 1);
+          const edge = { x: g.x + g.nx * FARM_GATE.fenceInset, z: g.z + g.nz * FARM_GATE.fenceInset }; // back on the sidewalk line
+          out.props.push({ kind: 'farmStand', x: edge.x + g.nx * out_ + (g.nx ? 0 : along), z: edge.z + g.nz * out_ + (g.nz ? 0 : along), yaw: Math.atan2(g.nx, g.nz) });
+        }
         for (let k = 0; k < FF.pumpkins; k++) {
           const p = put('pumpkin', inner, busy, rng, { scale: rng.pick([0.6, 0.8, 1, 1, 1.3]) });
           if (p) out.props.push(p);

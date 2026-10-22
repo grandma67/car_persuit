@@ -180,6 +180,7 @@ describe('Farm crops, equipment and props', () => {
     for (const f of farmFields(q)) {
       if (f.crop === 'orchard') expect(within(f, 'tree')).toBeGreaterThan(30);
       if (f.crop === 'pumpkin') expect(within(f, 'pumpkin')).toBeGreaterThan(10);
+      if (f.crop === 'pumpkin') expect(props.filter((p) => p.kind === 'farmStand' && inRect(c.blocks[f.block].rect, p) && !inRect(f.rect, p))).toHaveLength(1);
       if (f.crop === 'hay') expect(q.dressing.structures.filter((st) => st.kind === 'roundBale' && inRect(f.rect, st)).length).toBeGreaterThan(3);
       if (['corn', 'wheat', 'pumpkin'].includes(f.crop)) {
         expect(within(f, 'scarecrow')).toBeGreaterThanOrEqual(1);

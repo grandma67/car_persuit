@@ -253,7 +253,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   // The crops' furniture, then the yard's clutter and equipment; kerb clutter along the streets.
   const yardFps = [...buildings.map((b) => rectFootprint({ ...b, w: b.w + 1, d: b.d + 1 })), ...out.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius + 1, hz: l.radius + 1, yaw: 0 }))];
   const fenceFps = props.map((p) => propFootprint(p, 0.3));
-  const inFields = dressFields(fields, gaps, [...yardFps, ...fenceFps], rng);
+  const inFields = dressFields(fields, gaps, [...yardFps, ...fenceFps], sw, rng);
   out.structures.push(...inFields.structures);
   out.solids.push(...inFields.solids);
   out.ground.push(...inFields.ground);

@@ -256,6 +256,8 @@ export const FARM_FIELDS = {
   combine: [3.6, 9] as [number, number], // the combine's footprint, across and along
   header: [2.6, 9.5] as [number, number], // its header on a trailer
   gateClutter: 0.5, // chance of a bale or crates by a field gate
+  standIn: 0.95, // the pumpkin stand's centre, in from the kerb
+  standAlong: 3, // and along from the gate's edge
   tractors: [1, 3] as [number, number],
 };
 
