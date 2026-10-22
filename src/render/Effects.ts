@@ -142,7 +142,7 @@ export class Effects {
       for (let i = 0; i < n; i++) emitter.emit(b.position, this.tmpVel.set(0, 0, 0), 0);
     };
     switch (b.kind) {
-      case 'haybale': return burst(this.straw, 45);
+      case 'haybale': case 'roundBale': return burst(this.straw, 45);
       case 'cart': burst(this.straw, 18); return burst(this.chips, 18);
       case 'stall': burst(this.cloth, 10); return burst(this.chips, 22);
       case 'barrels': case 'pillory': case 'signpost': return burst(this.chips, 18);

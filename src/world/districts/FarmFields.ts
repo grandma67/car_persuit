@@ -18,12 +18,6 @@ export interface FenceGap {
   nz: number;
 }
 
-/** A round bale lying on its side: solid, its axis along `yaw`. */
-export interface RoundBaleData {
-  r: number;
-  len: number;
-}
-
 export interface FieldDressing {
   props: StreetProp[];
   structures: Structure[];
@@ -185,7 +179,7 @@ export function dressFields(
       }
       case 'hay': {
         out.ground.push({ kind: 'stubble', ...f.rect, yaw: f.rowsAlongX ? 0 : Math.PI / 2 });
-        // Round bales in loose rows along the field, solid; stacks of square ones, breakable.
+        // Round bales in loose rows along the field (heavy props that roll once shoved); stacks of square ones.
         const along = f.rowsAlongX;
         for (let row = -1; row <= 1; row++) {
           const off = row * (along ? inner.d : inner.w) * 0.3;
@@ -195,9 +189,8 @@ export function dressFields(
             const yaw = rng.range(0, Math.PI);
             const fp: Footprint = { x, z, hx: FF.baleLength / 2, hz: FF.baleRadius, yaw };
             if (busy.hits({ ...fp, hx: fp.hx + 0.6, hz: fp.hz + 0.6 })) continue;
-            const data: RoundBaleData = { r: FF.baleRadius, len: FF.baleLength };
-            out.structures.push({ kind: 'roundBale', x, z, yaw, footprints: [fp], data: data as unknown as Record<string, unknown> });
-            out.solids.push(fp);
+            const wrapped = (Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * 43758.5453) % 1 < 0.3;
+            out.props.push({ kind: 'roundBale', x, z, yaw, color: wrapped ? 0xe8ece8 : 0xd0b060 });
             busy.add({ ...fp, hx: fp.hx + FF.baleGap, hz: fp.hz + FF.baleGap });
           }
         }

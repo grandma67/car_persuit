@@ -81,12 +81,12 @@ export const modelKey = (p: StreetProp): ModelKey => {
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
 /** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor']);
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale']);
 /**
  * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
- * standing on its rim (its axle along local X).
+ * standing on its rim or a round bale on its side (the axle along local X).
  */
-const ROUND: Partial<Record<PropKind, 'upright' | 'axleX'>> = { drums: 'upright', cableReel: 'axleX' };
+const ROUND: Partial<Record<PropKind, 'upright' | 'axleX'>> = { drums: 'upright', cableReel: 'axleX', roundBale: 'axleX' };
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -690,7 +690,7 @@ function harborModels(): Record<HarborKind | 'fence-chainlink', THREE.BufferGeom
 }
 
 type FarmKind = 'jackOLantern' | 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
-  | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon';
+  | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon' | 'roundBale';
 /** The Farm's breakables: fencing, the gate's mailbox, timber lamps, yard clutter, crops' furniture and machinery. */
 function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
   const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
@@ -848,8 +848,13 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
     ...[-0.08, 0.08].map((x) => part(box(0.07, 0.06, 0.04), 0x1a0e04, x, 0.27, 0.24)), // eyes
     part(box(0.18, 0.04, 0.04), 0x1a0e04, 0, 0.15, 0.24), // the grin
   ]);
+  // A round bale on its side, axle along X: tinted per bale (plain straw or white wrap).
+  const roundBale = mergeGeometries([
+    part(cyl(0.8, 0.8, 1.5, 14).rotateZ(Math.PI / 2), 0xffffff, 0, 0.8),
+    ...[-1, 1].map((e) => part(cyl(0.74, 0.74, 0.02, 14).rotateZ(Math.PI / 2), 0xd8d8d8, e * 0.755, 0.8)),
+  ]);
   return {
-    jackOLantern,
+    jackOLantern, roundBale,
     'fence-rail': fenceRail, mailbox, woodLamp, milkChurn, feedSacks, wheelbarrow, waterTrough, fruitBin, pumpkin, farmStand, scarecrow,
     toolRack, parkedTractor, hayRake, plough, seedDrill, baler, hayWagon,
   };
@@ -1075,7 +1080,7 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat',
   'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink',
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
-  'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern']);
+  'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel

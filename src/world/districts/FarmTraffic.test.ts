@@ -140,7 +140,7 @@ describe('Farm off-road routes', () => {
   it.each(placed)('seed %i: into each field through its gates, round every bale and trunk', (_seed, city, q) => {
     const grid = new NavGrid(city);
     const trunks = q.dressing.props.filter((p) => p.kind === 'tree').map((p) => propFootprint(p));
-    const bales = q.dressing.structures.filter((s) => s.kind === 'roundBale').flatMap((s) => s.footprints);
+    const bales = q.dressing.props.filter((p) => p.kind === 'roundBale').map((p) => propFootprint(p));
     for (const f of farmFields(q)) {
       for (const g of fenceGaps(q)[f.block]) {
         const path = grid.findPath(outside(g), inside(g));

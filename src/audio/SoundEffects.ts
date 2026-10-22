@@ -260,7 +260,7 @@ export class SoundEffects {
       return;
     }
     // Old City breakables.
-    if (kind === 'haybale') {
+    if (kind === 'haybale' || kind === 'roundBale') {
       this.burst(0, 0.35, 'lowpass', 900, 0.7, gain * 1.4); // a soft whump of straw
       this.burst(0.02, 0.6, 'highpass', 2500, 0.5, gain * 0.4);
       return;

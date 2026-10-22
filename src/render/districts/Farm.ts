@@ -11,7 +11,6 @@ import { GeometryBuilder } from '../../world/CityBuilder';
 import type { District, GroundPatch, Structure } from '../../world/districts/District';
 import { farmFields, type Crop } from '../../world/districts/Farm';
 import type { RanchGateData } from '../../world/districts/FarmGate';
-import type { RoundBaleData } from '../../world/districts/FarmFields';
 import { buildCrops } from './farmCrops';
 import type { PivotData } from '../../world/districts/FarmNight';
 import { FARM } from '../../gameplay/balance';
@@ -64,19 +63,6 @@ function soil(flat: GeometryBuilder, p: GroundPatch, city: CityData, snowy: bool
     const row = alongX ? { x: p.x, z: p.z + c, w: p.w - 0.4, d: width } : { x: p.x + c, z: p.z, w: width, d: p.d - 0.4 };
     flat.drape(row, 0.078, furrow, city.terrain);
   }
-}
-
-/** A round bale lying on its side, wrapped or plain straw. */
-function roundBale(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
-  const d = s.data as unknown as RoundBaleData;
-  const wrapped = (Math.abs(Math.sin(s.x * 12.9898 + s.z * 78.233)) * 43758.5453) % 1 < 0.3;
-  const g = [
-    part(cyl(d.r, d.r, d.len, 14).rotateZ(Math.PI / 2), wrapped ? 0xe8ece8 : 0xd0b060, 0, d.r, 0),
-    ...[-1, 1].map((e) => part(cyl(d.r * 0.92, d.r * 0.92, 0.02, 14).rotateZ(Math.PI / 2), wrapped ? 0xd8dcd8 : 0xb89848, (e * d.len) / 2 + e * 0.005, d.r, 0)),
-  ];
-  if (snowy) g.push(part(box(d.len * 0.9, 0.06, d.r * 0.9), SNOW, 0, d.r * 2 - 0.02, 0));
-  const m = frameOf(s.x, y, s.z, s.yaw);
-  out.push(...g.map((p) => p.applyMatrix4(m)));
 }
 
 /** The combine: a big green harvester on its wheels, cab to the front (+Z), the unloading auger folded. */
@@ -308,7 +294,6 @@ export function renderFarm(q: District, city: CityData, scene: THREE.Scene, ctx:
   for (const s of q.dressing.structures) {
     const y = Math.min(...s.footprints.map((f) => groundBase(city.terrain, f.x, f.z, Math.max(f.hx, f.hz)))) - 0.05;
     if (s.kind === 'ranchGate') ranchGate(s, snowy, solid, signs);
-    else if (s.kind === 'roundBale') roundBale(s, y, snowy, solid);
     else if (s.kind === 'combine') combine(s, y, snowy, solid);
     else if (s.kind === 'headerTrailer') headerTrailer(s, y, snowy, solid);
     else if (s.kind === 'balePyramid') balePyramid(s, y, snowy, solid);
