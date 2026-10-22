@@ -18,7 +18,7 @@ const TIGHT = 1.6;
 const NEAR = 3;
 const PENALTY = { core: 190, tight: 70, near: 10 };
 /** Props a car can plough through at a cost (they break): the route may cross them if it must. */
-const SOFT: Set<PropKind> = new Set(['fence', 'cone', 'umbrella', 'sign', 'bench', 'boomGate', 'crossbuck']);
+const SOFT: Set<PropKind> = new Set(['fence', 'cone', 'umbrella', 'sign', 'bench', 'boomGate', 'crossbuck', 'pumpkin', 'scarecrow', 'mailbox', 'milkChurn', 'feedSacks', 'wheelbarrow']);
 const DIAG = Math.SQRT2;
 const NEIGHBOURS: [number, number, number][] = [
   [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],

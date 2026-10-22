@@ -5,7 +5,7 @@
 import type { Rng } from '../../core/Rng';
 import { CONTAINER, HARBOR } from '../../gameplay/balance';
 import type { CityData, Rect } from '../CityGenerator';
-import { footprintsOverlap, propFootprint, type Footprint, type StreetProp } from '../StreetProps';
+import { FootprintIndex, propFootprint, type Footprint, type StreetProp } from '../StreetProps';
 import type { Structure } from './District';
 
 /** One container: its centre on the ground plan, its tier (0 on the ground) and length. */
@@ -266,11 +266,12 @@ export function yardFence(block: Rect, yard: Yard): StreetProp[] {
 /** Drop props that would stand on a footprint or another prop already taken. */
 export function clearOf(props: StreetProp[], solids: Footprint[], taken: Footprint[] = []): StreetProp[] {
   const kept: StreetProp[] = [];
-  const busy = [...taken];
+  const hard = new FootprintIndex(solids);
+  const busy = new FootprintIndex(taken);
   for (const p of props) {
     const fp = propFootprint(p, 0.05);
-    if (solids.some((s) => footprintsOverlap(fp, s)) || busy.some((s) => footprintsOverlap(fp, s))) continue;
-    busy.push(propFootprint(p));
+    if (hard.hits(fp) || busy.hits(fp)) continue;
+    busy.add(propFootprint(p));
     kept.push(p);
   }
   return kept;

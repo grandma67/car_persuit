@@ -8,6 +8,8 @@ import { TireSmoke } from './TireSmoke';
 const FRONT_WHEELS = [0, 1];
 const REAR_WHEELS = [2, 3];
 const SMOKE_PER_SECOND = 55; // per rear wheel at full skid
+const FIELD_PER_SECOND = 26; // dust puffs or mud clods per rear wheel, driving through a field at speed
+const RUT = 0.5; // how dark tyre ruts in a field mark, as a skid's strength
 const ENGINE_SMOKE_PER_SECOND = 30;
 const FIRE_PER_SECOND = 40;
 // Exhaust: the engine's effort shows in the fumes, from every tailpipe the car's mesh has (rates
@@ -61,6 +63,10 @@ export class Effects {
   });
   // Old City breakables: wood chips and planks, straw, a cloth puff from stall awnings, pottery shards.
   private chips = new TireSmoke({ color: 0x6b4a2c, maxAlpha: 0.95, additive: false, startSize: 0.28, growth: 0.05, lift: [2.5, 6], gravity: 9.8, spread: 5, life: [0.7, 1.1], carry: 0.4 });
+  // Off-road in a field: dust behind the wheels when dry, clods of mud when it rains.
+  private dust = new TireSmoke({ color: 0xb89a6a, maxAlpha: 0.4, additive: false, startSize: 0.7, growth: 2.2, lift: [0.4, 1.4], spread: 1.2, life: [0.9, 1.5] });
+  private mud = new TireSmoke({ color: 0x3e2e20, maxAlpha: 0.95, additive: false, startSize: 0.14, growth: 0, lift: [1.5, 3.5], gravity: 9.8, spread: 2, life: [0.4, 0.7], carry: 0.3 });
+  private fieldBudget = 0;
   private straw = new TireSmoke({ color: 0xdcbc62, maxAlpha: 0.9, additive: false, startSize: 0.3, growth: 0.5, lift: [2, 5], gravity: 4, spread: 4, life: [0.9, 1.5], carry: 0.3 });
   private cloth = new TireSmoke({ color: 0xece4d4, maxAlpha: 0.55, additive: false, startSize: 0.6, growth: 2.2, lift: [0.6, 1.6], spread: 1.5, life: [0.5, 0.9] });
   private shards = new TireSmoke({ color: 0xb8643a, maxAlpha: 0.95, additive: false, startSize: 0.2, growth: 0, lift: [1.5, 4.5], gravity: 9.8, spread: 4, life: [0.6, 0.9], carry: 0.3 });
@@ -89,8 +95,9 @@ export class Effects {
   private tmpVel = new THREE.Vector3();
   private exhaustAt = new THREE.Vector3();
 
-  constructor(scene: THREE.Scene, sprayColor: number) {
+  constructor(scene: THREE.Scene, sprayColor: number, private wet = false) {
     this.smoke.setColor(sprayColor);
+    scene.add(this.dust.points, this.mud.points);
     scene.add(this.skidMarks.mesh, this.smoke.points);
     scene.add(this.exhaust.points, this.soot.points, this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points, this.flash);
     scene.add(this.chips.points, this.straw.points, this.cloth.points, this.shards.points);
@@ -188,17 +195,25 @@ export class Effects {
     this.smokeBudget += skid > 0.15 ? SMOKE_PER_SECOND * skid * speedFactor * dt : 0;
     const puffs = Math.floor(this.smokeBudget);
     this.smokeBudget -= puffs;
+    // In a field the tyres cut ruts and throw up dust (or mud in the rain).
+    const rut = player.onSoft && Math.abs(player.speed) > 2;
+    this.fieldBudget += rut ? FIELD_PER_SECOND * speedFactor * dt : 0;
+    const clods = Math.floor(this.fieldBudget);
+    this.fieldBudget -= clods;
     for (const w of REAR_WHEELS) {
       const contact = player.wheelContact(w, this.tmpContact);
-      this.skidMarks.add(w, skid > 0.25 ? contact : null, skid);
+      this.skidMarks.add(w, skid > 0.25 || rut ? contact : null, Math.max(skid, rut ? RUT : 0));
       if (contact) for (let i = 0; i < puffs; i++) this.smoke.emit(contact, this.tmpVel, skid);
+      if (contact && rut) for (let i = 0; i < clods; i++) (this.wet ? this.mud : this.dust).emit(contact, this.tmpVel, 0.5);
     }
     // Fronts leave their own marks when they scrub or the brakes bite (no smoke: the rears carry that).
     const frontSkid = player.frontSkid;
     for (const w of FRONT_WHEELS) {
       const contact = frontSkid > 0.25 ? player.wheelContact(w, this.tmpContact) : null;
-      this.skidMarks.add(w, contact, frontSkid);
+      this.skidMarks.add(w, contact ?? (rut ? player.wheelContact(w, this.tmpContact) : null), Math.max(frontSkid, rut ? RUT : 0));
     }
+    this.dust.update(dt);
+    this.mud.update(dt);
     this.smoke.update(dt);
     this.updateExhaust(dt, player);
 

@@ -198,7 +198,8 @@ describe('Farm crops, equipment and props', () => {
   it.each(placed)('seed %i: nothing solid on a road or in a fence gap', (_seed, c, q) => {
     const roads = roadsOf(c);
     const lanes = Object.values(fenceGaps(q)).flat().map((g) => gapLane(g));
-    for (const fp of q.dressing.solids) {
+    const pieces = q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }));
+    for (const fp of [...q.dressing.solids, ...pieces]) {
       for (const r of roads) expect(footprintsOverlap(fp, r)).toBe(false);
       for (const l of lanes) expect(footprintsOverlap(fp, l)).toBe(false);
     }

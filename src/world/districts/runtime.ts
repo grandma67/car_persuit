@@ -21,10 +21,12 @@ export interface DistrictTrafficRules {
   noHeavy: Set<string>;
   /** Interior junctions and their district's traffic (spawn density and mix). */
   nodes: Map<number, DistrictTraffic>;
+  /** Perimeter junctions of districts with an edge mix (DistrictTraffic.edge): spawns there use it. */
+  edges: Map<number, DistrictTraffic>;
 }
 
 export function districtTraffic(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): DistrictTrafficRules {
-  const rules: DistrictTrafficRules = { limits: new Map(), noHeavy: new Set(), nodes: new Map() };
+  const rules: DistrictTrafficRules = { limits: new Map(), noHeavy: new Set(), nodes: new Map(), edges: new Map() };
   for (const q of city.districts) {
     const def = defOf(q.kind, defs);
     if (!def) continue;
@@ -35,6 +37,7 @@ export function districtTraffic(city: CityData, defs: DistrictDef[] = DISTRICT_D
     }
     if (!t.heavy) for (const k of q.streets) rules.noHeavy.add(k);
     for (const id of q.interior) rules.nodes.set(id, t);
+    if (t.edge) for (const id of q.perimeter) rules.edges.set(id, { density: 1, heavy: true, weights: t.edge });
   }
   return rules;
 }

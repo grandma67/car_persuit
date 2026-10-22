@@ -6,7 +6,7 @@ import type { Rng } from '../../core/Rng';
 import { FARM_FIELDS as FF, FARM_GATE } from '../../gameplay/balance';
 import type { Building, Rect } from '../CityGenerator';
 import { shrink } from '../lots';
-import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../StreetProps';
+import { FootprintIndex, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../StreetProps';
 import type { GroundPatch, Structure } from './District';
 import type { Field } from './Farm';
 
@@ -49,26 +49,26 @@ export function gapMouth(g: FenceGap, sidewalk: number): Footprint {
 }
 
 /** A spot for something `hx` × `hz` inside `area`, clear of `taken`; null after a few tries. */
-function spot(area: Rect, hx: number, hz: number, yaw: number, taken: Footprint[], rng: Rng, tries = 30): Footprint | null {
+function spot(area: Rect, hx: number, hz: number, yaw: number, taken: FootprintIndex, rng: Rng, tries = 30): Footprint | null {
   for (let k = 0; k < tries; k++) {
     const fp: Footprint = {
       x: area.x + rng.range(-1, 1) * Math.max(0, area.w / 2 - Math.max(hx, hz)),
       z: area.z + rng.range(-1, 1) * Math.max(0, area.d / 2 - Math.max(hx, hz)),
       hx, hz, yaw,
     };
-    if (!taken.some((t) => footprintsOverlap(fp, t))) return fp;
+    if (!taken.hits(fp)) return fp;
   }
   return null;
 }
 
 /** Place a prop of a kind in `area`, clear of `taken` (and taking its place). */
-export function put(kind: PropKind, area: Rect, taken: Footprint[], rng: Rng, extra: Partial<StreetProp> = {}, yaw = rng.range(0, Math.PI * 2)): StreetProp | null {
+export function put(kind: PropKind, area: Rect, taken: FootprintIndex, rng: Rng, extra: Partial<StreetProp> = {}, yaw = rng.range(0, Math.PI * 2)): StreetProp | null {
   const probe: StreetProp = { kind, x: 0, z: 0, yaw, ...extra };
   const fp = propFootprint(probe, 0.3);
   const at = spot(area, fp.hx, fp.hz, yaw, taken, rng);
   if (!at) return null;
   const p = { ...probe, x: at.x, z: at.z };
-  taken.push(propFootprint(p, 0.3));
+  taken.add(propFootprint(p, 0.3));
   return p;
 }
 
@@ -150,17 +150,17 @@ export function dressFields(
     // The ways in through the gates; across a hay field they run right through (between the bales).
     const deep = f.crop === 'hay' ? Math.max(f.rect.w, f.rect.d) : FF.gapLane;
     const lanes = (gaps[f.block] ?? []).map((g) => gapLane(g, deep));
-    const busy: Footprint[] = [...taken, ...lanes];
+    const busy = new FootprintIndex([...taken, ...lanes]);
     const inner = shrink(f.rect, FF.edgeClear);
     // Scarecrows stand in the corn, wheat and pumpkins.
     const scarecrows = f.crop === 'corn' || f.crop === 'wheat' || f.crop === 'pumpkin' ? rng.int(FF.scarecrows[0], FF.scarecrows[1]) : 0;
     // A maze's paths stay clear too (its scarecrow stands in a path, where it can be seen).
-    if (f.maze) busy.push(...f.maze.map((r) => rectFootprint(r)));
+    for (const r of f.maze ?? []) busy.add(rectFootprint(r));
     switch (f.crop) {
       case 'orchard': {
-        const trees = orchardTrees(f.rect, pears, rng).filter((t) => !busy.some((b) => footprintsOverlap(propFootprint(t, 0.5), b)));
+        const trees = orchardTrees(f.rect, pears, rng).filter((t) => !busy.hits(propFootprint(t, 0.5)));
         out.props.push(...trees);
-        busy.push(...trees.map((t) => propFootprint(t, 1.2)));
+        for (const t of trees) busy.add(propFootprint(t, 1.2));
         for (let k = rng.int(FF.fruitBins[0], FF.fruitBins[1]); k > 0; k--) {
           const p = put('fruitBin', inner, busy, rng);
           if (p) out.props.push(p);
@@ -194,18 +194,18 @@ export function dressFields(
             const x = f.rect.x + (along ? len : off) + rng.range(-1.5, 1.5), z = f.rect.z + (along ? off : len) + rng.range(-1.5, 1.5);
             const yaw = rng.range(0, Math.PI);
             const fp: Footprint = { x, z, hx: FF.baleLength / 2, hz: FF.baleRadius, yaw };
-            if (busy.some((b) => footprintsOverlap(fp, { ...b, hx: b.hx + 0.6, hz: b.hz + 0.6 }))) continue;
+            if (busy.hits({ ...fp, hx: fp.hx + 0.6, hz: fp.hz + 0.6 })) continue;
             const data: RoundBaleData = { r: FF.baleRadius, len: FF.baleLength };
             out.structures.push({ kind: 'roundBale', x, z, yaw, footprints: [fp], data: data as unknown as Record<string, unknown> });
             out.solids.push(fp);
-            busy.push({ ...fp, hx: fp.hx + FF.baleGap, hz: fp.hz + FF.baleGap });
+            busy.add({ ...fp, hx: fp.hx + FF.baleGap, hz: fp.hz + FF.baleGap });
           }
         }
         for (let k = rng.int(FF.baleStacks[0], FF.baleStacks[1]); k > 0; k--) {
           const at = spot(inner, 1.8, 1.2, 0, busy, rng);
           if (!at) continue;
           for (const [dx, dz] of [[-0.65, -0.65], [0.65, -0.65], [-0.65, 0.65], [0.65, 0.65], [1.95, 0]]) out.props.push({ kind: 'haybale', x: at.x + dx, z: at.z + dz, yaw: 0 });
-          busy.push({ ...at, hx: at.hx + 0.5, hz: at.hz + 0.5 });
+          busy.add({ ...at, hx: at.hx + 0.5, hz: at.hz + 0.5 });
         }
         const wagon = put('hayWagon', inner, busy, rng);
         if (wagon) out.props.push(wagon);
@@ -225,11 +225,11 @@ export function dressFields(
             const body: Footprint = { ...c, hx: FF.combine[0] / 2, hz: FF.combine[1] / 2, yaw };
             const off = f.rowsAlongX ? { x: 0, z: (c.z > f.rect.z ? -1 : 1) * 5 } : { x: (c.x > f.rect.x ? -1 : 1) * 5, z: 0 };
             const trailer: Footprint = { x: c.x + off.x, z: c.z + off.z, hx: FF.header[0] / 2, hz: FF.header[1] / 2, yaw: yaw + Math.PI / 2 };
-            if ([body, trailer].some((fp) => busy.some((b) => footprintsOverlap(fp, b)))) continue;
+            if (busy.hits(body) || busy.hits(trailer)) continue;
             out.structures.push({ kind: 'combine', ...c, yaw, footprints: [body] });
             out.structures.push({ kind: 'headerTrailer', x: trailer.x, z: trailer.z, yaw: trailer.yaw, footprints: [trailer] });
             out.solids.push(body, trailer);
-            busy.push(...[body, trailer].map((fp) => ({ ...fp, hx: fp.hx + 2, hz: fp.hz + 2 })));
+            for (const fp of [body, trailer]) busy.add({ ...fp, hx: fp.hx + 2, hz: fp.hz + 2 });
             combine = true;
             break;
           }
@@ -245,10 +245,10 @@ export function dressFields(
     for (const g of gaps[f.block] ?? []) {
       if (rng.next() > FF.gateClutter) continue;
       const side = rng.next() < 0.5 ? -1 : 1;
-      const along = FF.gapWidth / 2 + 1.2;
+      const along = FF.gapWidth / 2 + 1.8; // just past the way in
       const x = g.x - g.nx * 1.4 + (g.nx ? 0 : side * along), z = g.z - g.nz * 1.4 + (g.nz ? 0 : side * along);
       const p: StreetProp = { kind: rng.next() < 0.6 ? 'haybale' : 'crates', x, z, yaw: rng.range(-0.3, 0.3) };
-      if (!busy.some((b) => footprintsOverlap(propFootprint(p), b) && !lanes.includes(b))) out.props.push(p);
+      if (!busy.hits(propFootprint(p))) out.props.push(p);
     }
   }
   return out;
@@ -257,7 +257,7 @@ export function dressFields(
 /** The farmyard's clutter and equipment, in the gaps round the buildings. */
 export function yardClutter(yard: Rect, shed: Building | undefined, taken: Footprint[], rng: Rng): StreetProp[] {
   const out: StreetProp[] = [];
-  const busy = [...taken];
+  const busy = new FootprintIndex(taken);
   const area = shrink(yard, 1.5);
   const add = (kind: PropKind, extra: Partial<StreetProp> = {}, where = area, yaw?: number) => {
     const p = put(kind, where, busy, rng, extra, yaw);

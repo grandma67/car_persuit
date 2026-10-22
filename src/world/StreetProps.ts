@@ -148,6 +148,9 @@ export function propFootprint(p: StreetProp, margin = 0): Footprint {
 
 /** Separating-axis test for two oriented rectangles. */
 export function footprintsOverlap(a: Footprint, b: Footprint): boolean {
+  // Far apart (beyond both bounding circles): no need for the axes. Same answer, much cheaper.
+  const reach = Math.hypot(a.hx, a.hz) + Math.hypot(b.hx, b.hz);
+  if ((b.x - a.x) ** 2 + (b.z - a.z) ** 2 > reach * reach) return false;
   const axes = (f: Footprint) => {
     const c = Math.cos(f.yaw);
     const s = Math.sin(f.yaw);
@@ -167,6 +170,35 @@ export function footprintsOverlap(a: Footprint, b: Footprint): boolean {
     if (dist > ra + rb) return false;
   }
   return true;
+}
+
+/** Footprints bucketed on a grid, for "does this overlap any of them?" over many (same answers as a scan). */
+export class FootprintIndex {
+  private cells = new Map<number, Footprint[]>();
+  constructor(items: Footprint[] = [], private size = 8) {
+    for (const f of items) this.add(f);
+  }
+
+  private each(f: Footprint, fn: (key: number) => boolean | void): boolean {
+    const r = Math.hypot(f.hx, f.hz);
+    const i0 = Math.floor((f.x - r) / this.size), i1 = Math.floor((f.x + r) / this.size);
+    const j0 = Math.floor((f.z - r) / this.size), j1 = Math.floor((f.z + r) / this.size);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (fn((i + 4096) * 8192 + (j + 4096))) return true;
+    return false;
+  }
+
+  add(f: Footprint): void {
+    this.each(f, (k) => {
+      const list = this.cells.get(k);
+      if (list) list.push(f);
+      else this.cells.set(k, [f]);
+    });
+  }
+
+  /** Does `f` overlap anything added? */
+  hits(f: Footprint): boolean {
+    return this.each(f, (k) => this.cells.get(k)?.some((o) => footprintsOverlap(f, o)) ?? false);
+  }
 }
 
 export function rectFootprint(r: Rect): Footprint {

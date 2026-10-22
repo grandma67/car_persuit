@@ -91,9 +91,9 @@ const radius = (kind: LandmarkKind) => LANDMARK_RADIUS[kind];
  * and inside the sidewalk line. A piece that won't fit in the yard tries the field corners next to
  * it (fields are open ground). Silos are concrete or blue steel per farm.
  */
-export function yardPieces(yard: Rect, fields: Rect[], buildings: Building[], rng: Rng): Landmark[] {
+export function yardPieces(yard: Rect, fields: Rect[], buildings: Building[], avoid: Footprint[], rng: Rng): Landmark[] {
   const out: Landmark[] = [];
-  const taken: Footprint[] = buildings.map((b) => rectFootprint({ ...b, w: b.w + FG.pieceGap * 2, d: b.d + FG.pieceGap * 2 }));
+  const taken: Footprint[] = [...buildings.map((b) => rectFootprint({ ...b, w: b.w + FG.pieceGap * 2, d: b.d + FG.pieceGap * 2 })), ...avoid];
   const fits = (fp: Footprint, area: Rect) =>
     Math.abs(fp.x - area.x) + fp.hx <= area.w / 2 && Math.abs(fp.z - area.z) + fp.hz <= area.d / 2 && !taken.some((t) => footprintsOverlap(fp, t));
   const steel = rng.next() < 0.5 ? 1 : 0;

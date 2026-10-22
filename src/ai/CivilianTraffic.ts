@@ -16,6 +16,7 @@ import {
   PICKUP_SPEC,
   BUS_SPEC,
   BOX_TRUCK_SPEC,
+  TRACTOR_SPEC,
   RAMP_TRUCK_SPEC,
   type VehicleSpec,
 } from '../vehicles/VehicleSpecs';
@@ -49,9 +50,11 @@ const CIVILIAN_TRACTION = 6;
 const COLORS = [0xc9ccd1, 0xf0f0ee, 0x1c1e22, 0x24345a, 0x6e1a1f, 0x5b6068, 0xb8a98c, 0x2f4a3a, 0x8a8f96, 0x3a5f8a];
 const BUS_COLORS = [0xd8a21c, 0xc0392b, 0x2a6fb0, 0x2e8b57];
 const TRUCK_COLORS = [0xf0f0ee, 0x24345a, 0x6e1a1f, 0x2f4a3a];
+const TRACTOR_COLORS = [0x2f7a3a, 0xc8302a, 0x2f5a9a, 0xd8a02a];
 
 // Weighted mix of civilian vehicles: mostly cars, a fair few vans/pickups, the odd bus and truck.
-const MIX: { weight: number; spec: VehicleSpec; colors: number[] }[] = [
+// `local`: only where a district asks for it by name (the Farm's tractors), never elsewhere.
+const MIX: { weight: number; spec: VehicleSpec; colors: number[]; local?: boolean }[] = [
   { weight: 34, spec: { ...PLAYER_SPEC, body: 'sedan' }, colors: COLORS },
   { weight: 16, spec: { ...COP_SUV_SPEC, livery: undefined, maxHealth: undefined, engineForce: 5000 }, colors: COLORS },
   { weight: 10, spec: { ...PLAYER_SPEC, body: 'sports' }, colors: COLORS },
@@ -59,15 +62,17 @@ const MIX: { weight: number; spec: VehicleSpec; colors: number[] }[] = [
   { weight: 10, spec: PICKUP_SPEC, colors: COLORS },
   { weight: 8, spec: BUS_SPEC, colors: BUS_COLORS },
   { weight: 10, spec: BOX_TRUCK_SPEC, colors: TRUCK_COLORS },
+  { weight: 5, spec: TRACTOR_SPEC, colors: TRACTOR_COLORS, local: true },
 ];
-const MIX_TOTAL = MIX.reduce((s, m) => s + m.weight, 0);
+const MIX_TOTAL = MIX.reduce((s, m) => s + (m.local ? 0 : m.weight), 0);
 
 const isHeavy = (spec: VehicleSpec) => spec.body === 'bus' || spec.body === 'boxtruck' || spec.body === 'ramptruck';
 
 /** A civilian from the mix; inside a district, its weights (and no buses or trucks where it bans them). */
 function civilianSpec(rng: Rng, district?: DistrictTraffic): VehicleSpec {
   const weight = (m: (typeof MIX)[number]) =>
-    !district ? m.weight : !district.heavy && isHeavy(m.spec) ? 0 : m.weight * (district.weights?.[m.spec.name] ?? 1);
+    m.local ? m.weight * (district?.weights?.[m.spec.name] ?? 0)
+    : !district ? m.weight : !district.heavy && isHeavy(m.spec) ? 0 : m.weight * (district.weights?.[m.spec.name] ?? 1);
   const total = district ? MIX.reduce((sum, m) => sum + weight(m), 0) : MIX_TOTAL;
   let roll = rng.next() * total;
   const pick = MIX.find((m) => (roll -= weight(m)) < 0) ?? MIX[0];
@@ -293,7 +298,9 @@ export class CivilianTraffic {
     const node = zones?.size ? this.weightedPick(candidates, (n) => zones.get(n.id)?.density ?? 1) : this.rng.pick(candidates);
     const to = g.nodes[this.rng.pick(node.neighbors)];
     // Inside a district (or turning into one), its own mix.
-    const district = zones?.get(node.id) ?? zones?.get(to.id);
+    // Along a district's perimeter streets, its edge mix (the Farm's tractors out on the roads round it).
+    const edges = this.districts?.edges;
+    const district = zones?.get(node.id) ?? zones?.get(to.id) ?? (edges?.has(to.id) ? edges.get(node.id) : undefined);
     // Start in our lane (right, or left in an English city) just past the junction, heading along the road.
     const len = Math.hypot(to.x - node.x, to.z - node.z);
     const dx = (to.x - node.x) / len;

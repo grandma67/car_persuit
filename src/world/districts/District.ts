@@ -121,6 +121,8 @@ export interface DistrictTraffic {
   density: number; // spawn density multiplier inside
   heavy: boolean; // false: no buses or trucks inside
   weights?: Partial<Record<string, number>>; // spawn weight multiplier per vehicle spec name inside
+  /** Spawn weights on the perimeter streets (the mix there is the city's otherwise): the Farm's tractors. */
+  edge?: Partial<Record<string, number>>;
 }
 
 export interface DistrictDef {

@@ -6,7 +6,7 @@ import type { Rng } from '../../core/Rng';
 import { FARM } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import { footprintsOverlap, propFootprint, rectFootprint, type PropKind, type StreetProp } from '../StreetProps';
+import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type PropKind, type StreetProp } from '../StreetProps';
 import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type Gate, type LotLook } from './District';
 import { inDistrict, isJunctionControl, kerbClutter } from './apply';
 import { cattleGrid, fieldFence, ranchGateAt, yardPieces } from './FarmGate';
@@ -196,7 +196,7 @@ export const FARM_DEF: DistrictDef = {
   drop,
   swap: { lamp: 'woodLamp' },
   keepZebras: false,
-  traffic: { density: FARM.density, heavy: true, weights: { Pickup: FARM.pickupWeight, Tractor: FARM.tractorWeight } },
+  traffic: { density: FARM.density, heavy: true, weights: { Pickup: FARM.pickupWeight, Tractor: FARM.tractorWeight }, edge: { Tractor: FARM.tractorEdge } },
   copSpawnSkip: FARM.copSpawnSkip,
   roadblockGates: true,
   mapColor: 0xd8b04a,
@@ -236,14 +236,15 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const yard = city.blocks[farmyardBlock(q)].rect;
   const near = [...fields].sort((a, b) => Math.hypot(a.rect.x - yard.x, a.rect.z - yard.z) - Math.hypot(b.rect.x - yard.x, b.rect.z - yard.z));
   const buildings = city.buildings.filter((b) => b.district === 'farm' && inRect(q.bounds, b));
-  out.landmarks.push(...yardPieces(shrink(yard, sw), near.map((f) => f.rect), buildings, rng));
-  // Split-rail fences round the fields.
+  // Split-rail fences round the fields (first: the pieces keep out of their gates' lanes).
   const gaps: Record<number, FenceGap[]> = {};
   for (const f of fields) {
     const fence = fieldFence(f.rect, city.blocks[f.block].rect, q, city);
     props.push(...fence.props);
     gaps[f.block] = fence.gaps;
   }
+  const lanes = Object.values(gaps).flat().map((g) => gapLane(g));
+  out.landmarks.push(...yardPieces(shrink(yard, sw), near.map((f) => f.rect), buildings, lanes, rng));
   // Sometimes a maze cut through one corn field.
   const corn = fields.filter((f) => f.crop === 'corn');
   if (rng.next() < FARM.mazeChance) {
@@ -264,7 +265,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   if (!props.some((p) => p.kind === 'parkedTractor')) {
     const busy = [...yardFps, ...out.solids, ...props.map((p) => propFootprint(p, 0.3)), ...Object.values(gaps).flat().map((g) => gapLane(g))];
     for (const f of near) {
-      const p = put('parkedTractor', shrink(f.rect, 2.5), busy, rng, { color: 0x2f7a3a });
+      const p = put('parkedTractor', shrink(f.rect, 2.5), new FootprintIndex(busy), rng, { color: 0x2f7a3a });
       if (p) {
         props.push(p);
         break;
@@ -280,8 +281,8 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const controls = city.streetProps.filter((p) => inDistrict(q, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
   const pieces = out.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }));
   const kept = clearOf(props, [...out.solids, ...pieces, ...controls, ...buildings.map(rectFootprint)]);
-  const blocking = [...kept.map((p) => propFootprint(p, 0.1)), ...out.solids, ...pieces];
-  city.streetProps = city.streetProps.filter((p) => !inDistrict(q, p) || isJunctionControl(p) || !blocking.some((k) => footprintsOverlap(propFootprint(p), k)));
+  const blocking = new FootprintIndex([...kept.map((p) => propFootprint(p, 0.1)), ...out.solids, ...pieces]);
+  city.streetProps = city.streetProps.filter((p) => !inDistrict(q, p) || isJunctionControl(p) || !blocking.hits(propFootprint(p)));
   out.props = kept;
   out.extra = { fields, gaps };
   return out;

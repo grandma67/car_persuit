@@ -120,6 +120,13 @@ export class Vehicle {
   readonly knock = [0, 0];
   private lastYawRate = 0;
   private gripScale = 1; // road grip (wet, ice)
+  /** On soft ground (a field) this step: less grip, more rolling drag. */
+  onSoft = false;
+  /**
+   * Soft ground for every car in the city (the Farm's fields), set once per city by the game: where
+   * it is, the tyre grip multiplier there and the extra rolling drag (m/s²). Null: none.
+   */
+  static softGround: { at: (x: number, z: number) => boolean; grip: number; drag: number } | null = null;
   // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
   private lastVel = new THREE.Vector3();
   private impact = 0;
@@ -174,14 +181,17 @@ export class Vehicle {
     this.controller.setIndexForwardAxis = 2;
     // Wheel order: FL, FR, RL, RR (+X is the car's left side when facing +Z).
     const wy = spec.wheelY ?? 0;
+    // Bigger rear wheels mount higher by the difference, so the chassis rides level.
+    const rearR = spec.rearWheelRadius ?? spec.wheelRadius;
+    const ry = wy + rearR - spec.wheelRadius;
     const wheelPositions = [
       { x: spec.wheelX, y: wy, z: spec.wheelZ },
       { x: -spec.wheelX, y: wy, z: spec.wheelZ },
-      { x: spec.wheelX, y: wy, z: -spec.wheelZ },
-      { x: -spec.wheelX, y: wy, z: -spec.wheelZ },
+      { x: spec.wheelX, y: ry, z: -spec.wheelZ },
+      { x: -spec.wheelX, y: ry, z: -spec.wheelZ },
     ];
     wheelPositions.forEach((p, i) => {
-      this.controller.addWheel(p, { x: 0, y: -1, z: 0 }, { x: -1, y: 0, z: 0 }, spec.suspensionRestLength, spec.wheelRadius);
+      this.controller.addWheel(p, { x: 0, y: -1, z: 0 }, { x: -1, y: 0, z: 0 }, spec.suspensionRestLength, i >= 2 ? rearR : spec.wheelRadius);
       this.controller.setWheelSuspensionStiffness(i, spec.suspensionStiffness);
       this.controller.setWheelSuspensionCompression(i, 0.83 * 2 * Math.sqrt(spec.suspensionStiffness) * 0.3);
       this.controller.setWheelSuspensionRelaxation(i, 0.88 * 2 * Math.sqrt(spec.suspensionStiffness) * 0.3);
@@ -295,6 +305,7 @@ export class Vehicle {
       c.setWheelSideFrictionStiffness(i, rear ? rearSide * knockedRear : s.sideFriction * knockedFront);
     }
 
+    this.softDrag(dt);
     c.updateVehicle(dt, undefined, CAR_GROUPS);
     if (drifting && speed > 0) this.driftAssist(input, dt);
     this.lastInput = input;
@@ -612,7 +623,29 @@ export class Vehicle {
   /** Scale tyre grip (wet or icy roads). */
   setGrip(scale: number): void {
     this.gripScale = scale;
-    for (let i = 0; i < 4; i++) this.controller.setWheelFrictionSlip(i, this.spec.frictionSlip * scale);
+    this.applyFrictionSlip();
+  }
+
+  private applyFrictionSlip(): void {
+    const soft = this.onSoft && Vehicle.softGround ? Vehicle.softGround.grip : 1;
+    for (let i = 0; i < 4; i++) this.controller.setWheelFrictionSlip(i, this.spec.frictionSlip * this.gripScale * soft);
+  }
+
+  /** On soft ground: the tyres' grip drops and the ground drags at the wheels (on the ground only). */
+  private softDrag(dt: number): void {
+    const g = Vehicle.softGround;
+    const p = this.body.translation();
+    const soft = !!g && g.at(p.x, p.z);
+    if (soft !== this.onSoft) {
+      this.onSoft = soft;
+      this.applyFrictionSlip();
+    }
+    if (!soft || !this.grounded) return;
+    const v = this.body.linvel();
+    const s = Math.hypot(v.x, v.z);
+    if (s < 0.1) return;
+    const dv = Math.min(s, g!.drag * dt) * this.body.mass();
+    this.body.applyImpulse({ x: (-v.x / s) * dv, y: 0, z: (-v.z / s) * dv }, true);
   }
 
   /**

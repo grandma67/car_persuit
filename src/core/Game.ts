@@ -57,7 +57,7 @@ import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { TiltInput, detectTilt, requestTiltPermission } from './tilt';
 import { getPref, setPref } from './idbPrefs';
-import { COP_RAM, DAMAGE } from '../gameplay/balance';
+import { COP_RAM, DAMAGE, FARM } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
 
 const FIXED_DT = 1 / 60;
@@ -234,8 +234,11 @@ export class Game {
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
     this.player.gearShifts = true;
     this.player.headlights = Math.max({ day: 0, afternoon: 0.45, night: 1 }[time.name], weather === 'clear' ? 0 : 0.45);
+    // The Farm's fields: soft ground for every car (less grip, more drag).
+    const soft = this.city.districts.flatMap((q) => q.dressing.soft ?? []);
+    Vehicle.softGround = soft.length ? { at: (x, z) => soft.some((r) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2), grip: FARM.fieldGrip, drag: FARM.fieldDrag } : null;
     this.player.setGrip(playerGrip(climate, weather));
-    this.effects = new Effects(this.scene, climate.spray);
+    this.effects = new Effects(this.scene, climate.spray, weather === 'rain');
     if (weather !== 'clear') {
       this.precipitation = new Precipitation(weather, mobile ? 0.5 : 1);
       this.scene.add(this.precipitation.object);
