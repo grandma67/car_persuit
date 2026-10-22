@@ -164,7 +164,7 @@ export const HARBOR_DEF: DistrictDef = {
   salt: 0x4a2b0e,
   chance: HARBOR.chance,
   site: 'coast',
-  shapes: [[2, 2], [3, 3], [4, 4]],
+  shapes: [[2, 2], [2, 3], [2, 4], [3, 3], [3, 4], [4, 4]],
   rings: ['industrial', 'residential'],
   minShare: { industrial: 0.5 },
   gates: 'all',

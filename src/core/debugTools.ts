@@ -13,11 +13,18 @@ const CAMERA_BACK = 7; // the chase camera sits about this far behind the car
 /** Only what the helpers need from the (private) game internals. */
 interface Internals {
   city: CityData;
-  player: { teleport(x: number, y: number, z: number, yaw: number, speed?: number): void; position: P & { y: number }; speed: number };
+  player: {
+    teleport(x: number, y: number, z: number, yaw: number, speed?: number): void;
+    position: P & { y: number };
+    speed: number;
+    body: { rotation(): { x: number; y: number; z: number; w: number } };
+  };
+  policeOff: boolean;
+  director: { cops: { vehicle: { position: P } }[] };
   ground: (x: number, z: number) => number;
   renderer: { info: { programs: unknown[] | null; render: { calls: number; triangles: number } } };
   overview: boolean;
-  overviewCamera(): { position: { set(x: number, y: number, z: number): void }; lookAt(x: number, y: number, z: number): void };
+  overviewCamera(): { position: { set(x: number, y: number, z: number): void }; lookAt(x: number, y: number, z: number): void; near: number; updateProjectionMatrix(): void };
   scene: { traverse(f: (o: { isMesh?: boolean; isInstancedMesh?: boolean; geometry?: { index: { count: number } | null; attributes: { position: { count: number } } } }) => void): void };
 }
 
@@ -53,6 +60,7 @@ export function debugTools(game: Game) {
     return true;
   };
   const at = (t: P | [number, number]): P => (Array.isArray(t) ? { x: t[0], z: t[1] } : t);
+  let aerialUsed = false;
 
   const api = {
     sleep,
@@ -91,13 +99,69 @@ export function debugTools(game: Game) {
      */
     async aerial(target: P | [number, number] | false, { dist = 90, height = 60, from = Math.PI * 1.25, wait = 600 } = {}) {
       const on = target !== false;
+      if (on) aerialUsed = true;
       if (g.overview !== on) await api.hold('KeyC', 50);
       if (!on) return;
       const t = at(target);
       const cam = g.overviewCamera();
+      // A near plane of 1 m: at 10 m (the overview's own) a roof close to the lens is cut into
+      // stray triangles that look like broken geometry.
+      cam.near = 1;
+      cam.updateProjectionMatrix();
       cam.position.set(t.x + Math.sin(from) * dist, g.ground(t.x, t.z) + height, t.z + Math.cos(from) * dist);
       cam.lookAt(t.x, g.ground(t.x, t.z) + 8, t.z);
       await sleep(wait);
+    },
+    /** Police on or off (O toggles; this sets it). */
+    async police(on: boolean) {
+      if (g.policeOff === on) await api.hold('KeyO', 50);
+    },
+    /** The nearest road centre-line point (or junction) to (x, z): a safe place to start a drive. */
+    road(x: number, z: number): P {
+      return roads().reduce((best, p) => (Math.hypot(p.x - x, p.z - z) < Math.hypot(best.x - x, best.z - z) ? p : best));
+    },
+    /**
+     * Everything within r m of (x, z): district structures and solids, landmarks, street props and
+     * buildings, nearest first. For "what did the car hit?".
+     */
+    near(x: number, z: number, r = 6) {
+      const c = city();
+      const d = (p: P) => Math.round(Math.hypot(p.x - x, p.z - z) * 10) / 10;
+      const out: { what: string; d: number; x: number; z: number }[] = [];
+      for (const q of c.districts) {
+        for (const s of q.dressing.structures) for (const f of s.footprints) if (Math.hypot(f.x - x, f.z - z) < r + Math.hypot(f.hx, f.hz)) out.push({ what: `${q.kind}:${s.kind}`, d: d(f), x: f.x, z: f.z });
+      }
+      for (const l of c.landmarks) if (d(l) < r + l.radius) out.push({ what: `landmark:${l.kind}`, d: d(l), x: l.x, z: l.z });
+      for (const p of c.streetProps) if (d(p) < r) out.push({ what: `prop:${p.kind}${p.style ? '-' + p.style : ''}`, d: d(p), x: p.x, z: p.z });
+      for (const b of c.buildings) if (inRect(b, { x, z }, r)) out.push({ what: `building:${b.lot ?? b.zone}`, d: d(b), x: b.x, z: b.z });
+      return out.sort((a, b) => a.d - b.d).slice(0, 20);
+    },
+    /**
+     * Drive: put the car on the road nearest `from` (never off it: a start on a sidewalk or in a
+     * lot snags kerbs and clutter), heading `yaw`, at `speed`, then hold W for `ms`, sampling every
+     * `every` ms. Stops early on a hit (speed halves in one sample) and reports what was there.
+     * Police are switched off unless `police`.
+     */
+    async drive({ from, yaw, speed = 15, ms = 6000, every = 250, police = false, snap = true }: { from: P | [number, number]; yaw: number; speed?: number; ms?: number; every?: number; police?: boolean; snap?: boolean }) {
+      await api.police(police);
+      const start = snap ? api.road(at(from).x, at(from).z) : at(from);
+      api.place(start.x, start.z, yaw, speed);
+      const samples: { x: number; z: number; speed: number; tilt: number }[] = [];
+      let hit: { at: P; speedBefore: number; near: ReturnType<typeof api.near> } | null = null;
+      for (let t = 0; t < ms; t += every) {
+        await api.hold('KeyW', every);
+        const p = g.player.position;
+        const r = g.player.body.rotation();
+        const tilt = Math.round((Math.asin(Math.min(1, 2 * Math.hypot(r.x, r.z) * Math.abs(r.w))) * 180) / Math.PI);
+        const s = { x: Math.round(p.x), z: Math.round(p.z), speed: +g.player.speed.toFixed(1), tilt };
+        const prev = samples[samples.length - 1];
+        samples.push(s);
+        if (prev && prev.speed > 6 && s.speed < prev.speed / 2) {
+          hit = { at: { x: s.x, z: s.z }, speedBefore: prev.speed, near: api.near(p.x, p.z, 5) };
+          break;
+        }
+      }
+      return { start, samples: samples.map((s) => `${s.x},${s.z} ${s.speed}m/s${s.tilt > 15 ? ` tilt${s.tilt}` : ''}`).join(' | '), hit };
     },
     /** Line up `back` m outside a district gate, facing in (optionally moving). */
     async gate(i = 0, { back = 30, speed = 0, lateral = 0, kind = undefined as DistrictKind | undefined, wait = 1200 } = {}) {
@@ -145,7 +209,10 @@ export function debugTools(game: Game) {
         if (o.isMesh && !o.isInstancedMesh && o.geometry) staticTris += (o.geometry.index?.count ?? o.geometry.attributes.position.count) / 3;
       });
       const { calls, triangles } = g.renderer.info.render;
-      return { programs: g.renderer.info.programs?.length ?? 0, calls, triangles, staticTris: Math.round(staticTris) };
+      // The overview camera turns the fog off, which recompiles every material: programs read high
+      // for the rest of the run. Measure before any aerial().
+      const warn = aerialUsed ? 'aerial() ran: fog was off, programs not comparable' : undefined;
+      return { programs: g.renderer.info.programs?.length ?? 0, calls, triangles, staticTris: Math.round(staticTris), ...(warn ? { warn } : {}) };
     },
     /** The car's position and speed. */
     car: () => ({ x: Math.round(g.player.position.x), z: Math.round(g.player.position.z), speed: +g.player.speed.toFixed(1) }),

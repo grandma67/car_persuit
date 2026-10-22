@@ -11,6 +11,11 @@ destinations, cops, civilian traffic. `PLAN.md` = the game. `PLAN_DISTRICTS.md`,
   `npm run t -- src/world/districts`, `-t "name"`. Never pipe vitest through `grep`/`tail` without a limit.
 - District numbers: `npm run stats -- oldtown [seeds=100]` (placement rate forced/natural, shapes,
   gates, avg lots/landmarks/props/structures, gen ms on vs off)
+- Seeds to look at: `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`
+  (`name:N` at least, `name=N` exactly; counts structures, landmarks, props, ground patches, lots,
+  roles; `flat` = no hill/canals, for physics sims). Never write a search script for this.
+- Building budget: `npm run budget -- harbor [seeds=20]` (walls + roofs triangles, facade styles
+  used, gen + geometry ms on vs off)
 - One-off TS script: `node scripts/run-ts.mjs <file.ts> [args]` (default export gets args). Use for
   numbers instead of scratch tests (vitest swallows `console.log`).
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>`; see `RAPIER.md` (stay on 0.18.2).
@@ -35,9 +40,37 @@ any number of times, so **one run per milestone with all its views**. Eval file 
 
 `dbg`: `district(kind?)`, `place(x,z,yaw,speed)`, `view(point,{dist})` (picks a clear road spot; never
 place the car by hand), `gate(i,{back,speed,lateral})`, `find(kind)` (landmark/structure/prop/lot),
-`hold(code,ms)`, `stars(n)`, `fps(ms)`, `stats()` (programs, calls, triangles, static triangles), `car()`.
+`hold(code,ms)`, `stars(n)`, `fps(ms)`, `stats()` (programs, calls, triangles, static triangles), `car()`,
+`police(on)`, `road(x,z)` (nearest road centre point), `near(x,z,r)` (what stands there, nearest first),
+`drive({from, yaw, speed, ms, police, snap})` (starts on the nearest road, holds W, samples position /
+speed / tilt, stops at a hit and lists what was there), `aerial(point,{dist,height,from})` / `aerial(false)`
+(overview camera aimed at a point: whole cranes, roofs, yards).
+
+**Milestone tour**: `--query "seed=N&debug&<kind>=1" --eval-file scripts/evals/district-tour.js`
+(stats + FPS first, then a road and an aerial shot of each structure kind and an overview;
+`&tour=N`, `&tourKinds=a,b`). Start there; write a custom eval only for drives and chases.
 Output JSON: `val`, `shots`, console errors/warnings (Rapier deprecation filtered). Read only needed
 screenshots. Compare with main: `git worktree add <scratch>/mainwt main`, symlink `node_modules`, `--port 5299`.
+
+**Measuring and debugging pitfalls** (each cost runs in the Harbor):
+- Programs: measure `dbg.stats()` **before** any `aerial()` (the overview turns fog off and every
+  material recompiles: 35 read as 58) and before a drive breaks props (a first break can add one).
+  `stats()` warns once `aerial()` has run.
+- Stray triangles or holes close to an aerial camera are near-plane clipping, not geometry: back the
+  camera off before chasing them (`aerial()` sets the near plane to 1 m).
+- Drives start on a road (`dbg.drive` snaps there). A start 25 m past a block edge lands on the next
+  block's sidewalk or lot, among kerb clutter, and the car pitches over from the first frame.
+- A drive "stopping" is usually traffic, a roadblock at 5★ or a building past the end of the line:
+  check `hit.near` and a shot before suspecting the district. Use `police(false)` unless testing cops.
+- Long breakable props become long debris: a 7 m boom arm thrown ahead jammed a straddle carrier's
+  gap like a wall. Give long or wide breakables a small collider (post only) or check the gaps after.
+- Parked vehicles: never `buildCarMesh` in a district (its two SpotLights change the light count and
+  recompile everything; `paint: 'work'` is a new program). Merge a vertex-coloured body instead.
+- Instanced repeats: tint with `setColorAt` on the props' material settings, or textures on the sign
+  faces' settings (map + emissive map, no vertex/instance colours); never both on one material.
+- A district's search for buildings "on the street" must allow its lot gap: Chinatown's
+  `streetMask` wants faces within 1 m of the sidewalk line, Harbor lots stand 2–4 m back (`frontMask`).
+- Read screenshots one at a time and only the ones that answer a question; aerial shots answer more.
 
 ## Working rules (from the user)
 
