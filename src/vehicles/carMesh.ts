@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
+import { RAMP, TRACTOR_CAB, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 
 export interface CarMesh {
   root: THREE.Group;
@@ -102,9 +102,9 @@ const templates = new Map<string, CarMesh>();
  * and darkens on its own.
  */
 export function buildCarMesh(spec: VehicleSpec): CarMesh {
-  const { body, halfExtents, wheelRadius, tandemRear, livery, kerb, paint } = spec;
+  const { body, halfExtents, wheelRadius, rearWheelRadius, tandemRear, livery, kerb, paint } = spec;
   const door = body === 'bus' ? (kerb === 'left' ? 'left' : 'right') : null; // the kerb side only places a bus's door
-  const key = JSON.stringify({ body, halfExtents, wheelRadius, tandemRear, livery, door, paint });
+  const key = JSON.stringify({ body, halfExtents, wheelRadius, rearWheelRadius, tandemRear, livery, door, paint });
   let template = templates.get(key);
   if (!template) templates.set(key, (template = createCarMesh(spec)));
   return cloneCarMesh(template, spec.color);
@@ -221,7 +221,7 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   const body = spec.body ?? 'sports';
   // Body: a box with the front top edge pulled down — a sharp wedge for sports cars, a gentle
   // bonnet slope for sedans/SUVs, flat-fronted for trucks and buses.
-  const noseDrop = { sports: 0.85, sedan: 0.7, suv: 0.3, truck: 0, van: 0.35, pickup: 0.3, bus: 0, boxtruck: 0, ramptruck: 0 }[body];
+  const noseDrop = { sports: 0.85, sedan: 0.7, suv: 0.3, truck: 0, van: 0.35, pickup: 0.3, bus: 0, boxtruck: 0, ramptruck: 0, tractor: 0.2 }[body];
   const tall = body === 'bus' || body === 'boxtruck';
   // The box truck is drawn as a cab plus a cargo box instead (below).
   if (body !== 'boxtruck') {
@@ -251,6 +251,7 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
     case 'pickup': roof = pickup(parts); break;
     case 'ramptruck': roof = rampTruck(parts); break;
     case 'suv': roof = suv(parts); break;
+    case 'tractor': roof = tractor(parts); break;
     case 'sedan':
     case 'sports': roof = canopyCar(parts, body); break;
   }
@@ -295,18 +296,21 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
     root.add(front, rear, repeater, fg, rg);
   }
 
-  const tireGeo = new THREE.CylinderGeometry(spec.wheelRadius, spec.wheelRadius, 0.32, 12);
-  tireGeo.rotateZ(Math.PI / 2);
-  const rimGeo = new THREE.CylinderGeometry(spec.wheelRadius * 0.6, spec.wheelRadius * 0.6, 0.34, 6);
-  rimGeo.rotateZ(Math.PI / 2);
+  const tyre = (r: number, w: number) => [
+    new THREE.CylinderGeometry(r, r, w, 12).rotateZ(Math.PI / 2),
+    new THREE.CylinderGeometry(r * 0.6, r * 0.6, w + 0.02, 6).rotateZ(Math.PI / 2),
+  ];
+  const [tireGeo, rimGeo] = tyre(spec.wheelRadius, 0.32);
+  // A tractor's tall, wide rear tyres.
+  const [rearTireGeo, rearRimGeo] = spec.rearWheelRadius ? tyre(spec.rearWheelRadius, 0.5) : [tireGeo, rimGeo];
   const wheels: CarMesh['wheels'] = [];
   for (let i = 0; i < 4; i++) {
     const pivot = new THREE.Group();
     // A tandem rear: two wheels one behind the other, either side of the physics axle between them.
     const offsets = spec.tandemRear && i >= 2 ? [spec.tandemRear / 2, -spec.tandemRear / 2] : [0];
     const spinners = offsets.map((z) => {
-      const spinner = new THREE.Mesh(tireGeo, tire);
-      spinner.add(new THREE.Mesh(rimGeo, rim));
+      const spinner = new THREE.Mesh(i >= 2 ? rearTireGeo : tireGeo, tire);
+      spinner.add(new THREE.Mesh(i >= 2 ? rearRimGeo : rimGeo, rim));
       spinner.position.z = z;
       pivot.add(spinner);
       return spinner;
@@ -539,6 +543,18 @@ function van({ hx, hy, hz, glass, box }: BodyParts): number {
   box(hx * 1.9, hy * 0.55, 0.04, glass, 0, hy * 0.5, hz - 0.15);
   for (const side of [-1, 1]) box(0.04, hy * 0.45, hz * 1.2, glass, side * (hx + 0.01), hy * 0.5, hz * 0.05);
   return hy;
+}
+
+/** A tractor: the bonnet is the body; a cab on four posts over the rear axle, glass all round, a roof, an exhaust stack. */
+function tractor({ hx, hy, hz, paint, trim, glass, box }: BodyParts): number {
+  const top = hy + TRACTOR_CAB;
+  const z0 = -hz * 0.95, z1 = -hz * 0.05; // the cab, over the rear wheels
+  for (const x of [-1, 1]) for (const z of [z0, z1]) box(0.08, TRACTOR_CAB - 0.1, 0.08, trim, x * (hx - 0.05), hy + (TRACTOR_CAB - 0.1) / 2, z);
+  box(hx * 1.85, TRACTOR_CAB - 0.35, 0.03, glass, 0, hy + (TRACTOR_CAB - 0.35) / 2 + 0.1, z1);
+  for (const x of [-1, 1]) box(0.03, TRACTOR_CAB - 0.5, z1 - z0 - 0.1, glass, x * (hx - 0.05), hy + (TRACTOR_CAB - 0.5) / 2 + 0.2, (z0 + z1) / 2);
+  box(hx * 2.1, 0.1, z1 - z0 + 0.3, paint, 0, top - 0.05, (z0 + z1) / 2);
+  box(0.1, 0.9, 0.1, trim, -hx * 0.5, hy + 0.45, hz * 0.6); // the exhaust stack
+  return top;
 }
 
 /** Cab up front, open bed with low walls behind. */

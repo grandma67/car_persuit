@@ -6,12 +6,13 @@ export interface VehicleSpec {
   livery?: 'police';
   /** Paint finish: 'gloss' (default) metallic flake under a clear coat; 'work' a duller, rougher coat for tractors and work trucks. */
   paint?: 'gloss' | 'work';
-  body?: 'sports' | 'sedan' | 'suv' | 'truck' | 'van' | 'pickup' | 'bus' | 'boxtruck' | 'ramptruck'; // mesh shape, default sports
+  body?: 'sports' | 'sedan' | 'suv' | 'truck' | 'van' | 'pickup' | 'bus' | 'boxtruck' | 'ramptruck' | 'tractor'; // mesh shape, default sports
   maxHealth?: number; // default 100
   kerb?: 'left' | 'right'; // side the doors open onto (buses), default right
   mass: number; // kg
   halfExtents: { x: number; y: number; z: number }; // chassis collider, metres
   wheelRadius: number;
+  rearWheelRadius?: number; // bigger rear wheels (a tractor's), mounted higher so the chassis stays level; default wheelRadius
   wheelX: number; // lateral offset of wheels from centre
   wheelZ: number; // longitudinal offset of axles from centre
   wheelY?: number; // height of the wheel mounts relative to the chassis centre (tall bodies), default 0
@@ -237,6 +238,27 @@ export const RAMP_TRUCK_SPEC: VehicleSpec = {
   maxSteer: 0.6, // its wheels sit outside the deck: more lock would turn them into the hull
 };
 
+// A farm tractor: slow and heavy, a short bonnet and a cab with a roof on posts, tall rear wheels.
+// Civilian traffic only, inside the Farm and on its perimeter streets (DistrictTraffic.edge).
+export const TRACTOR_SPEC: VehicleSpec = {
+  ...PLAYER_SPEC,
+  name: 'Tractor',
+  body: 'tractor',
+  paint: 'work',
+  color: 0x2f7a3a,
+  ...heavy(3400),
+  halfExtents: { x: 0.85, y: 0.55, z: 1.6 },
+  wheelRadius: 0.48,
+  rearWheelRadius: 0.82,
+  wheelX: 0.9,
+  wheelZ: 1.05,
+  wheelY: -0.1,
+  maxSpeed: 25 / 3.6,
+  maxSteer: 0.6,
+  minSteer: 0.45,
+  frictionSlip: 2.6,
+};
+
 /** Ramp truck deck and cab in chassis-local space (+Z forward), shared by physics and mesh. */
 export const RAMP = {
   halfWidth: 2.0,
@@ -271,14 +293,17 @@ export function vehicleTop(spec: VehicleSpec): number {
   const hy = spec.halfExtents.y;
   const body = spec.body ?? 'sports';
   // The roof line per body, as carMesh builds it (the light bar sits on it), and anything above it.
-  const roof = { sports: hy + 0.48, sedan: hy + 0.58, suv: hy + 0.77, truck: hy, van: hy, pickup: hy + 0.75, bus: hy + 0.08, boxtruck: hy, ramptruck: RAMP.cab.top }[body];
+  const roof = { sports: hy + 0.48, sedan: hy + 0.58, suv: hy + 0.77, truck: hy, van: hy, pickup: hy + 0.75, bus: hy + 0.08, boxtruck: hy, ramptruck: RAMP.cab.top, tractor: hy + TRACTOR_CAB }[body];
   const extras = { truck: hy + 0.12, ramptruck: RAMP.top.y + 0.05 } as Partial<Record<typeof body, number>>; // roof hatch; deck and exhaust stack
   const lightBar = spec.livery === 'police' ? roof + 0.26 : 0;
   return ride + Math.max(roof, extras[body] ?? 0, lightBar);
 }
 
+/** How far a tractor's cab roof stands above its body's top (carMesh builds it). */
+export const TRACTOR_CAB = 1.5;
+
 /** Every vehicle spec in the game, for checks that must cover them all. */
 export const ALL_SPECS: VehicleSpec[] = [
   PLAYER_SPEC, COP_PATROL_SPEC, COP_INTERCEPTOR_SPEC, COP_SUV_SPEC, COP_ARMORED_SPEC,
-  VAN_SPEC, PICKUP_SPEC, BUS_SPEC, BOX_TRUCK_SPEC, RAMP_TRUCK_SPEC,
+  VAN_SPEC, PICKUP_SPEC, BUS_SPEC, BOX_TRUCK_SPEC, RAMP_TRUCK_SPEC, TRACTOR_SPEC,
 ];

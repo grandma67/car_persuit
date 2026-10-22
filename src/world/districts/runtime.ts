@@ -1,10 +1,10 @@
 // What the game's systems need from the placed districts: speed caps and no-go streets for
 // traffic, spawn weights, cop spawn skips, roadblock gates, destination zoning. Pure data.
 import type { CityData } from '../CityGenerator';
-import type { StreetProp } from '../StreetProps';
+import type { Footprint, PropKind, StreetProp } from '../StreetProps';
 import { inRect } from '../lots';
 import { DISTRICT_DEFS } from './index';
-import type { DistrictDef, DistrictKind, DistrictTraffic } from './District';
+import type { DistrictDef, DistrictKind, DistrictTraffic, Structure } from './District';
 
 const defOf = (kind: DistrictKind, defs: DistrictDef[]) => defs.find((d) => d.kind === kind);
 
@@ -21,10 +21,12 @@ export interface DistrictTrafficRules {
   noHeavy: Set<string>;
   /** Interior junctions and their district's traffic (spawn density and mix). */
   nodes: Map<number, DistrictTraffic>;
+  /** Perimeter junctions of districts with an edge mix (DistrictTraffic.edge): spawns there use it. */
+  edges: Map<number, DistrictTraffic>;
 }
 
 export function districtTraffic(city: CityData, defs: DistrictDef[] = DISTRICT_DEFS): DistrictTrafficRules {
-  const rules: DistrictTrafficRules = { limits: new Map(), noHeavy: new Set(), nodes: new Map() };
+  const rules: DistrictTrafficRules = { limits: new Map(), noHeavy: new Set(), nodes: new Map(), edges: new Map() };
   for (const q of city.districts) {
     const def = defOf(q.kind, defs);
     if (!def) continue;
@@ -35,6 +37,7 @@ export function districtTraffic(city: CityData, defs: DistrictDef[] = DISTRICT_D
     }
     if (!t.heavy) for (const k of q.streets) rules.noHeavy.add(k);
     for (const id of q.interior) rules.nodes.set(id, t);
+    if (t.edge) for (const id of q.perimeter) rules.edges.set(id, { density: 1, heavy: true, weights: t.edge });
   }
   return rules;
 }
@@ -64,4 +67,33 @@ export function roadblockGates(city: CityData, defs: DistrictDef[] = DISTRICT_DE
 /** Street props a district shows only at night (dressing.extra.nightProps: Chinatown's night market and festival). */
 export function nightProps(city: CityData): StreetProp[] {
   return city.districts.flatMap((q) => (q.dressing.extra?.nightProps as StreetProp[] | undefined) ?? []);
+}
+
+/** Dressing a district shows only on some runs: structures with their solids, props, prop kinds taken away. */
+export interface RunDressing {
+  structures?: Structure[];
+  solids?: Footprint[];
+  props?: StreetProp[];
+  drop?: PropKind[];
+}
+
+/**
+ * Join the run's extra dressing into the city before it is built: on a night run each district's
+ * `extra.night` (the Farm's harvest-night bale pyramid), and the climate's `extra.byClimate[name]`
+ * (the desert's irrigator, no pumpkins in the snow). Generation itself never depends on either.
+ */
+export function joinRunDressing(city: CityData, run: { night: boolean; climate: string }): void {
+  for (const q of city.districts) {
+    const extra = q.dressing.extra as { night?: RunDressing; byClimate?: Record<string, RunDressing> } | undefined;
+    for (const d of [run.night ? extra?.night : undefined, extra?.byClimate?.[run.climate]]) {
+      if (!d) continue;
+      q.dressing.structures.push(...(d.structures ?? []));
+      q.dressing.solids.push(...(d.solids ?? []));
+      if (d.drop?.length) {
+        const gone = new Set<PropKind>(d.drop);
+        q.dressing.props = q.dressing.props.filter((p) => !gone.has(p.kind));
+        city.streetProps = city.streetProps.filter((p) => !gone.has(p.kind) || !inRect(q.bounds, p));
+      }
+    }
+  }
 }

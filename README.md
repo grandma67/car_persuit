@@ -21,7 +21,7 @@ Add `?seed=1234` to replay a city, `?time=day|afternoon|night` to force the time
 ## Features
 
 - Seeded island city on a hill with canals, bridges, parks, plazas, town squares and jump ramps; climates (temperate, snow, beach, desert), rain and snow, day to night.
-- Themed districts: a walled Old City with gatehouses, a market square and a striking town-hall clock (`?oldtown=1` to force it); Chinatown with paifang gates, lantern-strung streets, shophouses, a night market and Lunar New Year fireworks (`?chinatown=1`); a Harbor with gantry cranes over the seafront road, a moored ship and a container yard to drive through (`?harbor=1`).
+- Themed districts: a walled Old City with gatehouses, a market square and a striking town-hall clock (`?oldtown=1` to force it); Chinatown with paifang gates, lantern-strung streets, shophouses, a night market and Lunar New Year fireworks (`?chinatown=1`); a Harbor with gantry cranes over the seafront road, a moored ship and a container yard to drive through (`?harbor=1`); a Farm on the island's edge with a red barn, silos, a windmill and fields of corn, wheat, pumpkins, orchard and hay to tear through (`?farm=1`).
 - Rapier vehicle physics, drifting, crash damage, scratches and explosions.
 - Cops that route, cut you off, ram and set roadblocks; patrol cars, interceptors, SUVs and armored trucks.
 - Civilian traffic that obeys lights and right of way, including buses and trucks; breakable street props.

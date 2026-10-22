@@ -17,9 +17,10 @@ const cellKey = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096);
 const LAMP_HEAD = new THREE.Vector3(0, 5.8, 1.3); // bulb position in lamp space
 const OIL_LAMP_HEAD = new THREE.Vector3(0, 3.75, 0); // the lantern's flame, on top of its post
 const DRAGON_LAMP_HEAD = new THREE.Vector3(0, 4.12, 0); // the pagoda lantern's glass
-const LAMP_HEADS: Partial<Record<PropKind, THREE.Vector3>> = { lamp: LAMP_HEAD, oilLamp: OIL_LAMP_HEAD, dragonLamp: DRAGON_LAMP_HEAD };
+const JACK_GLOW = new THREE.Vector3(0, 0.22, 0.2); // the candle behind a jack-o'-lantern's face
+const LAMP_HEADS: Partial<Record<PropKind, THREE.Vector3>> = { lamp: LAMP_HEAD, woodLamp: LAMP_HEAD, oilLamp: OIL_LAMP_HEAD, dragonLamp: DRAGON_LAMP_HEAD, jackOLantern: JACK_GLOW };
 /** Props that light up at night: a bulb (or flame) and a pool of light under it. */
-const LIGHTS = new Set<PropKind>(['lamp', 'oilLamp', 'dragonLamp']);
+const LIGHTS = new Set<PropKind>(['lamp', 'woodLamp', 'oilLamp', 'dragonLamp', 'jackOLantern']);
 /** A dragon lamp's banner: hung from the brackets on its street side, edge-on to the kerb. */
 const BANNER = { w: 0.5, h: 1.05, y: 2.45, z: 0.42 };
 const LIGHT_POOL_RADIUS = 7;
@@ -70,20 +71,22 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
 };
 
 type PlainKind = Exclude<PropKind, 'sign' | 'tree'>;
-type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink';
+type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink' | 'fence-rail' | 'tree-fruit-pear';
 export const modelKey = (p: StreetProp): ModelKey => {
   if (p.kind === 'fence' && p.style === 'chainlink') return 'fence-chainlink';
+  if (p.kind === 'fence' && p.style === 'rail') return 'fence-rail';
+  if (p.kind === 'tree' && p.tree === 'fruit' && p.style === 'pear') return 'tree-fruit-pear';
   const key: ModelKey =
     p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
 /** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift']);
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale']);
 /**
  * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
- * standing on its rim (its axle along local X).
+ * standing on its rim or a round bale on its side (the axle along local X).
  */
-const ROUND: Partial<Record<PropKind, 'upright' | 'axleX'>> = { drums: 'upright', cableReel: 'axleX' };
+const ROUND: Partial<Record<PropKind, 'upright' | 'axleX'>> = { drums: 'upright', cableReel: 'axleX', roundBale: 'axleX' };
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -133,6 +136,7 @@ function plateBox(shape: SignShape): THREE.Box3 {
 export function debrisParts(def: StreetProp): DebrisPart[] {
   switch (def.kind) {
     case 'lamp':
+    case 'woodLamp':
       return [
         { x: 0, y: 5.95, z: 0.65, hx: 0.035, hy: 0.035, hz: 0.7 }, // arm
         { x: 0, y: 5.9, z: 1.3, hx: 0.225, hy: 0.06, hz: 0.16 }, // head
@@ -251,6 +255,7 @@ function treeModels(look: Greenery): Record<`tree-${TreeKind}`, THREE.BufferGeom
       ...(look.snowy ? [part(cone(1.08, 1.85), SNOW, 0, 5.65)] : []), // snow cap over the top tier
     ]),
     'tree-palm': mergeGeometries([part(cyl(0.16, 0.26, 6.5, 6), 0x8a6a48, 0, 3.25), ...fronds]),
+    'tree-fruit': fruitTree(look, 0xc8302a),
     'tree-cactus': mergeGeometries([
       part(cyl(0.38, 0.42, 3.4, 7), cactus, 0, 1.7),
       part(cyl(0.22, 0.22, 0.9, 7).rotateZ(Math.PI / 2), cactus, 0.75, 1.5),
@@ -259,6 +264,23 @@ function treeModels(look: Greenery): Record<`tree-${TreeKind}`, THREE.BufferGeom
       part(cyl(0.2, 0.2, 1.0, 7), cactus, -0.95, 2.6),
     ]),
   };
+}
+
+/** An orchard tree: a short trunk under a wide, low crown hung with fruit (bare in the snow). */
+function fruitTree(look: Greenery, fruit: number): THREE.BufferGeometry {
+  const trunk = mergeGeometries([
+    part(new THREE.CylinderGeometry(0.2, 0.3, 1.7, 6), look.trunk, 0, 0.85),
+    ...[0, 2.1, 4.2].map((a) => part(new THREE.CylinderGeometry(0.08, 0.12, 1.4, 5).translate(0, 0.7, 0).rotateZ(0.7).rotateY(a), look.trunk, 0, 1.6)),
+  ]);
+  if (look.snowy) return trunk;
+  const crown = part(new THREE.IcosahedronGeometry(2.1, 1).scale(1, 0.72, 1), look.leaves, 0, 3.1);
+  // Fruit dotted over the crown's surface.
+  const dots = Array.from({ length: 22 }, (_, k) => {
+    const a = k * 2.399, y = 1 - (2 * (k + 0.5)) / 22 * 0.8;
+    const r = Math.sqrt(1 - y * y);
+    return part(new THREE.IcosahedronGeometry(0.13, 0), fruit, Math.cos(a) * r * 2.12, 3.1 + y * 1.5, Math.sin(a) * r * 2.12);
+  });
+  return mergeGeometries([trunk, crown, ...dots]);
 }
 
 export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
@@ -357,6 +379,8 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     ...oldCityModels(),
     ...chinatownModels(),
     ...harborModels(),
+    ...farmModels(),
+    'tree-fruit-pear': fruitTree(look, 0xc8c43a),
   };
 }
 
@@ -665,6 +689,177 @@ function harborModels(): Record<HarborKind | 'fence-chainlink', THREE.BufferGeom
   return { pallet, crates, drums, cableReel, lifebuoy, forklift, boomGate, crossbuck, 'fence-chainlink': fenceChainlink };
 }
 
+type FarmKind = 'jackOLantern' | 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
+  | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon' | 'roundBale';
+/** The Farm's breakables: fencing, the gate's mailbox, timber lamps, yard clutter, crops' furniture and machinery. */
+function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (rt: number, rb: number, h: number, seg = 10) => new THREE.CylinderGeometry(rt, rb, h, seg);
+  const wheel = (r: number, w: number, x: number, y: number, z: number, color = 0x1c1c1c) => part(cyl(r, r, w, 14).rotateZ(Math.PI / 2), color, x, y, z);
+  const timber = 0x8a6a48;
+  const grey = 0x7a6a58;
+  const steel = 0x6a7076;
+  const dark = 0x22252a;
+  const red = 0xb8302a;
+  const yellow = 0xd8a82a;
+  const straw = 0xd8b860;
+  // Two round posts and three split rails between them, a little crooked.
+  const fenceRail = mergeGeometries([
+    ...[-1.45, 1.45].map((x) => part(cyl(0.08, 0.1, 1.35, 6), grey, x, 0.67)),
+    ...[0.35, 0.7, 1.05].map((y, k) => part(box(2.95, 0.11, 0.08).rotateZ((k - 1) * 0.015), k % 2 ? timber : 0x9a7a54, 0, y)),
+  ]);
+  // A rural mailbox: a rounded tin box on a timber post, its red flag up.
+  const mailbox = mergeGeometries([
+    part(box(0.1, 1.1, 0.1), 0x6a4e30, 0, 0.55),
+    part(box(0.3, 0.22, 0.5), 0x3a4a5a, 0, 1.15),
+    part(cyl(0.15, 0.15, 0.5, 10).rotateX(Math.PI / 2), 0x3a4a5a, 0, 1.26),
+    part(box(0.02, 0.22, 0.05), 0xc8302a, 0.17, 1.35, -0.1),
+  ]);
+  // A timber pole with a plank arm and an enamel shade (the head where a street lamp's is).
+  const woodLamp = mergeGeometries([
+    part(cyl(0.12, 0.16, 6.1, 7), 0x6a4e30, 0, 3.05),
+    part(box(0.1, 0.1, 1.5), 0x6a4e30, 0, 5.95, 0.7),
+    part(box(0.06, 0.6, 0.06).rotateX(0.75), 0x6a4e30, 0, 5.65, 0.25),
+    part(cyl(0.12, 0.32, 0.2, 10), 0x2f4a3a, 0, 5.92, 1.3),
+  ]);
+  // A milk churn: a tin can with a shoulder and a lid.
+  const milkChurn = mergeGeometries([
+    part(cyl(0.2, 0.2, 0.55, 12), 0xc8ccd0, 0, 0.28),
+    part(cyl(0.12, 0.2, 0.18, 12), 0xc8ccd0, 0, 0.64),
+    part(cyl(0.12, 0.12, 0.12, 12), 0xb0b4b8, 0, 0.79),
+    part(cyl(0.14, 0.14, 0.04, 12), 0x8a8e92, 0, 0.87),
+  ]);
+  // A heap of feed sacks with made-up stencils (a band of colour, no brand).
+  const sack = (x: number, y: number, z: number, r: number) => part(box(0.9, 0.3, 0.55).rotateY(r), 0xd8ccb0, x, y, z);
+  const feedSacks = mergeGeometries([
+    sack(-0.25, 0.15, -0.15, 0.1), sack(0.25, 0.15, 0.15, -0.1), sack(0, 0.45, 0, 0.4),
+    part(box(0.6, 0.06, 0.56).rotateY(0.4), 0x3a6a3a, 0, 0.45, 0),
+  ]);
+  // A wheelbarrow: tray, handles, the wheel at the front (+Z).
+  const wheelbarrow = mergeGeometries([
+    part(box(0.6, 0.3, 0.8), 0x3a6a8a, 0, 0.5, 0.1),
+    ...[-0.25, 0.25].map((x) => part(box(0.05, 0.05, 1.5), timber, x, 0.4, -0.2)),
+    ...[-0.25, 0.25].map((x) => part(box(0.05, 0.35, 0.05), timber, x, 0.18, -0.35)),
+    wheel(0.18, 0.1, 0, 0.18, 0.7),
+  ]);
+  // A long galvanised water trough on its feet, full.
+  const waterTrough = mergeGeometries([
+    part(box(0.9, 0.55, 2.3), 0x9aa2a6, 0, 0.35),
+    part(box(0.8, 0.02, 2.2), 0x3f7f9a, 0, 0.6),
+    ...[-0.9, 0.9].map((z) => part(box(0.95, 0.08, 0.1), 0x5a6064, 0, 0.04, z)),
+  ]);
+  // An orchard bin of fruit with a picking ladder leaning on it.
+  const fruitBin = mergeGeometries([
+    part(box(1.15, 0.75, 1.15), 0x9a7a54, 0, 0.45),
+    part(box(1.05, 0.04, 1.05), 0xc8402a, 0, 0.8),
+    ...[-0.5, 0.5].flatMap((x) => [-0.5, 0.5].map((z) => part(box(0.1, 0.12, 0.1), 0x6a4e30, x, 0.06, z))),
+    ...[-0.25, 0.25].map((x) => part(box(0.06, 2.6, 0.06).rotateX(-0.35), timber, x, 1.2, -1.0)),
+    ...[0.4, 0.9, 1.4, 1.9].map((y) => part(box(0.5, 0.04, 0.04), timber, 0, y, -0.86 - (y - 1.2) * 0.36)),
+  ]);
+  // A pumpkin: ribbed (a squashed ball of segments) with a stalk.
+  const pumpkin = mergeGeometries([
+    ...Array.from({ length: 6 }, (_, k) => part(new THREE.SphereGeometry(0.2, 8, 6).scale(1, 0.8, 1), 0xe0741a, Math.cos(k) * 0.12, 0.2, Math.sin(k) * 0.12)),
+    part(new THREE.SphereGeometry(0.26, 10, 6).scale(1, 0.75, 1), 0xd8681a, 0, 0.21),
+    part(cyl(0.03, 0.04, 0.12, 5), 0x4a6a2a, 0, 0.43),
+  ]);
+  // A roadside stand: a plank counter of pumpkin crates under a little roof, a price board.
+  const farmStand = mergeGeometries([
+    part(box(2.6, 0.9, 1.0), timber, 0, 0.45),
+    ...[-1.2, 1.2].flatMap((x) => [-0.45, 0.45].map((z) => part(box(0.1, 2.3, 0.1), 0x6a4e30, x, 1.15, z))),
+    part(box(2.9, 0.08, 1.4).rotateX(0.18), red, 0, 2.3),
+    ...[-0.8, 0, 0.8].map((x) => part(new THREE.SphereGeometry(0.22, 8, 6).scale(1, 0.75, 1), 0xe0741a, x, 1.05, 0.1)),
+    part(box(0.9, 0.6, 0.04), 0xf2ecd8, 0.9, 1.7, 0.55),
+    part(box(0.5, 0.08, 0.05), dark, 0.9, 1.75, 0.58),
+  ]);
+  // A scarecrow on its cross post: a straw head under a hat, a patched shirt, straw at the cuffs.
+  const scarecrow = mergeGeometries([
+    part(box(0.1, 2.1, 0.1), 0x6a4e30, 0, 1.05),
+    part(box(1.4, 0.08, 0.08), 0x6a4e30, 0, 1.55),
+    part(box(0.6, 0.65, 0.3), 0x5a7a9a, 0, 1.3),
+    part(box(0.18, 0.18, 0.02), 0xc8302a, 0.12, 1.4, 0.16), // the patch
+    ...[-1, 1].map((sx) => part(box(0.45, 0.16, 0.18), 0x5a7a9a, sx * 0.48, 1.55)),
+    ...[-1, 1].map((sx) => part(cyl(0.05, 0.1, 0.15, 6).rotateZ(sx * Math.PI / 2), straw, sx * 0.76, 1.55)),
+    part(new THREE.SphereGeometry(0.2, 8, 6), 0xe0c890, 0, 1.85),
+    part(cyl(0.34, 0.34, 0.03, 10), 0x5a4228, 0, 2.0),
+    part(cyl(0.17, 0.2, 0.25, 10), 0x5a4228, 0, 2.13),
+  ]);
+  // A rack of hand tools against a board: rakes, pitchforks, shovels.
+  const toolRack = mergeGeometries([
+    part(box(1.8, 1.6, 0.06), timber, 0, 0.9, -0.2),
+    ...[-0.7, -0.35, 0, 0.35, 0.7].map((x, k) => part(box(0.04, 1.5, 0.04).rotateZ((k - 2) * 0.03), 0x9a7a54, x, 0.85, -0.1)),
+    ...[-0.7, 0.35].map((x) => part(box(0.35, 0.05, 0.05), steel, x, 1.6, -0.1)), // rake heads
+    ...[-0.35, 0.7].map((x) => part(box(0.22, 0.3, 0.02), steel, x, 1.65, -0.1)), // fork tines
+    part(box(0.22, 0.3, 0.03), 0x5a5e62, 0, 0.18, -0.1), // a shovel blade
+  ]);
+  // A tractor (tinted per instance): bonnet ahead (+Z), cab, big rear wheels, small fronts, a loader frame.
+  const parkedTractor = mergeGeometries([
+    part(box(0.95, 1.0, 2.0), 0xffffff, 0, 1.2, 0.55),
+    part(box(1.3, 0.25, 1.3), 0xffffff, 0, 1.1, -0.9),
+    ...[-0.6, 0.6].flatMap((x) => [-0.4, 0.45].map((z) => part(box(0.06, 1.5, 0.06), dark, x, 2.0, -0.95 + z))),
+    part(box(1.35, 0.08, 1.15), 0xffffff, 0, 2.78, -0.9),
+    part(box(1.2, 1.0, 0.04), 0x4a5a64, 0, 2.05, -0.38), // windscreen
+    part(cyl(0.06, 0.06, 1.0, 6), dark, 0.3, 2.2, 1.1), // exhaust stack
+    wheel(0.85, 0.5, -0.9, 0.85, -0.85), wheel(0.85, 0.5, 0.9, 0.85, -0.85),
+    wheel(0.48, 0.3, -0.7, 0.48, 1.25), wheel(0.48, 0.3, 0.7, 0.48, 1.25),
+    ...[-0.85, 0.85].map((x) => part(box(0.1, 0.1, 1.8), 0x3a3a3a, x, 1.3, 1.6)),
+    part(box(1.9, 0.6, 0.5), 0x5a5e62, 0, 0.45, 2.55), // the loader bucket
+  ]);
+  // A wheel rake: a frame with three spoked wheels at an angle.
+  const hayRake = mergeGeometries([
+    part(box(3.0, 0.1, 0.1), yellow, 0, 1.0, 0),
+    part(box(0.1, 0.1, 2.0), yellow, 0, 1.0, 0.6),
+    ...[-1.1, 0, 1.1].map((x) => part(new THREE.TorusGeometry(0.6, 0.04, 4, 12).rotateY(0.6), steel, x, 0.65, 0)),
+    ...[-1.4, 1.4].map((x) => wheel(0.3, 0.12, x, 0.3, -0.3)),
+  ]);
+  // A mouldboard plough: a beam, three curved shares.
+  const plough = mergeGeometries([
+    part(box(0.2, 0.2, 3.0), red, 0, 0.8, 0),
+    ...[-0.9, 0, 0.9].map((z) => part(box(0.7, 0.5, 0.3).rotateY(0.5), steel, 0.2, 0.35, z)),
+    part(box(1.6, 0.15, 0.15), red, 0, 0.9, 1.3),
+    wheel(0.35, 0.15, 0.7, 0.35, -1.2),
+  ]);
+  // A seed drill: a long hopper on wheels, its coulters below.
+  const seedDrill = mergeGeometries([
+    part(box(3.0, 0.7, 0.9), 0x2f6a3a, 0, 0.95, 0),
+    part(box(3.1, 0.06, 1.0), 0x2a2a2a, 0, 1.32, 0),
+    ...Array.from({ length: 8 }, (_, k) => part(box(0.04, 0.5, 0.2), steel, -1.4 + k * 0.4, 0.35, 0.3)),
+    ...[-1.5, 1.5].map((x) => wheel(0.45, 0.15, x, 0.45, -0.2)),
+  ]);
+  // A baler: a boxy body with a pickup at the front, on two wheels.
+  const baler = mergeGeometries([
+    part(box(1.8, 1.5, 3.0), 0x2f5a3a, 0, 1.15, -0.4),
+    part(box(2.2, 0.4, 0.8), 0x2a2a2a, 0, 0.4, 1.3),
+    part(box(0.12, 0.12, 1.6), 0x2a2a2a, 0.5, 0.8, 1.6),
+    ...[-1.0, 1.0].map((x) => wheel(0.5, 0.3, x, 0.5, -0.6)),
+  ]);
+  // A hay wagon: a flat bed on four wheels stacked with square bales.
+  const bale = (x: number, y: number, z: number) => part(box(1.1, 0.5, 0.55), straw, x, y, z);
+  const hayWagon = mergeGeometries([
+    part(box(2.3, 0.15, 5.0), timber, 0, 0.9, 0),
+    ...[-1.1, 1.1].flatMap((x) => [-1.7, 1.7].map((z) => wheel(0.4, 0.2, x * 0.85, 0.4, z))),
+    part(box(0.1, 0.1, 1.2), dark, 0, 0.7, 3.0),
+    ...[-0.55, 0.55].flatMap((x) => [-2.0, -1.4, -0.8, -0.2, 0.4, 1.0, 1.6, 2.2].map((z) => bale(x, 1.23, z))),
+    ...[-0.55, 0.55].flatMap((x) => [-1.4, -0.8, -0.2, 0.4, 1.0].map((z) => bale(x, 1.74, z))),
+  ]);
+  // A jack-o'-lantern: a pumpkin with a carved face (the glow behind it is the lamp bulb).
+  const jackOLantern = mergeGeometries([
+    ...Array.from({ length: 6 }, (_, k) => part(new THREE.SphereGeometry(0.2, 8, 6).scale(1, 0.8, 1), 0xe0741a, Math.cos(k) * 0.12, 0.2, Math.sin(k) * 0.12 - 0.04)),
+    part(cyl(0.03, 0.04, 0.12, 5), 0x4a6a2a, 0, 0.43),
+    ...[-0.08, 0.08].map((x) => part(box(0.07, 0.06, 0.04), 0x1a0e04, x, 0.27, 0.24)), // eyes
+    part(box(0.18, 0.04, 0.04), 0x1a0e04, 0, 0.15, 0.24), // the grin
+  ]);
+  // A round bale on its side, axle along X: tinted per bale (plain straw or white wrap).
+  const roundBale = mergeGeometries([
+    part(cyl(0.8, 0.8, 1.5, 14).rotateZ(Math.PI / 2), 0xffffff, 0, 0.8),
+    ...[-1, 1].map((e) => part(cyl(0.74, 0.74, 0.02, 14).rotateZ(Math.PI / 2), 0xd8d8d8, e * 0.755, 0.8)),
+  ]);
+  return {
+    jackOLantern, roundBale,
+    'fence-rail': fenceRail, mailbox, woodLamp, milkChurn, feedSacks, wheelbarrow, waterTrough, fruitBin, pumpkin, farmStand, scarecrow,
+    toolRack, parkedTractor, hayRake, plough, seedDrill, baler, hayWagon,
+  };
+}
+
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -883,7 +1078,9 @@ function signTexture(variant: SignVariant): THREE.Texture {
 /** District props: their meshes are only built in a city that has some. */
 const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp', 'dragonLamp',
   'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat',
-  'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink']);
+  'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink',
+  'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
+  'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
@@ -922,7 +1119,7 @@ export class PropSystem {
       if (!counts[key] && (key.endsWith('-old') || DISTRICT_KEYS.has(key))) continue;
       const mesh = new THREE.InstancedMesh(models[key], material, Math.max(1, counts[key]));
       mesh.count = counts[key];
-      mesh.castShadow = key !== 'fence'; // thousands of fence pickets aren't worth the shadow pass
+      mesh.castShadow = key !== 'fence' && key !== 'fence-rail'; // thousands of fence pickets aren't worth the shadow pass
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -938,7 +1135,7 @@ export class PropSystem {
     };
 
     // Lamp bulbs (unlit, so they glow) and soft light pools on the ground beneath them.
-    const lamps = counts.lamp + counts.oilLamp + counts.dragonLamp;
+    const lamps = counts.lamp + counts.woodLamp + counts.oilLamp + counts.dragonLamp + counts.jackOLantern;
     this.bulbs = addAttachmentMesh(new THREE.BoxGeometry(0.38, 0.05, 0.24), new THREE.MeshBasicMaterial({ toneMapped: false }), lamps);
     this.pools = addAttachmentMesh(
       new THREE.PlaneGeometry(LIGHT_POOL_RADIUS * 2, LIGHT_POOL_RADIUS * 2).rotateX(-Math.PI / 2),
@@ -1017,6 +1214,7 @@ export class PropSystem {
         const local = new THREE.Matrix4().makeTranslation(at);
         if (def.kind === 'oilLamp') local.multiply(new THREE.Matrix4().makeScale(0.55, 6, 0.9));
         if (def.kind === 'dragonLamp') local.multiply(new THREE.Matrix4().makeScale(1.1, 11, 1.8));
+        if (def.kind === 'jackOLantern') local.multiply(new THREE.Matrix4().makeScale(0.75, 3, 0.4)); // its carved face
         attach(this.bulbs, li, local, warm);
         if (def.banner && banners) {
           // Edge-on to the kerb, so it faces along the street.

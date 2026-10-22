@@ -13,7 +13,10 @@ export type PropKind =
   | 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan'
   | 'lionDance' | 'dragonFloat'
   // Harbor
-  | 'pallet' | 'crates' | 'drums' | 'cableReel' | 'lifebuoy' | 'forklift' | 'boomGate' | 'crossbuck';
+  | 'pallet' | 'crates' | 'drums' | 'cableReel' | 'lifebuoy' | 'forklift' | 'boomGate' | 'crossbuck'
+  // Farm
+  | 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
+  | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon' | 'jackOLantern' | 'roundBale';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -29,7 +32,7 @@ export interface StreetProp {
   tree?: TreeKind; // trees
   scale?: number; // trees: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
-  style?: 'old' | 'chainlink'; // restyled by a district (old iron posts, chain-link fencing): same kind and variant, so the same rules
+  style?: 'old' | 'chainlink' | 'rail' | 'pear'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
 }
 
@@ -90,6 +93,28 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   forklift: { hx: 0.65, hz: 1.6, height: 2.3, mass: 2500, breakSpeed: 8, slowdown: 0.3 },
   boomGate: { hx: 3.6, hz: 0.15, height: 1.2, mass: 30, breakSpeed: 1.5, slowdown: 0.03 },
   crossbuck: { hx: 0.1, hz: 0.1, height: 3.0, mass: 20, breakSpeed: 2.5, slowdown: 0.02 },
+  // Farm
+  mailbox: { hx: 0.25, hz: 0.3, height: 1.3, mass: 10, breakSpeed: 1.2, slowdown: 0.01 },
+  woodLamp: { hx: 0.16, hz: 0.16, height: 6.2, mass: 90, breakSpeed: 3.5, slowdown: 0.07 },
+  milkChurn: { hx: 0.22, hz: 0.22, height: 0.9, mass: 25, breakSpeed: 1.2, slowdown: 0.01 },
+  feedSacks: { hx: 0.6, hz: 0.4, height: 0.8, mass: 60, breakSpeed: 1.5, slowdown: 0.03 },
+  wheelbarrow: { hx: 0.35, hz: 0.8, height: 0.7, mass: 30, breakSpeed: 1.2, slowdown: 0.02 },
+  waterTrough: { hx: 0.5, hz: 1.2, height: 0.7, mass: 150, breakSpeed: 3, slowdown: 0.06 },
+  fruitBin: { hx: 0.6, hz: 0.6, height: 0.9, mass: 90, breakSpeed: 2.5, slowdown: 0.05 },
+  pumpkin: { hx: 0.32, hz: 0.32, height: 0.5, mass: 12, breakSpeed: 0.8, slowdown: 0.01 },
+  farmStand: { hx: 1.4, hz: 0.7, height: 2.4, mass: 70, breakSpeed: 2, slowdown: 0.05 },
+  scarecrow: { hx: 0.15, hz: 0.15, height: 2.2, mass: 10, breakSpeed: 1, slowdown: 0.01 },
+  toolRack: { hx: 0.9, hz: 0.25, height: 1.8, mass: 30, breakSpeed: 1.5, slowdown: 0.02 },
+  // Heavy machinery: it takes a real hit to shove and costs a lot of speed.
+  parkedTractor: { hx: 1.15, hz: 1.9, height: 2.8, mass: 3800, breakSpeed: 8, slowdown: 0.32 },
+  hayRake: { hx: 1.6, hz: 1.1, height: 1.4, mass: 450, breakSpeed: 5, slowdown: 0.12 },
+  plough: { hx: 1.0, hz: 1.6, height: 1.1, mass: 700, breakSpeed: 6, slowdown: 0.15 },
+  seedDrill: { hx: 1.6, hz: 0.8, height: 1.4, mass: 800, breakSpeed: 6, slowdown: 0.15 },
+  baler: { hx: 1.2, hz: 2.2, height: 2.0, mass: 1600, breakSpeed: 7, slowdown: 0.22 },
+  hayWagon: { hx: 1.2, hz: 2.6, height: 2.6, mass: 900, breakSpeed: 6, slowdown: 0.18 },
+  jackOLantern: { hx: 0.3, hz: 0.3, height: 0.5, mass: 10, breakSpeed: 0.8, slowdown: 0.01 },
+  // A round bale on its side (axle along local X): heavy, but a solid shove sets it rolling.
+  roundBale: { hx: 0.75, hz: 0.8, height: 1.6, mass: 350, breakSpeed: 3, slowdown: 0.1 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */
@@ -98,6 +123,7 @@ const TREE_SPECS: Record<TreeKind, Partial<PropSpec>> = {
   pine: { hx: 0.3, hz: 0.3, height: 5.5 },
   palm: { hx: 0.26, hz: 0.26, height: 6.5, mass: 200, breakSpeed: 6, slowdown: 0.2 },
   cactus: { hx: 0.42, hz: 0.42, height: 3.4, mass: 150, breakSpeed: 3, slowdown: 0.1 },
+  fruit: { hx: 0.3, hz: 0.3, height: 4, mass: 180, breakSpeed: 5, slowdown: 0.18 },
 };
 
 /** The spec for this particular prop: trees vary by kind and size. */
@@ -125,6 +151,9 @@ export function propFootprint(p: StreetProp, margin = 0): Footprint {
 
 /** Separating-axis test for two oriented rectangles. */
 export function footprintsOverlap(a: Footprint, b: Footprint): boolean {
+  // Far apart (beyond both bounding circles): no need for the axes. Same answer, much cheaper.
+  const reach = Math.hypot(a.hx, a.hz) + Math.hypot(b.hx, b.hz);
+  if ((b.x - a.x) ** 2 + (b.z - a.z) ** 2 > reach * reach) return false;
   const axes = (f: Footprint) => {
     const c = Math.cos(f.yaw);
     const s = Math.sin(f.yaw);
@@ -144,6 +173,35 @@ export function footprintsOverlap(a: Footprint, b: Footprint): boolean {
     if (dist > ra + rb) return false;
   }
   return true;
+}
+
+/** Footprints bucketed on a grid, for "does this overlap any of them?" over many (same answers as a scan). */
+export class FootprintIndex {
+  private cells = new Map<number, Footprint[]>();
+  constructor(items: Footprint[] = [], private size = 8) {
+    for (const f of items) this.add(f);
+  }
+
+  private each(f: Footprint, fn: (key: number) => boolean | void): boolean {
+    const r = Math.hypot(f.hx, f.hz);
+    const i0 = Math.floor((f.x - r) / this.size), i1 = Math.floor((f.x + r) / this.size);
+    const j0 = Math.floor((f.z - r) / this.size), j1 = Math.floor((f.z + r) / this.size);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (fn((i + 4096) * 8192 + (j + 4096))) return true;
+    return false;
+  }
+
+  add(f: Footprint): void {
+    this.each(f, (k) => {
+      const list = this.cells.get(k);
+      if (list) list.push(f);
+      else this.cells.set(k, [f]);
+    });
+  }
+
+  /** Does `f` overlap anything added? */
+  hits(f: Footprint): boolean {
+    return this.each(f, (k) => this.cells.get(k)?.some((o) => footprintsOverlap(f, o)) ?? false);
+  }
 }
 
 export function rectFootprint(r: Rect): Footprint {

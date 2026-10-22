@@ -238,8 +238,29 @@ export class SoundEffects {
       this.woodBreak(0.4, gain);
       return;
     }
+    // Farm breakables (churns, troughs and the mailbox clang as metal, below).
+    if (kind === 'parkedTractor' || kind === 'baler' || kind === 'plough' || kind === 'seedDrill' || kind === 'hayRake') {
+      this.impact(Math.min(1, strength + (kind === 'parkedTractor' || kind === 'baler' ? 0.3 : 0.15)));
+      return;
+    }
+    if (kind === 'pumpkin' || kind === 'jackOLantern' || kind === 'fruitBin') {
+      this.burst(0, 0.12, 'lowpass', 500, 1, gain * 1.5); // a wet squash
+      this.burst(0.01, 0.08, 'bandpass', 1600, 1.2, gain * 0.6);
+      if (kind === 'fruitBin') this.woodBreak(0.5, gain);
+      return;
+    }
+    if (kind === 'scarecrow' || kind === 'feedSacks') {
+      this.burst(0, 0.3, 'lowpass', 800, 0.7, gain * 1.2);
+      this.burst(0.02, 0.5, 'highpass', 2600, 0.5, gain * 0.45);
+      return;
+    }
+    if (kind === 'farmStand' || kind === 'toolRack' || kind === 'wheelbarrow' || kind === 'hayWagon' || kind === 'woodLamp') {
+      this.woodBreak(kind === 'hayWagon' ? 0.85 : kind === 'woodLamp' ? 0.6 : 0.55, gain);
+      if (kind === 'hayWagon') this.burst(0.03, 0.5, 'lowpass', 900, 0.7, gain);
+      return;
+    }
     // Old City breakables.
-    if (kind === 'haybale') {
+    if (kind === 'haybale' || kind === 'roundBale') {
       this.burst(0, 0.35, 'lowpass', 900, 0.7, gain * 1.4); // a soft whump of straw
       this.burst(0.02, 0.6, 'highpass', 2500, 0.5, gain * 0.4);
       return;
@@ -337,6 +358,30 @@ export class SoundEffects {
         osc.start(at);
         osc.stop(at + decay + 0.05);
       }
+    }
+  }
+
+  /**
+   * Tyres drumming over a cattle grid: a quick run of low thuds, one per bar, faster the faster
+   * the car goes. `speed` in m/s.
+   */
+  rattle(speed: number): void {
+    const ctx = this.ctx;
+    const bars = 12;
+    const gap = Math.max(0.012, 0.2 / Math.max(speed, 1)); // a bar every 20 cm
+    const gain = Math.min(0.5, 0.15 + speed * 0.012);
+    for (let k = 0; k < bars; k++) {
+      const t = ctx.currentTime + k * gap;
+      const thud = ctx.createOscillator();
+      thud.type = 'triangle';
+      thud.frequency.setValueAtTime(110 + (k % 3) * 18, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+      thud.connect(g).connect(this.master);
+      thud.start(t);
+      thud.stop(t + 0.07);
+      this.burst(k * gap, 0.04, 'bandpass', 1800, 2, gain * 0.35); // the steel's clank
     }
   }
 

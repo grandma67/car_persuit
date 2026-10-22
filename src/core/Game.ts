@@ -52,12 +52,12 @@ import { Airtime, type Takeoff } from '../gameplay/Airtime';
 import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { DISTRICT_DEFS } from '../world/districts/index';
-import { copSpawnSkips, districtOfNode, districtTraffic, nightProps, roadblockGates } from '../world/districts/runtime';
+import { copSpawnSkips, districtOfNode, districtTraffic, joinRunDressing, nightProps, roadblockGates } from '../world/districts/runtime';
 import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { TiltInput, detectTilt, requestTiltPermission } from './tilt';
 import { getPref, setPref } from './idbPrefs';
-import { COP_RAM, DAMAGE } from '../gameplay/balance';
+import { COP_RAM, DAMAGE, FARM } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
 
 const FIXED_DT = 1 / 60;
@@ -127,6 +127,7 @@ export class Game {
   private airtime = new Airtime(); // the player's jumps, for the run log
   private rampJump = false; // the flight in progress left from a ramp
   private ramSound = 0; // a cop started ramming the player this frame: crash strength 0..1
+  private onGrid = false; // the player is over a cattle grid (it rattles as they cross onto it)
   private landmarks: Landmarks;
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
   private sirens: Sirens;
@@ -201,6 +202,8 @@ export class Game {
     // Night-only street props (Chinatown's night market and festival) join the city on a night run.
     const night = time.name === 'night';
     if (night) this.city.streetProps.push(...nightProps(this.city));
+    // Dressing for this run's night and climate (the Farm's harvest night, its desert irrigator).
+    joinRunDressing(this.city, { night, climate: climate.name });
     const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
     this.canalWater = built.canalWater;
     this.walls = built.walls;
@@ -225,6 +228,7 @@ export class Game {
       theme, climate, lampGlow: time.lampGlow, night, ground: this.ground, hour0: startHour(seed, time.name),
       bell: (strikes, at) => this.audio.bell(strikes, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.position) / 450, 0, 1)),
       firework: (at, colour) => this.effects.firework(at, colour),
+      movers: () => [this.player, ...this.director.cops.map((c) => c.vehicle)],
     });
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
 
@@ -232,8 +236,11 @@ export class Game {
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
     this.player.gearShifts = true;
     this.player.headlights = Math.max({ day: 0, afternoon: 0.45, night: 1 }[time.name], weather === 'clear' ? 0 : 0.45);
+    // The Farm's fields: soft ground for every car (less grip, more drag).
+    const soft = this.city.districts.flatMap((q) => q.dressing.soft ?? []);
+    Vehicle.softGround = soft.length ? { at: (x, z) => soft.some((r) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2), grip: FARM.fieldGrip, drag: FARM.fieldDrag } : null;
     this.player.setGrip(playerGrip(climate, weather));
-    this.effects = new Effects(this.scene, climate.spray);
+    this.effects = new Effects(this.scene, climate.spray, weather === 'rain');
     if (weather !== 'clear') {
       this.precipitation = new Precipitation(weather, mobile ? 0.5 : 1);
       this.scene.add(this.precipitation.object);
@@ -1069,6 +1076,9 @@ export class Game {
     const playerCrash = Math.max(impact > 0 ? impactStrength(impact) : 0, this.ramSound);
     this.ramSound = 0;
     this.audio.impact(Math.max(playerCrash, crashSound));
+    const grid = this.city.districts.some((q) => q.dressing.ground.some((g) => g.kind === 'cattleGrid' && Math.abs(p.position.x - g.x) <= g.w / 2 && Math.abs(p.position.z - g.z) <= g.d / 2));
+    if (grid && !this.onGrid) this.audio.rattle(p.speed);
+    this.onGrid = grid;
     if (this.state === 'playing') this.whooshes();
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
     const w = waterNearby(p.position.x, p.position.z, this.city.islandSize / 2, this.city.terrain.canals);

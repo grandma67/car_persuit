@@ -192,6 +192,81 @@ export const HARBOR = {
   bund: 1.2, // bund wall height round the tank farm
 };
 
+/** The Farm: fields and a farmyard on the island's edge (world/districts/Farm.ts), metres where not said. */
+export const FARM = {
+  chance: 0.4,
+  density: 0.4,
+  pickupWeight: 3, // spawn weight multipliers inside
+  tractorWeight: 4,
+  tractorEdge: 2, // tractors' weight on the perimeter streets (none anywhere else in the city)
+  copSpawnSkip: 0.4,
+  maxCrop: 6000, // crop row-strip instances drawn, at most
+  trampleRes: 64, // trample texture per field, texels a side
+  mazeChance: 0.3, // a corn maze in one corn field
+  harvestChance: 0.25, // harvest night (night runs only)
+  fieldGrip: 0.7, // tyre grip multiplier on soft ground
+  fieldDrag: 2.5, // extra rolling drag on soft ground, m/s²
+  maxGlow: 110, // at night: timber street lamps, the yard light, the barn lantern, jack-o'-lanterns, fireflies
+  jackOLanterns: 24, // on a harvest night, at most
+  fireflies: 36, // on a warm night, at most (within maxGlow)
+  pivotInset: 3, // the irrigator's reach stops this far inside its field
+  pivotTower: 0.6, // a tower's solid footprint, half side
+  pivotHeight: 3.2, // the truss above the ground
+  /** Largest footprint per farmyard lot kind, each way (the rest of the lot is yard). */
+  lotSize: {
+    farmhouse: [14, 11], barn: [24, 16], machineShed: [22, 12], granary: [8, 6], henhouse: [9, 6],
+  } as Record<string, [number, number]>,
+  farmhouseHeight: [7, 9] as [number, number], // two storeys
+  barnHeight: [8, 10] as [number, number],
+  lowHeight: [3.5, 5] as [number, number], // granary and henhouse
+  cornerInset: 3, // a granary or henhouse put in a free yard corner stands this far in from the sidewalk line
+  yardGap: 4, // and at least this far from the other buildings
+};
+
+/** The Farm's ranch gate, cattle grids, yard pieces and fences (world/districts/FarmGate.ts), metres. */
+export const FARM_GATE = {
+  setIn: [1, 3.5, 6, 9], // ranch-gate posts in from the wall line (further in if a post would touch a junction control)
+  post: 0.35, // a log post's solid footprint, half side
+  headroom: 0.3, // the sign's bottom above overheadClearance
+  signWidth: 6.5,
+  signHeight: 1.3,
+  chain: 0.5, // between the sign and the crossbeam
+  mailboxOut: 1.6, // the mailbox, in from the right-hand post
+  gridDepth: 2.6, // a cattle grid along the street
+  pieceGap: 2, // silos, bins, windmill and tower keep this far from buildings and each other
+  rowGap: 0.8, // between silos (or bins) in a row
+  silos: [1, 3] as [number, number],
+  bins: [2, 4] as [number, number],
+  waterTowerChance: 0.5,
+  fenceInset: 0.3, // field fences stand this far inside the sidewalk line
+  fieldGate: 8, // the gap in a field's fence, wide enough for any car
+  railLength: 3, // one split-rail panel
+};
+
+/** What stands in the Farm's fields and yard (world/districts/FarmFields.ts), metres. */
+export const FARM_FIELDS = {
+  gapLane: 12, // kept clear of solids and clutter, in from each fence gap
+  gapWidth: FARM_GATE.fieldGate,
+  edgeClear: 2.5, // things in a field keep this far in from its fence
+  mazeCell: 9, // a corn maze's grid
+  mazePath: 4, // its paths' width
+  orchardSpacing: 6, // fruit trees on this grid
+  orchardInset: 2,
+  scarecrows: [1, 2] as [number, number],
+  fruitBins: [2, 4] as [number, number],
+  pumpkins: 45, // per pumpkin field, at most
+  baleRadius: 0.8, // round bales
+  baleLength: 1.5,
+  baleGap: 1.6, // between round bales, at least (a car squeezes through)
+  baleStacks: [1, 3] as [number, number], // stacks of square bales per hay field
+  combine: [3.6, 9] as [number, number], // the combine's footprint, across and along
+  header: [2.6, 9.5] as [number, number], // its header on a trailer
+  gateClutter: 0.5, // chance of a bale or crates by a field gate
+  standIn: 0.95, // the pumpkin stand's centre, in from the kerb
+  standAlong: 3, // and along from the gate's edge
+  tractors: [1, 3] as [number, number],
+};
+
 /** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */
 export const HARBOR_QUAY = {
   bollardSpacing: 15,

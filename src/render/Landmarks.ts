@@ -235,6 +235,98 @@ function bollard(): THREE.BufferGeometry {
   ]);
 }
 
+/** A windmill's measurements: its wheel's radius and the hub's height (the Farm renderer turns the wheel). */
+export const WINDMILL = { wheel: 2.4, hub: 12.6, top: 12 };
+
+/** A bar between two points, into `out`. */
+function strut(out: THREE.BufferGeometry[], a: THREE.Vector3, b: THREE.Vector3, r: number, color: number): void {
+  const len = a.distanceTo(b);
+  const g = box(r * 2, len, r * 2).translate(0, len / 2, 0);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()));
+  out.push(part(g, color, a.x, a.y, a.z));
+}
+
+/** A farm silo: a tall cylinder under a dome, a caged ladder up one side; concrete or blue steel. */
+function silo(steel: boolean): THREE.BufferGeometry {
+  const body = steel ? 0x2f5a8a : 0xcac6ba;
+  const h = 17;
+  const out = [
+    part(cyl(3.05, 3.05, 0.4, 20), 0x9a968c, 0, 0.2),
+    part(cyl(2.9, 2.9, h, 20), body, 0, h / 2 + 0.2),
+    part(new THREE.SphereGeometry(2.92, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), steel ? 0xe8ecee : 0xb0aca2, 0, h + 0.2),
+    part(cyl(0.5, 0.5, 0.6, 10), 0x6a6e72, 0, h + 3.2),
+    part(box(0.5, h, 0.12), 0x4a4e52, 0, h / 2 + 0.2, 2.98),
+  ];
+  // Steel silos: white bands; concrete: the stave joints.
+  for (let y = 2.5; y < h; y += 2.5) out.push(part(cyl(2.93, 2.93, steel ? 0.18 : 0.05, 20), steel ? 0xe8ecee : 0xa8a49a, 0, y));
+  return mergeGeometries(out);
+}
+
+/** A grain bin: corrugated steel under a shallow cone, a ladder, and an auger leaning up to its roof. */
+function grainBin(): THREE.BufferGeometry {
+  const r = 3.3, h = 6.2;
+  const out = [
+    part(cyl(r + 0.15, r + 0.15, 0.3, 20), 0x9a968c, 0, 0.15),
+    part(cyl(r, r, h, 24), 0xb8bec2, 0, h / 2 + 0.3),
+    part(cyl(0.3, r + 0.15, 2.3, 24), 0xc8ccd0, 0, h + 0.3 + 1.15),
+    part(cyl(0.45, 0.45, 0.5, 10), 0x8a9094, 0, h + 2.6 + 0.25),
+    part(box(0.45, h + 2, 0.08), 0x5a5e62, 0, (h + 2) / 2 + 0.3, r + 0.06),
+  ];
+  for (let y = 0.9; y < h; y += 0.7) out.push(part(cyl(r + 0.03, r + 0.03, 0.06, 24), 0x9aa0a4, 0, y + 0.3));
+  // The auger: a long tube from a hopper on the ground out at +X up to the roof's peak.
+  strut(out, new THREE.Vector3(r + 3.6, 0.6, 0), new THREE.Vector3(0.5, h + 2.4, 0), 0.16, 0xb8a040);
+  out.push(part(cyl(0.6, 0.25, 0.7, 8), 0xb8a040, r + 3.7, 0.55, 0));
+  out.push(part(box(0.1, 0.9, 0.1), 0x5a5e62, r + 2.2, 1.0, 0));
+  return mergeGeometries(out);
+}
+
+/** A windmill's lattice tower and platform, with a round stock tank beside it (the wheel turns separately). */
+function windmill(): THREE.BufferGeometry {
+  const out: THREE.BufferGeometry[] = [];
+  const steel = 0x8a9094;
+  const top = WINDMILL.top;
+  const leg = (sx: number, sz: number, y: number) => new THREE.Vector3(sx * (1.7 - (1.35 * y) / top), y, sz * (1.7 - (1.35 * y) / top));
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  for (const [sx, sz] of corners) strut(out, leg(sx, sz, 0), leg(sx, sz, top), 0.07, steel);
+  // Girts and X-braces between the legs, in panels up the tower.
+  for (let y = 0; y < top - 0.1; y += 2.4) {
+    const y1 = Math.min(top, y + 2.4);
+    for (let k = 0; k < 4; k++) {
+      const [ax, az] = corners[k], [bx, bz] = corners[(k + 1) % 4];
+      strut(out, leg(ax, az, y1), leg(bx, bz, y1), 0.035, steel);
+      strut(out, leg(ax, az, y), leg(bx, bz, y1), 0.025, steel);
+      strut(out, leg(bx, bz, y), leg(ax, az, y1), 0.025, steel);
+    }
+  }
+  out.push(part(box(1.2, 0.12, 1.2), 0x6a6e72, 0, top, 0)); // the platform
+  out.push(part(cyl(0.12, 0.12, WINDMILL.hub - top, 8), 0x4a4e52, 0, (top + WINDMILL.hub) / 2)); // the mast to the head
+  out.push(part(box(0.1, top, 0.1), 0x4a4e52, 0, top / 2)); // the pump rod
+  // The stock tank: galvanised, round, low.
+  out.push(part(cyl(1.15, 1.15, 0.8, 16), 0xa8b0b4, 2.1, 0.4, 0));
+  out.push(part(cyl(1.05, 1.05, 0.04, 16), 0x3f7f9a, 2.1, 0.72, 0));
+  return mergeGeometries(out);
+}
+
+/** A water tower: a round tank with a cone roof on four braced legs. */
+function waterTower(): THREE.BufferGeometry {
+  const out: THREE.BufferGeometry[] = [];
+  const steel = 0x6a7076;
+  const top = 11;
+  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    strut(out, new THREE.Vector3(sx * 2.2, 0, sz * 2.2), new THREE.Vector3(sx * 1.7, top, sz * 1.7), 0.14, steel);
+    out.push(part(box(0.6, 0.3, 0.6), 0x9a968c, sx * 2.2, 0.15, sz * 2.2));
+  }
+  for (const y of [3.5, 7.5]) {
+    const k = 2.2 - (0.5 * y) / top;
+    for (const [ax, az, bx, bz] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]]) strut(out, new THREE.Vector3(ax * k, y, az * k), new THREE.Vector3(bx * k, y, bz * k), 0.06, steel);
+  }
+  out.push(part(cyl(2.8, 2.8, 4, 20), 0xd8d4c8, 0, top + 2));
+  out.push(part(cyl(2.85, 2.85, 0.25, 20), 0x8a3a30, 0, top + 0.12));
+  out.push(part(cyl(0.2, 3.05, 1.6, 20), 0x6a6e72, 0, top + 4.8));
+  out.push(part(cyl(0.12, 0.12, top, 8), steel, 0, top / 2)); // the riser pipe
+  return mergeGeometries(out);
+}
+
 const SNOW = 0xeef2f6;
 /** Snow lying on the Old City pieces in a snowy city. */
 const SNOW_CAPS = {
@@ -244,10 +336,15 @@ const SNOW_CAPS = {
   column: () => part(cyl(0.44, 0.44, 0.1, 12), SNOW, 0, 3.9),
   lion: () => mergeGeometries([part(box(0.57, 0.06, 0.52), SNOW, 0, 2.26, 0.12), part(box(1.12, 0.05, 1.12), SNOW, 0, 0.89)]),
   bollard: () => part(cyl(0.33, 0.33, 0.05, 10), SNOW, 0, 0.845),
+  silo: () => part(new THREE.SphereGeometry(2.96, 20, 6, 0, Math.PI * 2, 0, Math.PI / 3), SNOW, 0, 17.2),
+  siloSteel: () => part(new THREE.SphereGeometry(2.96, 20, 6, 0, Math.PI * 2, 0, Math.PI / 3), SNOW, 0, 17.2),
+  grainBin: () => part(cyl(0.35, 3.48, 2.32, 24), SNOW, 0, 6.5 + 1.17),
+  waterTower: () => part(cyl(0.25, 3.1, 1.62, 20), SNOW, 0, 11 + 4.83),
+  windmill: () => part(box(1.24, 0.08, 1.24), SNOW, 0, WINDMILL.top + 0.1),
 };
 
 /** District pieces (Old City, the lions, bollards) stand straight on the ground, without a paved pad. */
-const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense', 'bollard']);
+const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense', 'bollard', 'silo', 'grainBin', 'windmill', 'waterTower']);
 
 /**
  * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
@@ -345,6 +442,9 @@ export class Landmarks {
       cannon: cannon(), column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
       lion: lion(), incense: incense(), bollard: bollard(),
     };
+    // Farm pieces: built only in a city that has them.
+    const farm: Record<string, () => THREE.BufferGeometry> = { silo: () => silo(false), siloSteel: () => silo(true), grainBin, windmill, waterTower };
+    const modelOf = (key: string): THREE.BufferGeometry => (models as Record<string, THREE.BufferGeometry>)[key] ?? ((models as Record<string, THREE.BufferGeometry>)[key] = farm[key]());
 
     const plain = new Map<string, THREE.Matrix4[]>(); // district pieces by kind, drawn instanced
     for (const l of landmarks) {
@@ -389,7 +489,7 @@ export class Landmarks {
     }
     // One instanced mesh per district piece kind (lions, cannons …), snow-capped in a snowy city.
     for (const [kind, matrices] of plain) {
-      const model = models[kind as keyof typeof models];
+      const model = modelOf(kind);
       const cap = this.snowy ? SNOW_CAPS[kind as keyof typeof SNOW_CAPS]?.() : undefined;
       const mesh = new THREE.InstancedMesh(cap ? mergeGeometries([model, cap]) : model, solid, matrices.length);
       matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
@@ -404,8 +504,9 @@ export class Landmarks {
   private addPlain(l: Landmark, terrain: Terrain, world: RAPIER.World, plain: Map<string, THREE.Matrix4[]>): void {
     const y = groundBase(terrain, l.x, l.z, l.radius) - 0.05;
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), l.yaw);
-    if (!plain.has(l.kind)) plain.set(l.kind, []);
-    plain.get(l.kind)!.push(new THREE.Matrix4().compose(new THREE.Vector3(l.x, y, l.z), q, new THREE.Vector3(1, 1, 1)));
+    const key = l.kind === 'silo' && l.variant ? 'siloSteel' : l.kind;
+    if (!plain.has(key)) plain.set(key, []);
+    plain.get(key)!.push(new THREE.Matrix4().compose(new THREE.Vector3(l.x, y, l.z), q, new THREE.Vector3(1, 1, 1)));
     const r = l.radius * 0.8;
     const desc = RAPIER.ColliderDesc.cuboid(r, 2, r).setTranslation(l.x, y + 2, l.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
     this.colliders.add(world.createCollider(desc).handle);
