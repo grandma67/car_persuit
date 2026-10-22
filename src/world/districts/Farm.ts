@@ -6,10 +6,11 @@ import type { Rng } from '../../core/Rng';
 import { FARM } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import { footprintsOverlap, propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
+import { footprintsOverlap, propFootprint, rectFootprint, type PropKind, type StreetProp } from '../StreetProps';
 import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type Gate, type LotLook } from './District';
-import { inDistrict, isJunctionControl } from './apply';
+import { inDistrict, isJunctionControl, kerbClutter } from './apply';
 import { cattleGrid, fieldFence, ranchGateAt, yardPieces } from './FarmGate';
+import { cornMaze, dressFields, gapLane, gapMouth, put, yardClutter, type FenceGap } from './FarmFields';
 import { clearOf } from './HarborYard';
 import { shuffle } from './place';
 import { frontMask } from './Harbor';
@@ -24,6 +25,7 @@ export interface Field {
   crop: Crop;
   rect: Rect; // inside the sidewalk line: drivable and soft
   rowsAlongX: boolean;
+  maze?: Rect[]; // a corn maze's paths
 }
 
 /** The most fields of one crop: twice, unless the farm has more fields than that allows. */
@@ -49,7 +51,10 @@ export const farmyardBlock = (q: District) => q.blocks.find((k) => !q.roles.has(
 export const farmFields = (q: District) => (q.dressing.extra?.fields ?? []) as Field[];
 
 /** The gaps in each field's fence (by block), with the outward normal of the side they're on. */
-export const fenceGaps = (q: District) => (q.dressing.extra?.gaps ?? {}) as Record<number, { x: number; z: number; nx: number; nz: number }[]>;
+export const fenceGaps = (q: District) => (q.dressing.extra?.gaps ?? {}) as Record<number, FenceGap[]>;
+
+/** Kerb clutter along the farm's streets. */
+const CLUTTER: PropKind[] = ['haybale', 'haybale', 'barrels', 'milkChurn', 'pumpkin', 'crates'];
 
 /** Does the main street run along X? */
 function mainAlongX(q: District, city: CityData): boolean {
@@ -189,7 +194,7 @@ export const FARM_DEF: DistrictDef = {
   roles,
   lots,
   drop,
-  swap: {},
+  swap: { lamp: 'woodLamp' },
   keepZebras: false,
   traffic: { density: FARM.density, heavy: true, weights: { Pickup: FARM.pickupWeight, Tractor: FARM.tractorWeight } },
   copSpawnSkip: FARM.copSpawnSkip,
@@ -233,12 +238,43 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const buildings = city.buildings.filter((b) => b.district === 'farm' && inRect(q.bounds, b));
   out.landmarks.push(...yardPieces(shrink(yard, sw), near.map((f) => f.rect), buildings, rng));
   // Split-rail fences round the fields.
-  const gaps: Record<number, { x: number; z: number; nx: number; nz: number }[]> = {};
+  const gaps: Record<number, FenceGap[]> = {};
   for (const f of fields) {
     const fence = fieldFence(f.rect, city.blocks[f.block].rect, q, city);
     props.push(...fence.props);
     gaps[f.block] = fence.gaps;
   }
+  // Sometimes a maze cut through one corn field.
+  const corn = fields.filter((f) => f.crop === 'corn');
+  if (rng.next() < FARM.mazeChance) {
+    const f = rng.pick(corn);
+    f.maze = cornMaze(f.rect, gaps[f.block], rng);
+  }
+  // The crops' furniture, then the yard's clutter and equipment; kerb clutter along the streets.
+  const yardFps = [...buildings.map((b) => rectFootprint({ ...b, w: b.w + 1, d: b.d + 1 })), ...out.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius + 1, hz: l.radius + 1, yaw: 0 }))];
+  const fenceFps = props.map((p) => propFootprint(p, 0.3));
+  const inFields = dressFields(fields, gaps, [...yardFps, ...fenceFps], rng);
+  out.structures.push(...inFields.structures);
+  out.solids.push(...inFields.solids);
+  out.ground.push(...inFields.ground);
+  props.push(...inFields.props);
+  const shed = buildings.find((b) => b.lot === 'machineShed');
+  props.push(...yardClutter(shrink(yard, sw), shed, [...yardFps, ...props.map((p) => propFootprint(p, 0.3))], rng));
+  // A full yard: the tractor waits at the edge of the nearest field instead.
+  if (!props.some((p) => p.kind === 'parkedTractor')) {
+    const busy = [...yardFps, ...out.solids, ...props.map((p) => propFootprint(p, 0.3)), ...Object.values(gaps).flat().map((g) => gapLane(g))];
+    for (const f of near) {
+      const p = put('parkedTractor', shrink(f.rect, 2.5), busy, rng, { color: 0x2f7a3a });
+      if (p) {
+        props.push(p);
+        break;
+      }
+    }
+  }
+  const around = { ...city, streetProps: [...city.streetProps, ...props] };
+  const mouths = Object.values(gaps).flat().map((g) => gapMouth(g, sw));
+  const clutter = kerbClutter(q, around, CLUTTER, rng, { step: [14, 28] });
+  props.push(...clutter.filter((p) => !fields.some((f) => inRect(f.rect, p)) && !mouths.some((m) => footprintsOverlap(propFootprint(p), m))));
   // The district's props keep off its solids, its pieces and the junction controls; the city's
   // own that stood where they go are taken away (never a junction control).
   const controls = city.streetProps.filter((p) => inDistrict(q, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));

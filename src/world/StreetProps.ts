@@ -15,7 +15,8 @@ export type PropKind =
   // Harbor
   | 'pallet' | 'crates' | 'drums' | 'cableReel' | 'lifebuoy' | 'forklift' | 'boomGate' | 'crossbuck'
   // Farm
-  | 'mailbox';
+  | 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
+  | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -31,7 +32,7 @@ export interface StreetProp {
   tree?: TreeKind; // trees
   scale?: number; // trees: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
-  style?: 'old' | 'chainlink' | 'rail'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
+  style?: 'old' | 'chainlink' | 'rail' | 'pear'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
 }
 
@@ -94,6 +95,23 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   crossbuck: { hx: 0.1, hz: 0.1, height: 3.0, mass: 20, breakSpeed: 2.5, slowdown: 0.02 },
   // Farm
   mailbox: { hx: 0.25, hz: 0.3, height: 1.3, mass: 10, breakSpeed: 1.2, slowdown: 0.01 },
+  woodLamp: { hx: 0.16, hz: 0.16, height: 6.2, mass: 90, breakSpeed: 3.5, slowdown: 0.07 },
+  milkChurn: { hx: 0.22, hz: 0.22, height: 0.9, mass: 25, breakSpeed: 1.2, slowdown: 0.01 },
+  feedSacks: { hx: 0.6, hz: 0.4, height: 0.8, mass: 60, breakSpeed: 1.5, slowdown: 0.03 },
+  wheelbarrow: { hx: 0.35, hz: 0.8, height: 0.7, mass: 30, breakSpeed: 1.2, slowdown: 0.02 },
+  waterTrough: { hx: 0.5, hz: 1.2, height: 0.7, mass: 150, breakSpeed: 3, slowdown: 0.06 },
+  fruitBin: { hx: 0.6, hz: 0.6, height: 0.9, mass: 90, breakSpeed: 2.5, slowdown: 0.05 },
+  pumpkin: { hx: 0.32, hz: 0.32, height: 0.5, mass: 12, breakSpeed: 0.8, slowdown: 0.01 },
+  farmStand: { hx: 1.4, hz: 0.7, height: 2.4, mass: 70, breakSpeed: 2, slowdown: 0.05 },
+  scarecrow: { hx: 0.15, hz: 0.15, height: 2.2, mass: 10, breakSpeed: 1, slowdown: 0.01 },
+  toolRack: { hx: 0.9, hz: 0.25, height: 1.8, mass: 30, breakSpeed: 1.5, slowdown: 0.02 },
+  // Heavy machinery: it takes a real hit to shove and costs a lot of speed.
+  parkedTractor: { hx: 1.15, hz: 1.9, height: 2.8, mass: 3800, breakSpeed: 8, slowdown: 0.32 },
+  hayRake: { hx: 1.6, hz: 1.1, height: 1.4, mass: 450, breakSpeed: 5, slowdown: 0.12 },
+  plough: { hx: 1.0, hz: 1.6, height: 1.1, mass: 700, breakSpeed: 6, slowdown: 0.15 },
+  seedDrill: { hx: 1.6, hz: 0.8, height: 1.4, mass: 800, breakSpeed: 6, slowdown: 0.15 },
+  baler: { hx: 1.2, hz: 2.2, height: 2.0, mass: 1600, breakSpeed: 7, slowdown: 0.22 },
+  hayWagon: { hx: 1.2, hz: 2.6, height: 2.6, mass: 900, breakSpeed: 6, slowdown: 0.18 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */
@@ -102,6 +120,7 @@ const TREE_SPECS: Record<TreeKind, Partial<PropSpec>> = {
   pine: { hx: 0.3, hz: 0.3, height: 5.5 },
   palm: { hx: 0.26, hz: 0.26, height: 6.5, mass: 200, breakSpeed: 6, slowdown: 0.2 },
   cactus: { hx: 0.42, hz: 0.42, height: 3.4, mass: 150, breakSpeed: 3, slowdown: 0.1 },
+  fruit: { hx: 0.3, hz: 0.3, height: 4, mass: 180, breakSpeed: 5, slowdown: 0.18 },
 };
 
 /** The spec for this particular prop: trees vary by kind and size. */

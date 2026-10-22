@@ -237,6 +237,28 @@ export const FARM_GATE = {
   railLength: 3, // one split-rail panel
 };
 
+/** What stands in the Farm's fields and yard (world/districts/FarmFields.ts), metres. */
+export const FARM_FIELDS = {
+  gapLane: 12, // kept clear of solids and clutter, in from each fence gap
+  gapWidth: FARM_GATE.fieldGate,
+  edgeClear: 2.5, // things in a field keep this far in from its fence
+  mazeCell: 9, // a corn maze's grid
+  mazePath: 4, // its paths' width
+  orchardSpacing: 6, // fruit trees on this grid
+  orchardInset: 2,
+  scarecrows: [1, 2] as [number, number],
+  fruitBins: [2, 4] as [number, number],
+  pumpkins: 45, // per pumpkin field, at most
+  baleRadius: 0.8, // round bales
+  baleLength: 1.5,
+  baleGap: 1.6, // between round bales, at least (a car squeezes through)
+  baleStacks: [1, 3] as [number, number], // stacks of square bales per hay field
+  combine: [3.6, 9] as [number, number], // the combine's footprint, across and along
+  header: [2.6, 9.5] as [number, number], // its header on a trailer
+  gateClutter: 0.5, // chance of a bale or crates by a field gate
+  tractors: [1, 3] as [number, number],
+};
+
 /** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */
 export const HARBOR_QUAY = {
   bollardSpacing: 15,

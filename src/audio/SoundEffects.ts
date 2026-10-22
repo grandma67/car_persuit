@@ -238,6 +238,27 @@ export class SoundEffects {
       this.woodBreak(0.4, gain);
       return;
     }
+    // Farm breakables (churns, troughs and the mailbox clang as metal, below).
+    if (kind === 'parkedTractor' || kind === 'baler' || kind === 'plough' || kind === 'seedDrill' || kind === 'hayRake') {
+      this.impact(Math.min(1, strength + (kind === 'parkedTractor' || kind === 'baler' ? 0.3 : 0.15)));
+      return;
+    }
+    if (kind === 'pumpkin' || kind === 'fruitBin') {
+      this.burst(0, 0.12, 'lowpass', 500, 1, gain * 1.5); // a wet squash
+      this.burst(0.01, 0.08, 'bandpass', 1600, 1.2, gain * 0.6);
+      if (kind === 'fruitBin') this.woodBreak(0.5, gain);
+      return;
+    }
+    if (kind === 'scarecrow' || kind === 'feedSacks') {
+      this.burst(0, 0.3, 'lowpass', 800, 0.7, gain * 1.2);
+      this.burst(0.02, 0.5, 'highpass', 2600, 0.5, gain * 0.45);
+      return;
+    }
+    if (kind === 'farmStand' || kind === 'toolRack' || kind === 'wheelbarrow' || kind === 'hayWagon' || kind === 'woodLamp') {
+      this.woodBreak(kind === 'hayWagon' ? 0.85 : kind === 'woodLamp' ? 0.6 : 0.55, gain);
+      if (kind === 'hayWagon') this.burst(0.03, 0.5, 'lowpass', 900, 0.7, gain);
+      return;
+    }
     // Old City breakables.
     if (kind === 'haybale') {
       this.burst(0, 0.35, 'lowpass', 900, 0.7, gain * 1.4); // a soft whump of straw

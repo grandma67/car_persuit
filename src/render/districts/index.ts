@@ -23,6 +23,8 @@ export interface DistrictRenderContext {
   hour0: number;
   /** A bell rings out from `at` (the Old City's clock striking the hour). */
   bell?: (strikes: number, at: THREE.Vector3) => void;
+  /** The cars on the move (the player and the cops): the Farm's crops flatten under them. */
+  movers?: () => { position: THREE.Vector3 }[];
   /** A firework bursts at `at` in one of a few colours (Chinatown's festival nights). */
   firework?: (at: THREE.Vector3, colour: number) => void;
 }

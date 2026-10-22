@@ -8,7 +8,7 @@ import type { TimeOfDay } from './CityTheme';
 
 export type ClimateName = 'temperate' | 'snow' | 'beach' | 'desert';
 export type WeatherName = 'clear' | 'rain' | 'snow';
-export type TreeKind = 'round' | 'pine' | 'palm' | 'cactus';
+export type TreeKind = 'round' | 'pine' | 'palm' | 'cactus' | 'fruit';
 
 export interface Climate {
   name: ClimateName;

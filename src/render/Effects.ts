@@ -156,6 +156,19 @@ export class Effects {
       case 'drums': return burst(this.sparks, 8);
       case 'lifebuoy': return burst(this.cloth, 6);
       case 'forklift': burst(this.sparks, 24); return burst(this.shards, 10);
+      // Farm
+      case 'pumpkin': return burst(this.fruit, 22);
+      case 'fruitBin': burst(this.fruit, 30); return burst(this.chips, 12);
+      case 'farmStand': burst(this.fruit, 14); return burst(this.chips, 20);
+      case 'feedSacks': burst(this.straw, 24); return burst(this.steam, 10); // a cloud of grain dust
+      case 'scarecrow': burst(this.straw, 50); return burst(this.cloth, 5); // the hat and shirt fly off
+      case 'waterTrough': return burst(this.water, 36);
+      case 'milkChurn': burst(this.steam, 8); return burst(this.water, 8);
+      case 'wheelbarrow': case 'toolRack': case 'mailbox': return burst(this.chips, b.kind === 'toolRack' ? 20 : 8);
+      case 'woodLamp': burst(this.chips, 12); return burst(this.fire, 8);
+      case 'hayWagon': burst(this.straw, 60); return burst(this.chips, 14);
+      case 'parkedTractor': case 'baler': burst(this.sparks, 24); return burst(this.shards, 8);
+      case 'plough': case 'seedDrill': case 'hayRake': return burst(this.sparks, 14);
     }
     if (b.kind === 'lamp' || b.kind === 'signal') {
       for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0);

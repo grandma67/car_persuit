@@ -4,7 +4,9 @@ import { inRect } from '../lots';
 import { footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
 import type { District } from './District';
 import { isJunctionControl } from './apply';
-import { DISTRICTS, FARM_GATE } from '../../gameplay/balance';
+import { DISTRICTS, FARM_FIELDS, FARM_GATE } from '../../gameplay/balance';
+import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
+import { gapLane } from './FarmFields';
 import { CROPS, FARM_DEF, cropCap, farmFields, farmyardBlock, fenceGaps, ranchGate } from './Farm';
 import type { RanchGateData } from './FarmGate';
 
@@ -159,6 +161,96 @@ describe('Farm ranch gate, yard pieces and fences', () => {
       for (const r of roads) expect(footprintsOverlap(propFootprint(p), r)).toBe(false);
       expect(farmFields(q).some((f) => inRect(f.rect, p))).toBe(true);
     }
+  });
+});
+
+describe('Farm crops, equipment and props', () => {
+  /** Widest that ever leaves the road (the ramp truck is road traffic only). */
+  const offRoadWidest = Math.max(...ALL_SPECS.filter((sp) => sp.body !== 'ramptruck').map((sp) => sp.halfExtents.x)) * 2;
+  const mazes = placed.filter(([, , q]) => farmFields(q).some((f) => f.maze));
+
+  it('the maze roll comes up on some seeds, not all', () => {
+    expect(mazes.length).toBeGreaterThan(0);
+    expect(mazes.length).toBeLessThan(placed.length);
+  });
+
+  it.each(placed)('seed %i: each crop has its furniture', (_seed, c, q) => {
+    const props = q.dressing.props;
+    const within = (f: { rect: Rect }, kind: string) => props.filter((p) => p.kind === kind && inRect(f.rect, p)).length;
+    for (const f of farmFields(q)) {
+      if (f.crop === 'orchard') expect(within(f, 'tree')).toBeGreaterThan(30);
+      if (f.crop === 'pumpkin') expect(within(f, 'pumpkin')).toBeGreaterThan(10);
+      if (f.crop === 'hay') expect(q.dressing.structures.filter((st) => st.kind === 'roundBale' && inRect(f.rect, st)).length).toBeGreaterThan(3);
+      if (['corn', 'wheat', 'pumpkin'].includes(f.crop)) {
+        expect(within(f, 'scarecrow')).toBeGreaterThanOrEqual(1);
+        expect(within(f, 'scarecrow')).toBeLessThanOrEqual(FARM_FIELDS.scarecrows[1]);
+      } else expect(within(f, 'scarecrow')).toBe(0);
+    }
+    expect(q.dressing.structures.filter((st) => st.kind === 'combine').length).toBeLessThanOrEqual(1);
+    const tractors = props.filter((p) => p.kind === 'parkedTractor').length;
+    expect(tractors).toBeGreaterThanOrEqual(1);
+    expect(tractors).toBeLessThanOrEqual(FARM_FIELDS.tractors[1]);
+    // Every street lamp inside is a timber one.
+    expect(c.streetProps.filter((p) => p.kind === 'lamp' && inRect(q.bounds, p))).toHaveLength(0);
+  });
+
+  it.each(placed)('seed %i: nothing solid on a road or in a fence gap', (_seed, c, q) => {
+    const roads = roadsOf(c);
+    const lanes = Object.values(fenceGaps(q)).flat().map((g) => gapLane(g));
+    for (const fp of q.dressing.solids) {
+      for (const r of roads) expect(footprintsOverlap(fp, r)).toBe(false);
+      for (const l of lanes) expect(footprintsOverlap(fp, l)).toBe(false);
+    }
+  });
+
+  it.each(placed)('seed %i: kerb clutter keeps off the centre line; props off solids and each other', (_seed, c, q) => {
+    const solids = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
+    const mine = q.dressing.props;
+    for (const p of mine) expect(solids.filter((f) => footprintsOverlap(propFootprint(p), f))).toEqual([]);
+    for (let i = 0; i < mine.length; i++) for (let j = i + 1; j < mine.length; j++) expect(footprintsOverlap(propFootprint(mine[i]), propFootprint(mine[j]))).toBe(false);
+    const s = c.config.sidewalk;
+    const onSidewalk = mine.filter((p) => q.blocks.some((k) => {
+      const r = c.blocks[k].rect;
+      return inRect(r, p) && !inRect({ ...r, w: r.w - 2 * s, d: r.d - 2 * s }, p);
+    }));
+    for (const p of onSidewalk) {
+      const road = c.roads.find((r) => footprintsOverlap(propFootprint(p, s), rectFootprint(r.rect)));
+      if (!road) continue;
+      const alongX = road.rect.w > road.rect.d;
+      const lateral = alongX ? Math.abs(p.z - road.rect.z) : Math.abs(p.x - road.rect.x);
+      const fp = propFootprint(p);
+      expect(lateral - Math.hypot(fp.hx, fp.hz)).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
+    }
+  });
+
+  it.each(placed)('seed %i: orchard aisles are wide enough for any car', (_seed, _c, q) => {
+    for (const f of farmFields(q).filter((x) => x.crop === 'orchard')) {
+      const trees = q.dressing.props.filter((p) => p.kind === 'tree' && inRect(f.rect, p));
+      for (const axis of ['x', 'z'] as const) {
+        const lines = [...new Set(trees.map((t) => Math.round(t[axis] * 100) / 100))].sort((a, b) => a - b);
+        const trunk = propFootprint(trees[0]).hx;
+        for (let i = 1; i < lines.length; i++) expect(lines[i] - lines[i - 1] - 2 * trunk).toBeGreaterThanOrEqual(offRoadWidest + 1);
+      }
+    }
+  });
+
+  it.each(mazes.length ? mazes : placed.slice(0, 1))('seed %i: a corn maze joins at least two fence gaps', (_seed, _c, q) => {
+    const f = farmFields(q).find((x) => x.maze);
+    if (!f) return;
+    expect(f.crop).toBe('corn');
+    const paths = f.maze!;
+    for (const r of paths) expect(Math.min(r.w, r.d)).toBeGreaterThanOrEqual(FARM_FIELDS.mazePath - 1e-6);
+    // Paths that touch are joined; a gap is in whichever path holds it.
+    const touch = (a: Rect, b: Rect) => Math.abs(a.x - b.x) <= (a.w + b.w) / 2 && Math.abs(a.z - b.z) <= (a.d + b.d) / 2;
+    const seen = new Set([0]);
+    const queue = [0];
+    while (queue.length) {
+      const i = queue.pop()!;
+      paths.forEach((r, j) => !seen.has(j) && touch(paths[i], r) && (seen.add(j), queue.push(j)));
+    }
+    expect(seen.size).toBe(paths.length);
+    const reached = fenceGaps(q)[f.block].filter((g) => paths.some((r) => inRect(r, g, 0.01)));
+    expect(reached.length).toBeGreaterThanOrEqual(2);
   });
 });
 
