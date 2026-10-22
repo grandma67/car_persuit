@@ -61,6 +61,12 @@ const AIR_LEVEL = 5; // rad/s² per radian of tilt
 // this much toward the impact (damage, crunch); hits from the side or onto the roof count in full.
 const SUSPENSION_ABSORB = 0.35;
 
+// Collision groups (membership << 16 | filter). Debris in CAR_PASSES rests on the ground and on
+// fixed things but not on cars, their wheel rays or forward sensors: a barrier's long fallen arm
+// would otherwise wedge across a corridor like a wall.
+export const CAR_PASSES = 0x0002;
+export const CAR_GROUPS = ((0xffff << 16) | (0xffff & ~CAR_PASSES)) >>> 0;
+
 // A Rapier raycast vehicle plus its mesh. The same class drives the player and (later) cops;
 // only the DriveInput source differs.
 export class Vehicle {
@@ -157,7 +163,8 @@ export class Vehicle {
           { x: 0, y: 0, z: 0, w: 1 },
         )
         .setFriction(0.4)
-        .setRestitution(0.1),
+        .setRestitution(0.1)
+        .setCollisionGroups(CAR_GROUPS),
       this.body,
     );
     if (spec.body === 'ramptruck') this.addRampColliders();
@@ -193,14 +200,15 @@ export class Vehicle {
   /** Deck wedge and cab: massless extra colliders on the same body (the chassis carries the mass). */
   private addRampColliders(): void {
     const deck = RAPIER.ColliderDesc.convexHull(rampHullPoints(this.spec));
-    if (deck) this.world.createCollider(deck.setDensity(0).setFriction(1.2).setRestitution(0), this.body);
+    if (deck) this.world.createCollider(deck.setDensity(0).setFriction(1.2).setRestitution(0).setCollisionGroups(CAR_GROUPS), this.body);
     const { z0, z1, top } = RAMP.cab;
     const bottom = -this.spec.halfExtents.y;
     this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(RAMP.halfWidth, (top - bottom) / 2, (z1 - z0) / 2)
         .setTranslation(0, (top + bottom) / 2, (z0 + z1) / 2)
         .setDensity(0)
-        .setFriction(0.4),
+        .setFriction(0.4)
+        .setCollisionGroups(CAR_GROUPS),
       this.body,
     );
   }
@@ -287,7 +295,7 @@ export class Vehicle {
       c.setWheelSideFrictionStiffness(i, rear ? rearSide * knockedRear : s.sideFriction * knockedFront);
     }
 
-    c.updateVehicle(dt);
+    c.updateVehicle(dt, undefined, CAR_GROUPS);
     if (drifting && speed > 0) this.driftAssist(input, dt);
     this.lastInput = input;
     // Brake lights follow real braking (not coasting), held briefly so feathering doesn't flicker.

@@ -4,7 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { part } from '../render/geometry';
 import { SUNK_BELOW } from '../render/Sea';
 import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
-import type { Vehicle } from '../vehicles/Vehicle';
+import { CAR_PASSES, type Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
 import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
 import type { TreeKind } from './Climate';
@@ -70,14 +70,20 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
 };
 
 type PlainKind = Exclude<PropKind, 'sign' | 'tree'>;
-type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old';
+type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink';
 export const modelKey = (p: StreetProp): ModelKey => {
+  if (p.kind === 'fence' && p.style === 'chainlink') return 'fence-chainlink';
   const key: ModelKey =
     p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
 /** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan']);
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift']);
+/**
+ * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
+ * standing on its rim (its axle along local X).
+ */
+const ROUND: Partial<Record<PropKind, 'upright' | 'axleX'>> = { drums: 'upright', cableReel: 'axleX' };
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -108,6 +114,7 @@ export interface DebrisPart {
   hz: number;
   yaw?: number;
   round?: boolean;
+  carPasses?: boolean; // rests on the ground, but cars drive through it (CAR_PASSES)
 }
 
 const plateBoxes = new Map<SignShape, THREE.Box3>();
@@ -172,6 +179,13 @@ export function debrisParts(def: StreetProp): DebrisPart[] {
       ];
     case 'umbrella':
       return [{ x: 0, y: 2.55, z: 0, hx: 1.7, hy: 0.35, hz: 1.7, round: true }]; // canopy
+    case 'boomGate':
+      // The 7 m arm and the fork it rests on (the post is the intact collider). Cars pass through
+      // them: wedged between a straddle carrier's legs, the arm stood like a wall.
+      return [
+        { x: 0.225, y: 1.0, z: 0, hx: 3.4, hy: 0.06, hz: 0.06, carPasses: true }, // arm
+        { x: 3.4, y: 0.49, z: 0, hx: 0.15, hy: 0.49, hz: 0.06, carPasses: true }, // fork
+      ];
     default:
       return [];
   }
@@ -186,7 +200,9 @@ export function addDebrisColliders(world: RAPIER.World, body: RAPIER.RigidBody, 
   for (const d of debrisParts(def)) {
     const desc = d.round ? RAPIER.ColliderDesc.cylinder(d.hy, d.hx) : RAPIER.ColliderDesc.cuboid(d.hx, d.hy, d.hz);
     q.setFromAxisAngle(UP, d.yaw ?? 0);
-    world.createCollider(desc.setTranslation(d.x, d.y, d.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }).setMass(mass).setFriction(0.6), body);
+    desc.setTranslation(d.x, d.y, d.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }).setMass(mass).setFriction(0.6);
+    if (d.carPasses) desc.setCollisionGroups(((CAR_PASSES << 16) | (0xffff & ~CAR_PASSES)) >>> 0);
+    world.createCollider(desc, body);
   }
 }
 
@@ -340,6 +356,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     'sign-octagon-old': oldSign('octagon'), 'sign-round-old': oldSign('round'), 'sign-triangle-old': oldSign('triangle'), 'sign-square-old': oldSign('square'), 'sign-diamond-old': oldSign('diamond'),
     ...oldCityModels(),
     ...chinatownModels(),
+    ...harborModels(),
   };
 }
 
@@ -570,6 +587,84 @@ function chinatownModels(): Record<ChinatownKind, THREE.BufferGeometry> {
   return { dragonLamp, produceStall, lanternStand, dimSumCart, fishCrate, mahjongTable, menuBoard, firecrackerCrate, parkedVan, lionDance, dragonFloat };
 }
 
+type HarborKind = 'pallet' | 'crates' | 'drums' | 'cableReel' | 'lifebuoy' | 'forklift' | 'boomGate' | 'crossbuck';
+/** The Harbor's breakables: dock clutter, a forklift, boom barriers, level-crossing posts and chain-link fencing. */
+function harborModels(): Record<HarborKind | 'fence-chainlink', THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (rt: number, rb: number, h: number, seg = 10) => new THREE.CylinderGeometry(rt, rb, h, seg);
+  const pine = 0xb08a58;
+  const steel = 0x5a6168;
+  const dark = 0x22252a;
+  // A stack of six pallets: deck boards on three runners each.
+  const pallet = mergeGeometries(Array.from({ length: 6 }, (_, k) => [
+    ...[-0.4, 0, 0.4].map((z) => part(box(1.2, 0.1, 0.12), pine, 0, k * 0.15 + 0.05, z)),
+    ...[-0.5, -0.25, 0, 0.25, 0.5].map((x) => part(box(0.1, 0.03, 1.0), k % 2 ? 0xa07a48 : pine, x, k * 0.15 + 0.115)),
+  ]).flat());
+  // Two wooden crates, one on the other, stencilled with a dark band.
+  const crates = mergeGeometries([
+    part(box(1.2, 0.75, 1.2), 0x9a7448, 0, 0.375),
+    part(box(1.22, 0.08, 1.22), 0x6a4e30, 0, 0.6),
+    part(box(0.9, 0.55, 0.9).rotateY(0.3), 0xa8825a, 0, 1.025),
+    part(box(0.92, 0.06, 0.92).rotateY(0.3), 0x6a4e30, 0, 1.15),
+  ]);
+  // A steel drum (tinted per instance): ribs and a lid.
+  const drums = mergeGeometries([
+    part(cyl(0.3, 0.3, 0.9, 12), 0xffffff, 0, 0.45),
+    ...[0.3, 0.6].map((y) => part(cyl(0.31, 0.31, 0.04, 12), 0xd8d8d8, 0, y)),
+    part(cyl(0.28, 0.28, 0.02, 12), 0xc8c8c8, 0, 0.91),
+  ]);
+  // A wooden cable reel on its rim, axle along X, black cable wound round the drum.
+  const cableReel = mergeGeometries([
+    ...[-0.45, 0.45].map((x) => part(cyl(0.8, 0.8, 0.08, 14).rotateZ(Math.PI / 2), pine, x, 0.8)),
+    part(cyl(0.55, 0.55, 0.82, 14).rotateZ(Math.PI / 2), dark, 0, 0.8),
+    part(cyl(0.12, 0.12, 1.0, 8).rotateZ(Math.PI / 2), 0x6a4e30, 0, 0.8),
+  ]);
+  // A lifebuoy in its box on a post.
+  const lifebuoy = mergeGeometries([
+    part(box(0.08, 1.6, 0.08), steel, 0, 0.8, -0.05),
+    part(box(0.5, 0.6, 0.12), 0xd8d8d0, 0, 1.25, 0.03),
+    part(new THREE.TorusGeometry(0.2, 0.06, 6, 12), 0xe8601e, 0, 1.25, 0.11),
+    ...[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((a) => part(box(0.06, 0.13, 0.13).rotateZ(a), 0xf2f2ee, Math.sin(a) * 0.2, 1.25 + Math.cos(a) * 0.2, 0.11)),
+  ]);
+  // A counterbalanced forklift (body tinted per instance), mast and forks at the front (+Z).
+  const forklift = mergeGeometries([
+    part(box(1.2, 0.8, 2.4), 0xffffff, 0, 0.75, -0.3),
+    part(box(1.24, 0.7, 0.5), 0xffffff, 0, 0.85, -1.35), // counterweight
+    part(box(1.1, 0.06, 1.3), dark, 0, 2.2, -0.2), // overhead guard
+    ...[-0.5, 0.5].flatMap((x) => [-0.8, 0.4].map((z) => part(box(0.06, 1.1, 0.06), dark, x, 1.65, z))),
+    part(box(0.5, 0.5, 0.5), dark, 0, 1.4, -0.6), // seat
+    ...[-0.35, 0.35].map((x) => part(box(0.12, 2.2, 0.12), steel, x, 1.1, 1.0)), // mast
+    part(box(0.9, 0.12, 0.12), steel, 0, 2.15, 1.0),
+    ...[-0.3, 0.3].map((x) => part(box(0.12, 0.05, 1.1), steel, x, 0.12, 1.55)), // forks
+    ...[-1, 1].flatMap((x) => [0.55, -1.0].map((z) => part(cyl(0.3, 0.3, 0.25, 10).rotateZ(Math.PI / 2), dark, x * 0.62, 0.3, z))),
+  ]);
+  // A boom barrier: a post at -X, the red-and-white arm across, resting on a fork at +X.
+  const arm = Array.from({ length: 8 }, (_, k) => part(box(0.85, 0.12, 0.12), k % 2 ? 0xc8202a : 0xf2f2ee, -3.2 + 0.45 + k * 0.85, 1.0));
+  const boomGate = mergeGeometries([
+    part(box(0.45, 1.1, 0.45), 0xe8c22a, -3.4, 0.55),
+    part(box(0.6, 0.35, 0.5), dark, -3.4, 1.0), // the motor housing
+    ...arm,
+    part(box(0.08, 0.95, 0.08), steel, 3.4, 0.47),
+    part(box(0.3, 0.06, 0.12), steel, 3.4, 0.95),
+  ]);
+  // A level-crossing post: two white boards with red edges crossed in an X, facing +Z.
+  const board = (rot: number) => [part(box(1.3, 0.22, 0.03).rotateZ(rot), 0xc8202a, 0, 2.55, 0.06), part(box(1.2, 0.14, 0.035).rotateZ(rot), 0xf2f2ee, 0, 2.55, 0.06)];
+  const crossbuck = mergeGeometries([
+    part(box(0.1, 2.9, 0.1), 0xf2f2ee, 0, 1.45),
+    ...[0.4, 0.9, 1.4].map((y) => part(box(0.11, 0.25, 0.11), 0x1c1c1c, 0, y)),
+    ...board(0.6), ...board(-0.6),
+  ]);
+  // A chain-link panel between galvanised posts, a top rail, the mesh as a lattice of wires you see through.
+  const wire = 0x8a9096;
+  const fenceChainlink = mergeGeometries([
+    ...[-1.45, 1.45].map((x) => part(box(0.07, 2.1, 0.07), 0x9aa0a6, x, 1.05)),
+    part(box(2.9, 0.05, 0.05), 0x9aa0a6, 0, 2.05),
+    ...Array.from({ length: 13 }, (_, k) => part(box(0.018, 1.95, 0.018), wire, -1.35 + k * 0.225, 1.0)),
+    ...Array.from({ length: 9 }, (_, k) => part(box(2.85, 0.018, 0.018), wire, 0, 0.1 + k * 0.23)),
+  ]);
+  return { pallet, crates, drums, cableReel, lifebuoy, forklift, boomGate, crossbuck, 'fence-chainlink': fenceChainlink };
+}
+
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -787,7 +882,8 @@ function signTexture(variant: SignVariant): THREE.Texture {
 
 /** District props: their meshes are only built in a city that has some. */
 const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp', 'dragonLamp',
-  'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat']);
+  'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat',
+  'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
@@ -983,6 +1079,20 @@ export class PropSystem {
 
   private addCollider(p: PropState): void {
     const spec = propSpec(p.def);
+    if (p.def.kind === 'boomGate') {
+      // Only the post is solid while it stands (it still breaks on its whole footprint, see
+      // checkVehicle); knocked loose, the arm and fork rest on the ground (debrisParts).
+      this.world.createCollider(RAPIER.ColliderDesc.cuboid(0.25, 0.6, 0.25).setTranslation(-3.4, 0.6, 0).setMass(spec.mass).setFriction(0.6), p.body!);
+      return;
+    }
+    const round = ROUND[p.def.kind];
+    if (round) {
+      const desc = round === 'upright'
+        ? RAPIER.ColliderDesc.cylinder(spec.height / 2, spec.hx)
+        : RAPIER.ColliderDesc.cylinder(spec.hx, spec.height / 2).setRotation({ x: 0, y: 0, z: Math.SQRT1_2, w: Math.SQRT1_2 }); // axle along X
+      this.world.createCollider(desc.setTranslation(0, spec.height / 2, 0).setMass(spec.mass).setFriction(0.6), p.body!);
+      return;
+    }
     this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(spec.hx, spec.height / 2, spec.hz).setTranslation(0, spec.height / 2, 0).setMass(spec.mass).setFriction(0.6),
       p.body!,

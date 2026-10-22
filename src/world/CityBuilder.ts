@@ -5,7 +5,7 @@ import type { Building, CityData, Rect } from './CityGenerator';
 import { ROOF_TILES, zoneLook, type CityTheme } from './CityTheme';
 import { DISTRICT_DEFS } from './districts/index';
 import type { LotLook, TrimKind } from './districts/District';
-import { ARCADE_DEPTH, EAVE, JETTY_FROM, clockTowerFrame, jettyDepth, roofRise } from './districts/trims';
+import { ARCADE_DEPTH, EAVE, JETTY_FROM, clockTowerFrame, controlRoom, jettyDepth, roofRise } from './districts/trims';
 import type { Climate, TreeKind } from './Climate';
 import type { StreetProp } from './StreetProps';
 import { clipRect, groundBase, groundHeight, groundNormal, isFlat, type Terrain } from './Terrain';
@@ -483,8 +483,12 @@ const CAPS: Record<FacadeStyle, { over: number; up: number; down: number; stone:
   ashlar: { over: 0.35, up: 0.5, down: 0.45, stone: true },
   shophouse: { over: 0.3, up: 0.8, down: 0.35, stone: true }, // a moulded parapet
   storefront: { over: 0.15, up: 0.5, down: 0.25, stone: false },
+  rollerDoors: { over: 0.05, up: 0.4, down: 0.2, stone: false },
+  panel: { over: 0.08, up: 0.25, down: 0.15, stone: false }, // a low cap
 };
 const WHITE = new THREE.Color(0xffffff);
+/** Building.street / Building.open bits for the wall faces in order: +Z, -Z, +X, -X. */
+const SIDE_BITS = [1, 2, 4, 8];
 
 /** The builder for a facade style's merged walls (made on first use). */
 function wallsFor(walls: Map<FacadeStyle, GeometryBuilder>, facade: FacadeStyle): GeometryBuilder {
@@ -531,7 +535,10 @@ function addBuilding(
       [[x1, z1], [x1, z0], [1, 0, 0]],
       [[x0, z0], [x0, z1], [-1, 0, 0]],
     ];
-    for (const [[ax, az], [bx, bz], normal] of faces) {
+    for (const [k, [[ax, az], [bx, bz], normal]] of faces.entries()) {
+      // An open side (a transit shed's quay side) has no wall; the others show their inside through it.
+      if (open & SIDE_BITS[k]) continue;
+      if (open) roofs.quad([[bx, ya, bz], [ax, ya, az], [ax, yb, az], [bx, yb, bz]], normal.map((n) => -n), inside);
       let blank = 0;
       if (onGround) {
         let groundY = -Infinity;
@@ -559,8 +566,15 @@ function addBuilding(
     }
   };
   const trims = look.trims ?? [];
+  const open = b.open ?? 0;
+  const inside = wallColor.clone().multiplyScalar(0.45);
+  // A battery of silos stands in the lot instead of walls.
+  if (look.form === 'silos') {
+    addSilos(b, y0, roofs, wallColor, roofColor);
+    return;
+  }
   // An arcade sets its ground floor back behind columns; a jetty pushes the upper floors out.
-  const arcade = trims.includes('colonnade') && split === floors && floors >= 2;
+  const arcade = trims.includes('colonnade') && !open && split === floors && floors >= 2;
   const jetFloor = Math.ceil(JETTY_FROM / floor - 1e-6);
   const jetty = !arcade && trims.includes('jetty') && split === floors && jetFloor < floors ? jettyDepth(b.variant) : 0;
   let roofB: Building = b;
@@ -577,13 +591,26 @@ function addBuilding(
     if (split < floors) wallFaces(top, ySplit, y1, split, floors, false);
   }
 
-  addRoof(look, roofB, { y1, ySplit, split, floors, top: roofB === b ? top : roofB }, roofs, rng, wallColor, roofColor, snowy);
+  // Glazing on a sawtooth roof's steep faces, in the industrial walls' texture (its high strip of factory glass).
+  const glaze = (corners: number[][], normal: number[], width: number) => {
+    const u = Math.max(1, Math.round(width / WINDOW_WIDTH)) / WINDOW_CELLS;
+    const v0 = 0.56 / WINDOW_CELLS, v1 = 0.9 / WINDOW_CELLS;
+    facing(wallsFor(walls, 'industrial'), corners, normal, wallColor, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
+  };
+  addRoof(look, roofB, { y1, ySplit, split, floors, top: roofB === b ? top : roofB, glaze }, roofs, rng, wallColor, roofColor, snowy);
+  // Under an open side, the ceiling.
+  if (open) {
+    const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2, yc = y1 - 0.02;
+    roofs.quad([[x0, yc, z0], [x1, yc, z0], [x1, yc, z1], [x0, yc, z1]], [0, -1, 0], inside);
+  }
   addTrims(trims, b, { y0, floor, jetty, jetFloor, roofB, roof: look.roof, tile: roofColor }, roofs, wallColor, snowy);
 }
 
 const grow = (r: Rect, m: number): Rect => ({ x: r.x, z: r.z, w: r.w + m * 2, d: r.d + m * 2 });
 /** Chinatown's pagoda cap: how far out past the walls, how high its lid, and the corners' sweep. */
 const PAGODA = { over: 0.9, rise: 1.3, upturn: 0.6, sweep: 1.6 };
+/** How far a loading dock's canopy reaches out. */
+const DOCK = 2.2;
 /** How far a balcony stands out from the wall. */
 const BALCONY = 0.9;
 
@@ -593,6 +620,8 @@ interface RoofFrame {
   split: number;
   floors: number;
   top: Rect; // the top floors' footprint
+  /** A glazed quad into the industrial walls (sawtooth roofs' steep faces): corners, normal, width. */
+  glaze?: (corners: number[][], normal: number[], width: number) => void;
 }
 
 /** The roof for a look's shape, into the shared roof mesh. Shapes still to come stand in as gable or flat. */
@@ -615,9 +644,15 @@ function addRoof(look: LotLook, b: Building, f: RoofFrame, roofs: GeometryBuilde
       addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy, false);
       addPagodaEave(f.top, f.y1 + CAPS[look.facade].up, roofs, tile());
       return;
+    case 'sawtooth':
+      addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy, false); // the cap only (its rooftop draws still made)
+      addSawtooth(b, f.y1 + CAPS[look.facade].up, roofs, wallColor, tile(), f.glaze);
+      return;
+    case 'barrel':
+      addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy, false);
+      addBarrel(b, f.y1 + CAPS[look.facade].up, roofs, wallColor, tile());
+      return;
     case 'flat':
-    case 'sawtooth': // stub
-    case 'barrel': // stub
       addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy);
   }
 }
@@ -761,6 +796,28 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
         break;
       }
       case 'colonnade': {
+        if (b.open) {
+          // An open-sided shed: steel columns the full height along each open side, carrying the roof.
+          const steel = wallColor.clone().multiplyScalar(0.6);
+          const sides: [number, number, number, number, number][] = [
+            [1, b.x - b.w / 2, b.z + b.d / 2, b.x + b.w / 2, b.z + b.d / 2], [2, b.x - b.w / 2, b.z - b.d / 2, b.x + b.w / 2, b.z - b.d / 2],
+            [4, b.x + b.w / 2, b.z - b.d / 2, b.x + b.w / 2, b.z + b.d / 2], [8, b.x - b.w / 2, b.z - b.d / 2, b.x - b.w / 2, b.z + b.d / 2],
+          ];
+          for (const [bit, ax, az, bx, bz] of sides) {
+            if (!(b.open & bit)) continue;
+            const len = Math.hypot(bx - ax, bz - az);
+            const n = Math.max(2, Math.round(len / 6) + 1);
+            const ix = az === bz ? 0 : Math.sign(b.x - ax) * 0.3, iz = ax === bx ? 0 : Math.sign(b.z - az) * 0.3;
+            for (let k = 0; k < n; k++) {
+              const u = n === 1 ? 0.5 : k / (n - 1);
+              roofs.box({ x: ax + (bx - ax) * u + ix, z: az + (bz - az) * u + iz, w: 0.5, d: 0.5 }, f.y0, b.h, steel, null, steel);
+            }
+            // The eave beam over them.
+            const beam: Rect = az === bz ? { x: b.x, z: az + iz, w: b.w, d: 0.5 } : { x: ax + ix, z: b.z, w: 0.5, d: b.d };
+            roofs.box(beam, y1 - 0.8, 0.8, steel, null, steel);
+          }
+          break;
+        }
         // Columns on the lot line every ~3 m round the set-back ground floor, and the arcade's ceiling.
         const top = f.y0 + f.floor;
         const col = wallColor.clone().lerp(WHITE, 0.3);
@@ -810,10 +867,50 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
         });
         break;
       }
-      case 'loadingDock':
+      case 'loadingDock': {
+        // A steel canopy over the ground-floor doors along each street side (not an open one), on
+        // hangers back to the wall. The doors and bumpers are in the rollerDoors facade.
+        const steel = new THREE.Color(0x5a6168);
+        const yc = f.y0 + Math.min(f.floor, 3.5) + 0.25;
+        const sides: [number, number, number][] = [[1, 0, 1], [2, 0, -1], [4, 1, 0], [8, -1, 0]];
+        for (const [bit, nx, nz] of sides) {
+          if (b.street !== undefined && !(b.street & bit)) continue;
+          if ((b.open ?? 0) & bit) continue;
+          const len = (nx ? b.d : b.w) - 2;
+          if (len < 4) continue;
+          const cx = b.x + nx * (b.w / 2 + DOCK / 2), cz = b.z + nz * (b.d / 2 + DOCK / 2);
+          roofs.box(nx ? { x: cx, z: cz, w: DOCK, d: len } : { x: cx, z: cz, w: len, d: DOCK }, yc, 0.18, steel, null, snowy ? new THREE.Color(SNOW) : steel);
+          const n = Math.max(2, Math.round(len / 5));
+          for (let k = 0; k <= n; k++) {
+            const t = -len / 2 + (len * k) / n;
+            const hx = b.x + nx * (b.w / 2 + DOCK - 0.1) + (nx ? 0 : t), hz = b.z + nz * (b.d / 2 + DOCK - 0.1) + (nz ? 0 : t);
+            roofs.box({ x: hx, z: hz, w: 0.06, d: 0.06 }, yc + 0.18, 1.6, steel, null, steel);
+          }
+        }
+        break;
+      }
+      case 'radarMast': {
+        // The control room on the roof (its glass band drawn lit by the district renderer), a
+        // lattice mast with a radar bar, and a flagpole.
+        const r = controlRoom(b);
+        const frame = wallColor.clone().lerp(WHITE, 0.3);
+        roofs.box(r, y1, 0.6, frame, null, frame);
+        roofs.box(r, y1 + r.h - 0.5, 0.5, frame, null, snowy ? new THREE.Color(SNOW) : frame);
+        roofs.box({ x: r.x, z: r.z, w: r.w + 0.6, d: r.d + 0.6 }, y1 + r.h, 0.25, frame.clone().multiplyScalar(0.8), null, snowy ? new THREE.Color(SNOW) : frame);
+        const mastTop = y1 + r.h + 6;
+        const steel = new THREE.Color(0xd8d8d0);
+        for (const [dx, dz] of [[-0.35, -0.35], [0.35, -0.35], [0.35, 0.35], [-0.35, 0.35]]) {
+          roofs.box({ x: r.x + dx, z: r.z + dz, w: 0.08, d: 0.08 }, y1 + r.h, 6, steel, null, steel);
+        }
+        for (let y = y1 + r.h + 1; y < mastTop; y += 1.2) roofs.box({ x: r.x, z: r.z, w: 0.78, d: 0.78 }, y, 0.06, steel, null, steel);
+        roofs.box({ x: r.x, z: r.z, w: 3.4, d: 0.3 }, mastTop, 0.35, new THREE.Color(0x2a2d30), null, new THREE.Color(0x2a2d30));
+        const px = r.x + r.w / 2 - 0.4, pz = r.z + r.d / 2 - 0.4;
+        roofs.box({ x: px, z: pz, w: 0.1, d: 0.1 }, y1 + r.h, 5, steel, null, steel);
+        roofs.box({ x: px + 0.8, z: pz, w: 1.5, d: 0.04 }, y1 + r.h + 4, 0.9, new THREE.Color(0x2f5f9a), null, new THREE.Color(0x2f5f9a));
+        break;
+      }
       case 'porch':
       case 'hoist':
-      case 'radarMast':
         break;
     }
   }
@@ -861,6 +958,95 @@ function addHip(b: Rect, y: number, roofs: GeometryBuilder, tileColor: THREE.Col
   quad([P(len, ye, run), P(len, ye, -run), P(ridge, yr, 0), P(ridge, yr, 0)], N((yr - ye) / kh, (len - ridge) / kh, 0), tileColor.clone().multiplyScalar(0.92));
   quad([P(-len, ye, -run), P(-len, ye, run), P(-ridge, yr, 0), P(-ridge, yr, 0)], N(-(yr - ye) / kh, (len - ridge) / kh, 0), tileColor.clone().multiplyScalar(0.92));
   quad([P(-len, ye, -run), P(len, ye, -run), P(len, ye, run), P(-len, ye, run)], [0, -1, 0], tileColor.clone().multiplyScalar(0.6));
+}
+
+/**
+ * A quad with its corners turned to face `normal` (whichever way round they came), into `to`;
+ * UVs follow their corners.
+ */
+function facing(to: GeometryBuilder, corners: number[][], normal: number[], color: THREE.Color, uv?: number[][]): void {
+  const [p0, p1, , p3] = corners;
+  const a = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+  const c = [p3[0] - p0[0], p3[1] - p0[1], p3[2] - p0[2]];
+  const n = [a[1] * c[2] - a[2] * c[1], a[2] * c[0] - a[0] * c[2], a[0] * c[1] - a[1] * c[0]];
+  const flip = n[0] * normal[0] + n[1] * normal[1] + n[2] * normal[2] < 0;
+  to.quad(flip ? [...corners].reverse() : corners, normal, color, uv && (flip ? [...uv].reverse() : uv));
+}
+
+/**
+ * Sawtooth roof: teeth along the longer side, each a slope rising to a steep glazed face (into the
+ * industrial walls through `glaze`), its ends closed in the wall colour.
+ */
+function addSawtooth(b: Rect, y: number, roofs: GeometryBuilder, wallColor: THREE.Color, tileColor: THREE.Color, glaze?: RoofFrame['glaze']): void {
+  const alongX = b.w >= b.d;
+  const A = (alongX ? b.w : b.d) / 2;
+  const C = (alongX ? b.d : b.w) / 2;
+  const P = (a: number, h: number, c: number) => (alongX ? [b.x + a, h, b.z + c] : [b.x + c, h, b.z + a]);
+  const N = (a: number, h: number, c: number) => (alongX ? [a, h, c] : [c, h, a]);
+  const n = Math.max(2, Math.round((2 * A) / 7));
+  const t = (2 * A) / n;
+  const rise = Math.min(3, t * 0.45);
+  const k = Math.hypot(t, rise);
+  for (let i = 0; i < n; i++) {
+    const a0 = -A + i * t, a1 = a0 + t;
+    facing(roofs, [P(a0, y, -C), P(a1, y + rise, -C), P(a1, y + rise, C), P(a0, y, C)], N(-rise / k, t / k, 0), tileColor);
+    const glass = [P(a1, y, -C), P(a1, y, C), P(a1, y + rise, C), P(a1, y + rise, -C)];
+    if (glaze) glaze(glass, N(1, 0, 0), 2 * C);
+    else facing(roofs, glass, N(1, 0, 0), wallColor);
+    for (const side of [-1, 1]) facing(roofs, [P(a0, y, side * C), P(a1, y, side * C), P(a1, y + rise, side * C), P(a1, y + rise, side * C)], N(0, 0, side), wallColor);
+  }
+}
+
+/** Barrel roof: a shallow arch across the shorter side, running the building's length, with its ends filled. */
+function addBarrel(b: Rect, y: number, roofs: GeometryBuilder, wallColor: THREE.Color, tileColor: THREE.Color): void {
+  const alongX = b.w >= b.d;
+  const A = (alongX ? b.w : b.d) / 2;
+  const C = (alongX ? b.d : b.w) / 2;
+  const o = 0.3; // eave overhang across
+  const P = (a: number, h: number, c: number) => (alongX ? [b.x + a, h, b.z + c] : [b.x + c, h, b.z + a]);
+  const N = (a: number, h: number, c: number) => (alongX ? [a, h, c] : [c, h, a]);
+  const rise = Math.min(4, C * 0.35);
+  const h = (c: number) => y + rise * (1 - (c / (C + o)) ** 2);
+  const SEG = 10;
+  const cs = Array.from({ length: SEG + 1 }, (_, i) => -C - o + ((2 * (C + o)) * i) / SEG);
+  for (let i = 0; i < SEG; i++) {
+    const [c0, c1] = [cs[i], cs[i + 1]];
+    const dc = c1 - c0, dh = h(c1) - h(c0), k = Math.hypot(dc, dh);
+    facing(roofs, [P(-A, h(c0), c0), P(A, h(c0), c0), P(A, h(c1), c1), P(-A, h(c1), c1)], N(0, dc / k, -dh / k), tileColor);
+    facing(roofs, [P(-A, h(c0) - 0.02, c0), P(A, h(c0) - 0.02, c0), P(A, h(c1) - 0.02, c1), P(-A, h(c1) - 0.02, c1)], N(0, -1, 0), tileColor.clone().multiplyScalar(0.5));
+    // The end walls under the arch (inside the wall line only).
+    const e0 = Math.max(-C, c0), e1 = Math.min(C, c1);
+    if (e1 <= e0) continue;
+    for (const end of [-1, 1]) facing(roofs, [P(end * A, y - 0.05, e0), P(end * A, y - 0.05, e1), P(end * A, h(e1), e1), P(end * A, h(e0), e0)], N(end, 0, 0), wallColor);
+  }
+}
+
+/** A battery of silos in two rows along the lot, a head house along the top, in the roof mesh. */
+function addSilos(b: Building, y0: number, roofs: GeometryBuilder, wallColor: THREE.Color, roofColor: THREE.Color): void {
+  const alongX = b.w >= b.d;
+  const L = alongX ? b.w : b.d, W = alongX ? b.d : b.w;
+  const rows = W >= 9 ? 2 : 1;
+  const r = Math.min(W / rows / 2 - 0.1, 4.5);
+  const n = Math.max(1, Math.floor(L / (2 * r + 0.2)));
+  const pitch = L / n;
+  const SIDES = 14;
+  const at = (a: number, c: number) => (alongX ? [b.x + a, b.z + c] : [b.x + c, b.z + a]);
+  const top = y0 + b.h - 4; // the head house sits above
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < rows; j++) {
+      const [cx, cz] = at(-L / 2 + pitch * (i + 0.5), rows === 1 ? 0 : (j - 0.5) * (W / 2));
+      for (let k = 0; k < SIDES; k++) {
+        const t0 = (k / SIDES) * Math.PI * 2, t1 = ((k + 1) / SIDES) * Math.PI * 2;
+        const [x0, z0, x1, z1] = [cx + Math.cos(t0) * r, cz + Math.sin(t0) * r, cx + Math.cos(t1) * r, cz + Math.sin(t1) * r];
+        const tm = (t0 + t1) / 2;
+        facing(roofs, [[x0, y0, z0], [x1, y0, z1], [x1, top, z1], [x0, top, z0]], [Math.cos(tm), 0, Math.sin(tm)], wallColor.clone().multiplyScalar(0.92 + 0.08 * Math.cos(tm)));
+        facing(roofs, [[cx, top + 1, cz], [x0, top, z0], [x1, top, z1], [x1, top, z1]], [Math.cos(tm) * 0.3, 1, Math.sin(tm) * 0.3], roofColor);
+      }
+    }
+  }
+  // The head house along the battery's top and a gallery door at the seaward end.
+  const hh: Rect = alongX ? { x: b.x, z: b.z, w: L - 1, d: 3.6 } : { x: b.x, z: b.z, w: 3.6, d: L - 1 };
+  roofs.box(hh, top + 0.6, 3.6, wallColor.clone().multiplyScalar(0.85), null, roofColor);
 }
 
 function pickTree(climate: Climate, rng: Rng): TreeKind {

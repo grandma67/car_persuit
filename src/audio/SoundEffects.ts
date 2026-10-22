@@ -221,6 +221,19 @@ export class SoundEffects {
       this.impact(Math.min(1, strength + 0.3));
       return;
     }
+    // Harbor breakables (drums, the forklift, boom gates and crossing posts clang as metal, below).
+    if (kind === 'pallet' || kind === 'crates' || kind === 'cableReel') {
+      this.woodBreak(kind === 'crates' ? 0.7 : 0.5, gain);
+      return;
+    }
+    if (kind === 'lifebuoy') {
+      this.burst(0, 0.2, 'lowpass', 900, 0.7, gain);
+      return;
+    }
+    if (kind === 'forklift') {
+      this.impact(Math.min(1, strength + 0.3));
+      return;
+    }
     if (kind === 'produceStall' || kind === 'dimSumCart' || kind === 'fishCrate') {
       this.woodBreak(0.4, gain);
       return;
@@ -385,7 +398,7 @@ export class SoundEffects {
     band.frequency.exponentialRampToValueAtTime(650 - 200 * fast, end); // bigger Doppler drop when fast
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.32 * strength, peak);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.32 * strength), peak); // an exponential ramp can't reach 0
     gain.gain.exponentialRampToValueAtTime(0.0001, end);
     swish.connect(band).connect(gain).connect(panner);
     swish.start(now, Math.random() * 1.5);
@@ -399,7 +412,7 @@ export class SoundEffects {
     low.frequency.value = 160;
     const lowGain = ctx.createGain();
     lowGain.gain.setValueAtTime(0.0001, now);
-    lowGain.gain.exponentialRampToValueAtTime(0.6 * heavy * strength, peak + 0.05);
+    lowGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.6 * heavy * strength), peak + 0.05);
     lowGain.gain.exponentialRampToValueAtTime(0.0001, end + 0.2);
     buffet.connect(low).connect(lowGain).connect(panner);
     buffet.start(now, Math.random() * 1.5);

@@ -223,6 +223,18 @@ function incense(): THREE.BufferGeometry {
   ]);
 }
 
+/** A mooring bollard: a squat cast-iron post with a flared cap, painted black with a yellow band. */
+function bollard(): THREE.BufferGeometry {
+  const iron = 0x22252a;
+  return mergeGeometries([
+    part(cyl(0.38, 0.4, 0.1, 10), iron, 0, 0.05),
+    part(cyl(0.24, 0.28, 0.55, 10), iron, 0, 0.37),
+    part(cyl(0.25, 0.25, 0.08, 10), 0xd8b02a, 0, 0.42),
+    part(cyl(0.34, 0.24, 0.12, 10), iron, 0, 0.7),
+    part(cyl(0.34, 0.34, 0.06, 10), iron, 0, 0.79),
+  ]);
+}
+
 const SNOW = 0xeef2f6;
 /** Snow lying on the Old City pieces in a snowy city. */
 const SNOW_CAPS = {
@@ -231,10 +243,11 @@ const SNOW_CAPS = {
   marketCross: () => part(cyl(0, 3.4, 2.25, 8), SNOW, 0, 5.6),
   column: () => part(cyl(0.44, 0.44, 0.1, 12), SNOW, 0, 3.9),
   lion: () => mergeGeometries([part(box(0.57, 0.06, 0.52), SNOW, 0, 2.26, 0.12), part(box(1.12, 0.05, 1.12), SNOW, 0, 0.89)]),
+  bollard: () => part(cyl(0.33, 0.33, 0.05, 10), SNOW, 0, 0.845),
 };
 
-/** District pieces (Old City, the lions) stand straight on the ground, without a paved pad. */
-const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense']);
+/** District pieces (Old City, the lions, bollards) stand straight on the ground, without a paved pad. */
+const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense', 'bollard']);
 
 /**
  * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
@@ -330,7 +343,7 @@ export class Landmarks {
     const models = {
       fountain: fountain(), statue: statue(), obelisk: obelisk(), sculpture: sculpture(),
       cannon: cannon(), column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
-      lion: lion(), incense: incense(),
+      lion: lion(), incense: incense(), bollard: bollard(),
     };
 
     const plain = new Map<string, THREE.Matrix4[]>(); // district pieces by kind, drawn instanced

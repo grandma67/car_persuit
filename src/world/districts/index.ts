@@ -2,7 +2,8 @@
 // order; placement then goes in a per-seed shuffled order (applyDistricts), a later district keeping
 // a block away from the earlier ones.
 import { CHINATOWN_DEF } from './Chinatown';
+import { HARBOR_DEF } from './Harbor';
 import type { DistrictDef } from './District';
 import { OLD_CITY_DEF } from './OldCity';
 
-export const DISTRICT_DEFS: DistrictDef[] = [OLD_CITY_DEF, CHINATOWN_DEF];
+export const DISTRICT_DEFS: DistrictDef[] = [OLD_CITY_DEF, CHINATOWN_DEF, HARBOR_DEF];
