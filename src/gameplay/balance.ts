@@ -98,13 +98,13 @@ export const CHECKPOINT_HEAT_RATE = 1.3;
 export const ROADBLOCK_INTERVAL = 35;
 
 /**
- * City districts (Old City, Chinatown, Harbor, Farm): shared rules. Anything above a road (gate
+ * City districts (Old City, Chinatown, Harbor, Farm, Slums): shared rules. Anything above a road (gate
  * arches, lantern strings, crane portals) clears the tallest vehicle by 1.5 m; kerb clutter may
  * poke into the roadway but stays this far from the centre line (about 0.75 m beside the widest
  * body in its lane).
  */
 export const DISTRICTS = {
-  max: 4, // safety cap on districts per city, in placement order
+  max: 5, // safety cap on districts per city, in placement order
   orderSalt: 0x0d3e7, // stream for the per-seed placement order of the rolled districts
   clutterMinOffset: 5, // metres from the centre line
   overheadClearance: Math.max(...ALL_SPECS.map(vehicleTop)) + 1.5,
@@ -265,6 +265,33 @@ export const FARM_FIELDS = {
   standIn: 0.95, // the pumpkin stand's centre, in from the kerb
   standAlong: 3, // and along from the gate's edge
   tractors: [1, 3] as [number, number],
+};
+
+/** The Slums: run-down blocks just outside the centre (world/districts/Slums.ts), metres where not said. */
+export const SLUMS = {
+  chance: 0.35,
+  density: 0.6,
+  pickupWeight: 2, // spawn weight multipliers inside
+  vanWeight: 1.5,
+  copSpawnSkip: 0.5,
+  vacant: [1, 2] as [number, number], // vacant blocks (rubble lots), one of which may be the camp
+  campChance: 0.6, // a tent camp in a vacant block (or half of one)
+  junkyardChance: 0.6, // a junkyard block (3×3 always, when it has the room)
+  ruins: [1, 2] as [number, number], // destroyed buildings on lots that front a street
+  ruinMin: 10, // a ruin's lot, at least this each way
+  gutted: [1, 3] as [number, number], // burnt-out shells
+  boardedShare: 0.25, // of the remaining lots: shop rows shut on the ground floor
+  squatShare: 0.15, // tenements with one bay fallen in, a tarp over it
+  fenceInset: 0.3, // a vacant lot's chain-link stands this far inside the sidewalk line
+  fenceHole: 9, // the torn gap in it on a street side, wide enough for any car
+  weeds: [4, 9] as [number, number], // weed patches per vacant lot
+  maxTags: 260, // graffiti decals in the district, at most
+  maxWrecks: 40, // wrecked cars, at most
+  maxGlow: 90, // at night: the few working lamps, lit windows, the corner store's sign, burn barrels and camp fires
+  rubbleGrip: 0.8, // tyre grip multiplier on rubble lots
+  rubbleDrag: 1.5, // extra rolling drag there, m/s²
+  potholeKick: 0.35, // vertical kick when a wheel crosses a pothole, m/s of the car's speed per 10 m/s
+  trainChance: 0.5, // a freight train crosses the overpass now and then (per seed)
 };
 
 /** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */

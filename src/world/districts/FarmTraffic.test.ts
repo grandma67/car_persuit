@@ -18,7 +18,7 @@ import type { District, DistrictTraffic } from './District';
 import { farmFields, fenceGaps, ranchGate } from './Farm';
 
 const DT = 1 / 60;
-const ALONE = { farm: true, oldtown: false, chinatown: false, harbor: false };
+const ALONE = { farm: true, oldtown: false, chinatown: false, harbor: false, slums: false };
 
 /** Seeds whose forced Farm sits on flat ground (the sim's ground is a plane). */
 function flatSeeds(count: number): [number, CityData, District][] {

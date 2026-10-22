@@ -12,10 +12,10 @@ import type { FacadeStyle } from '../../render/Facades';
 export type { LotStyle } from '../lots';
 
 /** Grows with the registry (world/districts/index.ts). */
-export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm';
+export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums';
 
 /** What a special (unfilled) block is for; the district's dressing fills it. */
-export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard';
+export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'camp' | 'junkyard';
 
 // --- Building looks (rendered by CityBuilder's addBuilding through the facade pipeline) ---
 
@@ -137,7 +137,8 @@ export interface DistrictDef {
   site: 'inland' | 'edge' | 'coast';
   shapes: [number, number][]; // cluster sizes in blocks; both orientations are tried. One is rolled per seed, the smaller ones are fallbacks
   rings: Zone[]; // zones its blocks may sit in
-  minShare?: Partial<Record<Zone, number>>; // e.g. { midtown: 0.5 }
+  /** Least share of blocks per zone, e.g. { midtown: 0.5 }; zones joined by '+' count together ({ 'residential+industrial': 0.5 }). */
+  minShare?: Partial<Record<Zone | `${Zone}+${Zone}`, number>>;
   minCore?: number; // least share of downtown + midtown blocks
   gates: 'all' | 'mainStreet';
   extraGates?: number; // with 'mainStreet': up to this many more

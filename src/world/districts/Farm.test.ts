@@ -12,7 +12,7 @@ import { CROPS, FARM_DEF, cropCap, farmFields, farmyardBlock, fenceGaps, ranchGa
 import type { RanchGateData } from './FarmGate';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const city = (seed: number) => generateCity(seed, undefined, { force: { farm: true, oldtown: false, chinatown: false, harbor: false } });
+const city = (seed: number) => generateCity(seed, undefined, { force: { farm: true, oldtown: false, chinatown: false, harbor: false, slums: false } });
 const placed = SEEDS.flatMap((seed) => {
   const c = city(seed);
   const q = c.districts.find((d) => d.kind === 'farm');
@@ -316,7 +316,7 @@ describe('Farm runs: harvest night, climate, glow', () => {
 });
 
 describe('Farm with every district forced on', () => {
-  const all = SEEDS.map((seed) => [seed, generateCity(seed, undefined, { force: { farm: true, oldtown: true, chinatown: true, harbor: true } })] as const);
+  const all = SEEDS.map((seed) => [seed, generateCity(seed, undefined, { force: { farm: true, oldtown: true, chinatown: true, harbor: true, slums: true } })] as const);
 
   it('places on most seeds, or sits out cleanly', () => {
     expect(all.filter(([, c]) => c.districts.some((d) => d.kind === 'farm')).length).toBeGreaterThan(SEEDS.length * 0.6);

@@ -68,8 +68,9 @@ function candidates(def: DistrictDef, [a, b]: [number, number], grid: DistrictGr
         const zones: Zone[] = [];
         for (let j = j0; j < j0 + h; j++) for (let i = i0; i < i0 + w; i++) zones.push(city.blocks[j * n + i].zone);
         if (!zones.every((d) => def.rings.includes(d))) continue;
-        const share = Object.entries(def.minShare ?? {}) as [Zone, number][];
-        if (share.some(([d, min]) => zones.filter((x) => x === d).length < min * zones.length)) continue;
+        // A share's key is a zone or zones joined by '+' (their blocks counted together).
+        const share = Object.entries(def.minShare ?? {}) as [string, number][];
+        if (share.some(([d, min]) => zones.filter((x) => d.split('+').includes(x)).length < min * zones.length)) continue;
         if (def.minCore && zones.filter((x) => x === 'downtown' || x === 'midtown').length < def.minCore * zones.length) continue;
         out.push({ i0, j0, w, h });
       }

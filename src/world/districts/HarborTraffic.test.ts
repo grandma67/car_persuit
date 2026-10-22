@@ -18,7 +18,7 @@ import { inDistrict } from './apply';
 
 const DT = 1 / 60;
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const ALONE = { harbor: true, oldtown: false, chinatown: false, farm: false };
+const ALONE = { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false };
 
 /** Seeds on flat ground with no canals (the sim's ground is a plane). */
 function flatSeeds(count: number): [number, CityData, District][] {
