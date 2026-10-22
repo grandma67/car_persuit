@@ -20,7 +20,7 @@ export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard';
 // --- Building looks (rendered by CityBuilder's addBuilding through the facade pipeline) ---
 
 export type RoofShape = 'flat' | 'gable' | 'steepGable' | 'hip' | 'gambrel' | 'sawtooth' | 'barrel' | 'monopitch' | 'pagoda';
-export type TrimKind = 'jetty' | 'colonnade' | 'balcony' | 'loadingDock' | 'porch' | 'chimney' | 'hoist' | 'clockTower' | 'radarMast';
+export type TrimKind = 'jetty' | 'colonnade' | 'balcony' | 'loadingDock' | 'porch' | 'chimney' | 'hoist' | 'clockTower' | 'radarMast' | 'stilts';
 
 /** How a lot's building looks: facade per floor band, roof, palette and merged trims. */
 export interface LotLook {
@@ -31,6 +31,11 @@ export interface LotLook {
   palette: number[]; // wall tints, picked by the building's variant
   roofTiles?: number[]; // roof colours for pitched roofs
   trims?: TrimKind[];
+  /**
+   * The colour painted into the facade texture itself (barn red under white trim): untextured
+   * parts in the wall colour (gable ends, trims) take it too, so they match the walls.
+   */
+  paint?: number;
   /** Not walls but a battery of silos (Harbor). */
   form?: 'silos';
 }

@@ -12,7 +12,9 @@ export type LandmarkKind =
   // Chinatown
   | 'lion' | 'pagoda' | 'incense'
   // Harbor
-  | 'bollard';
+  | 'bollard'
+  // Farm
+  | 'silo' | 'grainBin' | 'windmill' | 'waterTower';
 
 export interface Landmark {
   kind: LandmarkKind;
@@ -27,6 +29,8 @@ export interface Landmark {
   crossing?: number;
   /** Pagodas: how many storeys. */
   tiers?: number;
+  /** A look variant (the Farm's silos: 0 concrete, 1 blue steel). */
+  variant?: number;
 }
 
 /** A jump ramp's deck in local space: the car drives along +Z from the toe to the lip. */
@@ -53,6 +57,10 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   pagoda: 4.2,
   incense: 0.8,
   bollard: 0.35,
+  silo: 3.2,
+  grainBin: 3.6,
+  windmill: 3.2, // the tower and its stock tank
+  waterTower: 3,
 };
 /** What a town square may roll (fixed: adding a kind above must not move any seed's squares). */
 const LANDMARK_KINDS: LandmarkKind[] = ['fountain', 'statue', 'obelisk', 'sculpture', 'ramp'];

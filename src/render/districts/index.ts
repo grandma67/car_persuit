@@ -8,6 +8,7 @@ import type { Climate } from '../../world/Climate';
 import type { District, DistrictKind } from '../../world/districts/District';
 import type { GroundHeight } from '../../world/Terrain';
 import { renderChinatown } from './Chinatown';
+import { renderFarm } from './Farm';
 import { renderHarbor } from './Harbor';
 import { renderOldCity } from './OldCity';
 
@@ -38,6 +39,7 @@ export const DISTRICT_RENDERERS: Partial<Record<DistrictKind, DistrictRenderer>>
   oldtown: renderOldCity,
   chinatown: renderChinatown,
   harbor: renderHarbor,
+  farm: renderFarm,
 };
 
 /** Draw every placed district's structures, overhead pieces and ground patches. */

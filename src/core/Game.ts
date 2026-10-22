@@ -127,6 +127,7 @@ export class Game {
   private airtime = new Airtime(); // the player's jumps, for the run log
   private rampJump = false; // the flight in progress left from a ramp
   private ramSound = 0; // a cop started ramming the player this frame: crash strength 0..1
+  private onGrid = false; // the player is over a cattle grid (it rattles as they cross onto it)
   private landmarks: Landmarks;
   private chaseTarget: ChaseTarget = { position: new THREE.Vector3(), velocity: new THREE.Vector3() };
   private sirens: Sirens;
@@ -1069,6 +1070,9 @@ export class Game {
     const playerCrash = Math.max(impact > 0 ? impactStrength(impact) : 0, this.ramSound);
     this.ramSound = 0;
     this.audio.impact(Math.max(playerCrash, crashSound));
+    const grid = this.city.districts.some((q) => q.dressing.ground.some((g) => g.kind === 'cattleGrid' && Math.abs(p.position.x - g.x) <= g.w / 2 && Math.abs(p.position.z - g.z) <= g.d / 2));
+    if (grid && !this.onGrid) this.audio.rattle(p.speed);
+    this.onGrid = grid;
     if (this.state === 'playing') this.whooshes();
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
     const w = waterNearby(p.position.x, p.position.z, this.city.islandSize / 2, this.city.terrain.canals);

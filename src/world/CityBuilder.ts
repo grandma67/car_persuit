@@ -5,7 +5,7 @@ import type { Building, CityData, Rect } from './CityGenerator';
 import { ROOF_TILES, zoneLook, type CityTheme } from './CityTheme';
 import { DISTRICT_DEFS } from './districts/index';
 import type { LotLook, TrimKind } from './districts/District';
-import { ARCADE_DEPTH, EAVE, JETTY_FROM, clockTowerFrame, controlRoom, jettyDepth, roofRise } from './districts/trims';
+import { ARCADE_DEPTH, EAVE, GAMBREL_KNEE, JETTY_FROM, STILTS, clockTowerFrame, controlRoom, jettyDepth, roofRise } from './districts/trims';
 import type { Climate, TreeKind } from './Climate';
 import type { StreetProp } from './StreetProps';
 import { clipRect, groundBase, groundHeight, groundNormal, isFlat, type Terrain } from './Terrain';
@@ -485,6 +485,8 @@ const CAPS: Record<FacadeStyle, { over: number; up: number; down: number; stone:
   storefront: { over: 0.15, up: 0.5, down: 0.25, stone: false },
   rollerDoors: { over: 0.05, up: 0.4, down: 0.2, stone: false },
   panel: { over: 0.08, up: 0.25, down: 0.15, stone: false }, // a low cap
+  boards: { over: 0.2, up: 0.25, down: 0.25, stone: false },
+  barnDoors: { over: 0.2, up: 0.25, down: 0.25, stone: false },
 };
 const WHITE = new THREE.Color(0xffffff);
 /** Building.street / Building.open bits for the wall faces in order: +Z, -Z, +X, -X. */
@@ -504,10 +506,17 @@ function wallsFor(walls: Map<FacadeStyle, GeometryBuilder>, facade: FacadeStyle)
 function addBuilding(
   b: Building, y0: number, look: LotLook, walls: Map<FacadeStyle, GeometryBuilder>, roofs: GeometryBuilder, rng: Rng, snowy: boolean, terrain: Terrain,
 ): void {
+  // A granary stands on posts: its walls start above them (the collider stays the lot box).
+  if (look.trims?.includes('stilts')) {
+    y0 += STILTS;
+    b = { ...b, h: b.h - STILTS };
+  }
   const upper = wallsFor(walls, look.facade);
   const ground = look.ground && look.ground !== look.facade ? wallsFor(walls, look.ground) : null;
   const palette = look.palette;
-  const wallColor = new THREE.Color(palette[Math.floor(b.variant * palette.length)]);
+  const tint = new THREE.Color(palette[Math.floor(b.variant * palette.length)]);
+  // Untextured parts (gable ends, trims, base course) take the paint the texture carries.
+  const wallColor = look.paint ? tint.clone().multiply(new THREE.Color(look.paint)) : tint;
   const roofColor = snowy ? new THREE.Color(SNOW) : wallColor.clone().multiplyScalar(0.55);
   // Per-building window pattern offset, snapped to whole cells so windows line up with floors.
   const uOff = Math.floor(b.variant * 97) % WINDOW_CELLS / WINDOW_CELLS;
@@ -553,7 +562,7 @@ function addBuilding(
       const band = (to: GeometryBuilder, f0: number, f1: number, yA: number, yB: number) => {
         const v0 = vOff + f0 / WINDOW_CELLS;
         const v1 = vOff + f1 / WINDOW_CELLS;
-        to.quad([[ax, yA, az], [bx, yA, bz], [bx, yB, bz], [ax, yB, az]], normal, wallColor, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
+        to.quad([[ax, yA, az], [bx, yA, bz], [bx, yB, bz], [ax, yB, az]], normal, tint, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
       };
       // The ground floor in its own style (shopfronts, roller doors), when it's at street level.
       if (ground && f === 0) {
@@ -595,7 +604,7 @@ function addBuilding(
   const glaze = (corners: number[][], normal: number[], width: number) => {
     const u = Math.max(1, Math.round(width / WINDOW_WIDTH)) / WINDOW_CELLS;
     const v0 = 0.56 / WINDOW_CELLS, v1 = 0.9 / WINDOW_CELLS;
-    facing(wallsFor(walls, 'industrial'), corners, normal, wallColor, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
+    facing(wallsFor(walls, 'industrial'), corners, normal, tint, [[uOff, v0], [uOff + u, v0], [uOff + u, v1], [uOff, v1]]);
   };
   addRoof(look, roofB, { y1, ySplit, split, floors, top: roofB === b ? top : roofB, glaze }, roofs, rng, wallColor, roofColor, snowy);
   // Under an open side, the ceiling.
@@ -636,9 +645,13 @@ function addRoof(look: LotLook, b: Building, f: RoofFrame, roofs: GeometryBuilde
       addHip(b, f.y1, roofs, tile(), roofRise('hip', b));
       return;
     case 'gable':
-    case 'gambrel': // stub
-    case 'monopitch': // stub
       addGable(b, f.y1, roofs, wallColor, tile());
+      return;
+    case 'gambrel':
+      addGambrel(b, f.y1, roofs, wallColor, tile(), roofRise('gambrel', b));
+      return;
+    case 'monopitch':
+      addMonopitch(b, f.y1, roofs, wallColor, tile(), roofRise('monopitch', b), (b.variant * 11) % 1 < 0.5 ? -1 : 1);
       return;
     case 'pagoda':
       addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy, false);
@@ -909,12 +922,86 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
         roofs.box({ x: px + 0.8, z: pz, w: 1.5, d: 0.04 }, y1 + r.h + 4, 0.9, new THREE.Color(0x2f5f9a), null, new THREE.Color(0x2f5f9a));
         break;
       }
-      case 'porch':
-      case 'hoist':
+      case 'porch': {
+        // A porch along the house's front (its first street side, else +Z): a timber deck a step
+        // up, white posts and rail, under a shallow lean-to roof.
+        const bits: [number, number, number][] = [[1, 0, 1], [2, 0, -1], [4, 1, 0], [8, -1, 0]];
+        const [, nx, nz] = bits.find(([bit]) => (b.street ?? 1) & bit) ?? bits[0];
+        const len = (nx ? b.d : b.w) - 1.2;
+        if (len < 3) break;
+        const deep = PORCH;
+        const cx = b.x + nx * (b.w / 2 + deep / 2), cz = b.z + nz * (b.d / 2 + deep / 2);
+        const deck: Rect = nx ? { x: cx, z: cz, w: deep, d: len } : { x: cx, z: cz, w: len, d: deep };
+        const white = new THREE.Color(0xf2f0e8);
+        const boards = new THREE.Color(0x8a6a4a);
+        roofs.box(deck, f.y0, 0.35 + 0.3, boards, null, boards);
+        const yr = f.y0 + Math.min(f.floor, 3.2) + 0.35;
+        const roof: Rect = nx ? { ...deck, w: deep + 0.3, x: cx + nx * 0.15 } : { ...deck, d: deep + 0.3, z: cz + nz * 0.15 };
+        roofs.box(roof, yr, 0.15, f.tile, null, snowy ? new THREE.Color(SNOW) : f.tile);
+        const n = Math.max(2, Math.round(len / 2.5) + 1);
+        for (let k = 0; k < n; k++) {
+          const t = -len / 2 + 0.15 + ((len - 0.3) * k) / (n - 1);
+          const ox = cx + nx * (deep / 2 - 0.15) + (nx ? 0 : t), oz = cz + nz * (deep / 2 - 0.15) + (nz ? 0 : t);
+          roofs.box({ x: ox, z: oz, w: 0.18, d: 0.18 }, f.y0 + 0.65, yr - f.y0 - 0.65, white, null, white);
+        }
+        // The rail between the posts, with an opening at the steps in the middle.
+        const ox = cx + nx * (deep / 2 - 0.15), oz = cz + nz * (deep / 2 - 0.15);
+        for (const half of [-1, 1]) {
+          const seg = len / 2 - 0.9;
+          const mid = half * (0.9 + seg / 2);
+          roofs.box(nx ? { x: ox, z: cz + mid, w: 0.08, d: seg } : { x: cx + mid, z: oz, w: seg, d: 0.08 }, f.y0 + 1.5, 0.08, white, null, white);
+        }
+        const step: Rect = nx ? { x: cx + nx * (deep / 2 + 0.4), z: cz, w: 0.8, d: 1.6 } : { x: cx, z: cz + nz * (deep / 2 + 0.4), w: 1.6, d: 0.8 };
+        roofs.box(step, f.y0, 0.3, boards, null, boards);
         break;
+      }
+      case 'hoist': {
+        // A barn's hay hood: a loft door in white trim high on one gable end, a little gabled hood
+        // over a beam reaching out past it, a rope and hook hanging from the beam.
+        const r = f.roofB;
+        const alongX = r.w >= r.d;
+        const end = (b.variant * 23) % 1 < 0.5 ? -1 : 1;
+        const A = (alongX ? r.w : r.d) / 2;
+        const rise = roofRise(f.roof, r);
+        const at = (a: number, c: number) => (alongX ? { x: r.x + a, z: r.z + c } : { x: r.x + c, z: r.z + a });
+        const white = new THREE.Color(0xf4f2ea);
+        const dark = new THREE.Color(0x2a2220);
+        const yd = y1 + 0.2, hd = Math.min(2.2, rise * 0.55);
+        const door = at(end * (A + 0.03), 0);
+        const dw = alongX ? 0.06 : 2, dd = alongX ? 2 : 0.06;
+        roofs.box({ ...door, w: dw + (alongX ? 0 : 0.3), d: dd + (alongX ? 0.3 : 0) }, yd - 0.15, hd + 0.3, white, null, white);
+        roofs.box({ ...at(end * (A + 0.06), 0), w: alongX ? 0.06 : 1.7, d: alongX ? 1.7 : 0.06 }, yd, hd, dark, null, dark);
+        const yb = yd + hd + 0.35;
+        const beam = at(end * (A + 0.7), 0);
+        roofs.box({ ...beam, w: alongX ? 1.5 : 0.22, d: alongX ? 0.22 : 1.5 }, yb, 0.22, oak, null, oak);
+        const hood = at(end * (A + 0.65), 0);
+        roofs.box({ ...hood, w: alongX ? 1.4 : 1.2, d: alongX ? 1.2 : 1.4 }, yb + 0.35, 0.12, f.tile, null, snowy ? new THREE.Color(SNOW) : f.tile);
+        const tip = at(end * (A + 1.3), 0);
+        roofs.box({ ...tip, w: 0.03, d: 0.03 }, yb - 2.2, 2.2, new THREE.Color(0xb8a070), null, oak);
+        roofs.box({ ...tip, w: 0.12, d: 0.12 }, yb - 2.35, 0.15, dark, null, dark);
+        break;
+      }
+      case 'stilts': {
+        // The posts the walls stand on (addBuilding raised them), on pads, and the floor's sill beam.
+        const yg = f.y0 - STILTS;
+        const nxp = Math.max(2, Math.round(b.w / 2.5) + 1), nzp = Math.max(2, Math.round(b.d / 2.5) + 1);
+        for (let i = 0; i < nxp; i++) {
+          for (let j = 0; j < nzp; j++) {
+            if (i > 0 && i < nxp - 1 && j > 0 && j < nzp - 1) continue; // round the edge only
+            const x = b.x - b.w / 2 + 0.2 + ((b.w - 0.4) * i) / (nxp - 1), z = b.z - b.d / 2 + 0.2 + ((b.d - 0.4) * j) / (nzp - 1);
+            roofs.box({ x, z, w: 0.5, d: 0.5 }, yg - 0.3, 0.45, new THREE.Color(0x9a968c), null, new THREE.Color(0x9a968c));
+            roofs.box({ x, z, w: 0.25, d: 0.25 }, yg, STILTS, oak, null, oak);
+          }
+        }
+        roofs.box(b, f.y0 - 0.25, 0.25, oak, null, oak);
+        break;
+      }
     }
   }
 }
+
+/** How deep a farmhouse porch is. */
+const PORCH = 2.4;
 
 /** Pitched roof with overhanging eaves, ridge along the longer side, gable ends in the wall colour. */
 function addGable(b: Rect, y: number, roofs: GeometryBuilder, wallColor: THREE.Color, tileColor: THREE.Color, rise = roofRise('gable', b)): void {
@@ -937,6 +1024,58 @@ function addGable(b: Rect, y: number, roofs: GeometryBuilder, wallColor: THREE.C
   quad([P(-len, ye, -run), P(len, ye, -run), P(len, ye, run), P(-len, ye, run)], [0, -1, 0], tileColor.clone().multiplyScalar(0.6));
   quad([P(ea, y, ec), P(ea, y, -ec), P(ea, yr, 0), P(ea, yr, 0)], N(1, 0, 0), wallColor);
   quad([P(-ea, y, -ec), P(-ea, y, ec), P(-ea, yr, 0), P(-ea, yr, 0)], N(-1, 0, 0), wallColor);
+}
+
+/**
+ * Gambrel (barn) roof: on each side a steep lower slope from the eave to a knee, then a shallow
+ * upper one to the ridge along the longer side; the gable ends, five-sided, in the wall colour.
+ */
+function addGambrel(b: Rect, y: number, roofs: GeometryBuilder, wallColor: THREE.Color, tileColor: THREE.Color, rise: number): void {
+  const o = EAVE;
+  const alongX = b.w >= b.d;
+  const A = (alongX ? b.w : b.d) / 2; // half-length along the ridge (gable ends in the wall planes)
+  const C = (alongX ? b.d : b.w) / 2; // half-width, eave to ridge
+  const P = (a: number, h: number, c: number) => (alongX ? [b.x + a, h, b.z + c] : [b.x + c, h, b.z + a]);
+  const N = (a: number, h: number, c: number) => (alongX ? [a, h, c] : [c, h, a]);
+  const kc = C * GAMBREL_KNEE.across, ky = y + rise * GAMBREL_KNEE.up, yr = y + rise;
+  const ye = y - ((ky - y) * o) / (C - kc); // the lower slope carried on out over the eave
+  const L = A + o;
+  for (const side of [-1, 1]) {
+    // Lower and upper slopes on this side, eave → knee → ridge.
+    const slope = (c0: number, y0: number, c1: number, y1: number, color: THREE.Color) => {
+      const dc = c1 - c0, dy = y1 - y0, k = Math.hypot(dc, dy);
+      facing(roofs, [P(-L, y0, c0), P(L, y0, c0), P(L, y1, c1), P(-L, y1, c1)], N(0, Math.abs(dc) / k, (side * Math.abs(dy)) / k), color);
+    };
+    slope(side * (C + o), ye, side * kc, ky, tileColor.clone().multiplyScalar(0.94));
+    slope(side * kc, ky, 0, yr, tileColor);
+    // The ends: under the lower slope (a trapezoid) and the upper (a triangle with its pair).
+    for (const end of [-1, 1]) {
+      facing(roofs, [P(end * A, y, side * C), P(end * A, ky, side * kc), P(end * A, ky, 0), P(end * A, y, 0)], N(end, 0, 0), wallColor);
+      facing(roofs, [P(end * A, ky, side * kc), P(end * A, yr, 0), P(end * A, yr, 0), P(end * A, ky, 0)], N(end, 0, 0), wallColor);
+    }
+  }
+  facing(roofs, [P(-L, ye, -C - o), P(L, ye, -C - o), P(L, ye, C + o), P(-L, ye, C + o)], [0, -1, 0], tileColor.clone().multiplyScalar(0.6));
+}
+
+/**
+ * Monopitch (lean-to) roof: one slope across the shorter side, high on `high` (-1/+1 across), its
+ * ends and the high side's strip of wall above the wall tops in the wall colour.
+ */
+function addMonopitch(b: Rect, y: number, roofs: GeometryBuilder, wallColor: THREE.Color, tileColor: THREE.Color, rise: number, high: number): void {
+  const o = EAVE;
+  const alongX = b.w >= b.d;
+  const A = (alongX ? b.w : b.d) / 2;
+  const C = (alongX ? b.d : b.w) / 2;
+  const P = (a: number, h: number, c: number) => (alongX ? [b.x + a, h, b.z + c] : [b.x + c, h, b.z + a]);
+  const N = (a: number, h: number, c: number) => (alongX ? [a, h, c] : [c, h, a]);
+  const h = (c: number) => y + (rise * (C + c * high)) / (2 * C); // y + rise on the high side, y on the low
+  const L = A + o;
+  const k = Math.hypot(2 * C, rise);
+  const ch = high * (C + o), cl = -high * (C + o);
+  facing(roofs, [P(-L, h(ch), ch), P(L, h(ch), ch), P(L, h(cl), cl), P(-L, h(cl), cl)], N(0, (2 * C) / k, (-high * rise) / k), tileColor);
+  facing(roofs, [P(-L, h(ch) - 0.04, ch), P(L, h(ch) - 0.04, ch), P(L, h(cl) - 0.04, cl), P(-L, h(cl) - 0.04, cl)], [0, -1, 0], tileColor.clone().multiplyScalar(0.55));
+  for (const end of [-1, 1]) facing(roofs, [P(end * A, y, -C), P(end * A, y, C), P(end * A, h(C), C), P(end * A, h(-C), -C)], N(end, 0, 0), wallColor);
+  facing(roofs, [P(-A, y, high * C), P(A, y, high * C), P(A, y + rise, high * C), P(-A, y + rise, high * C)], N(0, 0, high), wallColor);
 }
 
 /** Hipped roof: sloping on all four sides, a short ridge along the longer side, overhanging eaves. */

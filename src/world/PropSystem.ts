@@ -70,9 +70,10 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
 };
 
 type PlainKind = Exclude<PropKind, 'sign' | 'tree'>;
-type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink';
+type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink' | 'fence-rail';
 export const modelKey = (p: StreetProp): ModelKey => {
   if (p.kind === 'fence' && p.style === 'chainlink') return 'fence-chainlink';
+  if (p.kind === 'fence' && p.style === 'rail') return 'fence-rail';
   const key: ModelKey =
     p.kind === 'sign' ? `sign-${SIGN_SHAPE[p.variant ?? 'stop']}` : p.kind === 'tree' ? `tree-${p.tree ?? 'round'}` : p.kind === 'signal' && p.armRight ? 'signal-right' : p.kind;
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
@@ -357,6 +358,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     ...oldCityModels(),
     ...chinatownModels(),
     ...harborModels(),
+    ...farmModels(),
   };
 }
 
@@ -665,6 +667,26 @@ function harborModels(): Record<HarborKind | 'fence-chainlink', THREE.BufferGeom
   return { pallet, crates, drums, cableReel, lifebuoy, forklift, boomGate, crossbuck, 'fence-chainlink': fenceChainlink };
 }
 
+/** The Farm's breakables: a split-rail fence panel and the ranch gate's mailbox. */
+function farmModels(): Record<'mailbox' | 'fence-rail', THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const timber = 0x8a6a48;
+  const grey = 0x7a6a58;
+  // Two round posts and three split rails between them, a little crooked.
+  const fenceRail = mergeGeometries([
+    ...[-1.45, 1.45].map((x) => part(new THREE.CylinderGeometry(0.08, 0.1, 1.35, 6), grey, x, 0.67)),
+    ...[0.35, 0.7, 1.05].map((y, k) => part(box(2.95, 0.11, 0.08).rotateZ((k - 1) * 0.015), k % 2 ? timber : 0x9a7a54, 0, y)),
+  ]);
+  // A rural mailbox: a rounded tin box on a timber post, its red flag up.
+  const mailbox = mergeGeometries([
+    part(box(0.1, 1.1, 0.1), 0x6a4e30, 0, 0.55),
+    part(box(0.3, 0.22, 0.5), 0x3a4a5a, 0, 1.15),
+    part(new THREE.CylinderGeometry(0.15, 0.15, 0.5, 10, 1, false, 0, Math.PI).rotateX(Math.PI / 2).rotateZ(-Math.PI / 2), 0x3a4a5a, 0, 1.26),
+    part(box(0.02, 0.22, 0.05), 0xc8302a, 0.17, 1.35, -0.1),
+  ]);
+  return { mailbox, 'fence-rail': fenceRail };
+}
+
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -883,7 +905,8 @@ function signTexture(variant: SignVariant): THREE.Texture {
 /** District props: their meshes are only built in a city that has some. */
 const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barrels', 'cannonballs', 'pillory', 'haybale', 'signpost', 'oilLamp', 'dragonLamp',
   'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat',
-  'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink']);
+  'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink',
+  'mailbox', 'fence-rail']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
@@ -922,7 +945,7 @@ export class PropSystem {
       if (!counts[key] && (key.endsWith('-old') || DISTRICT_KEYS.has(key))) continue;
       const mesh = new THREE.InstancedMesh(models[key], material, Math.max(1, counts[key]));
       mesh.count = counts[key];
-      mesh.castShadow = key !== 'fence'; // thousands of fence pickets aren't worth the shadow pass
+      mesh.castShadow = key !== 'fence' && key !== 'fence-rail'; // thousands of fence pickets aren't worth the shadow pass
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

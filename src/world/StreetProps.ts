@@ -13,7 +13,9 @@ export type PropKind =
   | 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan'
   | 'lionDance' | 'dragonFloat'
   // Harbor
-  | 'pallet' | 'crates' | 'drums' | 'cableReel' | 'lifebuoy' | 'forklift' | 'boomGate' | 'crossbuck';
+  | 'pallet' | 'crates' | 'drums' | 'cableReel' | 'lifebuoy' | 'forklift' | 'boomGate' | 'crossbuck'
+  // Farm
+  | 'mailbox';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -29,7 +31,7 @@ export interface StreetProp {
   tree?: TreeKind; // trees
   scale?: number; // trees: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
-  style?: 'old' | 'chainlink'; // restyled by a district (old iron posts, chain-link fencing): same kind and variant, so the same rules
+  style?: 'old' | 'chainlink' | 'rail'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
 }
 
@@ -90,6 +92,8 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   forklift: { hx: 0.65, hz: 1.6, height: 2.3, mass: 2500, breakSpeed: 8, slowdown: 0.3 },
   boomGate: { hx: 3.6, hz: 0.15, height: 1.2, mass: 30, breakSpeed: 1.5, slowdown: 0.03 },
   crossbuck: { hx: 0.1, hz: 0.1, height: 3.0, mass: 20, breakSpeed: 2.5, slowdown: 0.02 },
+  // Farm
+  mailbox: { hx: 0.25, hz: 0.3, height: 1.3, mass: 10, breakSpeed: 1.2, slowdown: 0.01 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */

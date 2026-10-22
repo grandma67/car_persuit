@@ -217,6 +217,26 @@ export const FARM = {
   yardGap: 4, // and at least this far from the other buildings
 };
 
+/** The Farm's ranch gate, cattle grids, yard pieces and fences (world/districts/FarmGate.ts), metres. */
+export const FARM_GATE = {
+  setIn: [1, 3.5, 6, 9], // ranch-gate posts in from the wall line (further in if a post would touch a junction control)
+  post: 0.35, // a log post's solid footprint, half side
+  headroom: 0.3, // the sign's bottom above overheadClearance
+  signWidth: 6.5,
+  signHeight: 1.3,
+  chain: 0.5, // between the sign and the crossbeam
+  mailboxOut: 1.6, // the mailbox, in from the right-hand post
+  gridDepth: 2.6, // a cattle grid along the street
+  pieceGap: 2, // silos, bins, windmill and tower keep this far from buildings and each other
+  rowGap: 0.8, // between silos (or bins) in a row
+  silos: [1, 3] as [number, number],
+  bins: [2, 4] as [number, number],
+  waterTowerChance: 0.5,
+  fenceInset: 0.3, // field fences stand this far inside the sidewalk line
+  fieldGate: 8, // the gap in a field's fence, wide enough for any car
+  railLength: 3, // one split-rail panel
+};
+
 /** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */
 export const HARBOR_QUAY = {
   bollardSpacing: 15,

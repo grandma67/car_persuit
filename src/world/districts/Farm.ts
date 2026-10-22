@@ -6,9 +6,11 @@ import type { Rng } from '../../core/Rng';
 import { FARM } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import type { StreetProp } from '../StreetProps';
+import { footprintsOverlap, propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
 import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type Gate, type LotLook } from './District';
-import { isJunctionControl } from './apply';
+import { inDistrict, isJunctionControl } from './apply';
+import { cattleGrid, fieldFence, ranchGateAt, yardPieces } from './FarmGate';
+import { clearOf } from './HarborYard';
 import { shuffle } from './place';
 import { frontMask } from './Harbor';
 
@@ -45,6 +47,9 @@ export const farmyardBlock = (q: District) => q.blocks.find((k) => !q.roles.has(
 
 /** The fields, as dressed. */
 export const farmFields = (q: District) => (q.dressing.extra?.fields ?? []) as Field[];
+
+/** The gaps in each field's fence (by block), with the outward normal of the side they're on. */
+export const fenceGaps = (q: District) => (q.dressing.extra?.gaps ?? {}) as Record<number, { x: number; z: number; nx: number; nz: number }[]>;
 
 /** Does the main street run along X? */
 function mainAlongX(q: District, city: CityData): boolean {
@@ -118,6 +123,12 @@ function lots(q: District, buildings: Building[], city: CityData, rng: Rng): voi
     }
   }
   for (const b of buildings) b.street = frontMask(b, q, city, 16);
+  // The machine shed stands open on the side facing the middle of the yard.
+  for (const b of buildings) {
+    if (b.lot !== 'machineShed') continue;
+    const dx = inner.x - b.x, dz = inner.z - b.z;
+    b.open = Math.abs(dx) * b.d > Math.abs(dz) * b.w ? (dx > 0 ? 4 : 8) : dz > 0 ? 1 : 2;
+  }
 }
 
 /** The field blocks, each with its crop: at least one corn, none more than `cropCap`. */
@@ -141,20 +152,24 @@ const DROP_SIGNS = new Set(['noSmoking', 'children', 'pedestrian', 'noParking'])
 const drop = (p: StreetProp) =>
   p.kind === 'hydrant' || p.kind === 'bench' || p.kind === 'umbrella' || (p.kind === 'sign' && DROP_SIGNS.has(p.variant ?? ''));
 
-/** Timber and steel farm buildings (refined in FM2). */
+/**
+ * Board-and-batten barns in red with white trim (the paint is in the boards' texture, so the
+ * palettes are near-white shades), a white or pale yellow farmhouse, a steel machine shed.
+ */
 function FARM_LOOKS(): Record<FarmLot, LotLook> {
-  const red = [0xa8322a, 0x9a2c26, 0xb03a2e];
-  const white = [0xf2efe6, 0xefe6c8, 0xe8e4d8];
-  const steel = [0x9aa2a8, 0x8a949a, 0xa8aca4];
-  const tin = [0x6a7076, 0x7a6a5e, 0x5a646c];
+  const shades = [0xffffff, 0xf2ece6, 0xe6dcd4];
+  const tin = [0x6a7076, 0x7a6a5e, 0x5a646c, 0x8a3a30];
   return {
-    barn: { facade: 'siding', roof: 'gable', palette: red, roofTiles: tin },
-    farmhouse: { facade: 'siding', roof: 'gable', palette: white, roofTiles: [0x5a4a44, 0x4a4e56, 0x6a5040], trims: ['chimney'] },
-    machineShed: { facade: 'industrial', roof: 'flat', palette: steel, roofTiles: tin },
-    granary: { facade: 'siding', roof: 'gable', palette: [0x8a6a4a, 0x9a7a56], roofTiles: tin },
-    henhouse: { facade: 'siding', roof: 'gable', palette: [0xb0503a, 0xe0d8c0], roofTiles: tin },
+    barn: { facade: 'boards', ground: 'barnDoors', roof: 'gambrel', palette: shades, roofTiles: [0x5a5e62, 0x6a4a40, 0x4e5a5e], trims: ['hoist'], paint: BARN_RED },
+    farmhouse: { facade: 'siding', roof: 'gable', palette: [0xf4f2ea, 0xf2e6b8, 0xeef0ec], roofTiles: [0x5a4a44, 0x4a4e56, 0x6a5040], trims: ['porch', 'chimney'] },
+    machineShed: { facade: 'industrial', roof: 'monopitch', palette: [0x9aa2a8, 0x8a949a, 0xa8aca4, 0x7c8a6e], roofTiles: tin, trims: ['colonnade'] },
+    granary: { facade: 'boards', roof: 'gable', palette: shades, roofTiles: tin, trims: ['stilts'], paint: BARN_RED },
+    henhouse: { facade: 'boards', roof: 'monopitch', palette: shades, roofTiles: tin, paint: BARN_RED },
   };
 }
+
+/** The red the boards' texture is painted (see Facades.ts). */
+export const BARN_RED = 0xa8322a;
 
 const FARM_STYLE = { lots: [1, 2] as [number, number], height: [5, 10] as [number, number], gap: [6, 10] as [number, number], empty: 0.3 };
 
@@ -186,6 +201,7 @@ export const FARM_DEF: DistrictDef = {
 function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const out = emptyDressing();
   out.soft = [];
+  const sw = city.config.sidewalk;
   // Fields: ploughed soil inside the sidewalk line, rows along the long side; drivable and soft.
   const fields = plantFields(q, city, rng);
   for (const f of fields) {
@@ -195,6 +211,42 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   }
   // Nothing of the city's own stands in a field (street props stay on the sidewalks).
   city.streetProps = city.streetProps.filter((p) => isJunctionControl(p) || !fields.some((f) => inRect(f.rect, p)));
-  out.extra = { fields };
+  const props: StreetProp[] = [];
+  // The ranch gate where the main street comes in from town; cattle grids on the other gates.
+  const ranch = ranchGate(q);
+  const gate = ranchGateAt(q, city, ranch, rng);
+  if (gate) {
+    out.structures.push(gate.s);
+    out.solids.push(...gate.solids);
+    out.overhead.push(gate.overhead);
+    props.push(...gate.props);
+  }
+  for (const g of q.gates) {
+    if (g === ranch) continue;
+    const grid = cattleGrid(city, g);
+    out.ground.push(grid.ground);
+    props.push(...grid.props);
+  }
+  // The silos, bins, windmill and water tower in the farmyard (the nearest fields if it's full).
+  const yard = city.blocks[farmyardBlock(q)].rect;
+  const near = [...fields].sort((a, b) => Math.hypot(a.rect.x - yard.x, a.rect.z - yard.z) - Math.hypot(b.rect.x - yard.x, b.rect.z - yard.z));
+  const buildings = city.buildings.filter((b) => b.district === 'farm' && inRect(q.bounds, b));
+  out.landmarks.push(...yardPieces(shrink(yard, sw), near.map((f) => f.rect), buildings, rng));
+  // Split-rail fences round the fields.
+  const gaps: Record<number, { x: number; z: number; nx: number; nz: number }[]> = {};
+  for (const f of fields) {
+    const fence = fieldFence(f.rect, city.blocks[f.block].rect, q, city);
+    props.push(...fence.props);
+    gaps[f.block] = fence.gaps;
+  }
+  // The district's props keep off its solids, its pieces and the junction controls; the city's
+  // own that stood where they go are taken away (never a junction control).
+  const controls = city.streetProps.filter((p) => inDistrict(q, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
+  const pieces = out.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }));
+  const kept = clearOf(props, [...out.solids, ...pieces, ...controls, ...buildings.map(rectFootprint)]);
+  const blocking = [...kept.map((p) => propFootprint(p, 0.1)), ...out.solids, ...pieces];
+  city.streetProps = city.streetProps.filter((p) => !inDistrict(q, p) || isJunctionControl(p) || !blocking.some((k) => footprintsOverlap(propFootprint(p), k)));
+  out.props = kept;
+  out.extra = { fields, gaps };
   return out;
 }

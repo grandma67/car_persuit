@@ -14,8 +14,15 @@ export function roofRise(shape: RoofShape, r: Rect): number {
   const half = Math.min(r.w, r.d) / 2; // eave to ridge, inside the walls
   if (shape === 'steepGable') return half * STEEP;
   if (shape === 'hip') return Math.min(6, half * 0.7);
+  if (shape === 'gambrel') return Math.min(6.5, half * 0.95);
+  if (shape === 'monopitch') return Math.min(2.5, half * 0.35); // the high side above the low
   return Math.min(3.5, half * 0.75); // 'gable'
 }
+
+/** A gambrel's knee: how far across from the ridge (share of the half width) and how high (share of the rise). */
+export const GAMBREL_KNEE = { across: 0.55, up: 0.62 };
+/** How high a granary stands on its stilts. */
+export const STILTS = 1.1;
 
 /** How far a jettied building's upper floors stand out, by its variant. */
 export const jettyDepth = (variant: number) => 0.6 + ((variant * 13) % 1) * 0.4;

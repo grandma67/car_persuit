@@ -320,6 +320,11 @@ export class CarAudio {
     if (volume > 0.02) this.sfx?.bell(strikes, 0.25 * volume);
   }
 
+  /** The Farm's cattle grids under the player's tyres (speed m/s). */
+  rattle(speed: number): void {
+    if (speed > 1) this.sfx?.rattle(speed);
+  }
+
   /** One-shot crash. strength 0..1. */
   impact(strength: number): void {
     this.sfx?.impact(strength);

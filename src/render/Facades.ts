@@ -7,7 +7,7 @@ import type { Rng } from '../core/Rng';
 
 export type FacadeStyle =
   | 'curtain' | 'office' | 'brick' | 'stucco' | 'shutters' | 'siding' | 'adobe' | 'industrial' | 'halfTimber' | 'ashlar' | 'shophouse' | 'storefront'
-  | 'rollerDoors' | 'panel';
+  | 'rollerDoors' | 'panel' | 'boards' | 'barnDoors';
 
 export const WINDOW_CELLS = 8;
 const PX = 64; // pixels per cell
@@ -280,7 +280,82 @@ const STYLES: Record<FacadeStyle, StyleSpec> = {
     panes: [],
     glass: '#2c343c', wallRough: 0.5, glassRough: 0.2, glassMetal: 0.2, lit: 0,
   },
+  boards: {
+    // The Farm's barns and sheds: barn-red board-and-batten (painted into the texture, so white trim
+    // stays white), a small square window per bay in a white frame, white corner boards at the
+    // bays' edges.
+    wall: (c, rng) => {
+      c.fillStyle = BARN_RED;
+      c.fillRect(0, 0, SIZE, SIZE);
+      boardGrain(c, rng);
+    },
+    panes: [{ x: 0.38, y: 0.3, w: 0.24, h: 0.24 }],
+    glass: '#20262c', wallRough: 0.9, glassRough: 0.2, glassMetal: 0.1, lit: 0.15, mullions: 'cross', frame: '#f4f2ea',
+    extras: (c, x, y) => {
+      c.fillStyle = '#f4f2ea'; // window trim: a wider white surround and a sill
+      c.fillRect(x + PX * 0.33, y + PX * 0.56, PX * 0.34, PX * 0.05);
+      if ((x / PX) % 4 === 0) c.fillRect(x, y, PX * 0.05, PX); // corner boards now and then
+    },
+  },
+  barnDoors: {
+    // A barn's ground floor: big X-braced sliding doors in white trim on every other bay (their
+    // track along the top), boards between with a small square window.
+    wall: (c, rng) => {
+      c.fillStyle = BARN_RED;
+      c.fillRect(0, 0, SIZE, SIZE);
+      boardGrain(c, rng);
+    },
+    panes: [],
+    glass: '#20262c', wallRough: 0.9, glassRough: 0.2, glassMetal: 0.1, lit: 0,
+    extras: (c, x, y) => {
+      const white = '#f4f2ea';
+      if ((x / PX) % 2 === 0) {
+        const x0 = x + PX * 0.06, x1 = x + PX * 0.94, y0 = y + PX * 0.12, y1 = y + PX;
+        const t = PX * 0.06;
+        c.fillStyle = '#2a2a2a'; // the track
+        c.fillRect(x, y0 - PX * 0.05, PX, PX * 0.03);
+        c.fillStyle = white;
+        c.fillRect(x0, y0, x1 - x0, t);
+        c.fillRect(x0, y1 - t, x1 - x0, t);
+        c.fillRect(x0, y0, t, y1 - y0);
+        c.fillRect(x1 - t, y0, t, y1 - y0);
+        c.fillRect((x0 + x1) / 2 - t / 2, y0, t, y1 - y0); // the two leaves meet in the middle
+        c.strokeStyle = white;
+        c.lineWidth = t * 0.9;
+        c.beginPath();
+        for (const [a, b] of [[x0, (x0 + x1) / 2], [(x0 + x1) / 2, x1]]) {
+          c.moveTo(a + t, y0 + t);
+          c.lineTo(b - t, y1 - t);
+          c.moveTo(b - t, y0 + t);
+          c.lineTo(a + t, y1 - t);
+        }
+        c.stroke();
+      } else {
+        c.fillStyle = white;
+        c.fillRect(x + PX * 0.36, y + PX * 0.3, PX * 0.28, PX * 0.28);
+        c.fillStyle = '#20262c';
+        c.fillRect(x + PX * 0.4, y + PX * 0.34, PX * 0.2, PX * 0.2);
+      }
+    },
+  },
 };
+
+/** The barn red painted into the farm's board textures (Farm.ts BARN_RED). */
+const BARN_RED = '#a8322a';
+
+/** Board-and-batten: a battens every quarter bay and a little grain in the boards between. */
+function boardGrain(c: Ctx, rng: Rng): void {
+  for (let x = 0; x < SIZE; x += PX / 8) {
+    c.fillStyle = `rgba(0,0,0,${0.04 + rng.next() * 0.08})`;
+    c.fillRect(x, 0, PX / 8, SIZE);
+  }
+  for (let x = 0; x < SIZE; x += PX / 4) {
+    c.fillStyle = 'rgba(0,0,0,0.28)';
+    c.fillRect(x + 3, 0, 1, SIZE);
+    c.fillStyle = 'rgba(255,255,255,0.12)';
+    c.fillRect(x, 0, 3, SIZE);
+  }
+}
 
 /** Lead cames in a diamond lattice over a pane. */
 function leaded(c: Ctx, p: Pane, x: number, y: number): void {

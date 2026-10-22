@@ -340,6 +340,30 @@ export class SoundEffects {
     }
   }
 
+  /**
+   * Tyres drumming over a cattle grid: a quick run of low thuds, one per bar, faster the faster
+   * the car goes. `speed` in m/s.
+   */
+  rattle(speed: number): void {
+    const ctx = this.ctx;
+    const bars = 12;
+    const gap = Math.max(0.012, 0.2 / Math.max(speed, 1)); // a bar every 20 cm
+    const gain = Math.min(0.5, 0.15 + speed * 0.012);
+    for (let k = 0; k < bars; k++) {
+      const t = ctx.currentTime + k * gap;
+      const thud = ctx.createOscillator();
+      thud.type = 'triangle';
+      thud.frequency.setValueAtTime(110 + (k % 3) * 18, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+      thud.connect(g).connect(this.master);
+      thud.start(t);
+      thud.stop(t + 0.07);
+      this.burst(k * gap, 0.04, 'bandpass', 1800, 2, gain * 0.35); // the steel's clank
+    }
+  }
+
   impact(strength: number): void {
     if (strength <= 0.01) return;
     const ctx = this.ctx;
