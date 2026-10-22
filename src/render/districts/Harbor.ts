@@ -4,13 +4,15 @@
 // drapes over the ground with the city's paving settings. No new shader programs.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { CONTAINER, HARBOR } from '../../gameplay/balance';
+import { HARBOR } from '../../gameplay/balance';
 import { part } from '../geometry';
 import type { CityData } from '../../world/CityGenerator';
 import { GeometryBuilder } from '../../world/CityBuilder';
 import type { District } from '../../world/districts/District';
 import type { TankFarmData } from '../../world/districts/Harbor';
 import { containersOf } from '../../world/districts/HarborYard';
+import { containerMeshes } from './containers';
+import { harborLights } from './harborLights';
 import { renderQuay } from './HarborQuay';
 import { harborPieces, type HarborPieces } from './HarborGate';
 import { harborSignMaterial } from './harborSigns';
@@ -23,20 +25,6 @@ const STEEL_DARK = 0x4a4f54;
 const SNOW = 0xeef2f6;
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
-
-/** One container along Z, base at y = 0: the box, darker corner posts and end frames, door bars. */
-function containerGeometry(len: number): THREE.BufferGeometry {
-  const { w, h } = CONTAINER;
-  const g = [part(box(w - 0.04, h - 0.04, len - 0.04), 0xffffff, 0, h / 2)];
-  const frame = 0x9a9a9a;
-  for (const x of [-1, 1]) for (const z of [-1, 1]) g.push(part(box(0.14, h, 0.14), frame, (x * (w - 0.12)) / 2, h / 2, (z * (len - 0.12)) / 2));
-  for (const z of [-1, 1]) {
-    for (const y of [0.07, h - 0.07]) g.push(part(box(w, 0.14, 0.14), frame, 0, y, (z * (len - 0.12)) / 2));
-  }
-  // Locking bars on the doors (+Z end).
-  for (const x of [-0.75, -0.3, 0.3, 0.75]) g.push(part(box(0.05, h - 0.3, 0.05), 0x7a7a7a, x, h / 2, len / 2 + 0.005));
-  return mergeGeometries(g);
-}
 
 function tankFarm(d: TankFarmData, x: number, z: number, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
   const t = 0.4;
@@ -84,30 +72,7 @@ export function renderHarbor(q: District, city: CityData, scene: THREE.Scene, ct
   if (pieces.lit.length) scene.add(new THREE.Mesh(mergeGeometries(pieces.lit), harborSignMaterial(0.25 + ctx.lampGlow * 1.3)));
 
   // Containers, the top tiers capped (the data is capped already; this guards the instance count).
-  const containers = containersOf(q.dressing.structures).slice(0, HARBOR.maxContainers);
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.2 });
-  const m = new THREE.Matrix4();
-  const rot = new THREE.Quaternion();
-  const one = new THREE.Vector3(1, 1, 1);
-  const pos = new THREE.Vector3();
-  const colour = new THREE.Color();
-  const yaw90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-  const tops = new Map<string, number>();
-  for (const c of containers) tops.set(`${c.x},${c.z}`, Math.max(tops.get(`${c.x},${c.z}`) ?? 0, c.tier));
-  for (const len of [CONTAINER.l40, CONTAINER.l20]) {
-    const list = containers.filter((c) => c.len === len);
-    if (!list.length) continue;
-    const mesh = new THREE.InstancedMesh(containerGeometry(len), material, list.length);
-    list.forEach((c, i) => {
-      // A column stands on the ground under its middle, a touch sunk.
-      pos.set(c.x, ctx.ground(c.x, c.z) - 0.05 + (c.base ?? 0) + c.tier * CONTAINER.h, c.z);
-      rot.copy(c.alongX ? yaw90 : new THREE.Quaternion());
-      mesh.setMatrixAt(i, m.compose(pos, rot, one));
-      mesh.setColorAt(i, colour.setHex(snowy && c.tier === tops.get(`${c.x},${c.z}`) ? SNOW : c.color));
-    });
-    mesh.castShadow = mesh.receiveShadow = true;
-    scene.add(mesh);
-  }
+  for (const mesh of containerMeshes(containersOf(q.dressing.structures).slice(0, HARBOR.maxContainers), ctx.ground, snowy)) scene.add(mesh);
 
   // The tank farm, with the pieces above.
   const geos: THREE.BufferGeometry[] = [...pieces.solid];
@@ -122,5 +87,12 @@ export function renderHarbor(q: District, city: CityData, scene: THREE.Scene, ct
     mesh.castShadow = mesh.receiveShadow = true;
     scene.add(mesh);
   }
-  return renderQuay(q, city, scene, ctx);
+  const quay = renderQuay(q, city, scene, ctx);
+  const blink = harborLights(q, city, scene, quay.ship, ctx.ground, ctx.lampGlow);
+  return {
+    update(dt, time, camera) {
+      quay.update(dt, time, camera);
+      blink?.(time);
+    },
+  };
 }

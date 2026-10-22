@@ -36,6 +36,20 @@ const CHINATOWN_BRIGHT: Record<string, Partial<LotLook>> = {
   bubbleTea: { palette: [0xffb0d8, 0xa8f0ff, 0xfff08a] },
   bakery: { palette: [0xffe0a8, 0xfff0c8] },
 };
+/** The Harbor in the desert: sun-faded, dusty sheds. */
+const HARBOR_DUSTY: Record<string, Partial<LotLook>> = {
+  warehouse: { palette: [0xb8aa94, 0xa89c88, 0xc4b49a, 0x9c9282], roofTiles: [0x9a8a74, 0x8a7e6c] },
+  transitShed: { palette: [0xc8bca4, 0xb8ae98], roofTiles: [0x9a8a74] },
+  coldStore: { palette: [0xe8e0d0, 0xdcd4c4] },
+  harborOffice: { palette: [0xd8ccb4, 0xe0d6c0] },
+  silo: { palette: [0xd0c2a8, 0xc4b69c] },
+};
+/** The Harbor by the beach: brighter paint on the sheds. */
+const HARBOR_BRIGHT: Record<string, Partial<LotLook>> = {
+  warehouse: { palette: [0x5a9ad0, 0xe07a4a, 0x4ab08a, 0xe8c24a, 0xd85a5a, 0x7a8ad8] },
+  transitShed: { palette: [0x6ab0d8, 0xe8d8a8, 0x8ad0b8] },
+  harborOffice: { palette: [0xf4f0e8, 0xe8f2f6] },
+};
 
 export interface CityTheme {
   name: string;
@@ -156,7 +170,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xa08c70, 0x8f7f68, 0xb39c7c, 0x7d705e],
     },
     asphalt: 0x3a3835, sidewalk: 0xc2b49a, plaza: 0xb08f6a, quay: 0x9a8a72, seaWall: 0xcbbd9f, planter: 0xa38a6a,
-    districts: { oldtown: OLD_CITY_SANDSTONE, chinatown: CHINATOWN_FADED },
+    districts: { oldtown: OLD_CITY_SANDSTONE, chinatown: CHINATOWN_FADED, harbor: HARBOR_DUSTY },
     grass: 0x6b7a3e, leaves: [0x5f6e34, 0x6f7a3c, 0x55642f, 0x7a8240], trunk: 0x5a4632,
     centerLine: 0xe0b84a, edgeLine: 0xe6e2d8,
   },
@@ -171,7 +185,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xc4b8a4, 0xb0a894, 0xd0c4ae, 0x9c9484],
     },
     asphalt: 0x36383d, sidewalk: 0xcfc6b4, plaza: 0xc8bca6, quay: 0xa0988a, seaWall: 0xe8e2d6, planter: 0xc0a888,
-    districts: { oldtown: OLD_CITY_WHITEWASH, chinatown: CHINATOWN_BRIGHT },
+    districts: { oldtown: OLD_CITY_WHITEWASH, chinatown: CHINATOWN_BRIGHT, harbor: HARBOR_BRIGHT },
     grass: 0x5d8a3e, leaves: [0x4f8a3a, 0x5c9440, 0x467a34, 0x6a9a48], trunk: 0x8a6a48,
     centerLine: 0xe0b84a, edgeLine: 0xeeeeea,
   },

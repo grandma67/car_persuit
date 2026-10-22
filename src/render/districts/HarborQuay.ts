@@ -257,7 +257,7 @@ function craneAt(d: CraneData, t: number): { z: number; y: number; carried: bool
   return { z, y, carried, restZ, restY };
 }
 
-export function renderQuay(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): { update(dt: number, time: number, camera: THREE.Camera): void } {
+export function renderQuay(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): { update(dt: number, time: number, camera: THREE.Camera): void; ship: THREE.Mesh | null } {
   const f = coastFrame(q);
   const L = quayLines(city);
   const snowy = ctx.climate.snowRoofs;
@@ -371,6 +371,7 @@ export function renderQuay(q: District, city: CityData, scene: THREE.Scene, ctx:
   for (const c of motion) place(c, 0);
   const NEAR = 450;
   return {
+    ship: shipMesh,
     update(_dt, time, camera) {
       const cam = camera.position;
       let moved = false;

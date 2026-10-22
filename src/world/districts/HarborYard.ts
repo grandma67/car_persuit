@@ -24,8 +24,18 @@ export interface StackData {
   containers: Container[];
 }
 
-/** Shipping-line colours: made-up lines, plain paint (reefers white). */
-export const LINE_COLOURS = [0xb03a2e, 0x2f5f9a, 0x3f7a4a, 0xd8762a, 0x8a8f94, 0xe8e8e4, 0x7a2a2a, 0x2a7a7a, 0xc9a22a];
+/** Shipping lines (made up): their paint and the name on their boxes; the white one is the reefers. */
+export const LINES = [
+  { color: 0xb03a2e, name: 'ARDENTA' },
+  { color: 0x2f5f9a, name: 'BLUEFINCH' },
+  { color: 0x3f7a4a, name: 'TERRAVERDE' },
+  { color: 0xd8762a, name: 'OKAPI' },
+  { color: 0x7a8288, name: 'GREYLAG' },
+  { color: 0xe8e8e4, name: 'POLAREEF' },
+];
+/** Empty boxes waiting in the empties' stack: plain, weathered. */
+export const EMPTY_LINES = [{ color: 0xb8b8b0, name: '' }, { color: 0x9aa0a6, name: '' }];
+export const LINE_COLOURS = LINES.map((l) => l.color);
 
 export interface Yard {
   stacks: Structure[]; // container stacks ('stack'), flatcars ('flatcar') with their boxes
@@ -53,7 +63,7 @@ const MAST_SLOT = 1.8; // the row end it takes
 const STACKER_SLOT = 10.5; // the row end the reach stacker parks in
 const RAIL_STRIP = 4.6; // across the rows: track, flatcars and clearance
 export const FLATCAR = { length: 14.2, width: 2.6, deck: 1.25 };
-const EMPTY_COLOURS = [0xb8b8b0, 0xd8d8d2, 0x9aa0a6];
+const EMPTY_COLOURS = EMPTY_LINES.map((l) => l.color);
 
 /**
  * Lay out a yard block. `rowsAlongX`: the rows (and the corridors between them) run along X,
