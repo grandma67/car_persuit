@@ -179,6 +179,8 @@ export const HARBOR = {
   stackHigh: [1, 4] as [number, number], // tiers per column
   crossCorridor: 8, // the corridor across the rows, through the middle of the block
   stackMargin: 0.6, // stacks stand this far in from the sidewalk line
+  straddles: [0, 2] as [number, number], // straddle carriers parked in a yard's corridors
+  straddleGap: 4.0, // the drivable gap between a carrier's frames, at least (the widest body + 1 m and some)
   transitShedShare: 0.5, // quay-row lots that are open transit sheds
   coldStores: [0, 2] as [number, number],
   officeHeight: [16, 22] as [number, number],
@@ -186,6 +188,7 @@ export const HARBOR = {
   siloChance: 0.5,
   siloHeight: [22, 30] as [number, number],
   tankFarmChance: 0.4,
+  forklifts: 3, // parked by shed fronts, at most
   bund: 1.2, // bund wall height round the tank farm
 };
 

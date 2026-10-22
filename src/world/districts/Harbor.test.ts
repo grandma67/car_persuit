@@ -3,11 +3,11 @@ import { generateCity, type CityData, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
 import { DISTRICTS, HARBOR, HARBOR_QUAY } from '../../gameplay/balance';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
-import { footprintsOverlap, rectFootprint } from '../StreetProps';
+import { footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
 import type { District } from './District';
 import { isJunctionControl } from './apply';
 import { HARBOR_DEF, backRows, quayRow, yardBlocks } from './Harbor';
-import { containersOf } from './HarborYard';
+import { containersOf, type StraddleData } from './HarborYard';
 import { coastFrame, quayLines, uOf, uSpan, vOf, type CraneData, type ShipData } from './HarborQuay';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
@@ -18,6 +18,8 @@ const placed = SEEDS.flatMap((seed) => {
   return q ? [[seed, c, q] as const] : [];
 });
 const widest = Math.max(...ALL_SPECS.map((s) => s.halfExtents.x)) * 2;
+/** Widest that ever leaves the road (the ramp truck is road traffic only): the armoured truck, the bus. */
+const offRoadWidest = Math.max(...ALL_SPECS.filter((s) => s.body !== 'ramptruck').map((s) => s.halfExtents.x)) * 2;
 const touches = (a: Rect, b: Rect) => Math.abs(a.x - b.x) <= (a.w + b.w) / 2 && Math.abs(a.z - b.z) <= (a.d + b.d) / 2;
 
 describe('Harbor placement', () => {
@@ -188,6 +190,62 @@ describe('Harbor quay, cranes and ship', () => {
     const L = quayLines(c);
     const apron = c.streetProps.filter((p) => inRect(q.frontage!, p) && vOf(f, p) > L.road[1]);
     expect(apron.filter((p) => p.kind === 'lamp' || p.kind === 'bench')).toEqual([]);
+  });
+});
+
+describe('Harbor sheds, yard furniture, gate and props', () => {
+  const roadsOf = (c: CityData) => [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
+
+  it.each(placed)('seed %i: boom barriers, fences, crossbucks and forklifts stand off every road', (_seed, c, q) => {
+    const roads = roadsOf(c);
+    for (const p of q.dressing.props.filter((p) => ['boomGate', 'fence', 'crossbuck', 'forklift', 'lifebuoy'].includes(p.kind))) {
+      expect(roads.some((r) => footprintsOverlap(propFootprint(p), r))).toBe(false);
+    }
+    expect(q.dressing.props.filter((p) => p.kind === 'boomGate').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it.each(placed)('seed %i: kerb clutter keeps off the centre line and away from solids and each other', (_seed, c, q) => {
+    const solids = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
+    const mine = q.dressing.props;
+    for (const p of mine) expect(solids.filter((f) => footprintsOverlap(propFootprint(p), f))).toEqual([]);
+    for (let i = 0; i < mine.length; i++) for (let j = i + 1; j < mine.length; j++) expect(footprintsOverlap(propFootprint(mine[i]), propFootprint(mine[j]))).toBe(false);
+    const clutter = mine.filter((p) => ['pallet', 'drums', 'crates', 'cableReel'].includes(p.kind));
+    for (const p of clutter) {
+      // Nearest road centre line: the road segment it stands beside.
+      const road = c.roads.find((r) => footprintsOverlap(propFootprint(p, c.config.sidewalk), rectFootprint(r.rect)));
+      if (!road) continue;
+      const alongX = road.rect.w > road.rect.d;
+      const lateral = alongX ? Math.abs(p.z - road.rect.z) : Math.abs(p.x - road.rect.x);
+      const fp = propFootprint(p);
+      expect(lateral - Math.hypot(fp.hx, fp.hz)).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
+    }
+  });
+
+  it.each(placed)('seed %i: straddle carriers leave a gap the widest vehicle clears', (_seed, _c, q) => {
+    for (const s of q.dressing.structures.filter((st) => st.kind === 'straddle')) {
+      const d = s.data as unknown as StraddleData;
+      expect(d.gap).toBeGreaterThanOrEqual(offRoadWidest + 1);
+      const [a, b] = s.footprints;
+      const apart = d.alongX ? Math.abs(a.z - b.z) - a.hz - b.hz : Math.abs(a.x - b.x) - a.hx - b.hx;
+      expect(apart).toBeCloseTo(d.gap, 5);
+    }
+  });
+
+  it.each(placed)('seed %i: a terminal gate on an inland gate, its canopy over the clearance', (_seed, _c, q) => {
+    const gate = q.dressing.structures.find((s) => s.kind === 'terminalGate');
+    expect(gate).toBeDefined();
+    const canopy = q.dressing.overhead.find((o) => o.kind === 'terminalCanopy')!;
+    expect(canopy.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+  });
+
+  it.each(placed)('seed %i: sheds front a street, transit sheds open to the sea, one look per lot', (_seed, c) => {
+    const inside = c.buildings.filter((b) => b.district === 'harbor');
+    for (const b of inside) {
+      expect(HARBOR_DEF.looks[b.lot!]).toBeDefined();
+      if (b.lot === 'transitShed') expect(b.open).toBeGreaterThan(0);
+      else expect(b.open ?? 0).toBe(0);
+    }
+    for (const b of inside) if (['warehouse', 'transitShed', 'coldStore'].includes(b.lot!)) expect(b.street).toBeGreaterThan(0);
   });
 });
 

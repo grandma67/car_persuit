@@ -31,6 +31,8 @@ export interface LotLook {
   palette: number[]; // wall tints, picked by the building's variant
   roofTiles?: number[]; // roof colours for pitched roofs
   trims?: TrimKind[];
+  /** Not walls but a battery of silos (Harbor). */
+  form?: 'silos';
 }
 
 // --- Placement results ---

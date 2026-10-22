@@ -11,7 +11,9 @@ export type PropKind =
   | 'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp'
   // Chinatown
   | 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan'
-  | 'lionDance' | 'dragonFloat';
+  | 'lionDance' | 'dragonFloat'
+  // Harbor
+  | 'pallet' | 'crates' | 'drums' | 'cableReel' | 'lifebuoy' | 'forklift' | 'boomGate' | 'crossbuck';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -27,7 +29,7 @@ export interface StreetProp {
   tree?: TreeKind; // trees
   scale?: number; // trees: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
-  style?: 'old'; // restyled by a district (old iron posts): same kind and variant, so the same rules
+  style?: 'old' | 'chainlink'; // restyled by a district (old iron posts, chain-link fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
 }
 
@@ -78,6 +80,16 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   // Lunar New Year (festival nights): a lion-dance costume on its stand and a dragon on a wheeled float.
   lionDance: { hx: 0.6, hz: 1.2, height: 1.9, mass: 30, breakSpeed: 1.5, slowdown: 0.03 },
   dragonFloat: { hx: 0.9, hz: 4.2, height: 2.4, mass: 150, breakSpeed: 2, slowdown: 0.08 },
+  // Harbor: dock clutter (drums and cable reels roll once loose), a forklift that takes a real hit,
+  // the boom barriers at the yard's corridor mouths (the arm along local X) and level-crossing posts.
+  pallet: { hx: 0.6, hz: 0.5, height: 0.9, mass: 60, breakSpeed: 1.5, slowdown: 0.03 },
+  crates: { hx: 0.6, hz: 0.6, height: 1.3, mass: 80, breakSpeed: 2, slowdown: 0.05 },
+  drums: { hx: 0.3, hz: 0.3, height: 0.9, mass: 40, breakSpeed: 1.2, slowdown: 0.02 },
+  cableReel: { hx: 0.5, hz: 0.8, height: 1.6, mass: 150, breakSpeed: 2.5, slowdown: 0.06 },
+  lifebuoy: { hx: 0.25, hz: 0.15, height: 1.6, mass: 10, breakSpeed: 1, slowdown: 0.01 },
+  forklift: { hx: 0.65, hz: 1.6, height: 2.3, mass: 2500, breakSpeed: 8, slowdown: 0.3 },
+  boomGate: { hx: 3.6, hz: 0.15, height: 1.2, mass: 30, breakSpeed: 1.5, slowdown: 0.03 },
+  crossbuck: { hx: 0.1, hz: 0.1, height: 3.0, mass: 20, breakSpeed: 2.5, slowdown: 0.02 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */

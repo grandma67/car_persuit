@@ -5,7 +5,9 @@
 import * as THREE from 'three';
 import type { Rng } from '../core/Rng';
 
-export type FacadeStyle = 'curtain' | 'office' | 'brick' | 'stucco' | 'shutters' | 'siding' | 'adobe' | 'industrial' | 'halfTimber' | 'ashlar' | 'shophouse' | 'storefront';
+export type FacadeStyle =
+  | 'curtain' | 'office' | 'brick' | 'stucco' | 'shutters' | 'siding' | 'adobe' | 'industrial' | 'halfTimber' | 'ashlar' | 'shophouse' | 'storefront'
+  | 'rollerDoors' | 'panel';
 
 export const WINDOW_CELLS = 8;
 const PX = 64; // pixels per cell
@@ -231,6 +233,52 @@ const STYLES: Record<FacadeStyle, StyleSpec> = {
         for (let k = 0; k < 9; k++) c.fillRect(x + PX * 0.06, y + PX * (0.33 + k * 0.032), PX * 0.88, 1);
       }
     },
+  },
+  rollerDoors: {
+    // A shed's ground floor: corrugated cladding, a full-height roller door on every other bay with
+    // black dock bumpers either side and a hazard-striped sill; a small personnel door between.
+    wall: (c, rng) => {
+      speckle(c, rng, 222, 10);
+      for (let x = 0; x < SIZE; x += 4) { c.fillStyle = grey(188); c.fillRect(x, 0, 1.5, SIZE); }
+    },
+    panes: [],
+    glass: '#2c343c', wallRough: 0.6, glassRough: 0.2, glassMetal: 0.2, lit: 0,
+    extras: (c, x, y) => {
+      if ((x / PX) % 2 === 0) {
+        const x0 = x + PX * 0.1, w = PX * 0.8, y0 = y + PX * 0.1;
+        c.fillStyle = grey(150); // the door's frame and head box
+        c.fillRect(x0 - 2, y0 - 4, w + 4, PX * 0.9 + 4);
+        c.fillStyle = grey(205);
+        c.fillRect(x0, y0, w, PX * 0.9);
+        c.fillStyle = grey(170); // its slats
+        for (let k = 0; k < 18; k++) c.fillRect(x0, y0 + k * (PX * 0.05), w, 1);
+        // Hazard stripes along the sill, bumpers either side of the door.
+        for (let k = 0; k < 8; k++) {
+          c.fillStyle = k % 2 ? '#1c1c1c' : '#e0b62a';
+          c.fillRect(x0 + (w * k) / 8, y + PX - 3, w / 8, 3);
+        }
+        c.fillStyle = '#1a1a1a';
+        c.fillRect(x + PX * 0.02, y + PX * 0.62, PX * 0.07, PX * 0.16);
+        c.fillRect(x + PX * 0.91, y + PX * 0.62, PX * 0.07, PX * 0.16);
+      } else {
+        // A personnel door and a small wired window.
+        c.fillStyle = '#4a5560';
+        c.fillRect(x + PX * 0.38, y + PX * 0.38, PX * 0.24, PX * 0.62);
+        c.fillStyle = '#2c343c';
+        c.fillRect(x + PX * 0.43, y + PX * 0.45, PX * 0.14, PX * 0.12);
+      }
+    },
+  },
+  panel: {
+    // A cold store: windowless insulated sandwich panels, a joint each metre or so, rivet lines.
+    wall: (c, rng) => {
+      speckle(c, rng, 238, 6);
+      const joint = PX / 3.5;
+      for (let y = 0; y < SIZE; y += joint) { c.fillStyle = grey(208); c.fillRect(0, y, SIZE, 1.5); }
+      for (let x = 0; x < SIZE; x += PX) { c.fillStyle = grey(215); c.fillRect(x, 0, 1, SIZE); }
+    },
+    panes: [],
+    glass: '#2c343c', wallRough: 0.5, glassRough: 0.2, glassMetal: 0.2, lit: 0,
   },
 };
 

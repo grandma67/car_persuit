@@ -199,7 +199,7 @@ describe('Old City square, landmarks and clutter', () => {
       if (p.kind === 'sign') expect(['noParking', 'noSmoking', 'children', 'pedestrian', 'busStop']).not.toContain(p.variant);
       if (isJunctionControl(p)) expect(p.style).toBe('old');
     }
-    expect(c.streetProps.filter((p) => !inDistrict(q, p) && p.style)).toEqual([]);
+    expect(c.streetProps.filter((p) => !inDistrict(q, p) && p.style === 'old')).toEqual([]);
   });
 
   it.each(placed)('seed %i: props stay clear of solids and of each other', (_seed, _c, q) => {

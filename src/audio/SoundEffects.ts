@@ -221,6 +221,19 @@ export class SoundEffects {
       this.impact(Math.min(1, strength + 0.3));
       return;
     }
+    // Harbor breakables (drums, the forklift, boom gates and crossing posts clang as metal, below).
+    if (kind === 'pallet' || kind === 'crates' || kind === 'cableReel') {
+      this.woodBreak(kind === 'crates' ? 0.7 : 0.5, gain);
+      return;
+    }
+    if (kind === 'lifebuoy') {
+      this.burst(0, 0.2, 'lowpass', 900, 0.7, gain);
+      return;
+    }
+    if (kind === 'forklift') {
+      this.impact(Math.min(1, strength + 0.3));
+      return;
+    }
     if (kind === 'produceStall' || kind === 'dimSumCart' || kind === 'fishCrate') {
       this.woodBreak(0.4, gain);
       return;

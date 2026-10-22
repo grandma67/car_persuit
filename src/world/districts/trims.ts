@@ -45,3 +45,9 @@ export function clockTowerFrame(b: Rect & { h: number }, roof: RoofShape): Clock
   const top = dialY + ring + 1.2;
   return { x: b.x, z: b.z, half, base: b.h - 1, top, dialY, dialR };
 }
+
+/** The Harbor office's control room on its roof: a glazed box, centred (its glass band lit by the district renderer). */
+export function controlRoom(b: Rect): Rect & { h: number } {
+  const side = Math.max(5, Math.min(10, Math.min(b.w, b.d) * 0.55));
+  return { x: b.x, z: b.z, w: side, d: side, h: 3.4 };
+}

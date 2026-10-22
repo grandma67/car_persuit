@@ -12,6 +12,8 @@ import type { District } from '../../world/districts/District';
 import type { TankFarmData } from '../../world/districts/Harbor';
 import { containersOf } from '../../world/districts/HarborYard';
 import { renderQuay } from './HarborQuay';
+import { harborPieces, type HarborPieces } from './HarborGate';
+import { harborSignMaterial } from './harborSigns';
 import type { DistrictRenderContext, DistrictView } from './index';
 
 const CONCRETE = 0xb4b2aa;
@@ -70,11 +72,16 @@ export function renderHarbor(q: District, city: CityData, scene: THREE.Scene, ct
       paving.drape(line, 0.08, yellow, city.terrain);
     }
   }
+  // Gate, gallery, yard pieces, track and plates: solids merged below, flat pieces with the paving.
+  const pieces: HarborPieces = { solid: [], signs: [], lit: [] };
+  harborPieces(q, city, ctx.ground, snowy, ctx.lampGlow > 0.3, paving, pieces);
   if (paving.positions.length) {
     const mesh = new THREE.Mesh(paving.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
     mesh.receiveShadow = true;
     scene.add(mesh);
   }
+  if (pieces.signs.length) scene.add(new THREE.Mesh(mergeGeometries(pieces.signs), harborSignMaterial(0.12)));
+  if (pieces.lit.length) scene.add(new THREE.Mesh(mergeGeometries(pieces.lit), harborSignMaterial(0.25 + ctx.lampGlow * 1.3)));
 
   // Containers, the top tiers capped (the data is capped already; this guards the instance count).
   const containers = containersOf(q.dressing.structures).slice(0, HARBOR.maxContainers);
@@ -93,7 +100,7 @@ export function renderHarbor(q: District, city: CityData, scene: THREE.Scene, ct
     const mesh = new THREE.InstancedMesh(containerGeometry(len), material, list.length);
     list.forEach((c, i) => {
       // A column stands on the ground under its middle, a touch sunk.
-      pos.set(c.x, ctx.ground(c.x, c.z) - 0.05 + c.tier * CONTAINER.h, c.z);
+      pos.set(c.x, ctx.ground(c.x, c.z) - 0.05 + (c.base ?? 0) + c.tier * CONTAINER.h, c.z);
       rot.copy(c.alongX ? yaw90 : new THREE.Quaternion());
       mesh.setMatrixAt(i, m.compose(pos, rot, one));
       mesh.setColorAt(i, colour.setHex(snowy && c.tier === tops.get(`${c.x},${c.z}`) ? SNOW : c.color));
@@ -102,8 +109,8 @@ export function renderHarbor(q: District, city: CityData, scene: THREE.Scene, ct
     scene.add(mesh);
   }
 
-  // The tank farm.
-  const geos: THREE.BufferGeometry[] = [];
+  // The tank farm, with the pieces above.
+  const geos: THREE.BufferGeometry[] = [...pieces.solid];
   for (const s of q.dressing.structures) {
     if (s.kind !== 'tankFarm') continue;
     const d = s.data as unknown as TankFarmData;

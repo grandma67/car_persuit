@@ -151,6 +151,11 @@ export class Effects {
       case 'parkedVan': return burst(this.shards, 10);
       case 'lionDance': burst(this.paper, 40); burst(this.confetti, 40); return burst(this.cloth, 6);
       case 'dragonFloat': burst(this.paper, 60); burst(this.confetti, 60); return burst(this.chips, 16);
+      case 'pallet': case 'crates': case 'boomGate': case 'crossbuck': return burst(this.chips, b.kind === 'crates' ? 26 : 18);
+      case 'cableReel': return burst(this.chips, 12);
+      case 'drums': return burst(this.sparks, 8);
+      case 'lifebuoy': return burst(this.cloth, 6);
+      case 'forklift': burst(this.sparks, 24); return burst(this.shards, 10);
     }
     if (b.kind === 'lamp' || b.kind === 'signal') {
       for (let i = 0; i < 14; i++) this.fire.emit(b.position, this.tmpVel.set(0, 0, 0), 0);
