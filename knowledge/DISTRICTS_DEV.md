@@ -112,7 +112,7 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
    off-road ground in `drivable`, overhead pieces with `bottom` ≥ clearance.
 3. Looks: facade styles in `Facades.ts` (+ `CAPS`), roofs in `addRoof`, trims in `addTrims`.
 4. Renderer `render/districts/<Name>.ts` in `DISTRICT_RENDERERS`.
-5. Docs: `DISTRICTS.md` (table row + section, odds line), `PLAN.md` version line, README mention.
+5. Docs: `DISTRICTS.md` (table row + section, odds line), `plans/PLAN_GAME.md` version line, README mention.
 
 ## Pitfalls
 

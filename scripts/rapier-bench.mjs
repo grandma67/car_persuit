@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Rapier step cost on the game's city, for comparing Rapier versions (see RAPIER.md):
+// Rapier step cost on the game's city, for comparing Rapier versions (see knowledge/RAPIER.md):
 //   node scripts/rapier-bench.mjs [version…]        e.g. 0.18.2 0.20.0  (default: the installed one)
 //   PKG=@dimforge/rapier3d-simd-compat node scripts/rapier-bench.mjs 0.20.0
 // Each version is fetched with `npm pack` into a temp folder (the project's node_modules is not

@@ -2,7 +2,7 @@
 
 A browser 3D car-chase game (GTA-style wanted stars) on a seeded island city, deployed to GitHub Pages
 as an installable PWA. Milestones M0–M7 are done; work now is polish and features. Districts:
-[DISTRICTS.md](DISTRICTS.md). Physics engine version: [RAPIER.md](RAPIER.md).
+[DISTRICTS.md](../DISTRICTS.md). Physics engine version: [RAPIER.md](../RAPIER.md).
 
 ## Rules
 
@@ -46,7 +46,7 @@ Generation and gameplay logic are pure data (no Three.js), unit-tested with Vite
   rarely, left-hand traffic.
 - Traffic lights, priority junctions with stop signs, crossings, bus stops, 90 km/h main streets,
   roadworks; lamps, hydrants, signs, fences, trees and more are breakable.
-- Districts (Old City, Chinatown, Harbor, Farm, Slums) overlay themed blocks: [DISTRICTS.md](DISTRICTS.md).
+- Districts (Old City, Chinatown, Harbor, Farm, Slums) overlay themed blocks: [DISTRICTS.md](../DISTRICTS.md).
 
 ## Police
 

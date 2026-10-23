@@ -7,15 +7,15 @@ destinations, cops, civilian traffic, themed districts.
 
 | File | What | Git |
 |---|---|---|
-| `PLAN.md` | the game: rules, layout, world, police, URL flags, versions | tracked |
-| `DISTRICTS.md` | what each district is (table + descriptions) | tracked |
-| `DISTRICTS_DEV.md` | **read before district work**: framework, rules, budgets, pitfalls, tests | tracked |
-| `BROWSER_CHECKS.md` | **read before a browser run**: `check:browser`, evals, `window.dbg`, pitfalls | tracked |
-| `RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
-| `TASKS.md` | current district branch, open items | **local, never commit** |
-| `PLAN_DISTRICTS.md` | district decisions, dropped ideas | **local, never commit** |
-| `TODO.md` | the user's task list | **local, never commit** |
-| `STAGE2_IDEAS.md` | future gameplay ideas | **local, never commit** |
+| `knowledge/plans/PLAN_GAME.md` | the game: rules, layout, world, police, URL flags, versions | tracked |
+| `knowledge/DISTRICTS.md` | what each district is (table + descriptions) | tracked |
+| `knowledge/DISTRICTS_DEV.md` | **read before district work**: framework, rules, budgets, pitfalls, tests | tracked |
+| `knowledge/BROWSER_CHECKS.md` | **read before a browser run**: `check:browser`, evals, `window.dbg`, pitfalls | tracked |
+| `knowledge/RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
+| `knowledge/TASKS.md` | current district branch, open items | **local, never commit** |
+| `knowledge/plans/PLAN_DISTRICTS.md` | district decisions, dropped ideas | tracked |
+| `knowledge/TODO.md` | the user's task list | **local, never commit** |
+| `knowledge/STAGE2_IDEAS.md` | future gameplay ideas | **local, never commit** |
 
 ## Commands
 
@@ -31,15 +31,15 @@ destinations, cops, civilian traffic, themed districts.
   roles; `flat` = no hill/canals, for physics sims). Never write a search script for this.
 - Building budget: `npm run budget -- harbor [seeds=20]` (walls + roofs triangles, facade styles, gen +
   geometry ms on vs off).
-- Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (see `RAPIER.md`).
-- Browser: `npm run check:browser …` (see `BROWSER_CHECKS.md`).
+- Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (see `knowledge/RAPIER.md`).
+- Browser: `npm run check:browser …` (see `knowledge/BROWSER_CHECKS.md`).
 
 ## Working rules (from the user)
 
 - **Git:** commit per milestone, short subject + bulleted body (what and why). Never push without asking.
 - **Districts:** one branch each (`districts/<kind>`). Within a branch do all milestones without asking;
   at branch end **stop for the user's approval**, then merge to main and branch the next from main.
-  Keep `TASKS.md` ticked (it tells the next session where things stand).
+  Keep `knowledge/TASKS.md` ticked (it tells the next session where things stand).
 - **Storage:** the origin is shared; touch only the game's own localStorage/IndexedDB keys.
 - **Testing split:** Claude owns logic (unit tests + headless browser checks: no errors, draw calls,
   programs, fps, screenshots). The user judges feel.
@@ -57,7 +57,7 @@ destinations, cops, civilian traffic, themed districts.
 
 - `world/CityGenerator.ts` → `CityData` (pure data). `world/CityBuilder.ts` → meshes + colliders;
   `world/PropSystem.ts` breakables; `render/Landmarks.ts` solid set pieces; districts overlay last
-  (`DISTRICTS_DEV.md`).
+  (`knowledge/DISTRICTS_DEV.md`).
 - **Determinism is sacred.** Each subsystem uses its own `new Rng(seed ^ SALT)`. The main `rng` in
   `generateCity` is shared in order (zone noise, parks, `fillBlock`, plazas, spawn): never add a draw to
   it; new features get a new salt. Anything that moves existing seeds needs a reason.
@@ -77,4 +77,4 @@ destinations, cops, civilian traffic, themed districts.
 - A refactor meant to change nothing: hash `generateCity` for ~60 seeds first (`run-ts.mjs` in the
   scratchpad), compare after.
 - A new prop, look or material: `renderer.info.programs` must not grow (browser run, on vs off).
-- District tests and rules: `DISTRICTS_DEV.md`.
+- District tests and rules: `knowledge/DISTRICTS_DEV.md`.

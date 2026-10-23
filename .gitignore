@@ -3,3 +3,9 @@ dist
 .DS_Store
 *.log
 graphify-out/
+
+# Local-only notes (never commit)
+knowledge/TASKS.md
+knowledge/TASKS_CLEARED.md
+knowledge/TODO.md
+knowledge/STAGE2_IDEAS.md

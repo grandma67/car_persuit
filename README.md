@@ -35,4 +35,4 @@ npm test        # unit tests (Vitest)
 npm run build   # type-check + build into dist/
 ```
 
-Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`. Design notes and URL flags: [PLAN.md](PLAN.md); districts: [DISTRICTS.md](DISTRICTS.md).
+Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`. Design notes and URL flags: [PLAN_GAME.md](knowledge/plans/PLAN_GAME.md); districts: [DISTRICTS.md](knowledge/DISTRICTS.md).
