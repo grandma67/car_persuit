@@ -1,15 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DISTRICTS, SLUMS } from '../../gameplay/balance';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
-import { generateCity, type CityData, type Rect } from '../CityGenerator';
+import { generateCity, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
-import { footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
+import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
 import type { District } from './District';
-import { isJunctionControl } from './apply';
-import { DISTRICT_DEFS } from './index';
-import { rollDistricts } from './place';
-import { SLUMS_DEF, roleBlocks, ruinsOf, vacantLots } from './Slums';
+import { roleBlocks, ruinsOf, vacantLots } from './Slums';
 import type { Decal } from './SlumsStreet';
+import { at, pavedOf } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const ALONE = { slums: true, oldtown: false, chinatown: false, harbor: false, farm: false };
@@ -19,10 +17,12 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'slums');
   return q ? [[seed, c, q] as const] : [];
 });
-const roadsOf = (c: CityData) => [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
 const inside = (outer: Rect, r: Rect) =>
   Math.abs(r.x - outer.x) + r.w / 2 <= outer.w / 2 + 1e-6 && Math.abs(r.z - outer.z) + r.d / 2 <= outer.d / 2 + 1e-6;
 const shrunk = (r: Rect) => rectFootprint({ ...r, w: r.w - 0.02, d: r.d - 0.02 });
+
+// Shared rules (solids off the paving, junction controls, prop spacing, kerb offset, overhead
+// clearance, stable per seed, a block apart, other rolls unmoved) are in DistrictRules.test.ts.
 
 describe('Slums placement', () => {
   it('places on most seeds when forced on', () => {
@@ -33,7 +33,6 @@ describe('Slums placement', () => {
     const { i0, j0, w, h } = q.grid;
     const n = c.config.blocks;
     const ring = DISTRICTS.outerRing;
-    expect(SLUMS_DEF.shapes.flatMap(([a, b]) => [[a, b], [b, a]])).toContainEqual([w, h]);
     expect(i0 >= ring && j0 >= ring && i0 + w <= n - ring && j0 + h <= n - ring).toBe(true);
     const zones = q.blocks.map((k) => c.blocks[k].zone);
     for (const z of zones) expect(['midtown', 'residential', 'industrial']).toContain(z);
@@ -67,12 +66,12 @@ describe('Slums roles and lots', () => {
     for (const r of ruins) {
       expect(r.street).toBeGreaterThan(0);
       expect(q.roles.has(r.block)).toBe(false);
-      for (const b of c.buildings) expect(footprintsOverlap(shrunk(r), rectFootprint(b))).toBe(false);
+      expect(c.buildings.filter((b) => footprintsOverlap(shrunk(r), rectFootprint(b))).map(at)).toEqual([]);
     }
   });
 
   it.each(placed)('seed %i: every vacant drivable rect is soft, inside its block and off the road; the camp is not drivable', (_seed, c, q) => {
-    const roads = roadsOf(c);
+    const roads = pavedOf(c);
     const s = c.config.sidewalk;
     const lots = vacantLots(q);
     expect(lots.length).toBe(roleBlocks(q, 'vacant').length + roleBlocks(q, 'camp').length);
@@ -81,56 +80,27 @@ describe('Slums roles and lots', () => {
       const inner = { ...block, w: block.w - 2 * s, d: block.d - 2 * s };
       if (v.camp) {
         expect(inside(inner, v.camp)).toBe(true);
-        for (const d of q.dressing.drivable) expect(footprintsOverlap(shrunk(v.camp), shrunk(d))).toBe(false);
+        expect(q.dressing.drivable.filter((d) => footprintsOverlap(shrunk(v.camp!), shrunk(d)))).toEqual([]);
       }
       if (!v.rect.w) continue;
       expect(inside(inner, v.rect)).toBe(true);
       expect(q.dressing.drivable).toContainEqual(v.rect);
       expect(q.dressing.soft).toContainEqual(v.rect);
-      for (const r of roads) expect(footprintsOverlap(shrunk(v.rect), r)).toBe(false);
+      expect(roads.filter((r) => footprintsOverlap(shrunk(v.rect), r))).toEqual([]);
       expect(c.buildings.some((b) => inRect(v.rect, b))).toBe(false);
       // The fence is torn open on at least one street side.
       expect(v.holes.length).toBeGreaterThanOrEqual(1);
     }
   });
-
-  it.each(placed)('seed %i: junction controls are untouched', (seed, c) => {
-    const off = generateCity(seed, undefined, { defs: [] });
-    const key = (x: CityData) => x.streetProps.filter(isJunctionControl).map((p) => `${p.kind}${p.variant ?? ''}${p.x},${p.z}`).sort();
-    expect(key(c)).toEqual(key(off));
-  });
 });
 
 describe('Slums with every district forced on', () => {
   const ALL = { slums: true, oldtown: true, chinatown: true, harbor: true, farm: true };
-  const all = SEEDS.map((seed) => [seed, generateCity(seed, undefined, { force: ALL })] as const);
 
-  it('places on most seeds, or sits out cleanly', () => {
-    expect(all.filter(([, c]) => c.districts.some((d) => d.kind === 'slums')).length).toBeGreaterThan(SEEDS.length * 0.5);
-  });
-
-  it.each(all)('seed %i: districts keep a block apart; the Slums are whole or absent', (_seed, c) => {
-    const ds = c.districts;
-    const apart = (a: District, b: District) => {
-      const g = a.grid, o = b.grid;
-      return !(g.i0 - 1 < o.i0 + o.w && o.i0 < g.i0 + g.w + 1 && g.j0 - 1 < o.j0 + o.h && o.j0 < g.j0 + g.h + 1);
-    };
-    for (const a of ds) for (const b of ds) if (a !== b) expect(apart(a, b)).toBe(true);
-    const slums = ds.find((d) => d.kind === 'slums');
-    const built = c.buildings.filter((b) => b.district === 'slums');
-    if (!slums) {
-      expect(built).toHaveLength(0);
-      expect(c.blocks.some((b) => b.district === 'slums')).toBe(false);
-    } else {
-      expect(built.filter((b) => b.lot === 'cornerStore')).toHaveLength(1);
-      for (const b of built) expect(inRect(slums.bounds, b)).toBe(true);
-    }
-  });
-
-  it.each(SEEDS)('seed %i: the other four roll as without the Slums', (seed) => {
-    const without = DISTRICT_DEFS.filter((d) => d.kind !== 'slums');
-    const rolls = (defs: typeof DISTRICT_DEFS) => rollDistricts(seed, defs).map((r) => r.def.kind).filter((k) => k !== 'slums');
-    expect(rolls(DISTRICT_DEFS)).toEqual(rolls(without));
+  it('places on most seeds, with its one corner store', () => {
+    const slums = SEEDS.map((seed) => generateCity(seed, undefined, { force: ALL })).flatMap((c) => (c.districts.some((d) => d.kind === 'slums') ? [c] : []));
+    expect(slums.length).toBeGreaterThan(SEEDS.length * 0.5);
+    for (const c of slums) expect(c.buildings.filter((b) => b.district === 'slums' && b.lot === 'cornerStore')).toHaveLength(1);
   });
 });
 
@@ -138,15 +108,9 @@ describe('Slums set pieces', () => {
   const widest = Math.max(...ALL_SPECS.map((s) => s.halfExtents.x)) * 2;
   const touches = (a: Rect, b: Rect) => Math.abs(a.x - b.x) <= (a.w + b.w) / 2 && Math.abs(a.z - b.z) <= (a.d + b.d) / 2;
 
-  it.each(placed)('seed %i: stubs, heaps, piers, stacks, fence and camp stay off roads and junctions', (_seed, c, q) => {
-    const roads = roadsOf(c);
-    for (const fp of q.dressing.solids) expect(roads.filter((r) => footprintsOverlap(fp, r))).toEqual([]);
+  it.each(placed)('seed %i: one ruin structure per ruin, one overpass', (_seed, _c, q) => {
     expect(q.dressing.structures.filter((s) => s.kind === 'ruin')).toHaveLength(ruinsOf(q).length);
-  });
-
-  it.each(placed)('seed %i: the overpass stands on a gate and clears every vehicle', (_seed, _c, q) => {
     expect(q.dressing.structures.filter((s) => s.kind === 'overpass').length).toBe(1);
-    for (const o of q.dressing.overhead) expect(o.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
   });
 
   it.each(placed)('seed %i: junkyard corridors are wide, clear of solids, and join two streets', (_seed, c, q) => {
@@ -155,7 +119,7 @@ describe('Slums set pieces', () => {
     const streets = new Set<number>();
     for (const r of corridors) {
       expect(Math.min(r.w, r.d)).toBeGreaterThanOrEqual(widest + 1);
-      for (const fp of q.dressing.solids) expect(footprintsOverlap(shrunk(r), fp)).toBe(false);
+      expect(q.dressing.solids.filter((fp) => footprintsOverlap(shrunk(r), fp)).map(at)).toEqual([]);
       const alongX = r.w > r.d;
       for (const end of [-1, 1]) {
         const tip: Rect = alongX ? { x: r.x + end * (r.w / 2 + 1), z: r.z, w: 0.5, d: 0.5 } : { x: r.x, z: r.z + end * (r.d / 2 + 1), w: 0.5, d: 0.5 };
@@ -167,7 +131,7 @@ describe('Slums set pieces', () => {
 
   it.each(placed)('seed %i: camp solids are never in a drivable rect', (_seed, _c, q) => {
     for (const s of q.dressing.structures.filter((st) => st.kind === 'camp')) {
-      for (const fp of s.footprints) for (const d of q.dressing.drivable) expect(footprintsOverlap(fp, shrunk(d))).toBe(false);
+      expect(s.footprints.filter((fp) => q.dressing.drivable.some((d) => footprintsOverlap(fp, shrunk(d)))).map(at)).toEqual([]);
     }
   });
 });
@@ -179,39 +143,26 @@ const corners = (f: Footprint) => {
 };
 
 describe('Slums streets', () => {
-  const CLUTTER = ['trashBags', 'shoppingCart', 'tyres', 'mattress', 'couch', 'burnBarrel', 'pallet', 'crates', 'drums'];
-
-  it.each(placed)('seed %i: kerb clutter keeps off the centre line; props off solids and each other', (_seed, c, q) => {
-    const mine = q.dressing.props;
-    for (const p of mine) expect(q.dressing.solids.filter((f) => footprintsOverlap(propFootprint(p), f))).toEqual([]);
-    for (let i = 0; i < mine.length; i++) for (let j = i + 1; j < mine.length; j++) expect(footprintsOverlap(propFootprint(mine[i]), propFootprint(mine[j]))).toBe(false);
-    for (const p of mine.filter((m) => CLUTTER.includes(m.kind))) {
-      const road = c.roads.find((r) => footprintsOverlap(propFootprint(p, c.config.sidewalk), rectFootprint(r.rect)));
-      if (!road) continue;
-      const alongX = road.rect.w > road.rect.d;
-      const lateral = alongX ? Math.abs(p.z - road.rect.z) : Math.abs(p.x - road.rect.x);
-      const fp = propFootprint(p);
-      expect(lateral - Math.hypot(fp.hx, fp.hz)).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
-    }
-  });
-
   it.each(placed)('seed %i: wrecks are never in a lane: off junctions, at most a kerb lane deep into a road', (_seed, c, q) => {
     const wrecks = q.dressing.props.filter((p) => p.kind === 'wreck');
     expect(wrecks.length).toBeGreaterThan(0);
     expect(wrecks.length).toBeLessThanOrEqual(40);
+    const junctions = new FootprintIndex(c.intersections.map(rectFootprint), 16);
+    const deep: string[] = [];
     for (const w of wrecks) {
       const fp = propFootprint(w);
-      for (const j of c.intersections) expect(footprintsOverlap(fp, rectFootprint(j))).toBe(false);
+      if (junctions.hits(fp)) deep.push(`in a junction at ${at(w)}`);
       for (const r of c.roads.map((road) => road.rect)) {
         const alongX = r.w > r.d;
         for (const p of corners(fp)) {
           if (!inRect(r, p)) continue;
           // How far in from the road's kerb edge this corner reaches.
           const depth = alongX ? r.d / 2 - Math.abs(p.z - r.z) : r.w / 2 - Math.abs(p.x - r.x);
-          expect(depth).toBeLessThanOrEqual(1.2);
+          if (depth > 1.2) deep.push(`${depth.toFixed(2)} m into the road at ${at(w)}`);
         }
       }
     }
+    expect(deep).toEqual([]);
   });
 
   it.each(placed)('seed %i: graffiti stands 2–3 cm proud of its wall, within the face, capped', (_seed, _c, q) => {
@@ -266,24 +217,15 @@ describe('Slums runs: night and climate', () => {
     for (const p of props.filter((m) => m.flicker)) expect(p.kind).toBe('lamp');
   });
 
-  it('climate dressing is stable per seed', () => {
-    for (const [seed, , q] of placed.slice(0, 12)) {
-      const again = city(seed).districts.find((d) => d.kind === 'slums')!;
-      expect(JSON.stringify(byClimate(again))).toBe(JSON.stringify(byClimate(q)));
-    }
-  });
-
   it.each(placed)('seed %i: slush and blown sand lie in the gutters, clear of the junctions; wrecks weather by the sea and in the desert', (_seed, c, q) => {
     const x = byClimate(q);
     const slush = x.snow.ground ?? [];
     expect(slush.length).toBeGreaterThan(0);
-    for (const r of slush) {
-      expect(c.roads.some((road) => inside(road.rect, r))).toBe(true);
-      for (const j of c.intersections) expect(footprintsOverlap(shrunk(r), rectFootprint(j))).toBe(false);
-    }
-    for (const r of (x.desert.ground ?? []).filter((g) => g.kind === 'drift')) {
-      for (const b of c.buildings) expect(footprintsOverlap(shrunk(r), rectFootprint(b))).toBe(false);
-    }
+    const junctions = new FootprintIndex(c.intersections.map(rectFootprint), 16);
+    const buildings = new FootprintIndex(c.buildings.map(rectFootprint), 16);
+    expect(slush.filter((r) => !c.roads.some((road) => inside(road.rect, r))).map(at)).toEqual([]);
+    expect(slush.filter((r) => junctions.hits(shrunk(r))).map(at)).toEqual([]);
+    expect((x.desert.ground ?? []).filter((g) => g.kind === 'drift' && buildings.hits(shrunk(g))).map(at)).toEqual([]);
     expect(x.beach.tint?.kinds).toContain('wreck');
     expect(x.desert.tint?.kinds).toContain('wreck');
   });

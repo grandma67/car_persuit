@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CITY, generateCity } from './CityGenerator';
+import { DEFAULT_CITY, generateCity, rollDriveSide } from './CityGenerator';
 import { signalState, SIGNAL_CYCLE } from './TrafficControl';
 
 const inside = (m: { x: number; z: number; w: number; d: number }, r: { x: number; z: number; w: number; d: number }) =>
@@ -168,14 +168,13 @@ describe('left-hand traffic (England)', () => {
   const facing = (p: { yaw: number }) => ({ fx: Math.sin(p.yaw), fz: Math.cos(p.yaw) });
 
   it('is rare, and decided by the seed', () => {
-    let left = 0;
-    for (let seed = 1; seed <= 200; seed++) {
-      const side = generateCity(seed).driveSide;
-      if (side === 'left') left++;
-      expect(generateCity(seed).driveSide).toBe(side);
-    }
-    expect(left).toBeGreaterThan(0);
-    expect(left).toBeLessThan(25);
+    const seeds = Array.from({ length: 200 }, (_, i) => i + 1);
+    const left = seeds.filter((s) => rollDriveSide(s) === 'left');
+    expect(left.length).toBeGreaterThan(0);
+    expect(left.length).toBeLessThan(25);
+    // The city takes the roll, either way.
+    expect(generateCity(left[0]).driveSide).toBe('left');
+    expect(generateCity(seeds.find((s) => !left.includes(s))!).driveSide).toBe('right');
   });
 
   it.each([1, 42, 1234])("seed %i: junction signs and signals stand on the driver's left", (seed) => {

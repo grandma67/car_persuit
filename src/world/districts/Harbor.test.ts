@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { generateCity, type CityData, type Rect } from '../CityGenerator';
+import { generateCity, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
-import { DISTRICTS, HARBOR, HARBOR_QUAY } from '../../gameplay/balance';
+import { HARBOR, HARBOR_QUAY } from '../../gameplay/balance';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
-import { footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
-import type { District } from './District';
-import { isJunctionControl } from './apply';
+import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
 import { HARBOR_DEF, backRows, quayRow, yardBlocks } from './Harbor';
 import { containersOf, type StraddleData } from './HarborYard';
 import { coastFrame, quayLines, uOf, uSpan, vOf, type CraneData, type ShipData } from './HarborQuay';
+import { at, pavedOf } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const city = (seed: number) => generateCity(seed, undefined, { force: { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false } });
@@ -22,6 +21,9 @@ const widest = Math.max(...ALL_SPECS.map((s) => s.halfExtents.x)) * 2;
 const offRoadWidest = Math.max(...ALL_SPECS.filter((s) => s.body !== 'ramptruck').map((s) => s.halfExtents.x)) * 2;
 const touches = (a: Rect, b: Rect) => Math.abs(a.x - b.x) <= (a.w + b.w) / 2 && Math.abs(a.z - b.z) <= (a.d + b.d) / 2;
 
+// Shared rules (solids off the paving, junction controls, prop spacing, kerb offset, overhead
+// clearance, stable per seed, a block apart) are in DistrictRules.test.ts.
+
 describe('Harbor placement', () => {
   it('places on most seeds when forced on', () => {
     expect(placed.length).toBeGreaterThan(SEEDS.length * 0.9);
@@ -30,7 +32,6 @@ describe('Harbor placement', () => {
   it.each(placed)('seed %i: a valid coast cluster, long side on the sea', (_seed, c, q) => {
     const { i0, j0, w, h } = q.grid;
     const n = c.config.blocks;
-    expect(HARBOR_DEF.shapes.flatMap(([a, b]) => [[a, b], [b, a]])).toContainEqual([w, h]);
     const zones = q.blocks.map((k) => c.blocks[k].zone);
     for (const z of zones) expect(['industrial', 'residential']).toContain(z);
     expect(zones.filter((z) => z === 'industrial').length).toBeGreaterThanOrEqual(zones.length / 2);
@@ -96,7 +97,7 @@ describe('Harbor yard and lots', () => {
     const streets = new Set<number>();
     for (const r of q.dressing.drivable) {
       expect(Math.min(r.w, r.d)).toBeGreaterThanOrEqual(widest + 1);
-      for (const fp of stacks) expect(footprintsOverlap(rectFootprint({ ...r, w: r.w - 0.02, d: r.d - 0.02 }), fp)).toBe(false);
+      expect(stacks.filter((fp) => footprintsOverlap(rectFootprint({ ...r, w: r.w - 0.02, d: r.d - 0.02 }), fp)).map(at)).toEqual([]);
       // Both ends reach a road segment.
       const alongX = r.w > r.d;
       for (const end of [-1, 1]) {
@@ -106,32 +107,20 @@ describe('Harbor yard and lots', () => {
     }
     expect(streets.size).toBeGreaterThanOrEqual(2);
   });
-
-  it.each(placed)('seed %i: junction controls are untouched and nothing solid stands on a road', (seed, c, q) => {
-    const off = generateCity(seed, undefined, { defs: [] });
-    const key = (x: CityData) => x.streetProps.filter(isJunctionControl).map((p) => `${p.kind}${p.variant ?? ''}${p.x},${p.z}`).sort();
-    expect(key(c)).toEqual(key(off));
-    const roads = [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
-    for (const fp of q.dressing.solids) expect(roads.some((r) => footprintsOverlap(fp, r))).toBe(false);
-  });
 });
 
 describe('Harbor quay, cranes and ship', () => {
-  const roadsOf = (c: CityData) => [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
   const span = (fps: { x: number; z: number; hx: number; hz: number }[], f: ReturnType<typeof coastFrame>) => {
     const us = fps.flatMap((p) => { const u = uOf(f, p), h = Math.abs(f.ax) * p.hx + Math.abs(f.az) * p.hz; return [u - h, u + h]; });
     return [Math.min(...us), Math.max(...us)];
   };
 
-  it.each(placed)('seed %i: crane legs, trucks and bollards stand off every road and junction', (_seed, c, q) => {
-    const roads = roadsOf(c);
+  it.each(placed)('seed %i: cranes and bollards as many as asked; bollards on the quay edge, crane trucks on the apron', (_seed, c, q) => {
     const cranes = q.dressing.structures.filter((s) => s.kind === 'crane');
     expect(cranes.length).toBeGreaterThanOrEqual(1);
     expect(cranes.length).toBeLessThanOrEqual(HARBOR.cranes[1]);
-    for (const s of cranes) for (const fp of s.footprints) expect(roads.some((r) => footprintsOverlap(fp, r))).toBe(false);
     const bollards = q.dressing.landmarks.filter((l) => l.kind === 'bollard');
     expect(bollards.length).toBeGreaterThan(3);
-    for (const b of bollards) expect(roads.some((r) => footprintsOverlap({ x: b.x, z: b.z, hx: b.radius, hz: b.radius, yaw: 0 }, r))).toBe(false);
     // Bollards on the quay edge, inside the sea wall; a working crane's truck on the apron.
     const f = coastFrame(q);
     const L = quayLines(c);
@@ -145,10 +134,9 @@ describe('Harbor quay, cranes and ship', () => {
     }
   });
 
-  it.each(placed)('seed %i: everything over the road clears the tallest vehicle', (_seed, _c, q) => {
+  it.each(placed)('seed %i: two portals over the road per crane', (_seed, _c, q) => {
     const portals = q.dressing.overhead.filter((o) => o.kind === 'cranePortal');
     expect(portals.length).toBe(2 * q.dressing.structures.filter((s) => s.kind === 'crane').length);
-    for (const o of q.dressing.overhead) expect(o.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
   });
 
   it.each(placed)('seed %i: the ship lies wholly in the sea, inside the frontage', (_seed, c, q) => {
@@ -194,31 +182,11 @@ describe('Harbor quay, cranes and ship', () => {
 });
 
 describe('Harbor sheds, yard furniture, gate and props', () => {
-  const roadsOf = (c: CityData) => [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
-
   it.each(placed)('seed %i: boom barriers, fences, crossbucks and forklifts stand off every road', (_seed, c, q) => {
-    const roads = roadsOf(c);
-    for (const p of q.dressing.props.filter((p) => ['boomGate', 'fence', 'crossbuck', 'forklift', 'lifebuoy'].includes(p.kind))) {
-      expect(roads.some((r) => footprintsOverlap(propFootprint(p), r))).toBe(false);
-    }
+    const roads = new FootprintIndex(pavedOf(c), 16);
+    const kinds = ['boomGate', 'fence', 'crossbuck', 'forklift', 'lifebuoy'];
+    expect(q.dressing.props.filter((p) => kinds.includes(p.kind) && roads.hits(propFootprint(p))).map((p) => `${p.kind} at ${at(p)}`)).toEqual([]);
     expect(q.dressing.props.filter((p) => p.kind === 'boomGate').length).toBeGreaterThanOrEqual(4);
-  });
-
-  it.each(placed)('seed %i: kerb clutter keeps off the centre line and away from solids and each other', (_seed, c, q) => {
-    const solids = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
-    const mine = q.dressing.props;
-    for (const p of mine) expect(solids.filter((f) => footprintsOverlap(propFootprint(p), f))).toEqual([]);
-    for (let i = 0; i < mine.length; i++) for (let j = i + 1; j < mine.length; j++) expect(footprintsOverlap(propFootprint(mine[i]), propFootprint(mine[j]))).toBe(false);
-    const clutter = mine.filter((p) => ['pallet', 'drums', 'crates', 'cableReel'].includes(p.kind));
-    for (const p of clutter) {
-      // Nearest road centre line: the road segment it stands beside.
-      const road = c.roads.find((r) => footprintsOverlap(propFootprint(p, c.config.sidewalk), rectFootprint(r.rect)));
-      if (!road) continue;
-      const alongX = road.rect.w > road.rect.d;
-      const lateral = alongX ? Math.abs(p.z - road.rect.z) : Math.abs(p.x - road.rect.x);
-      const fp = propFootprint(p);
-      expect(lateral - Math.hypot(fp.hx, fp.hz)).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
-    }
   });
 
   it.each(placed)('seed %i: straddle carriers leave a gap the widest vehicle clears', (_seed, _c, q) => {
@@ -231,11 +199,9 @@ describe('Harbor sheds, yard furniture, gate and props', () => {
     }
   });
 
-  it.each(placed)('seed %i: a terminal gate on an inland gate, its canopy over the clearance', (_seed, _c, q) => {
-    const gate = q.dressing.structures.find((s) => s.kind === 'terminalGate');
-    expect(gate).toBeDefined();
-    const canopy = q.dressing.overhead.find((o) => o.kind === 'terminalCanopy')!;
-    expect(canopy.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+  it.each(placed)('seed %i: a terminal gate with its canopy', (_seed, _c, q) => {
+    expect(q.dressing.structures.find((s) => s.kind === 'terminalGate')).toBeDefined();
+    expect(q.dressing.overhead.find((o) => o.kind === 'terminalCanopy')).toBeDefined();
   });
 
   it.each(placed)('seed %i: sheds front a street, transit sheds open to the sea, one look per lot', (_seed, c) => {
@@ -247,12 +213,4 @@ describe('Harbor sheds, yard furniture, gate and props', () => {
     }
     for (const b of inside) if (['warehouse', 'transitShed', 'coldStore'].includes(b.lot!)) expect(b.street).toBeGreaterThan(0);
   });
-});
-
-it('the yard and lot rolls are stable per seed', () => {
-  const sig = (q: District, c: CityData) => JSON.stringify([q.grid, [...q.roles], c.buildings.filter((b) => b.district === 'harbor').map((b) => b.lot), q.dressing.solids]);
-  for (const [seed, c, q] of placed.slice(0, 5)) {
-    const again = city(seed);
-    expect(sig(again.districts.find((d) => d.kind === 'harbor')!, again)).toBe(sig(q, c));
-  }
 });

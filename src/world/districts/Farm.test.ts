@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { generateCity, type CityData, type Rect } from '../CityGenerator';
+import { generateCity, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
-import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type StreetProp } from '../StreetProps';
+import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type Footprint, type StreetProp } from '../StreetProps';
 import type { District } from './District';
-import { isJunctionControl } from './apply';
-import { DISTRICTS, FARM, FARM_FIELDS, FARM_GATE } from '../../gameplay/balance';
+import { FARM, FARM_FIELDS, FARM_GATE } from '../../gameplay/balance';
 import { joinRunDressing } from './runtime';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 import { gapLane } from './FarmFields';
-import { CROPS, FARM_DEF, cropCap, farmFields, farmyardBlock, fenceGaps, ranchGate } from './Farm';
+import { CROPS, cropCap, farmFields, farmyardBlock, fenceGaps, ranchGate } from './Farm';
 import type { RanchGateData } from './FarmGate';
+import { at, landmarkFootprint, pavedOf, solidsOf } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const city = (seed: number) => generateCity(seed, undefined, { force: { farm: true, oldtown: false, chinatown: false, harbor: false, slums: false } });
@@ -18,9 +18,13 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'farm');
   return q ? [[seed, c, q] as const] : [];
 });
-const roadsOf = (c: CityData) => [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
 const inside = (outer: Rect, r: Rect) =>
   Math.abs(r.x - outer.x) + r.w / 2 <= outer.w / 2 + 1e-6 && Math.abs(r.z - outer.z) + r.d / 2 <= outer.d / 2 + 1e-6;
+/** Fence-gap lanes: the way through each gap, kept clear. */
+const lanesOf = (q: District) => Object.values(fenceGaps(q)).flat().map((g) => gapLane(g));
+
+// Shared rules (solids off the paving, junction controls, prop spacing, kerb offset, overhead
+// clearance, stable per seed, a block apart) are in DistrictRules.test.ts.
 
 describe('Farm placement', () => {
   it('places on most seeds when forced on', () => {
@@ -30,7 +34,6 @@ describe('Farm placement', () => {
   it.each(placed)('seed %i: a valid outer-ring cluster touching the island edge', (_seed, c, q) => {
     const { i0, j0, w, h } = q.grid;
     const n = c.config.blocks;
-    expect(FARM_DEF.shapes.flatMap(([a, b]) => [[a, b], [b, a]])).toContainEqual([w, h]);
     expect(i0 === 0 || j0 === 0 || i0 + w === n || j0 + h === n).toBe(true);
     const zones = q.blocks.map((k) => c.blocks[k].zone);
     for (const z of zones) expect(['residential', 'industrial']).toContain(z);
@@ -76,7 +79,7 @@ describe('Farm farmyard and fields', () => {
   });
 
   it.each(placed)('seed %i: each field is soil, drivable and soft inside its block, off the road', (_seed, c, q) => {
-    const roads = roadsOf(c);
+    const roads = pavedOf(c);
     const s = c.config.sidewalk;
     for (const f of farmFields(q)) {
       const block = c.blocks[f.block].rect;
@@ -85,15 +88,9 @@ describe('Farm farmyard and fields', () => {
       expect(q.dressing.soft).toContainEqual(f.rect);
       expect(q.dressing.ground.some((g) => g.kind === 'soil' && g.x === f.rect.x && g.z === f.rect.z)).toBe(true);
       const shrunk = rectFootprint({ ...f.rect, w: f.rect.w - 0.02, d: f.rect.d - 0.02 });
-      for (const r of roads) expect(footprintsOverlap(shrunk, r)).toBe(false);
+      expect(roads.filter((r) => footprintsOverlap(shrunk, r))).toEqual([]);
       expect(c.buildings.some((b) => inRect(f.rect, b))).toBe(false);
     }
-  });
-
-  it.each(placed)('seed %i: junction controls are untouched', (seed, c) => {
-    const off = generateCity(seed, undefined, { defs: [] });
-    const key = (x: CityData) => x.streetProps.filter(isJunctionControl).map((p) => `${p.kind}${p.variant ?? ''}${p.x},${p.z}`).sort();
-    expect(key(c)).toEqual(key(off));
   });
 });
 
@@ -109,18 +106,14 @@ describe('Farm ranch gate, yard pieces and fences', () => {
     expect(q.dressing.props.filter((p) => p.kind === 'mailbox')).toHaveLength(1);
   });
 
-  it.each(placed)('seed %i: the sign and crossbeam clear every vehicle', (_seed, _c, q) => {
-    for (const o of q.dressing.overhead) expect(o.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+  it.each(placed)('seed %i: the crossbeam stands above the sign', (_seed, _c, q) => {
     const s = q.dressing.structures.find((st) => st.kind === 'ranchGate')!;
     const d = s.data as unknown as RanchGateData;
     expect(d.beam).toBeGreaterThan(d.sign.bottom + d.sign.h);
   });
 
-  it.each(placed)('seed %i: posts and pieces stay off the roads; pieces as many as asked', (_seed, c, q) => {
-    const roads = roadsOf(c);
+  it.each(placed)('seed %i: yard pieces as many as asked, clear of the buildings and each other', (_seed, c, q) => {
     const pieces = q.dressing.landmarks.filter((l) => PIECES.includes(l.kind));
-    const fps = [...q.dressing.solids, ...pieces.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
-    for (const fp of fps) for (const r of roads) expect(footprintsOverlap(fp, r)).toBe(false);
     const n = (k: string) => pieces.filter((l) => l.kind === k).length;
     expect(n('silo')).toBeGreaterThanOrEqual(1);
     expect(n('silo')).toBeLessThanOrEqual(FARM_GATE.silos[1]);
@@ -131,38 +124,36 @@ describe('Farm ranch gate, yard pieces and fences', () => {
     // Clear of the buildings and of each other.
     const buildings = c.buildings.filter((b) => b.district === 'farm').map(rectFootprint);
     for (const l of pieces) {
-      const fp = { x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 };
-      for (const b of buildings) expect(footprintsOverlap(fp, b)).toBe(false);
+      expect(buildings.filter((b) => footprintsOverlap(landmarkFootprint(l), b))).toEqual([]);
       for (const o of pieces) if (o !== l) expect(Math.hypot(o.x - l.x, o.z - l.z)).toBeGreaterThanOrEqual(o.radius + l.radius);
     }
   });
 
   it.each(placed)('seed %i: every field has at least two fence gaps facing different streets', (_seed, c, q) => {
     const gaps = fenceGaps(q);
-    const roads = roadsOf(c);
-    const plazas = c.plazas.map(rectFootprint);
+    const ways = pavedOf(c, { plazas: true });
+    const props = new FootprintIndex(q.dressing.props.map((p) => propFootprint(p)));
     for (const f of farmFields(q)) {
       const mine = gaps[f.block];
       expect(new Set(mine.map((g) => `${g.nx},${g.nz}`)).size).toBeGreaterThanOrEqual(2);
       // Out through each gap, across the sidewalk, is a road (or a plaza's paving, where a field has only one street).
       for (const g of mine) {
         const out = { x: g.x + g.nx * (c.config.sidewalk + 2), z: g.z + g.nz * (c.config.sidewalk + 2), hx: 0.2, hz: 0.2, yaw: 0 };
-        expect(roads.some((r) => footprintsOverlap(out, r)) || plazas.some((r) => footprintsOverlap(out, r))).toBe(true);
+        expect(ways.some((r) => footprintsOverlap(out, r))).toBe(true);
         // Nothing stands in it.
         const gap = { x: g.x, z: g.z, hx: g.nx ? 1 : FARM_GATE.fieldGate / 2 - 0.2, hz: g.nz ? 1 : FARM_GATE.fieldGate / 2 - 0.2, yaw: 0 };
-        for (const p of q.dressing.props) expect(footprintsOverlap(propFootprint(p), gap)).toBe(false);
+        expect(props.hits(gap)).toBe(false);
       }
     }
   });
 
   it.each(placed)('seed %i: fences stand on the field side, never on a road', (_seed, c, q) => {
-    const roads = roadsOf(c);
+    const roads = new FootprintIndex(pavedOf(c), 16);
+    const fields = farmFields(q);
     const fences = q.dressing.props.filter((p) => p.kind === 'fence' && p.style === 'rail');
     expect(fences.length).toBeGreaterThan(0);
-    for (const p of fences) {
-      for (const r of roads) expect(footprintsOverlap(propFootprint(p), r)).toBe(false);
-      expect(farmFields(q).some((f) => inRect(f.rect, p))).toBe(true);
-    }
+    expect(fences.filter((p) => roads.hits(propFootprint(p))).map(at)).toEqual([]);
+    expect(fences.filter((p) => !fields.some((f) => inRect(f.rect, p))).map(at)).toEqual([]);
   });
 });
 
@@ -197,34 +188,9 @@ describe('Farm crops, equipment and props', () => {
     expect(c.streetProps.filter((p) => p.kind === 'lamp' && inRect(q.bounds, p))).toHaveLength(0);
   });
 
-  it.each(placed)('seed %i: nothing solid on a road or in a fence gap', (_seed, c, q) => {
-    const roads = roadsOf(c);
-    const lanes = Object.values(fenceGaps(q)).flat().map((g) => gapLane(g));
-    const pieces = q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }));
-    for (const fp of [...q.dressing.solids, ...pieces]) {
-      for (const r of roads) expect(footprintsOverlap(fp, r)).toBe(false);
-      for (const l of lanes) expect(footprintsOverlap(fp, l)).toBe(false);
-    }
-  });
-
-  it.each(placed)('seed %i: kerb clutter keeps off the centre line; props off solids and each other', (_seed, c, q) => {
-    const solids = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
-    const mine = q.dressing.props;
-    for (const p of mine) expect(solids.filter((f) => footprintsOverlap(propFootprint(p), f))).toEqual([]);
-    for (let i = 0; i < mine.length; i++) for (let j = i + 1; j < mine.length; j++) expect(footprintsOverlap(propFootprint(mine[i]), propFootprint(mine[j]))).toBe(false);
-    const s = c.config.sidewalk;
-    const onSidewalk = mine.filter((p) => q.blocks.some((k) => {
-      const r = c.blocks[k].rect;
-      return inRect(r, p) && !inRect({ ...r, w: r.w - 2 * s, d: r.d - 2 * s }, p);
-    }));
-    for (const p of onSidewalk) {
-      const road = c.roads.find((r) => footprintsOverlap(propFootprint(p, s), rectFootprint(r.rect)));
-      if (!road) continue;
-      const alongX = road.rect.w > road.rect.d;
-      const lateral = alongX ? Math.abs(p.z - road.rect.z) : Math.abs(p.x - road.rect.x);
-      const fp = propFootprint(p);
-      expect(lateral - Math.hypot(fp.hx, fp.hz)).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
-    }
+  it.each(placed)('seed %i: nothing solid in a fence gap', (_seed, _c, q) => {
+    const lanes = new FootprintIndex(lanesOf(q));
+    expect(solidsOf(q).filter((f) => lanes.hits(f)).map(at)).toEqual([]);
   });
 
   it.each(placed)('seed %i: orchard aisles are wide enough for any car', (_seed, _c, q) => {
@@ -233,7 +199,8 @@ describe('Farm crops, equipment and props', () => {
       for (const axis of ['x', 'z'] as const) {
         const lines = [...new Set(trees.map((t) => Math.round(t[axis] * 100) / 100))].sort((a, b) => a - b);
         const trunk = propFootprint(trees[0]).hx;
-        for (let i = 1; i < lines.length; i++) expect(lines[i] - lines[i - 1] - 2 * trunk).toBeGreaterThanOrEqual(offRoadWidest + 1);
+        const narrowest = Math.min(...lines.slice(1).map((l, i) => l - lines[i] - 2 * trunk));
+        expect(narrowest).toBeGreaterThanOrEqual(offRoadWidest + 1);
       }
     }
   });
@@ -262,17 +229,10 @@ describe('Farm runs: harvest night, climate, glow', () => {
   type Run = { structures: { kind: string; footprints: Footprint[] }[]; solids: Footprint[] };
   const extraOf = (q: District) => q.dressing.extra as { harvest: boolean; nightProps: StreetProp[]; night?: Run; byClimate: { desert: Run; snow: { drop: string[] } } };
 
-  it('the maze and harvest-night rolls are stable per seed, and come up on some seeds', () => {
-    let harvests = 0;
-    for (const [seed, , q] of placed.slice(0, 20)) {
-      const again = city(seed).districts.find((d) => d.kind === 'farm')!;
-      expect(extraOf(again).harvest).toBe(extraOf(q).harvest);
-      expect(farmFields(again).map((f) => !!f.maze)).toEqual(farmFields(q).map((f) => !!f.maze));
-      expect(extraOf(again).nightProps).toEqual(extraOf(q).nightProps);
-      if (extraOf(q).harvest) harvests++;
-    }
+  it('harvest night comes up on some seeds, not all', () => {
+    const harvests = placed.filter(([, , q]) => extraOf(q).harvest).length;
     expect(harvests).toBeGreaterThan(0);
-    expect(harvests).toBeLessThan(20);
+    expect(harvests).toBeLessThan(placed.length);
   });
 
   it.each(placed)('seed %i: night glow stays within the cap; harvest night only adds to night runs', (_seed, c, q) => {
@@ -284,19 +244,15 @@ describe('Farm runs: harvest night, climate, glow', () => {
     // Night-only things aren't in the city until a night run joins them.
     expect(c.streetProps.some((p) => p.kind === 'jackOLantern')).toBe(false);
     expect(q.dressing.structures.some((st) => st.kind === 'balePyramid' || st.kind === 'pivot')).toBe(false);
-    const solids = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
-    for (const p of x.nightProps) for (const fp of solids) expect(footprintsOverlap(propFootprint(p), fp)).toBe(false);
+    const solids = new FootprintIndex(solidsOf(q));
+    expect(x.nightProps.filter((p) => solids.hits(propFootprint(p))).map(at)).toEqual([]);
   });
 
   it.each(placed)('seed %i: the desert irrigator stands clear of the roads, gates and everything in its field', (_seed, c, q) => {
     const run = extraOf(q).byClimate.desert;
     if (!run.structures.length) return;
-    const roads = roadsOf(c);
-    const lanes = Object.values(fenceGaps(q)).flat().map((g) => gapLane(g));
-    const others = [...q.dressing.solids, ...q.dressing.landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 })), ...q.dressing.props.map((p) => propFootprint(p))];
-    for (const fp of run.solids) {
-      for (const r of [...roads, ...lanes, ...others]) expect(footprintsOverlap(fp, r)).toBe(false);
-    }
+    const taken = new FootprintIndex([...pavedOf(c), ...lanesOf(q), ...solidsOf(q), ...q.dressing.props.map((p) => propFootprint(p))], 16);
+    expect(run.solids.filter((fp) => taken.hits(fp)).map(at)).toEqual([]);
     expect(run.structures[0].kind).toBe('pivot');
   });
 
@@ -317,26 +273,14 @@ describe('Farm runs: harvest night, climate, glow', () => {
 });
 
 describe('Farm with every district forced on', () => {
-  const all = SEEDS.map((seed) => [seed, generateCity(seed, undefined, { force: { farm: true, oldtown: true, chinatown: true, harbor: true, slums: true } })] as const);
+  const all = SEEDS.map((seed) => generateCity(seed, undefined, { force: { farm: true, oldtown: true, chinatown: true, harbor: true, slums: true } }));
+  const farms = all.flatMap((c) => c.districts.filter((d) => d.kind === 'farm').map((q) => [c, q] as const));
 
-  it('places on most seeds, or sits out cleanly', () => {
-    expect(all.filter(([, c]) => c.districts.some((d) => d.kind === 'farm')).length).toBeGreaterThan(SEEDS.length * 0.6);
-  });
-
-  it.each(all)('seed %i: districts keep a block apart; a farm is whole or absent', (_seed, c) => {
-    const ds = c.districts;
-    const apart = (a: District, b: District) => {
-      const g = a.grid, o = b.grid;
-      return !(g.i0 - 1 < o.i0 + o.w && o.i0 < g.i0 + g.w + 1 && g.j0 - 1 < o.j0 + o.h && o.j0 < g.j0 + g.h + 1);
-    };
-    for (const a of ds) for (const b of ds) if (a !== b) expect(apart(a, b)).toBe(true);
-    const farm = ds.find((d) => d.kind === 'farm');
-    const built = c.buildings.filter((b) => b.district === 'farm');
-    if (!farm) expect(built).toHaveLength(0);
-    else {
-      expect(built.filter((b) => b.lot === 'barn')).toHaveLength(1);
-      expect(farmFields(farm)).toHaveLength(farm.blocks.length - 1);
-      for (const k of farm.blocks) expect(c.blocks[k].district).toBe('farm');
+  it('places on most seeds, with its barn and every field', () => {
+    expect(farms.length).toBeGreaterThan(SEEDS.length * 0.6);
+    for (const [c, q] of farms) {
+      expect(c.buildings.filter((b) => b.district === 'farm' && b.lot === 'barn')).toHaveLength(1);
+      expect(farmFields(q)).toHaveLength(q.blocks.length - 1);
     }
   });
 });

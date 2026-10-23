@@ -122,6 +122,11 @@ interface Edge {
   canal: boolean; // under a canal: no road, no plaza
 }
 
+/** Rarely the city is English and drives on the left: its own RNG stream, decided by the seed. */
+export function rollDriveSide(seed: number, config: CityConfig = DEFAULT_CITY): DriveSide {
+  return new Rng(seed ^ 0x1e7f5d).next() < config.leftHandChance ? 'left' : 'right';
+}
+
 export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, districtOpts: DistrictOptions = {}): CityData {
   const rng = new Rng(seed);
   const { blocks: n, blockSize, roadWidth } = config;
@@ -363,9 +368,8 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
   // Roadworks close junctions away from the spawn (and off the bridges), before signs and signals go up.
   const keepOpen = new Set([centre.id, ...centre.neighbors, ...centre.neighbors.flatMap((id) => nodes[id].neighbors), ...canalNodes, ...rampNodes]);
   const works = planRoadworks(graph, roadWidth, size, keepOpen, config.roadworksChance, new Rng(seed ^ 0x0c0e5));
-  // Rarely the city is English and drives on the left (own RNG stream, decided by the seed);
-  // signals, signs and stop lines go up on that side.
-  const driveSide: DriveSide = new Rng(seed ^ 0x1e7f5d).next() < config.leftHandChance ? 'left' : 'right';
+  // Signals, signs and stop lines go up on the side traffic keeps to.
+  const driveSide = rollDriveSide(seed, config);
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
   const traffic = generateTrafficControl(graph, roads.map((r) => r.rect), blocksOut, config, size, new Rng(seed ^ 0x7aff1c), keepOf(driveSide));
   // Furniture is laid out for the full grid; drop whatever would stand in a canal or on a tree

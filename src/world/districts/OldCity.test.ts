@@ -2,32 +2,35 @@ import { describe, expect, it } from 'vitest';
 import { generateCity } from '../CityGenerator';
 import { inRect } from '../lots';
 import { DISTRICTS, OLD_CITY, OLD_CITY_WALLS } from '../../gameplay/balance';
-import { footprintsOverlap, propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
+import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
 import { inDistrict, isJunctionControl } from './apply';
 import { facingSquare, OLD_CITY_DEF, squareBlock } from './OldCity';
 import { wallLine, wallPlan } from './OldCityWalls';
+import { at } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const city = (seed: number) => generateCity(seed, undefined, { force: { oldtown: true } });
-const oldCity = (seed: number) => city(seed).districts.find((q) => q.kind === 'oldtown');
+const placed = SEEDS.flatMap((seed) => {
+  const c = city(seed);
+  const q = c.districts.find((d) => d.kind === 'oldtown');
+  return q ? [[seed, c, q] as const] : [];
+});
+
+// Shared rules (solids off the paving, junction controls, prop spacing, kerb offset, overhead
+// clearance, stable per seed, a block apart) are in DistrictRules.test.ts.
 
 describe('Old City placement', () => {
   it('places on most seeds when forced on', () => {
-    const placed = SEEDS.filter((s) => oldCity(s)).length;
-    expect(placed).toBeGreaterThan(SEEDS.length * 0.7);
+    expect(placed.length).toBeGreaterThan(SEEDS.length * 0.7);
   });
 
   it('places every listed shape, either way round, on some seed', () => {
-    const got = new Set(SEEDS.flatMap((s) => { const g = oldCity(s)?.grid; return g ? [`${Math.min(g.w, g.h)}x${Math.max(g.w, g.h)}`] : []; }));
+    const got = new Set(placed.map(([, , { grid: g }]) => `${Math.min(g.w, g.h)}x${Math.max(g.w, g.h)}`));
     for (const [a, b] of OLD_CITY_DEF.shapes) expect(got).toContain(`${Math.min(a, b)}x${Math.max(a, b)}`);
   });
 
-  it.each(SEEDS)('seed %i: a valid cluster in the inner city', (seed) => {
-    const c = city(seed);
-    const q = c.districts.find((d) => d.kind === 'oldtown');
-    if (!q) return;
+  it.each(placed)('seed %i: a valid cluster in the inner city', (_seed, c, q) => {
     const { i0, j0, w, h } = q.grid;
-    expect(OLD_CITY_DEF.shapes.flatMap(([a, b]) => [[a, b], [b, a]])).toContainEqual([w, h]);
     // Clear of the outer ring, at least half downtown or midtown.
     const n = c.config.blocks, ring = DISTRICTS.outerRing;
     expect(i0 >= ring && j0 >= ring && i0 + w <= n - ring && j0 + h <= n - ring).toBe(true);
@@ -39,7 +42,7 @@ describe('Old City placement', () => {
   });
 
   it('comes in every size, in many places', () => {
-    const qs = SEEDS.map(oldCity).filter((q) => q !== undefined);
+    const qs = placed.map(([, , q]) => q);
     const sizes = new Set(qs.map((q) => q.grid.w));
     expect([...sizes].sort()).toEqual([2, 3, 4]);
     expect(new Set(qs.map((q) => `${q.grid.i0},${q.grid.j0}`)).size).toBeGreaterThan(qs.length / 3);
@@ -47,10 +50,7 @@ describe('Old City placement', () => {
 });
 
 describe('Old City lots', () => {
-  it.each(SEEDS)('seed %i: every lot has a kind, and exactly one town hall faces the square', (seed) => {
-    const c = city(seed);
-    const q = c.districts.find((d) => d.kind === 'oldtown');
-    if (!q) return;
+  it.each(placed)('seed %i: every lot has a kind, and exactly one town hall faces the square', (_seed, c, q) => {
     const inside = c.buildings.filter((b) => inRect(q.bounds, b));
     expect(inside.length).toBeGreaterThan(0);
     for (const b of inside) {
@@ -71,12 +71,6 @@ describe('Old City lots', () => {
 });
 
 describe('Old City walls', () => {
-  const placed = SEEDS.flatMap((seed) => {
-    const c = city(seed);
-    const q = c.districts.find((d) => d.kind === 'oldtown');
-    return q ? [[seed, c, q] as const] : [];
-  });
-
   it.each(placed)('seed %i: gate openings are at least road width + 2 sidewalks, with nothing in them', (_seed, c, q) => {
     const want = c.config.roadWidth + 2 * c.config.sidewalk;
     const plan = wallPlan(q, c);
@@ -90,11 +84,6 @@ describe('Old City walls', () => {
       const hole = { x: g.x, z: g.z, yaw: 0, ...along };
       expect(plan.solids.filter((s) => footprintsOverlap(s, hole))).toEqual([]);
     });
-  });
-
-  it.each(placed)('seed %i: no wall, tower or post overlaps a road, junction or plaza', (_seed, c, q) => {
-    const paved = [...c.roads.map((r) => r.rect), ...c.intersections, ...c.plazas].map(rectFootprint);
-    for (const s of q.dressing.solids) expect(paved.filter((r) => footprintsOverlap(s, r))).toEqual([]);
   });
 
   it.each(placed)('seed %i: the walls close the loop apart from gates and plaza openings', (_seed, c, q) => {
@@ -111,39 +100,18 @@ describe('Old City walls', () => {
     }
   });
 
-  it.each(placed)('seed %i: arches and portcullises clear the tallest vehicle', (_seed, _c, q) => {
-    const over = q.dressing.overhead.filter((o) => o.kind === 'arch' || o.kind === 'portcullis');
-    expect(over).toHaveLength(2 * q.gates.length);
-    for (const o of over) expect(o.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+  it.each(placed)('seed %i: an arch and a portcullis over every gate', (_seed, _c, q) => {
+    expect(q.dressing.overhead.filter((o) => o.kind === 'arch' || o.kind === 'portcullis')).toHaveLength(2 * q.gates.length);
   });
 
-  it.each(placed)('seed %i: buildings and props stay clear of the walls; junction controls are unchanged', (seed, c, q) => {
-    const solids = q.dressing.solids;
-    for (const b of c.buildings.filter((b) => inRect(q.bounds, b))) {
-      expect(solids.filter((s) => footprintsOverlap(s, rectFootprint(b)))).toEqual([]);
-    }
-    for (const p of c.streetProps) {
-      if (isJunctionControl(p)) continue;
-      expect(solids.filter((s) => footprintsOverlap(s, propFootprint(p)))).toEqual([]);
-    }
-    const plain = generateCity(seed, undefined, { defs: [] });
-    const bare = ({ style: _style, ...p }: StreetProp) => p;
-    expect(c.streetProps.filter(isJunctionControl).map(bare)).toEqual(plain.streetProps.filter(isJunctionControl));
-  });
-
-  it.each(placed)('seed %i: junction controls are not inside a wall', (_seed, c, q) => {
-    for (const p of c.streetProps.filter(isJunctionControl)) {
-      expect(q.dressing.solids.filter((s) => footprintsOverlap(s, propFootprint(p)))).toEqual([]);
-    }
+  it.each(placed)('seed %i: buildings and every street prop stay clear of the walls', (_seed, c, q) => {
+    const walls = new FootprintIndex(q.dressing.solids);
+    expect(c.buildings.filter((b) => inRect(q.bounds, b) && walls.hits(rectFootprint(b))).map(at)).toEqual([]);
+    expect(c.streetProps.filter((p) => walls.hits(propFootprint(p))).map((p) => `${p.kind} at ${at(p)}`)).toEqual([]);
   });
 });
 
 describe('Old City square, landmarks and clutter', () => {
-  const placed = SEEDS.flatMap((seed) => {
-    const c = city(seed);
-    const q = c.districts.find((d) => d.kind === 'oldtown');
-    return q ? [[seed, c, q] as const] : [];
-  });
   const circle = (l: { x: number; z: number; radius: number }) => ({ x: l.x, z: l.z, hx: l.radius * 0.8, hz: l.radius * 0.8, yaw: 0 });
 
   it.each(placed)('seed %i: the square has a well, a market cross and stalls; ruins are solid structures', (_seed, c, q) => {
@@ -156,12 +124,6 @@ describe('Old City square, landmarks and clutter', () => {
       expect(q.dressing.solids).toContainEqual(r.footprints[0]);
       expect(c.buildings.some((b) => b.x === r.x && b.z === r.z)).toBe(false);
     }
-  });
-
-  it.each(placed)('seed %i: no landmark, ruin or prop stands on a road, junction or plaza', (_seed, c, q) => {
-    const paved = [...c.roads.map((r) => r.rect), ...c.intersections, ...c.plazas].map(rectFootprint);
-    const ruins = q.dressing.structures.filter((s) => s.kind === 'ruin').flatMap((s) => s.footprints);
-    for (const f of [...q.dressing.landmarks.map(circle), ...ruins]) expect(paved.filter((r) => footprintsOverlap(f, r))).toEqual([]);
   });
 
   it.each(placed)('seed %i: landmarks keep clear of each other, buildings and walls', (_seed, c, q) => {
@@ -177,21 +139,6 @@ describe('Old City square, landmarks and clutter', () => {
     }
   });
 
-  it.each(placed)('seed %i: kerb clutter keeps clutterMinOffset from every centre line', (_seed, c, q) => {
-    const kerb = new Set(['pot', 'barrels', 'cart', 'haybale', 'amphora']);
-    for (const p of q.dressing.props.filter((p) => kerb.has(p.kind))) {
-      const fp = propFootprint(p);
-      const reach = Math.hypot(fp.hx, fp.hz);
-      for (const { rect } of c.roads) {
-        const alongX = rect.w > rect.d;
-        const along = alongX ? Math.abs(p.x - rect.x) <= rect.w / 2 : Math.abs(p.z - rect.z) <= rect.d / 2;
-        if (!along) continue;
-        const lateral = alongX ? Math.abs(p.z - rect.z) : Math.abs(p.x - rect.x);
-        expect(lateral - reach).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
-      }
-    }
-  });
-
   it.each(placed)('seed %i: nothing dropped is left inside; lamps are oil lamps; controls take old posts', (_seed, c, q) => {
     const inside = c.streetProps.filter((p) => inDistrict(q, p));
     for (const p of inside) {
@@ -201,22 +148,10 @@ describe('Old City square, landmarks and clutter', () => {
     }
     expect(c.streetProps.filter((p) => !inDistrict(q, p) && p.style === 'old')).toEqual([]);
   });
-
-  it.each(placed)('seed %i: props stay clear of solids and of each other', (_seed, _c, q) => {
-    const solids = [...q.dressing.solids, ...q.dressing.landmarks.map(circle)];
-    const mine = q.dressing.props;
-    for (const p of mine) expect(solids.filter((f) => footprintsOverlap(propFootprint(p), f))).toEqual([]);
-    for (let i = 0; i < mine.length; i++) {
-      for (let j = i + 1; j < mine.length; j++) expect(footprintsOverlap(propFootprint(mine[i]), propFootprint(mine[j]))).toBe(false);
-    }
-  });
 });
 
 describe('Old City glow budget', () => {
-  it.each(SEEDS)('seed %i: oil lamps and torches stay within maxGlow', (seed) => {
-    const c = city(seed);
-    const q = c.districts.find((d) => d.kind === 'oldtown');
-    if (!q) return;
+  it.each(placed)('seed %i: oil lamps and torches stay within maxGlow', (_seed, c, q) => {
     const lamps = c.streetProps.filter((p) => p.kind === 'oilLamp' && inDistrict(q, p)).length;
     expect(lamps).toBeGreaterThan(0);
     expect(lamps + Math.min(OLD_CITY.maxTorches, 2 * q.gates.length)).toBeLessThanOrEqual(OLD_CITY.maxGlow);

@@ -163,6 +163,12 @@ Pitfalls:
 - `Districts.test.ts` uses **stub defs** (one inland, one coast): rolls, overlay invariant (all outside
   the blocks + frontage identical to no-district city), placement, gates, main street, wall loop, lots,
   clutter offsets, runtime rules. Run after any change in `world/districts`, `CityGenerator`, `lots.ts`.
+- Rules every district keeps (solids off roads/junctions/plazas, junction controls untouched and
+  clear, props clear of solids/buildings/each other, kerb `clutterMinOffset`, overhead clearance,
+  stable per seed, a block apart, rolls independent) live once in `districts/rules.ts`, run on every
+  `DISTRICT_DEFS` entry by `DistrictRules.test.ts`. Don't repeat them in a district's file; add a
+  rule there if it holds for all districts. Checks return the list of breaks:
+  `expect(breaks).toEqual([])`, never `expect` inside a loop over props × roads (that cost 40 s).
 - Real district: `<Name>.test.ts` beside it, `generateCity(seed, undefined, { force: { oldtown: true } })`
   over ~40 seeds (`i * 7919 + 11`). Assert plan tests as logic: geometry vs road rects
   (`footprintsOverlap`, `rectFootprint`, `city.roads`, `city.intersections`), heights vs
