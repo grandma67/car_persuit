@@ -41,10 +41,23 @@ any number of times, so **one run per milestone with all its views**. Eval file 
 `dbg`: `district(kind?)`, `place(x,z,yaw,speed)`, `view(point,{dist})` (picks a clear road spot; never
 place the car by hand), `gate(i,{back,speed,lateral})`, `find(kind)` (landmark/structure/prop/lot),
 `hold(code,ms)`, `stars(n)`, `fps(ms)`, `stats()` (programs, calls, triangles, static triangles), `car()`,
-`police(on)`, `road(x,z)` (nearest road centre point), `near(x,z,r)` (what stands there, nearest first),
+`police(on)`, `road(x,z)` (nearest road centre point), `near(x,z,r)` (what stands there, nearest first,
+roadworks included), `repair()` (full health between drives),
 `drive({from, yaw, speed, ms, police, snap})` (starts on the nearest road, holds W, samples position /
-speed / tilt, stops at a hit and lists what was there), `aerial(point,{dist,height,from})` / `aerial(false)`
-(overview camera aimed at a point: whole cranes, roofs, yards).
+speed / tilt, stops at a hit and lists what was there), `aerial(point,{dist,height,from,look})` / `aerial(false)`
+(overview camera aimed at a point, `look` m above its ground: whole cranes, roofs, yards; loop `from` to
+orbit something in place), `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)`
+(models and lot buildings alone on a grey floor, labelled, HUD hidden; see the studio eval).
+
+**Studio** (look at models from every side): `--query "seed=N&debug&studio=dumpster,wreck-,couch~6a3a2a,lot:slums/gutted&angles=4&closeups=1" --eval-file scripts/evals/studio.js`
+(prop model keys, `-` prefixes, `~tint`, `lot:<kind>/<lot>[@height]`; `low=1` adds an eye-level shot,
+`city=` the climate's looks). Use it for every new prop or look before placing it; it compiles its own
+programs, so take `dbg.stats()` in another run.
+
+**Driving check**: `--query "seed=N&debug&<kind>=1" --eval-file scripts/evals/district-drive.js` (a 5★
+chase in under the first overhead gate with stuck cops listed, every gate at 30 m/s, each off-road
+drivable rect end to end; `hit` = stopped inside what it tests, `exit` = past it, `stuck` = never moved).
+Use it instead of hand-written drive evals.
 
 **Milestone tour**: `--query "seed=N&debug&<kind>=1" --eval-file scripts/evals/district-tour.js`
 (stats + FPS first, then a road and an aerial shot of each structure kind and an overview;

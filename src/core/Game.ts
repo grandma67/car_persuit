@@ -92,7 +92,9 @@ export class Game {
   private fog: THREE.Fog;
   private precipitation: Precipitation | null = null;
   private sky: Sky;
-  private overview = false; // ?debug only: top-down map view on C
+  private overview = false;
+  /** Debug only: a scene and camera rendered instead of the game's (dbg.studio). */
+  debugView: { scene: THREE.Scene; camera: THREE.Camera } | null = null; // ?debug only: top-down map view on C
   private debug = new URLSearchParams(window.location.search).has('debug');
   private hud: Hud;
   private screens: Screens;
@@ -719,6 +721,12 @@ export class Game {
     );
 
     this.sky.follow(this.chase.camera);
+    // Debug: the studio (dbg.studio) takes over the screen while it's open.
+    if (this.debugView) {
+      this.renderer.render(this.debugView.scene, this.debugView.camera);
+      this.input.endFrame();
+      return;
+    }
     const camera = this.overview ? this.overviewCamera() : this.chase.camera;
     const cars = this.glowCars;
     cars.length = 0;

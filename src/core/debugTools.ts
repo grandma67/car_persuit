@@ -5,6 +5,7 @@ import type { CityData, Rect } from '../world/CityGenerator';
 import type { District, DistrictKind } from '../world/districts/District';
 import { inRect } from '../world/lots';
 import type { Game } from './Game';
+import { createStudio, type StudioShot } from './debugStudio';
 
 type P = { x: number; z: number };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -25,6 +26,8 @@ interface Internals {
   renderer: { info: { programs: unknown[] | null; render: { calls: number; triangles: number } } };
   overview: boolean;
   overviewCamera(): { position: { set(x: number, y: number, z: number): void }; lookAt(x: number, y: number, z: number): void; near: number; updateProjectionMatrix(): void };
+  debugView: unknown;
+  health: { repair(share: number): number; destroyed: boolean; ratio: number };
   scene: { traverse(f: (o: { isMesh?: boolean; isInstancedMesh?: boolean; geometry?: { index: { count: number } | null; attributes: { position: { count: number } } } }) => void): void };
 }
 
@@ -61,6 +64,7 @@ export function debugTools(game: Game) {
   };
   const at = (t: P | [number, number]): P => (Array.isArray(t) ? { x: t[0], z: t[1] } : t);
   let aerialUsed = false;
+  const studio = createStudio(city);
 
   const api = {
     sleep,
@@ -97,7 +101,7 @@ export function debugTools(game: Game) {
      * Look at a point from above (the overview camera, C), from `dist` m away on the side `from`
      * (a heading, default the camera's south-west) and `height` m up. `false` goes back to the chase.
      */
-    async aerial(target: P | [number, number] | false, { dist = 90, height = 60, from = Math.PI * 1.25, wait = 600 } = {}) {
+    async aerial(target: P | [number, number] | false, { dist = 90, height = 60, from = Math.PI * 1.25, look = 8, wait = 600 } = {}) {
       const on = target !== false;
       if (on) aerialUsed = true;
       if (g.overview !== on) await api.hold('KeyC', 50);
@@ -109,8 +113,43 @@ export function debugTools(game: Game) {
       cam.near = 1;
       cam.updateProjectionMatrix();
       cam.position.set(t.x + Math.sin(from) * dist, g.ground(t.x, t.z) + height, t.z + Math.cos(from) * dist);
-      cam.lookAt(t.x, g.ground(t.x, t.z) + 8, t.z);
+      cam.lookAt(t.x, g.ground(t.x, t.z) + look, t.z);
       await sleep(wait);
+    },
+    /**
+     * The studio: prop models and district lot buildings on a plain floor, labelled, away from the
+     * city (names: `dumpster`, prefixes like `wreck-`, tints `couch~6a3a2a`, lots `lot:slums/tenement`
+     * or `lot:slums/tenement@18`). Returns what it laid out; `false` closes it. Then `studioShot`.
+     */
+    async studio(names: string[] | false) {
+      // The HUD (toasts, minimap, speed) hides while the studio is up.
+      const hud: HTMLElement[] = [];
+      for (let el: Element | null = document.querySelector('canvas'); el && el !== document.body; el = el.parentElement) {
+        for (const sib of el.parentElement?.children ?? []) if (sib !== el) hud.push(sib as HTMLElement);
+      }
+      if (names === false) {
+        studio.close();
+        g.debugView = null;
+        for (const el of hud) el.style.visibility = '';
+        return null;
+      }
+      for (const el of hud) el.style.visibility = 'hidden';
+      const laid = studio.open(names);
+      studio.shoot();
+      g.debugView = studio.view();
+      await sleep(300);
+      return laid;
+    },
+    /** Aim the studio camera: the whole grid, or `focus` (an item's index), `from` an angle (radians). */
+    async studioShot(shot: StudioShot = {}) {
+      const name = studio.shoot(shot);
+      await sleep(150);
+      return name;
+    },
+    /** Patch the car back to full health between test drives (a wreck stays wrecked). Returns the health share now. */
+    repair() {
+      g.health.repair(1);
+      return g.health.destroyed ? 0 : +g.health.ratio.toFixed(2);
     },
     /** Police on or off (O toggles; this sets it). */
     async police(on: boolean) {
@@ -134,6 +173,7 @@ export function debugTools(game: Game) {
       for (const l of c.landmarks) if (d(l) < r + l.radius) out.push({ what: `landmark:${l.kind}`, d: d(l), x: l.x, z: l.z });
       for (const p of c.streetProps) if (d(p) < r) out.push({ what: `prop:${p.kind}${p.style ? '-' + p.style : ''}`, d: d(p), x: p.x, z: p.z });
       for (const b of c.buildings) if (inRect(b, { x, z }, r)) out.push({ what: `building:${b.lot ?? b.zone}`, d: d(b), x: b.x, z: b.z });
+      for (const site of c.roadworks) for (const it of site.items) if (d(it) < r + Math.max(it.hw, it.hl)) out.push({ what: `roadworks:${it.kind}`, d: d(it), x: it.x, z: it.z });
       return out.sort((a, b) => a.d - b.d).slice(0, 20);
     },
     /**

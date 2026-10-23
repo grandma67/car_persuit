@@ -1001,9 +1001,10 @@ function wreckModels(): Record<`wreck-${WreckKind}`, THREE.BufferGeometry> {
     ...wheels(0.3, rubber).slice(0, 2), // one side's wheels left
     ...[-1.35, 1.35].map((z) => part(box(0.3, 0.38, 0.22), brick, W / 2 - 0.25, 0.19, z)), // bricks under the other
   ]);
+  // Built upright (with its dark chassis), then turned over onto its roof: wheels in the air.
   const flipped = mergeGeometries(
-    [...shell(0, 0xffffff, glass), ...wheels(0.3, rubber).map((g) => g.translate(0, 0.62, 0))]
-      .map((g) => g.rotateZ(Math.PI).translate(0, 1.72, 0)),
+    [...shell(0.32, 0xffffff, glass), part(box(W * 0.9, 0.06, L * 0.9), 0x2a2a2a, 0, 0.29, 0), ...wheels(0.3, rubber)]
+      .map((g) => g.rotateZ(Math.PI).translate(0, 1.46, 0)),
   );
   const crushed = mergeGeometries([
     part(box(W, 0.4, L), 0xffffff, 0, 0.32),
