@@ -1,6 +1,3 @@
-graphify skip this.
-Do not commit this file.
-
 # Districts: decisions and design log
 
 What each district is: `DISTRICTS.md`. How they are built: `DISTRICTS_DEV.md`. Open work: `TASKS.md`.
