@@ -127,7 +127,7 @@ export const SLUMS_DEF: DistrictDef = {
   salt: 0x51a3b7,
   chance: SLUMS.chance,
   site: 'inland',
-  shapes: [[2, 2], [3, 3]],
+  shapes: [[2, 2], [2, 3], [3, 3], [3, 4]],
   rings: ['midtown', 'residential', 'industrial'],
   minShare: { 'residential+industrial': 0.5 },
   gates: 'all',

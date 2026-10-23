@@ -25,14 +25,14 @@ export interface PivotData {
   height: number; // the truss above the ground
 }
 
-/** A harvest night's pumpkins that glow, and the bale pyramid by the ranch gate. */
-export function harvestNight(fields: Field[], props: StreetProp[], busy: Footprint[], yard: Rect, gate: Gate, rng: Rng): JoinedDressing {
+/** A harvest night's pumpkins that glow (at most `room`), and the bale pyramid by the ranch gate. */
+export function harvestNight(fields: Field[], props: StreetProp[], busy: Footprint[], yard: Rect, gate: Gate, room: number, rng: Rng): JoinedDressing {
   const out: JoinedDressing = { structures: [], solids: [], props: [] };
   const taken = new FootprintIndex([...busy, ...props.map((p) => propFootprint(p, 0.2))]);
   const lantern = (x: number, z: number) => {
     const p: StreetProp = { kind: 'jackOLantern', x, z, yaw: rng.range(-0.6, 0.6) + Math.PI };
     const fp = propFootprint(p, 0.15);
-    if (taken.hits(fp) || out.props.length >= FARM.jackOLanterns) return;
+    if (taken.hits(fp) || out.props.length >= room) return;
     taken.add(fp);
     out.props.push(p);
   };

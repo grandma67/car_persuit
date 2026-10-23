@@ -289,7 +289,10 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   // Joined in by the game on some runs: harvest night (night runs, on a roll) and the desert's irrigator.
   const standing = [...out.solids, ...pieces, ...buildings.map(rectFootprint), ...kept.map((p) => propFootprint(p, 0.3))];
   const harvest = rng.next() < FARM.harvestChance;
-  const night = harvest ? harvestNight(fields, kept, standing, shrink(yard, sw), ranch, rng) : undefined;
+  // The jack-o'-lanterns share the glow budget with the timber lamps and the barn's lantern.
+  const lamps = [...city.streetProps, ...kept].filter((p) => p.kind === 'woodLamp' && inRect(q.bounds, p)).length;
+  const room = Math.max(0, Math.min(FARM.jackOLanterns, FARM.maxGlow - lamps - 1));
+  const night = harvest ? harvestNight(fields, kept, standing, shrink(yard, sw), ranch, room, rng) : undefined;
   const desert = centrePivot(fields, gaps, standing, rng);
   // In the snow, the pumpkins are long in (the patch is a snowy field).
   const snow = { drop: ['pumpkin', 'jackOLantern'] as PropKind[] };

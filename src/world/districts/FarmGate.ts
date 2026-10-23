@@ -161,8 +161,10 @@ export function fieldFence(field: Rect, block: Rect, q: District, city: CityData
   };
   const street = sides.map((s) => onRoad(beyond(s)));
   const open = sides.map((s, k) => street[k] && inner(s));
-  // Too few: the perimeter streets too, then anything (a plaza's paving is a way out as well).
+  // Too few: the perimeter streets too, then a plaza (its paving is a way out as well), then anything.
+  const onPlaza = (p: { x: number; z: number }) => city.plazas.some((r) => Math.abs(p.x - r.x) <= r.w / 2 && Math.abs(p.z - r.z) <= r.d / 2);
   for (let k = 0; open.filter(Boolean).length < 2 && k < sides.length; k++) if (street[k]) open[k] = true;
+  for (let k = 0; open.filter(Boolean).length < 2 && k < sides.length; k++) if (onPlaza(beyond(sides[k]))) open[k] = true;
   for (let k = 0; open.filter(Boolean).length < 2 && k < sides.length; k++) open[k] = true;
   sides.forEach((s, k) => {
     const mid = (s.lo + s.hi) / 2;

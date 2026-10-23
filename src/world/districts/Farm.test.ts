@@ -140,13 +140,14 @@ describe('Farm ranch gate, yard pieces and fences', () => {
   it.each(placed)('seed %i: every field has at least two fence gaps facing different streets', (_seed, c, q) => {
     const gaps = fenceGaps(q);
     const roads = roadsOf(c);
+    const plazas = c.plazas.map(rectFootprint);
     for (const f of farmFields(q)) {
       const mine = gaps[f.block];
       expect(new Set(mine.map((g) => `${g.nx},${g.nz}`)).size).toBeGreaterThanOrEqual(2);
-      // Out through each gap, across the sidewalk, is a road.
+      // Out through each gap, across the sidewalk, is a road (or a plaza's paving, where a field has only one street).
       for (const g of mine) {
         const out = { x: g.x + g.nx * (c.config.sidewalk + 2), z: g.z + g.nz * (c.config.sidewalk + 2), hx: 0.2, hz: 0.2, yaw: 0 };
-        expect(roads.some((r) => footprintsOverlap(out, r))).toBe(true);
+        expect(roads.some((r) => footprintsOverlap(out, r)) || plazas.some((r) => footprintsOverlap(out, r))).toBe(true);
         // Nothing stands in it.
         const gap = { x: g.x, z: g.z, hx: g.nx ? 1 : FARM_GATE.fieldGate / 2 - 0.2, hz: g.nz ? 1 : FARM_GATE.fieldGate / 2 - 0.2, yaw: 0 };
         for (const p of q.dressing.props) expect(footprintsOverlap(propFootprint(p), gap)).toBe(false);
