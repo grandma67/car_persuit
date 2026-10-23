@@ -147,6 +147,7 @@ export class Effects {
       case 'stall': burst(this.cloth, 10); return burst(this.chips, 22);
       case 'barrels': case 'pillory': case 'signpost': return burst(this.chips, 18);
       case 'pot': case 'amphora': return burst(this.shards, 16);
+      case 'rubble': burst(this.steam, 8); return burst(this.chips, 16); // brick dust
       case 'oilLamp': case 'dragonLamp': return burst(this.fire, 10);
       case 'produceStall': burst(this.fruit, 30); burst(this.cloth, 8); return burst(this.chips, 12);
       case 'lanternStand': return burst(this.paper, 30);

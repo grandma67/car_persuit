@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DISTRICTS } from '../../gameplay/balance';
+import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 import { generateCity, type CityData, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
 import { footprintsOverlap, rectFootprint } from '../StreetProps';
@@ -129,5 +130,43 @@ describe('Slums with every district forced on', () => {
     const without = DISTRICT_DEFS.filter((d) => d.kind !== 'slums');
     const rolls = (defs: typeof DISTRICT_DEFS) => rollDistricts(seed, defs).map((r) => r.def.kind).filter((k) => k !== 'slums');
     expect(rolls(DISTRICT_DEFS)).toEqual(rolls(without));
+  });
+});
+
+describe('Slums set pieces', () => {
+  const widest = Math.max(...ALL_SPECS.map((s) => s.halfExtents.x)) * 2;
+  const touches = (a: Rect, b: Rect) => Math.abs(a.x - b.x) <= (a.w + b.w) / 2 && Math.abs(a.z - b.z) <= (a.d + b.d) / 2;
+
+  it.each(placed)('seed %i: stubs, heaps, piers, stacks, fence and camp stay off roads and junctions', (_seed, c, q) => {
+    const roads = roadsOf(c);
+    for (const fp of q.dressing.solids) expect(roads.filter((r) => footprintsOverlap(fp, r))).toEqual([]);
+    expect(q.dressing.structures.filter((s) => s.kind === 'ruin')).toHaveLength(ruinsOf(q).length);
+  });
+
+  it.each(placed)('seed %i: the overpass stands on a gate and clears every vehicle', (_seed, _c, q) => {
+    expect(q.dressing.structures.filter((s) => s.kind === 'overpass').length).toBe(1);
+    for (const o of q.dressing.overhead) expect(o.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+  });
+
+  it.each(placed)('seed %i: junkyard corridors are wide, clear of solids, and join two streets', (_seed, c, q) => {
+    const corridors = q.dressing.drivable.filter((d) => !vacantLots(q).some((v) => v.rect === d));
+    if (!roleBlocks(q, 'junkyard').length) return expect(corridors).toEqual([]);
+    const streets = new Set<number>();
+    for (const r of corridors) {
+      expect(Math.min(r.w, r.d)).toBeGreaterThanOrEqual(widest + 1);
+      for (const fp of q.dressing.solids) expect(footprintsOverlap(shrunk(r), fp)).toBe(false);
+      const alongX = r.w > r.d;
+      for (const end of [-1, 1]) {
+        const tip: Rect = alongX ? { x: r.x + end * (r.w / 2 + 1), z: r.z, w: 0.5, d: 0.5 } : { x: r.x, z: r.z + end * (r.d / 2 + 1), w: 0.5, d: 0.5 };
+        c.roads.forEach((road, i) => touches(road.rect, tip) && streets.add(i));
+      }
+    }
+    expect(streets.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(placed)('seed %i: camp solids are never in a drivable rect', (_seed, _c, q) => {
+    for (const s of q.dressing.structures.filter((st) => st.kind === 'camp')) {
+      for (const fp of s.footprints) for (const d of q.dressing.drivable) expect(footprintsOverlap(fp, shrunk(d))).toBe(false);
+    }
   });
 });

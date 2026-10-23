@@ -294,6 +294,27 @@ export const SLUMS = {
   trainChance: 0.5, // a freight train crosses the overpass now and then (per seed)
 };
 
+/** The Slums' set pieces (world/districts/SlumsSet.ts). */
+export const SLUMS_SET = {
+  floor: 3, // a storey, metres
+  wall: 0.45, // a wall stub's thickness
+  stubFloors: [2, 4] as [number, number], // the tallest stub's storeys
+  spill: 1.6, // the rubble mound runs this far out over the sidewalk (kerb side kept clear)
+  bricks: [3, 6] as [number, number], // loose `rubble` piles on the sidewalk past the mound
+  overpassSetIn: [3, 6, 9, 13], // the overpass in from the wall line (further in if a pier would touch a junction control)
+  overpassDepth: 5, // the deck along the street
+  pier: 0.42, // a pier column's footprint, half side
+  overpassHeadroom: 0.6, // the deck's underside above overheadClearance
+  junkCorridor: 7, // between wreck rows, street to street
+  junkCross: 7, // across the rows, through the middle
+  junkRows: [2, 3] as [number, number],
+  junkHigh: [1, 3] as [number, number], // wrecks per stack
+  junkFence: 2.6, // corrugated sheet height
+  tyreMountains: [1, 3] as [number, number],
+  campGap: 1, // the camp stands this far inside its lot all round
+  campDensity: 0.65, // share of the camp's grid cells with a shelter
+};
+
 /** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */
 export const HARBOR_QUAY = {
   bollardSpacing: 15,

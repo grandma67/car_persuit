@@ -271,7 +271,7 @@ export class SoundEffects {
       this.burst(0.02, 0.25, 'bandpass', 3800, 1.5, gain * 0.9);
       return;
     }
-    if (kind === 'cannonballs') {
+    if (kind === 'cannonballs' || kind === 'rubble') {
       this.impact(Math.min(0.6, strength + 0.2));
       return;
     }

@@ -380,6 +380,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     ...chinatownModels(),
     ...harborModels(),
     ...farmModels(),
+    rubble: rubblePile(),
     'tree-fruit-pear': fruitTree(look, 0xc8c43a),
   };
 }
@@ -860,6 +861,19 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
   };
 }
 
+/** The Slums' loose bricks: a low pile of bricks and broken block, off a ruin's heap. */
+function rubblePile(): THREE.BufferGeometry {
+  const bricks: [number, number, number, number, number][] = [
+    [-0.25, 0.06, -0.1, 0.3, 0x8a4a3a], [0.15, 0.06, 0.12, -0.5, 0x7a4234], [0.05, 0.06, -0.22, 1.1, 0x9a5a48],
+    [-0.1, 0.17, 0.02, 0.8, 0x8a4a3a], [0.22, 0.17, -0.05, -0.2, 0x6e3e30], [-0.3, 0.06, 0.22, 1.6, 0x9a8a7a],
+    [0.0, 0.28, -0.04, 0.1, 0x7a4234],
+  ];
+  return mergeGeometries([
+    part(new THREE.DodecahedronGeometry(0.32, 0).scale(1.3, 0.45, 1.1), 0x8a8478, 0, 0.1, 0),
+    ...bricks.map(([x, y, z, yaw, c]) => part(new THREE.BoxGeometry(0.23, 0.08, 0.11).rotateY(yaw), c, x, y + 0.04, z)),
+  ]);
+}
+
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -1080,7 +1094,8 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'produceStall', 'lanternStand', 'dimSumCart', 'fishCrate', 'mahjongTable', 'menuBoard', 'firecrackerCrate', 'parkedVan', 'lionDance', 'dragonFloat',
   'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink',
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
-  'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern']);
+  'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
+  'rubble']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel

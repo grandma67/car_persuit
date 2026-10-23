@@ -16,7 +16,9 @@ export type PropKind =
   | 'pallet' | 'crates' | 'drums' | 'cableReel' | 'lifebuoy' | 'forklift' | 'boomGate' | 'crossbuck'
   // Farm
   | 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
-  | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon' | 'jackOLantern' | 'roundBale';
+  | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon' | 'jackOLantern' | 'roundBale'
+  // Slums
+  | 'rubble';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -115,6 +117,8 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   jackOLantern: { hx: 0.3, hz: 0.3, height: 0.5, mass: 10, breakSpeed: 0.8, slowdown: 0.01 },
   // A round bale on its side (axle along local X): heavy, but a solid shove sets it rolling.
   roundBale: { hx: 0.75, hz: 0.8, height: 1.6, mass: 350, breakSpeed: 3, slowdown: 0.1 },
+  // Slums: a pile of loose bricks off a ruin's heap.
+  rubble: { hx: 0.45, hz: 0.4, height: 0.5, mass: 80, breakSpeed: 1.2, slowdown: 0.03 },
 };
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */

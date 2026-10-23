@@ -12,6 +12,8 @@ import { isJunctionControl } from './apply';
 import { frontMask, streetSides } from './Harbor';
 import { clearOf } from './HarborYard';
 import { shuffle } from './place';
+import { campLayout, junkyardLayout, overpassAt, ruinLayout } from './SlumsSet';
+import { footprintsOverlap } from '../StreetProps';
 
 export type SlumsLot = 'tenement' | 'boarded' | 'gutted' | 'cornerStore' | 'squat';
 
@@ -230,8 +232,45 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   // The fence keeps clear of the city's props round the lot and of its own panels at the corners.
   const kept = clearOf(props, [], city.streetProps.filter((p) => inRect(q.bounds, p, 2)).map((p) => propFootprint(p)));
   const ruins = RUINS.get(q) ?? [];
-  for (const r of ruins) out.ground.push({ kind: 'ruinLot', x: r.x, z: r.z, w: r.w, d: r.d });
-  out.props = kept;
+  const controls = city.streetProps.filter((p) => inRect(q.bounds, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
+  const extra: StreetProp[] = [];
+  // The destroyed buildings: stubs and heap solid, loose bricks on the sidewalk.
+  for (const r of ruins) {
+    out.ground.push({ kind: 'ruinLot', x: r.x, z: r.z, w: r.w, d: r.d });
+    const ruin = ruinLayout(r, city, controls, rng);
+    out.structures.push(ruin.s);
+    out.solids.push(...ruin.solids);
+    extra.push(...ruin.props);
+  }
+  // The rail overpass on the main-street gate.
+  const over = overpassAt(q, city);
+  if (over) {
+    out.structures.push(over.s);
+    out.solids.push(...over.solids);
+    out.overhead.push(over.overhead);
+  }
+  // The junkyard: wreck rows, corridors street to street, scrap bands, fence.
+  for (const k of roleBlocks(q, 'junkyard')) {
+    const y = junkyardLayout(k, city, rng);
+    out.structures.push(...y.structures);
+    out.solids.push(...y.solids);
+    out.drivable.push(...y.corridors);
+    out.overhead.push(...y.overhead);
+    out.ground.push({ kind: 'junkGround', ...shrink(city.blocks[k].rect, city.config.sidewalk) });
+    const inner = shrink(city.blocks[k].rect, city.config.sidewalk);
+    city.streetProps = city.streetProps.filter((p) => isJunctionControl(p) || !inRect(inner, p));
+  }
+  // The tent camp: one solid.
+  for (const v of vacant) {
+    if (!v.camp) continue;
+    const camp = campLayout(v.camp, rng);
+    out.structures.push(camp.s);
+    out.solids.push(camp.solid);
+  }
+  // The city's own props off the solids (never junction controls); the bricks clear of everything.
+  city.streetProps = city.streetProps.filter((p) => isJunctionControl(p) || !inRect(q.bounds, p) || !out.solids.some((s) => footprintsOverlap(propFootprint(p), s)));
+  const bricks = clearOf(extra, [...out.solids, ...controls], [...kept, ...city.streetProps.filter((p) => inRect(q.bounds, p, 2))].map((p) => propFootprint(p, 0.1)));
+  out.props = [...kept, ...bricks];
   out.extra = { vacant, ruins };
   return out;
 }
