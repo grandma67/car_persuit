@@ -6,8 +6,13 @@ const overlaps = (a: Rect, b: Rect) =>
   Math.abs(a.x - b.x) < (a.w + b.w) / 2 - 1e-6 && Math.abs(a.z - b.z) < (a.d + b.d) / 2 - 1e-6;
 
 const SEEDS = [1, 42, 1234, 99999, 314159];
-/** [seed, blocks per side]: the default grid, plus a mid and the largest run size. */
-const CASES: [number, number][] = [...SEEDS.map((s): [number, number] => [s, DEFAULT_CITY.blocks]), [42, 16], [1234, 20]];
+/** [seed, blocks per side]: the default grid, plus the smallest and largest run sizes. */
+const [MIN_BLOCKS, MAX_BLOCKS] = DEFAULT_CITY.blocksRange;
+const CASES: [number, number][] = [
+  ...SEEDS.map((s): [number, number] => [s, DEFAULT_CITY.blocks]),
+  [42, MIN_BLOCKS],
+  [1234, MAX_BLOCKS],
+];
 const sized = (seed: number, blocks: number, extra = {}) => generateCity(seed, { ...DEFAULT_CITY, blocks, ...extra });
 
 describe('generateCity', () => {
@@ -20,9 +25,10 @@ describe('generateCity', () => {
     expect(generateCity(43).buildings).not.toEqual(a.buildings);
   });
 
-  it('rolls a grid of 12 to 20 blocks per seed, the same every time', () => {
+  it('rolls a grid of 8 to 15 blocks per seed, the same every time', () => {
     const rolls = Array.from({ length: 200 }, (_, s) => rollCityBlocks(s));
-    expect(new Set(rolls)).toEqual(new Set([12, 13, 14, 15, 16, 17, 18, 19, 20]));
+    const range = Array.from({ length: MAX_BLOCKS - MIN_BLOCKS + 1 }, (_, i) => MIN_BLOCKS + i);
+    expect(new Set(rolls)).toEqual(new Set(range));
     expect(rollCityBlocks(42)).toBe(rolls[42]);
   });
 
