@@ -7,7 +7,7 @@
 // district. Read only the shots you need. Add `&tourKinds=crane,ship` to pick the kinds.
 (async () => {
   const params = new URLSearchParams(location.search);
-  const kinds = ['oldtown', 'chinatown', 'harbor', 'farm'];
+  const kinds = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums'];
   const kind = kinds.find((k) => params.get(k) === '1');
   const q = dbg.district(kind);
   if (!q) return { error: `no ${kind ?? 'district'} placed on this seed` };

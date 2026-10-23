@@ -11,6 +11,7 @@ import { renderChinatown } from './Chinatown';
 import { renderFarm } from './Farm';
 import { renderHarbor } from './Harbor';
 import { renderOldCity } from './OldCity';
+import { renderSlums } from './Slums';
 
 export interface DistrictRenderContext {
   theme: CityTheme;
@@ -42,6 +43,7 @@ export const DISTRICT_RENDERERS: Partial<Record<DistrictKind, DistrictRenderer>>
   chinatown: renderChinatown,
   harbor: renderHarbor,
   farm: renderFarm,
+  slums: renderSlums,
 };
 
 /** Draw every placed district's structures, overhead pieces and ground patches. */
