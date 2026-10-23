@@ -325,7 +325,6 @@ export const SLUMS_STREET = {
   payphones: [1, 2] as [number, number], // outside the corner store
   heavenSpot: 0.18, // share of walk-ups with a tag up by the roof
   poleSpacing: 24,
-  poleHeight: 8.6,
   wireSag: 0.9,
   laundryLines: [2, 6] as [number, number],
   potholesPer100m2: 0.5, // on the district's roads

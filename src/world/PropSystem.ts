@@ -6,7 +6,7 @@ import { SUNK_BELOW } from '../render/Sea';
 import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
 import { CAR_PASSES, type Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
-import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp, type WreckKind } from './StreetProps';
+import { footprintsOverlap, PROP_SPECS, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp, type WreckKind } from './StreetProps';
 import type { TreeKind } from './Climate';
 import { signalState, type SignalLight } from './TrafficControl';
 import { groundBase, groundHeight, groundNormal } from './Terrain';
@@ -71,10 +71,11 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
 };
 
 type PlainKind = Exclude<PropKind, 'sign' | 'tree' | 'wreck'>;
-type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink' | 'fence-rail' | 'tree-fruit-pear' | 'fence-torn' | `wreck-${WreckKind}`;
+type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink' | 'fence-rail' | 'tree-fruit-pear' | 'fence-torn' | 'utilityPole-transformer' | `wreck-${WreckKind}`;
 export const modelKey = (p: StreetProp): ModelKey => {
   if (p.kind === 'fence' && p.style === 'chainlink') return 'fence-chainlink';
   if (p.kind === 'fence' && p.style === 'torn') return 'fence-torn';
+  if (p.kind === 'utilityPole' && p.style === 'transformer') return 'utilityPole-transformer';
   if (p.kind === 'wreck') return `wreck-${p.wreck ?? 'burnt'}`;
   if (p.kind === 'fence' && p.style === 'rail') return 'fence-rail';
   if (p.kind === 'tree' && p.tree === 'fruit' && p.style === 'pear') return 'tree-fruit-pear';
@@ -188,6 +189,9 @@ export function debrisParts(def: StreetProp): DebrisPart[] {
         { x: 0, y: 2.97, z: 0, hx: 0.65, hy: 2.07, hz: 0.65, round: true }, // coiling dragons up to the finial
         { x: 0, y: 4.48, z: 0, hx: 0.76, hy: 0.14, hz: 0.76, round: true }, // the pagoda roof's upturned eaves
       ];
+    case 'utilityPole':
+      // The crossarm, cars pass through it: lying across the road, the pole is the only log to hit.
+      return [{ x: 0, y: PROP_SPECS.utilityPole.height - 0.8, z: 0, hx: 1.1, hy: 0.06, hz: 0.06, carPasses: true }];
     case 'umbrella':
       return [{ x: 0, y: 2.55, z: 0, hx: 1.7, hy: 0.35, hz: 1.7, round: true }]; // canopy
     case 'boomGate':
@@ -868,8 +872,9 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
   };
 }
 
-type SlumsKind = 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp' | 'fence-torn' | `wreck-${WreckKind}`;
-/** The Slums' junk: loose bricks, kerb clutter, a dead street lamp, a payphone, torn chain-link, the wrecks. */
+type SlumsKind = 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp'
+  | 'utilityPole' | 'utilityPole-transformer' | 'fence-torn' | `wreck-${WreckKind}`;
+/** The Slums' junk: loose bricks, kerb clutter, a dead street lamp, a payphone, utility poles, torn chain-link, the wrecks. */
 function slumsModels(): Record<SlumsKind, THREE.BufferGeometry> {
   const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
   const cyl = (rt: number, rb: number, h: number, seg = 10) => new THREE.CylinderGeometry(rt, rb, h, seg);
@@ -954,6 +959,14 @@ function slumsModels(): Record<SlumsKind, THREE.BufferGeometry> {
     part(box(0.07, 0.07, 0.75).rotateX(0.75), metal, 0, 5.72, 0.98),
     part(box(0.45, 0.12, 0.32).rotateX(1.1), metal, 0, 5.32, 1.25),
   ]);
+  // A timber utility pole: the crossarm across the street (local X), insulators; a transformer can on some.
+  const tar = 0x4a3a2c, h = PROP_SPECS.utilityPole.height;
+  const utilityPole = mergeGeometries([
+    part(cyl(0.13, 0.17, h + 0.05, 7), tar, 0, (h - 0.05) / 2), // 5 cm into the ground, on a slope too
+    part(box(2.2, 0.12, 0.12), tar, 0, h - 0.8),
+    ...[-0.95, 0, 0.95].map((x) => part(cyl(0.05, 0.05, 0.18, 6), 0x8a9a8a, x, h - 0.65)),
+  ]);
+  const transformer = mergeGeometries([utilityPole, part(cyl(0.3, 0.3, 0.8, 8), 0x7a8288, 0, h - 2.0, 0.32)]);
   // Torn chain-link: the posts and top rail, the mesh peeled back off one post and sagging.
   const wire = 0xa8aeb4;
   const fenceTorn = mergeGeometries([
@@ -963,7 +976,7 @@ function slumsModels(): Record<SlumsKind, THREE.BufferGeometry> {
     ...Array.from({ length: 6 }, (_, k) => part(box(1.6 - k * 0.12, 0.018, 0.018), wire, -0.6 - k * 0.06, 0.1 + k * 0.3)),
     part(box(1.0, 0.9, 0.018).rotateY(0.9).rotateX(0.5), wire, 0.9, 0.35, 0.35), // the peeled flap
   ]);
-  return { rubble, dumpster, trashBags, shoppingCart, mattress, couch, tyres, burnBarrel, payphone, brokenLamp, 'fence-torn': fenceTorn, ...wreckModels() };
+  return { rubble, dumpster, trashBags, shoppingCart, mattress, couch, tyres, burnBarrel, payphone, brokenLamp, utilityPole, 'utilityPole-transformer': transformer, 'fence-torn': fenceTorn, ...wreckModels() };
 }
 
 /**
@@ -1237,7 +1250,7 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
-  'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed']);
+  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
@@ -1631,7 +1644,7 @@ export class PropSystem {
     const dz = lv.z / speed;
     const lift = 1.5 + Math.random() * 2;
     body.setLinvel({ x: lv.x * 1.05 + (Math.random() - 0.5) * 2, y: lift, z: lv.z * 1.05 + (Math.random() - 0.5) * 2 }, true);
-    const tall = LIGHTS.has(p.def.kind) || p.def.kind === 'signal' || p.def.kind === 'tree' || p.def.kind === 'umbrella' || p.def.kind === 'signpost';
+    const tall = LIGHTS.has(p.def.kind) || p.def.kind === 'signal' || p.def.kind === 'tree' || p.def.kind === 'umbrella' || p.def.kind === 'signpost' || p.def.kind === 'utilityPole';
     const spin = (tall ? 3 : 6) * Math.min(1, speed / 15);
     body.setAngvel({ x: dz * spin, y: (Math.random() - 0.5) * 4, z: -dx * spin }, true);
 

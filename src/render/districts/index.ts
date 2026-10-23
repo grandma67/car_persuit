@@ -6,6 +6,7 @@ import type { CityData } from '../../world/CityGenerator';
 import type { CityTheme } from '../../world/CityTheme';
 import type { Climate } from '../../world/Climate';
 import type { District, DistrictKind } from '../../world/districts/District';
+import type { PropKind } from '../../world/StreetProps';
 import type { GroundHeight } from '../../world/Terrain';
 import { renderChinatown } from './Chinatown';
 import { renderFarm } from './Farm';
@@ -35,6 +36,8 @@ export interface DistrictRenderContext {
 /** A district's meshes, with whatever moves each frame. */
 export interface DistrictView {
   update?(dt: number, time: number, camera: THREE.Camera): void;
+  /** A prop was knocked loose (where it stood): pieces hung off it come down. */
+  propBroken?(kind: PropKind, x: number, z: number): void;
 }
 
 export type DistrictRenderer = (q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext) => DistrictView;

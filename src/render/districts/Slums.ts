@@ -433,20 +433,6 @@ function camp(pieces: CampPiece[], ground: GroundHeight, material: THREE.Materia
 
 // --- The streets ---
 
-/** A timber utility pole: the crossarm across the street, insulators, a transformer can on some. */
-function utilityPole(s: Structure, out: THREE.BufferGeometry[]): void {
-  const d = s.data as { y: number; h: number };
-  const tar = 0x4a3a2c;
-  const g = [
-    part(cyl(0.13, 0.17, d.h, 7), tar, 0, d.h / 2, 0),
-    part(box(2.2, 0.12, 0.12), tar, 0, d.h - 0.8, 0),
-    ...[-0.95, 0, 0.95].map((x) => part(cyl(0.05, 0.05, 0.18, 6), 0x8a9a8a, x, d.h - 0.65, 0)),
-  ];
-  if ((Math.abs(s.x * 13 + s.z * 7) % 10) < 3) g.push(part(cyl(0.3, 0.3, 0.8, 8), 0x7a8288, 0, d.h - 2.0, 0.32)); // a transformer can
-  const m = frameOf(s.x, d.y, s.z, s.yaw);
-  out.push(...g.map((p) => p.applyMatrix4(m)));
-}
-
 /** Points along a sagging line from a to b, heights y0 → y1 (world), `n` segments. */
 function sagLine(o: Overhead, y0: number, y1: number, sag: number, n: number): V3[] {
   const [a, b] = o.points;
@@ -456,11 +442,15 @@ function sagLine(o: Overhead, y0: number, y1: number, sag: number, n: number): V
   });
 }
 
-function wires(o: Overhead, out: THREE.BufferGeometry[]): void {
+/** A wire span pole to pole; an end whose pole was knocked down (`down`) lies on the ground, the line trailing over it. */
+function wires(o: Overhead, down: [boolean, boolean], ground: GroundHeight, out: THREE.BufferGeometry[]): void {
   const d = o.data as unknown as WireData;
-  const pts = sagLine(o, d.y0, d.y1, d.sag, 10);
+  const fallen = down[0] || down[1];
+  const end = (k: 0 | 1, y: number) => (down[k] ? ground(o.points[k].x, o.points[k].z) + 0.04 : y);
+  const pts = sagLine(o, end(0, d.y0), end(1, d.y1), d.sag, fallen ? 16 : 10);
+  if (fallen) for (const p of pts) p.y = Math.max(p.y, ground(p.x, p.z) + 0.04);
   for (let k = 1; k < pts.length; k++) out.push(beam(box(0.035, 1, 0.035), pts[k - 1], pts[k], 0x1a1a1a));
-  if (!d.sneakers) return;
+  if (!d.sneakers || fallen) return;
   // A pair of sneakers by their laces, mid-span.
   const m = pts[5];
   for (const [dx, drop, c] of [[-0.1, 0.45, 0xf2f2ee], [0.12, 0.6, 0xd83a2e]] as [number, number, number][]) {
@@ -597,11 +587,21 @@ export function renderSlums(q: District, city: CityData, scene: THREE.Scene, ctx
     else if (s.kind === 'tyres') tyres(s, ctx.ground, snowy, solid, rnd);
     else if (s.kind === 'wreckStack') stacked.push(...((s.data as { wrecks: Wreck[] }).wrecks));
     else if (s.kind === 'camp') camp((s.data as { pieces: CampPiece[] }).pieces, ctx.ground, instanced, scene);
-    else if (s.kind === 'utilityPole') utilityPole(s, solid);
   }
-  for (const o of q.dressing.overhead) {
-    if (o.kind === 'wire') wires(o, solid);
-    else if (o.kind === 'laundry') laundry(o, solid);
+  for (const o of q.dressing.overhead) if (o.kind === 'laundry') laundry(o, solid);
+  // The wires on their own mesh (the solid settings), rebuilt as the poles holding them are knocked down.
+  const spans = q.dressing.overhead.filter((o) => o.kind === 'wire').map((o) => ({ o, down: [false, false] as [boolean, boolean] }));
+  const lines = spans.length ? new THREE.Mesh(undefined, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 })) : null;
+  const string = () => {
+    const parts: THREE.BufferGeometry[] = [];
+    for (const w of spans) wires(w.o, w.down, ctx.ground, parts);
+    lines!.geometry.dispose();
+    lines!.geometry = mergeGeometries(parts);
+  };
+  if (lines) {
+    string();
+    lines.castShadow = lines.receiveShadow = true;
+    scene.add(lines);
   }
   // Stumps where the trees were cut down.
   for (const t of (q.dressing.extra?.stumps ?? []) as { x: number; z: number }[]) {
@@ -651,6 +651,16 @@ export function renderSlums(q: District, city: CityData, scene: THREE.Scene, ctx
     .map((m) => ({ at: new THREE.Vector3(m.x, ctx.ground(m.x, m.z) + 0.1, m.z), next: 0 }));
   const puff = ctx.steam;
   return {
+    propBroken(kind, x, z) {
+      if (kind !== 'utilityPole' || !lines) return;
+      let hit = false;
+      for (const w of spans) {
+        w.o.points.forEach((p, k) => {
+          if (!w.down[k] && Math.hypot(p.x - x, p.z - z) < 0.6) hit = w.down[k] = true;
+        });
+      }
+      if (hit) string();
+    },
     update(_dt, time, camera) {
       flicker?.(time);
       if (!puff) return;

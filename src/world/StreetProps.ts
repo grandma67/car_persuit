@@ -18,7 +18,7 @@ export type PropKind =
   | 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
   | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon' | 'jackOLantern' | 'roundBale'
   // Slums
-  | 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp' | 'wreck';
+  | 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp' | 'utilityPole' | 'wreck';
 /** A wrecked car's state: burnt out, up on bricks, stripped (doors open), on its roof, or crushed flat. */
 export type WreckKind = 'burnt' | 'bricks' | 'stripped' | 'flipped' | 'crushed';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
@@ -36,7 +36,7 @@ export interface StreetProp {
   tree?: TreeKind; // trees
   scale?: number; // trees: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
-  style?: 'old' | 'chainlink' | 'rail' | 'pear' | 'torn'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
+  style?: 'old' | 'chainlink' | 'rail' | 'pear' | 'torn' | 'transformer'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
   wreck?: WreckKind; // wrecks
   flicker?: boolean; // lamps: a failing tube, buzzing on and off at night
@@ -134,6 +134,8 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   burnBarrel: { hx: 0.3, hz: 0.3, height: 0.9, mass: 45, breakSpeed: 1.2, slowdown: 0.02 },
   payphone: { hx: 0.3, hz: 0.25, height: 2.2, mass: 90, breakSpeed: 3, slowdown: 0.05 },
   brokenLamp: { hx: 0.15, hz: 0.15, height: 6.2, mass: 120, breakSpeed: 4, slowdown: 0.08 },
+  // A timber utility pole: taller and heavier than a lamp, still snaps at speed (its wires drop with it).
+  utilityPole: { hx: 0.16, hz: 0.16, height: 8.6, mass: 260, breakSpeed: 5, slowdown: 0.12 },
   // A wreck at the kerb: heavy, a real hit to shove (on bricks or on its roof it doesn't move at all).
   wreck: { hx: 0.92, hz: 2.15, height: 1.4, mass: 1100, breakSpeed: 8, slowdown: 0.3 },
 };

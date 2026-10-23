@@ -189,6 +189,7 @@ export class Effects {
       case 'milkChurn': burst(this.steam, 8); return burst(this.water, 8);
       case 'wheelbarrow': case 'toolRack': case 'mailbox': return burst(this.chips, b.kind === 'toolRack' ? 20 : 8);
       case 'woodLamp': burst(this.chips, 12); return burst(this.fire, 8);
+      case 'utilityPole': burst(this.chips, 16); return burst(this.sparks, 30); // the lines arc as they snap
       case 'hayWagon': burst(this.straw, 60); return burst(this.chips, 14);
       case 'parkedTractor': case 'baler': burst(this.sparks, 24); return burst(this.shards, 8);
       case 'plough': case 'seedDrill': case 'hayRake': return burst(this.sparks, 14);

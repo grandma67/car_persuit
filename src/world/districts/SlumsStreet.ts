@@ -9,7 +9,7 @@ import { DISTRICTS, SLUMS, SLUMS_SET, SLUMS_STREET as ST } from '../../gameplay/
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { keepOf } from '../driveSide';
 import { inRect, shrink } from '../lots';
-import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp, type WreckKind } from '../StreetProps';
+import { footprintsOverlap, PROP_SPECS, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp, type WreckKind } from '../StreetProps';
 import { groundBase, groundHeight } from '../Terrain';
 import { kerbClutter } from './apply';
 import type { DistrictDressing, District, GroundPatch, Overhead } from './District';
@@ -253,22 +253,24 @@ export function streetDressing(q: District, city: CityData, out: DistrictDressin
         const fp: Footprint = { ...p, hx: 0.16, hz: 0.16, yaw: 0 };
         if (!free(fp) || nearGate(p)) continue;
         taken.push({ ...fp, hx: 0.5, hz: 0.5 });
-        poles.push({ ...p, y: groundBase(city.terrain, p.x, p.z, 0.3) - 0.05 });
+        poles.push({ ...p, y: groundBase(city.terrain, p.x, p.z, PROP_SPECS.utilityPole.hx) });
         break;
       }
     }
+    // Breakable, like the lamps: the wires drop with a pole knocked down (the renderer). A transformer can on some.
     for (const p of poles) {
-      out.structures.push({ kind: 'utilityPole', x: p.x, z: p.z, yaw: Math.atan2(s.dx, s.dz), footprints: [{ x: p.x, z: p.z, hx: 0.16, hz: 0.16, yaw: 0 }], data: { y: p.y, h: ST.poleHeight } });
-      out.solids.push({ x: p.x, z: p.z, hx: 0.16, hz: 0.16, yaw: 0 });
+      const pole: StreetProp = { kind: 'utilityPole', x: p.x, z: p.z, yaw: Math.atan2(s.dx, s.dz) };
+      if (Math.abs(p.x * 13 + p.z * 7) % 10 < 3) pole.style = 'transformer';
+      out.props.push(pole);
     }
-    const top = (p: { y: number }) => p.y + ST.poleHeight - 0.8;
+    const top = (p: { y: number }) => p.y + PROP_SPECS.utilityPole.height - 0.8;
     for (let i = 1; i < poles.length; i++) wires.push(wire(poles[i - 1], poles[i], top(poles[i - 1]), top(poles[i]), ST.wireSag, false, city));
     // Across the street from the middle pole to the far building line, a pair of sneakers on it now and then.
     if (poles.length) {
       const p = poles[Math.floor(poles.length / 2)];
       const t = (p.x - s.A.x) * s.dx + (p.z - s.A.z) * s.dz;
       const far = along(s, t, rw / 2 + sw - 0.2, -side);
-      const yFar = highest(p, far, city) + ST.poleHeight - 1.6; // level with the highest ground under it, on a hill too
+      const yFar = highest(p, far, city) + PROP_SPECS.utilityPole.height - 1.6; // level with the highest ground under it, on a hill too
       wires.push(wire(p, far, top(p), yFar, ST.wireSag * 0.8, rng.next() < 0.5, city));
     }
   }

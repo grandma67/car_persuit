@@ -1082,6 +1082,7 @@ export class Game {
       if (this.state === 'playing') this.raiseStars(this.wanted.propSmashed());
       this.audio.propBreak(b.kind, b.strength, b.tree);
       this.effects.propBreak(b);
+      for (const view of this.districtViews) view.propBroken?.(b.kind, b.position.x, b.position.z);
     }
   }
 

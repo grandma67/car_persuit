@@ -254,8 +254,8 @@ export class SoundEffects {
       this.burst(0.02, 0.5, 'highpass', 2600, 0.5, gain * 0.45);
       return;
     }
-    if (kind === 'farmStand' || kind === 'toolRack' || kind === 'wheelbarrow' || kind === 'hayWagon' || kind === 'woodLamp') {
-      this.woodBreak(kind === 'hayWagon' ? 0.85 : kind === 'woodLamp' ? 0.6 : 0.55, gain);
+    if (kind === 'farmStand' || kind === 'toolRack' || kind === 'wheelbarrow' || kind === 'hayWagon' || kind === 'woodLamp' || kind === 'utilityPole') {
+      this.woodBreak(kind === 'hayWagon' || kind === 'utilityPole' ? 0.85 : kind === 'woodLamp' ? 0.6 : 0.55, gain);
       if (kind === 'hayWagon') this.burst(0.03, 0.5, 'lowpass', 900, 0.7, gain);
       return;
     }
