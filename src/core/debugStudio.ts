@@ -1,9 +1,11 @@
-// A photo studio for headless checks (`dbg.studio` with ?debug): prop models, vehicles, zone
-// buildings and district lot buildings laid out on a grid on a plain floor, away from the city, each labelled, shot from any
+// A photo studio for headless checks (`dbg.studio` with ?debug): prop models, landmarks, vehicles,
+// zone buildings and district lot buildings laid out on a grid on a plain floor, away from the city, each labelled, shot from any
 // angle or close up. The game keeps running underneath; the studio takes over the screen until
 // `dbg.studio(false)`. Its own lights compile their own shader programs: measure `dbg.stats()` first.
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { createFacadeTextures } from '../render/Facades';
+import { Landmarks } from '../render/Landmarks';
 import { buildModels } from '../world/PropSystem';
 import { buildingGeometry } from '../world/CityBuilder';
 import type { Building, CityData, Zone } from '../world/CityGenerator';
@@ -15,6 +17,8 @@ import {
 import { pickTheme } from '../world/CityTheme';
 import { pickClimate } from '../world/Climate';
 import { DISTRICT_DEFS } from '../world/districts/index';
+import { LANDMARK_RADIUS, type LandmarkKind } from '../world/Landmarks';
+import type { Terrain } from '../world/Terrain';
 import { Rng } from './Rng';
 
 export interface StudioShot {
@@ -100,9 +104,26 @@ function parkedCar(spec: VehicleSpec): THREE.Group {
   return car.root;
 }
 
+const FLAT: Terrain = { hill: null, canals: [], bridges: [], land: [] };
+
+/**
+ * One landmark as the game builds it (paving pad, snow caps, fountain water), on flat ground at the
+ * origin. Landmarks also make colliders: a throwaway physics world takes them.
+ */
+function landmarkGroup(kind: LandmarkKind, n: number | undefined, snowy: boolean): THREE.Group {
+  const scene = new THREE.Scene();
+  const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+  new Landmarks([{ kind, x: 0, z: 0, yaw: 0, radius: LANDMARK_RADIUS[kind], tiers: n, variant: n }], FLAT, scene, world, 0, new Set(), snowy);
+  world.free();
+  const group = new THREE.Group();
+  // Everything but the fountain spray's particles (they only show while it updates).
+  for (const o of [...scene.children]) if (!(o instanceof THREE.Points)) group.add(o);
+  return group;
+}
+
 /** Walls (one mesh per facade style, textured as in game) and roofs of buildings on flat ground. */
 function buildingGroup(city: CityData, b: Building, theme: ReturnType<typeof pickTheme>, climate: ReturnType<typeof pickClimate>): THREE.Group {
-  const flat: CityData = { ...city, terrain: { hill: null, canals: [], bridges: [], land: [] }, buildings: [b] };
+  const flat: CityData = { ...city, terrain: FLAT, buildings: [b] };
   const { walls, roofs } = buildingGeometry(flat, theme, climate, new Rng(city.seed));
   const group = new THREE.Group();
   for (const [facade, builder] of walls) {
@@ -123,7 +144,8 @@ function buildingGroup(city: CityData, b: Building, theme: ReturnType<typeof pic
  * (`lot:slums/tenement`, optionally `lot:slums/tenement@18` for its height), a vehicle
  * (`car:bus`, `car:cop-` for every cop, `car:` for all, `car:sedan~c9ccd1` repainted; keys in CARS), or
  * an ordinary city building of a zone (`zone:residential`, `zone:` for all four, then optionally
- * `@height`, `v<variant>` 0..1 for its colour, roof and trims, `=WxD` for its footprint).
+ * `@height`, `v<variant>` 0..1 for its colour, roof and trims, `=WxD` for its footprint), or a
+ * landmark (`mark:statue`, `mark:` for all, `mark:pagoda@3` its storeys, `mark:silo@1` steel).
  */
 function makeItems(names: string[], city: CityData): Item[] {
   const models = buildModels({ leaves: 0x3d7a3f, trunk: 0x4a3426, snowy: false });
@@ -155,6 +177,14 @@ function makeItems(names: string[], city: CityData): Item[] {
       for (const key of matched) {
         const spec = tint ? { ...CARS[key], color: parseInt(tint, 16) } : CARS[key];
         add(`car:${key}${tint ? `~${tint}` : ''}`, parkedCar(spec));
+      }
+      continue;
+    }
+    if (raw.startsWith('mark:')) {
+      const [name, n] = raw.slice(5).split('@');
+      const all = Object.keys(LANDMARK_RADIUS) as LandmarkKind[];
+      for (const kind of all.filter((k) => !name || k === name)) {
+        add(name ? raw : `mark:${kind}`, landmarkGroup(kind, n === undefined ? undefined : Number(n), climate.snowRoofs));
       }
       continue;
     }

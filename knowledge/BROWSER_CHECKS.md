@@ -10,13 +10,17 @@ Compare with main: `git worktree add <scratchpad>/mainwt main`, symlink `node_mo
 ## Ready-made evals (`scripts/evals/`): start there
 
 - **Milestone tour** `district-tour.js` with `?seed=N&debug&<kind>=1`: stats + FPS first, then a road
-  and an aerial shot of each structure kind and an overview (`&tour=N`, `&tourKinds=a,b`).
+  and an aerial shot of each structure kind and an overview (`&tour=N`, `&tourKinds=a,b`). `&orbit=4`
+  takes each aerial from 4 angles: use it for gates and anything sized to its road. Kinds the district
+  lacks come from the whole city (`park`, `square`, landmarks, lots), so `?seed=N&debug&tourKinds=park,
+  statue&orbit=4` needs no district.
 - **Driving check** `district-drive.js`: a 5★ chase in under the first overhead gate with stuck cops
   listed, every gate at 30 m/s, each off-road drivable rect end to end (`hit` = stopped inside what it
   tests, `exit` = past it, `stuck` = never moved). Use it instead of hand-written drive evals.
 - **Studio** `studio.js` with `?seed=N&debug&studio=dumpster,wreck-,couch~6a3a2a,lot:slums/gutted&angles=4&closeups=1`:
   models, vehicles and buildings alone on a grey floor (prop keys, `-` prefixes, `~tint`,
-  `lot:<kind>/<lot>[@height]`, `car:<key>[~hex]` (`car:` all, `car:cop-` cops; player, sedan, sports,
+  `lot:<kind>/<lot>[@height]`, `mark:<landmark>[@n]` (`mark:` all; statue, fountain, pagoda@3, silo@1 …),
+  `car:<key>[~hex]` (`car:` all, `car:cop-` cops; player, sedan, sports,
   suv, van, pickup, bus, boxtruck, ramptruck, tractor), `zone:<zone>[@h][v<variant>][=WxD]` (`zone:` all
   four, the seed picks the theme); `low=1` adds an eye-level shot, `city=` the climate's looks). Use it
   for every new prop, vehicle or look before placing it. It compiles its own programs: take
@@ -41,7 +45,7 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 
 | Call | Does |
 |---|---|
-| `district(kind?)`, `find(kind)` | a district; a landmark/structure/prop/lot position |
+| `district(kind?)`, `find(kind)` | a district; a landmark/structure/prop/lot/`park`/`square` position |
 | `view(point,{dist})` | camera on a clear road spot near it (never place the car by hand) |
 | `gate(i,{back,speed,lateral,kind})` | car outside gate `i`, facing in |
 | `place(x,z,yaw,speed)`, `road(x,z)` | put the car; nearest road centre point |

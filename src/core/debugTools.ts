@@ -117,7 +117,7 @@ export function debugTools(game: Game) {
       await sleep(wait);
     },
     /**
-     * The studio: prop models, vehicles, zone and district lot buildings on a plain floor, labelled, away from the
+     * The studio: prop models, landmarks, vehicles, zone and district lot buildings on a plain floor, labelled, away from the
      * city (names: `dumpster`, prefixes like `wreck-`, tints `couch~6a3a2a`, lots `lot:slums/tenement`
      * or `lot:slums/tenement@18`). Returns what it laid out; `false` closes it. Then `studioShot`.
      */
@@ -212,9 +212,13 @@ export function debugTools(game: Game) {
       await sleep(wait);
       return g0;
     },
-    /** First landmark, structure, district prop or street prop of a kind (in a district, if any). */
+    /** First landmark, structure, district prop, street prop, lot, or `park`/`square` block of a kind. */
     find(kind: string): (P & { kind: string }) | undefined {
       const c = city();
+      if (kind === 'park' || kind === 'square') {
+        const b = c.blocks.find((bl) => (kind === 'square' ? bl.square : bl.park && !bl.square));
+        return b && { ...b.rect, kind };
+      }
       return (
         c.landmarks.find((l) => l.kind === kind) ??
         c.districts.flatMap((q) => q.dressing.structures).find((s) => s.kind === kind) ??
