@@ -1054,17 +1054,27 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
         const W = 3.2, D = 0.95;
         const uc = (hashOf(b, 1) < 0.5 ? -1 : 1) * (len / 2 - W / 2 - 1.2);
         const at = (u: number, v: number, y: number) => [b.x + nx * (half + v) + tx * (uc + u), y, b.z + nz * (half + v) + tz * (uc + u)];
-        const box = (u: number, v: number, y: number, lu: number, lv: number, h: number) => {
+        const box = (u: number, v: number, y: number, lu: number, lv: number, h: number, col = iron) => {
           const c = at(u, v, 0);
-          roofs.box({ x: c[0], z: c[2], w: tx ? lu : lv, d: tx ? lv : lu }, y, h, iron, null, iron);
+          roofs.box({ x: c[0], z: c[2], w: tx ? lu : lv, d: tx ? lv : lu }, y, h, col, null, col);
         };
         const iron = new THREE.Color(0x2a2826);
+        const ice = new THREE.Color(0xdce8f0);
         for (let k = 1; k < floors; k++) {
           const y = f.y0 + k * f.floor - 0.1;
           box(0, D / 2, y, W, D, 0.07); // the landing
           box(0, D - 0.03, y + 1.0, W, 0.05, 0.05); // its rail
           for (const e of [-1, 1]) box(e * (W / 2 - 0.03), D / 2, y + 1.0, 0.05, D, 0.05);
           for (let j = 0; j <= 6; j++) box(-W / 2 + (W * j) / 6, D - 0.03, y, 0.04, 0.04, 1.0);
+          if (snowy) {
+            // Snow on the landing, icicles hanging off its outer edge.
+            box(0, D / 2, y + 0.07, W - 0.1, D - 0.1, 0.05, new THREE.Color(SNOW));
+            for (let j = 0; j < 7; j++) {
+              const len = 0.15 + 0.35 * hashOf(b, k * 10 + j);
+              const c = at(-W / 2 + 0.25 + (W - 0.5) * (j / 6), D - 0.02, 0);
+              roofs.box({ x: c[0], z: c[2], w: 0.04, d: 0.04 }, y - len, len, ice, null, ice);
+            }
+          }
           if (k < floors - 1) {
             // The flight up to the next landing, alternating ends.
             const dir = k % 2 ? 1 : -1;

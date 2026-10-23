@@ -10,7 +10,8 @@ import { pickClimate } from '../src/world/Climate';
 import { Rng } from '../src/core/Rng';
 import type { DistrictKind } from '../src/world/districts/District';
 
-export default function ([kind = 'harbor', n = '20']: string[]): void {
+export default function ([kind = 'harbor', arg = '20']: string[]): void {
+  const n = arg.replace(/^seeds=/, ''); // `seeds=20` or `20`
   const rows: string[] = [];
   let worst = 0, extra = 0;
   const facades = new Set<string>();

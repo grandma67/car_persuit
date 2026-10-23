@@ -15,7 +15,8 @@ const avg = (rows: Record<string, number>[], n: number) => {
   return Object.fromEntries(Object.entries(sum).sort(([, a], [, b]) => b - a).map(([k, v]) => [k, +(v / n).toFixed(1)]));
 };
 
-export default function ([kind = DISTRICT_DEFS[0]?.kind, n = '100']: string[]): void {
+export default function ([kind = DISTRICT_DEFS[0]?.kind, arg = '100']: string[]): void {
+  const n = arg.replace(/^seeds=/, ''); // `seeds=100` or `100`
   if (!DISTRICT_DEFS.some((d) => d.kind === kind)) {
     console.log(`unknown district "${kind}"; registered: ${DISTRICT_DEFS.map((d) => d.kind).join(', ')}`);
     return;

@@ -12,7 +12,7 @@ import type { CityData } from '../../world/CityGenerator';
 import { GeometryBuilder } from '../../world/CityBuilder';
 import type { District, GroundPatch, Structure } from '../../world/districts/District';
 import { WRECK, type CampKind, type CampPiece, type CraneData, type JunkyardData, type OverpassData, type RuinData, type Wreck } from '../../world/districts/SlumsSet';
-import { SLUMS_SET as SS } from '../../gameplay/balance';
+import { SLUMS, SLUMS_SET as SS } from '../../gameplay/balance';
 import { groundBase } from '../../world/Terrain';
 import type { GroundHeight } from '../../world/Terrain';
 import { slumsPlate, slumsSignMaterial } from './slumsSigns';
@@ -489,6 +489,28 @@ function graffiti(decals: Decal[]): THREE.BufferGeometry | null {
   return mergeGeometries(decals.map((d) => graffitiPlate(d.w, d.h, d.cell, 0.82 + ((d.cell * 37) % 18) / 100).applyMatrix4(frameOf(d.x, d.y, d.z, d.yaw))));
 }
 
+/**
+ * Fire in the burn barrels and the camp's ring: instanced flames on the lamp bulbs' settings (unlit,
+ * tinted per instance), flickering by scale. Within the district's glow budget.
+ */
+function fires(at: THREE.Vector3[], scene: THREE.Scene): (time: number) => void {
+  const mesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.22, 0).scale(1, 1.8, 1), new THREE.MeshBasicMaterial({ toneMapped: false }), at.length);
+  const colour = new THREE.Color();
+  at.forEach((_, i) => mesh.setColorAt(i, colour.setHex(i % 3 ? 0xff8a2a : 0xffb84a)));
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), scale = new THREE.Vector3();
+  return (time) => {
+    at.forEach((p, i) => {
+      const f = 0.75 + 0.25 * Math.sin(time * 11 + i * 1.7) * Math.sin(time * 5.3 + i);
+      q.setFromAxisAngle(UP, time * 2 + i);
+      mesh.setMatrixAt(i, m.compose(p, q, scale.set(f, 0.6 + f * 0.6, f)));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  };
+}
+const UP = new THREE.Vector3(0, 1, 0);
+
 // --- Ground ---
 
 /** Flecks of another colour over a patch: debris, oil, gravel. */
@@ -535,6 +557,9 @@ function wear(flat: GeometryBuilder, wet: GeometryBuilder, p: GroundPatch, city:
       return flat.drape({ ...p, w: p.w - 0.2, d: p.d - 0.2 }, 0.06, c(0x2e2c2a), t);
     case 'puddle': return wet.drape(p, 0.04, c(0x2c3239), t);
     case 'litter': return flat.drape(p, 0.055, c([0xe8e4da, 0xa88a5a, 0xc83a2e, 0x6a6e72, 0x2f5f9a][Math.floor(rnd() * 5)]), t);
+    // The climate's: slush in the gutters, blown sand (over the wear, 2.5 cm clear of it).
+    case 'slush': return flat.drape(p, 0.085, c(rnd() < 0.5 ? 0xb8bcc0 : 0xa4a8ac), t);
+    case 'drift': return flat.drape(p, 0.085, c(rnd() < 0.5 ? 0xd8c09a : 0xcdb48c), t);
   }
 }
 
@@ -606,12 +631,28 @@ export function renderSlums(q: District, city: CityData, scene: THREE.Scene, ctx
   if (signs.length) scene.add(new THREE.Mesh(mergeGeometries(signs), slumsSignMaterial(0.06 + ctx.lampGlow * 0.1)));
   const stack = wrecks(stacked, ctx.ground, instanced);
   if (stack) scene.add(stack);
-  // Steam from half the manholes, puffing while the camera is near.
-  const steaming = ((q.dressing.extra?.manholes ?? []) as { x: number; z: number }[]).filter((_, i) => i % 2 === 0)
+  // Fire: in the burn barrels at night (by day too in the snow), and in the camp's ring at night;
+  // with the working lamps and the shop sign, never past the district's glow cap.
+  const inside = (p: { x: number; z: number }) => Math.abs(p.x - q.bounds.x) <= q.bounds.w / 2 + 2 && Math.abs(p.z - q.bounds.z) <= q.bounds.d / 2 + 2;
+  const lamps = city.streetProps.filter((p) => p.kind === 'lamp' && inside(p)).length;
+  const flames: THREE.Vector3[] = [];
+  if (ctx.night || snowy) {
+    for (const p of q.dressing.props) if (p.kind === 'burnBarrel') flames.push(new THREE.Vector3(p.x, ctx.ground(p.x, p.z) + 1.0, p.z));
+  }
+  if (ctx.night) {
+    for (const st of q.dressing.structures) {
+      if (st.kind !== 'camp') continue;
+      for (const pc of (st.data as { pieces: CampPiece[] }).pieces) if (pc.kind === 'fireRing') flames.push(new THREE.Vector3(pc.x, ctx.ground(pc.x, pc.z) + 0.25, pc.z));
+    }
+  }
+  const flicker = flames.length ? fires(flames.slice(0, Math.max(0, SLUMS.maxGlow - lamps - 1)), scene) : null;
+  // Steam from half the manholes (all of them in the snow), puffing while the camera is near.
+  const steaming = ((q.dressing.extra?.manholes ?? []) as { x: number; z: number }[]).filter((_, i) => snowy || i % 2 === 0)
     .map((m) => ({ at: new THREE.Vector3(m.x, ctx.ground(m.x, m.z) + 0.1, m.z), next: 0 }));
   const puff = ctx.steam;
   return {
     update(_dt, time, camera) {
+      flicker?.(time);
       if (!puff) return;
       for (const m of steaming) {
         if (time < m.next || m.at.distanceToSquared(camera.position) > 80 * 80) continue;

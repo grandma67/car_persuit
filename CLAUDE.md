@@ -86,7 +86,7 @@ screenshots. Compare with main: `git worktree add <scratch>/mainwt main`, symlin
 
 - **Zone:** distance ring of a block: `downtown | midtown | residential | industrial` (`Zone`,
   `block.zone`, `building.zone`, `ZONE_STYLE`, `theme.facades[zone]`).
-- **District:** themed area over a rectangle of blocks: Old City (`oldtown`), Chinatown, Harbor, Farm
+- **District:** themed area over a rectangle of blocks: Old City (`oldtown`), Chinatown, Harbor, Farm, Slums
   (`District`, `DistrictDef`, `block.district`, `building.district` + `building.lot`, `city.districts`,
   `DISTRICTS` in balance, `?oldtown=0|1`). A district block keeps its zone. In old commits "district" meant zone.
 

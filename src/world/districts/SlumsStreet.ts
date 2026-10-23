@@ -13,6 +13,7 @@ import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type P
 import { groundBase, groundHeight } from '../Terrain';
 import { kerbClutter } from './apply';
 import type { DistrictDressing, District, GroundPatch, Overhead } from './District';
+import type { RunDressing } from './runtime';
 import type { JunkyardData, OverpassData } from './SlumsSet';
 
 /** A graffiti piece: a plane facing +Z local (out of its wall), `y` its centre (world), cell in the atlas. */
@@ -141,7 +142,19 @@ export function streetDressing(q: District, city: CityData, out: DistrictDressin
     }
     if (best) lit.add(best);
   }
-  city.streetProps = city.streetProps.map((p) => (lit.has(p) ? { ...p, kind: 'lamp' as const } : p));
+  // And on each street, the dead lamp nearest its middle buzzes on and off at night.
+  const flicker = new Set<StreetProp>();
+  for (const s of streets) {
+    const mid = along(s, s.len / 2, 0, 1);
+    let best: StreetProp | undefined, d = s.len / 2;
+    for (const p of city.streetProps) {
+      if (p.kind !== 'brokenLamp' || lit.has(p) || flicker.has(p)) continue;
+      const k = Math.hypot(p.x - mid.x, p.z - mid.z);
+      if (k < d) (best = p), (d = k);
+    }
+    if (best) flicker.add(best);
+  }
+  city.streetProps = city.streetProps.map((p) => (lit.has(p) ? { ...p, kind: 'lamp' as const } : flicker.has(p) ? { ...p, kind: 'lamp' as const, flicker: true } : p));
 
   // Stumps where the trees were.
   const stumps = city.trees.filter((t) => inRect(q.bounds, t));
@@ -469,4 +482,49 @@ function wire(a: { x: number; z: number }, b: { x: number; z: number }, y0: numb
   }
   const data: WireData = { y0, y1, sag, sneakers };
   return { kind: 'wire', points: [{ x: a.x, z: a.z }, { x: b.x, z: b.z }], bottom, data: data as unknown as Record<string, unknown> };
+}
+
+/**
+ * The Slums by climate, chosen per run (generation never depends on it): slush along the kerbs in
+ * the snow; blown sand along the kerbs and banked against the walk-ups in the desert, the wrecks'
+ * paint bleached; by the beach, the wrecks salt-rusted. On the district's stream, after everything.
+ */
+export function climateDressing(q: District, city: CityData, rng: Rng): Record<string, RunDressing> {
+  const { roadWidth: rw, sidewalk: sw } = city.config;
+  const perimeter = new Set(q.perimeter);
+  /** Broken strips along both kerbs of every street, in the gutter (on the road, clear of the junctions). */
+  const gutter = (kind: string): GroundPatch[] => {
+    const out: GroundPatch[] = [];
+    for (const s of streetsOf(q, city)) {
+      const t0 = rw / 2 + 1 + (perimeter.has(s.a) ? sw : 0), t1 = s.len - rw / 2 - 1 - (perimeter.has(s.b) ? sw : 0);
+      for (const side of [-1, 1]) {
+        for (let t = t0 + rng.range(0, 2); t < t1 - 1; ) {
+          const len = Math.min(t1 - t, rng.range(2, 7)), w = rng.range(ST.gutterStrip[0], ST.gutterStrip[1]);
+          const c = along(s, t + len / 2, rw / 2 - w / 2, side);
+          out.push(Math.abs(s.dx) > 0.5 ? { kind, ...c, w: len, d: w } : { kind, ...c, w, d: len });
+          t += len + rng.range(0.5, 4);
+        }
+      }
+    }
+    return out;
+  };
+  const slush = gutter('slush');
+  const sand = gutter('drift');
+  // Sand banked against the street fronts of the walk-ups, on the sidewalk.
+  const FACES: [number, number, number][] = [[1, 0, 1], [2, 0, -1], [4, 1, 0], [8, -1, 0]];
+  for (const b of city.buildings) {
+    if (b.district !== 'slums' || !inRect(q.bounds, b)) continue;
+    for (const [bit, nx, nz] of FACES) {
+      if (!((b.street ?? 0) & bit) || rng.next() >= ST.driftChance) continue;
+      const len = (nx ? b.d : b.w) * rng.range(0.3, 0.8), deep = rng.range(0.5, 1.1);
+      const u = rng.range(-1, 1) * ((nx ? b.d : b.w) - len) / 2;
+      const c = { x: b.x + nx * (b.w / 2 + deep / 2) + (nx ? 0 : u), z: b.z + nz * (b.d / 2 + deep / 2) + (nz ? 0 : u) };
+      sand.push(nx ? { kind: 'drift', ...c, w: deep, d: len } : { kind: 'drift', ...c, w: len, d: deep });
+    }
+  }
+  return {
+    snow: { ground: slush },
+    desert: { ground: sand, tint: { kinds: ['wreck', 'dumpster', 'couch'], toward: 0xd8c8a8, by: 0.4 } },
+    beach: { tint: { kinds: ['wreck', 'dumpster'], toward: 0x8a4a2a, by: 0.45 } },
+  };
 }

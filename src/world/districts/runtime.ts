@@ -4,7 +4,7 @@ import type { CityData } from '../CityGenerator';
 import type { Footprint, PropKind, StreetProp } from '../StreetProps';
 import { inRect } from '../lots';
 import { DISTRICT_DEFS } from './index';
-import type { DistrictDef, DistrictKind, DistrictTraffic, Structure } from './District';
+import type { DistrictDef, DistrictKind, DistrictTraffic, GroundPatch, Structure } from './District';
 
 const defOf = (kind: DistrictKind, defs: DistrictDef[]) => defs.find((d) => d.kind === kind);
 
@@ -75,7 +75,13 @@ export interface RunDressing {
   solids?: Footprint[];
   props?: StreetProp[];
   drop?: PropKind[];
+  ground?: GroundPatch[]; // flat patches (the Slums' slush and dust drifts)
+  tint?: { kinds: PropKind[]; toward: number; by: number }; // props weathered towards a colour (bleached, salt-rusted wrecks)
 }
+
+/** Mix two 0xRRGGBB colours, `by` of the way from a to b. */
+const mixHex = (a: number, b: number, by: number) =>
+  [16, 8, 0].reduce((out, sh) => out | (Math.round(((a >> sh) & 255) * (1 - by) + ((b >> sh) & 255) * by) << sh), 0);
 
 /**
  * Join the run's extra dressing into the city before it is built: on a night run each district's
@@ -89,6 +95,13 @@ export function joinRunDressing(city: CityData, run: { night: boolean; climate: 
       if (!d) continue;
       q.dressing.structures.push(...(d.structures ?? []));
       q.dressing.solids.push(...(d.solids ?? []));
+      q.dressing.ground.push(...(d.ground ?? []));
+      if (d.tint) {
+        const { kinds, toward, by } = d.tint;
+        const weather = (p: StreetProp) => (kinds.includes(p.kind) && p.color !== undefined && inRect(q.bounds, p, 2) ? { ...p, color: mixHex(p.color, toward, by) } : p);
+        q.dressing.props = q.dressing.props.map(weather);
+        city.streetProps = city.streetProps.map(weather);
+      }
       if (d.drop?.length) {
         const gone = new Set<PropKind>(d.drop);
         q.dressing.props = q.dressing.props.filter((p) => !gone.has(p.kind));

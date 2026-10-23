@@ -675,6 +675,7 @@ export class Game {
     this.audio.setSiren(this.state === 'playing' ? nearestCop : null);
     this.props.sync();
     this.props.updateSignals(this.timer.getElapsed());
+    this.props.updateLamps(this.timer.getElapsed());
     for (const works of this.roadworks) works.update(frameDt, this.timer.getElapsed());
     for (const view of this.districtViews) view.update?.(frameDt, this.timer.getElapsed(), this.chase.camera);
     const carPos = this.player.mesh.root.position;

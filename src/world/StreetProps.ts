@@ -39,6 +39,7 @@ export interface StreetProp {
   style?: 'old' | 'chainlink' | 'rail' | 'pear' | 'torn'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
   wreck?: WreckKind; // wrecks
+  flicker?: boolean; // lamps: a failing tube, buzzing on and off at night
 }
 
 export interface PropSpec {

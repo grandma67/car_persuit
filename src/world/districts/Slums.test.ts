@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DISTRICTS } from '../../gameplay/balance';
+import { DISTRICTS, SLUMS } from '../../gameplay/balance';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 import { generateCity, type CityData, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
@@ -249,5 +249,42 @@ describe('Slums streets', () => {
     expect(working).toBeGreaterThan(0);
     expect(props.filter((p) => p.kind === 'bench')).toEqual([]);
     expect(c.trees.filter((t) => inRect(q.bounds, t))).toEqual([]);
+  });
+});
+
+describe('Slums runs: night and climate', () => {
+  type ByClimate = Record<string, { ground?: (Rect & { kind: string })[]; tint?: { kinds: string[] } }>;
+  const byClimate = (q: District) => (q.dressing.extra?.byClimate ?? {}) as ByClimate;
+
+  it.each(placed)('seed %i: night glow stays within the cap (working and flickering lamps, fires, the shop sign)', (_seed, c, q) => {
+    const props = c.streetProps.filter((p) => inRect(q.bounds, p, 2));
+    const lamps = props.filter((p) => p.kind === 'lamp').length;
+    const barrels = props.filter((p) => p.kind === 'burnBarrel').length;
+    const rings = q.dressing.structures.filter((st) => st.kind === 'camp').length;
+    expect(lamps + barrels + rings + 1).toBeLessThanOrEqual(SLUMS.maxGlow);
+    expect(props.filter((p) => p.flicker).length).toBeGreaterThan(0);
+    for (const p of props.filter((m) => m.flicker)) expect(p.kind).toBe('lamp');
+  });
+
+  it('climate dressing is stable per seed', () => {
+    for (const [seed, , q] of placed.slice(0, 12)) {
+      const again = city(seed).districts.find((d) => d.kind === 'slums')!;
+      expect(JSON.stringify(byClimate(again))).toBe(JSON.stringify(byClimate(q)));
+    }
+  });
+
+  it.each(placed)('seed %i: slush and blown sand lie in the gutters, clear of the junctions; wrecks weather by the sea and in the desert', (_seed, c, q) => {
+    const x = byClimate(q);
+    const slush = x.snow.ground ?? [];
+    expect(slush.length).toBeGreaterThan(0);
+    for (const r of slush) {
+      expect(c.roads.some((road) => inside(road.rect, r))).toBe(true);
+      for (const j of c.intersections) expect(footprintsOverlap(shrunk(r), rectFootprint(j))).toBe(false);
+    }
+    for (const r of (x.desert.ground ?? []).filter((g) => g.kind === 'drift')) {
+      for (const b of c.buildings) expect(footprintsOverlap(shrunk(r), rectFootprint(b))).toBe(false);
+    }
+    expect(x.beach.tint?.kinds).toContain('wreck');
+    expect(x.desert.tint?.kinds).toContain('wreck');
   });
 });

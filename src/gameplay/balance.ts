@@ -332,6 +332,8 @@ export const SLUMS_STREET = {
   wearPer100m2: 1.2, // oil stains, puddles, cracks
   fadedMarks: 0.45, // share of lane markings worn away in a patch
   litterPer10m: 1.4, // along each sidewalk
+  gutterStrip: [0.45, 0.9] as [number, number], // slush (snow) or blown sand (desert) along the kerbs, width
+  driftChance: 0.5, // desert: sand banked against a building front, per street face
 };
 
 /** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */

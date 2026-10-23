@@ -65,6 +65,23 @@ const FARM_BRIGHT: Record<string, Partial<LotLook>> = {
   machineShed: { palette: [0x5a9ad0, 0x4ab08a, 0xe8c24a] },
 };
 
+/** The Slums in the desert: adobe-toned walk-ups, the paint bleached. */
+const SLUMS_ADOBE: Record<string, Partial<LotLook>> = {
+  tenement: { palette: [0xc89a6a, 0xb8865a, 0xd0a878, 0xa87a52, 0xc4a080] },
+  boarded: { palette: [0xc89a6a, 0xb8865a, 0xd0a878] },
+  cornerStore: { palette: [0xd0a878, 0xc4a080] },
+  squat: { palette: [0xb8865a, 0xa87a52] },
+  gutted: { palette: [0x8a7058, 0x7a6450] },
+};
+/** The Slums by the beach: faded pastels gone chalky in the salt air. */
+const SLUMS_PASTEL: Record<string, Partial<LotLook>> = {
+  tenement: { palette: [0xd8b0a8, 0xa8c8c0, 0xd8cca0, 0xb8a8c8, 0xc8c0b0] },
+  boarded: { palette: [0xd8b0a8, 0xa8c8c0, 0xd8cca0] },
+  cornerStore: { palette: [0xa8c8c0, 0xd8cca0] },
+  squat: { palette: [0xb8a8c8, 0xd8b0a8] },
+  gutted: { palette: [0x8a807a, 0x7a7470] },
+};
+
 export interface CityTheme {
   name: string;
   buildings: Record<Zone, number[]>;
@@ -184,7 +201,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xa08c70, 0x8f7f68, 0xb39c7c, 0x7d705e],
     },
     asphalt: 0x3a3835, sidewalk: 0xc2b49a, plaza: 0xb08f6a, quay: 0x9a8a72, seaWall: 0xcbbd9f, planter: 0xa38a6a,
-    districts: { oldtown: OLD_CITY_SANDSTONE, chinatown: CHINATOWN_FADED, harbor: HARBOR_DUSTY, farm: FARM_DUSTY },
+    districts: { oldtown: OLD_CITY_SANDSTONE, chinatown: CHINATOWN_FADED, harbor: HARBOR_DUSTY, farm: FARM_DUSTY, slums: SLUMS_ADOBE },
     grass: 0x6b7a3e, leaves: [0x5f6e34, 0x6f7a3c, 0x55642f, 0x7a8240], trunk: 0x5a4632,
     centerLine: 0xe0b84a, edgeLine: 0xe6e2d8,
   },
@@ -199,7 +216,7 @@ const THEMES: CityTheme[] = [
       industrial: [0xc4b8a4, 0xb0a894, 0xd0c4ae, 0x9c9484],
     },
     asphalt: 0x36383d, sidewalk: 0xcfc6b4, plaza: 0xc8bca6, quay: 0xa0988a, seaWall: 0xe8e2d6, planter: 0xc0a888,
-    districts: { oldtown: OLD_CITY_WHITEWASH, chinatown: CHINATOWN_BRIGHT, harbor: HARBOR_BRIGHT, farm: FARM_BRIGHT },
+    districts: { oldtown: OLD_CITY_WHITEWASH, chinatown: CHINATOWN_BRIGHT, harbor: HARBOR_BRIGHT, farm: FARM_BRIGHT, slums: SLUMS_PASTEL },
     grass: 0x5d8a3e, leaves: [0x4f8a3a, 0x5c9440, 0x467a34, 0x6a9a48], trunk: 0x8a6a48,
     centerLine: 0xe0b84a, edgeLine: 0xeeeeea,
   },

@@ -13,7 +13,7 @@ import { frontMask, streetSides } from './Harbor';
 import { clearOf } from './HarborYard';
 import { shuffle } from './place';
 import { campLayout, junkyardLayout, overpassAt, ruinLayout } from './SlumsSet';
-import { streetDressing } from './SlumsStreet';
+import { climateDressing, streetDressing } from './SlumsStreet';
 import { footprintsOverlap } from '../StreetProps';
 
 export type SlumsLot = 'tenement' | 'boarded' | 'gutted' | 'cornerStore' | 'squat';
@@ -277,5 +277,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   out.extra = { vacant, ruins };
   // The streets: junk, wrecks, lamps, graffiti, wires and laundry, worn roads (last on the stream).
   streetDressing(q, city, out, rng);
+  // What each climate adds or weathers, chosen per run.
+  out.extra = { ...out.extra, byClimate: climateDressing(q, city, rng) };
   return out;
 }

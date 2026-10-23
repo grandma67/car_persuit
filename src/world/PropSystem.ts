@@ -1249,6 +1249,8 @@ export class PropSystem {
   private pools: THREE.InstancedMesh;
   private lenses: THREE.InstancedMesh;
   private signals: number[] = []; // prop indices of traffic signals
+  private flickers: number[] = []; // prop indices of lamps with a failing tube (the Slums)
+  private warm = new THREE.Color();
   private moving = new Set<number>(); // broken props whose body is still awake
   private active = new Set<number>(); // intact props that currently have a physics body
   private debris = new Set<number>(); // broken props that currently have a physics body
@@ -1344,6 +1346,8 @@ export class PropSystem {
     let nextLens = 0;
     let nextLight = 0;
     const warm = new THREE.Color(0xffe2b0).lerp(new THREE.Color(0xc8c8c8), 1 - lampGlow); // unlit by day
+    this.warm.copy(warm);
+    this.glowing = lampGlow > 0;
 
     this.world = world;
     defs.forEach((def, i) => {
@@ -1372,6 +1376,7 @@ export class PropSystem {
         if (def.kind === 'dragonLamp') local.multiply(new THREE.Matrix4().makeScale(1.1, 11, 1.8));
         if (def.kind === 'jackOLantern') local.multiply(new THREE.Matrix4().makeScale(0.75, 3, 0.4)); // its carved face
         attach(this.bulbs, li, local, warm);
+        if (def.flicker) this.flickers.push(i);
         if (def.banner && banners) {
           // Edge-on to the kerb, so it faces along the street.
           attach(banners[def.banner], nextBanner[def.banner]++, new THREE.Matrix4().makeTranslation(0, BANNER.y, BANNER.z).multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2)));
@@ -1537,6 +1542,21 @@ export class PropSystem {
 
   get brokenCount(): number {
     return this.props.filter((p) => p.broken).length;
+  }
+
+  private glowing = false;
+
+  /** Lamps with a failing tube buzz on and off at night (one shared pattern, each on its own phase). */
+  updateLamps(time: number): void {
+    if (!this.glowing || !this.flickers.length) return;
+    for (const i of this.flickers) {
+      const p = this.props[i];
+      if (p.broken) continue;
+      const ph = (p.def.x * 0.37 + p.def.z * 0.71) % 10;
+      const on = Math.sin(time * 9 + ph) * Math.sin(time * 2.3 + ph * 1.7) > -0.35 && Math.sin(time * 31 + ph) > -0.8;
+      this.bulbs.setColorAt(p.pool!, this.color.copy(this.warm).multiplyScalar(on ? 1 : 0.12));
+    }
+    this.bulbs.instanceColor!.needsUpdate = true;
   }
 
   /** Run the traffic-light cycle. `time` in seconds. */
