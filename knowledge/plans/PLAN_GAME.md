@@ -61,8 +61,11 @@ Generation and gameplay logic are pure data (no Three.js), unit-tested with Vite
 
 - The director spawns cops hidden round corners 120–260 m away, 60% ahead on the player's route, never
   within 60 m of the destination; cops > 260 m away or flipped for 3 s are moved back into play.
-- Cops follow turn- and speed-aware road routes, switch to lead pursuit with line of sight, ram, back off
-  when pinned, and steer off-road (`NavGrid`) round obstacles. Ideas for losing them: `STAGE2_IDEAS.md`.
+- Cops follow turn- and speed-aware road routes (a turn costs the time lost braking for it: 60 m of
+  road per 90°, 220 m to turn round) aimed up to 2 s ahead of the suspect, switch to lead pursuit with
+  line of sight, ram, back off when pinned, and steer off-road (`NavGrid`, never a U-turn on the spot
+  while moving) round obstacles. Feelers reach as far as stopping takes: they follow a car ahead at its
+  pace, swerve when closing, brake when boxed in, and check behind before reversing. Ideas for losing them: `STAGE2_IDEAS.md`.
 
 ## Civilians
 

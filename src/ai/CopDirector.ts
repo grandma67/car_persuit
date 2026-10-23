@@ -210,7 +210,7 @@ export class CopDirector {
         this.canSee,
         COP_TUNING,
         this.steering?.nav ?? null,
-        this.steering ? obstacleProbe(this.world, vehicle.body, this.steering.ignore, this.ground) : null,
+        this.steering ? obstacleProbe(this.world, vehicle.body, this.steering.ignore, this.ground, COP_SPECS[type].halfExtents.x) : null,
       ),
       health: new Health({ ...DAMAGE, maxHealth: COP_SPECS[type].maxHealth ?? DAMAGE.maxHealth }),
       wreckedFor: null,

@@ -59,18 +59,32 @@ export function purePursuit(path: P[], segment: number, pos: P, lookahead: numbe
 
 /**
  * Highest speed that still lets us slow to `cornerSpeed` for every sharp bend ahead within
- * braking distance (decelerating at `decel`).
+ * braking distance (decelerating at `decel`). `byAngle`: `cornerSpeed` is for a right angle;
+ * gentler bends are taken faster, hairpins slower.
  */
-export function cornerSpeedLimit(path: P[], segment: number, pos: P, speed: number, cornerSpeed: number, decel: number): number {
+export function cornerSpeedLimit(path: P[], segment: number, pos: P, speed: number, cornerSpeed: number, decel: number, byAngle = false): number {
   const horizon = (speed * speed) / (2 * decel) + 30;
   let allowed = Infinity;
   if (segment + 1 >= path.length) return allowed;
   let along = Math.hypot(path[segment + 1].x - pos.x, path[segment + 1].z - pos.z);
   for (let k = segment + 1; k + 1 < path.length && along < horizon; k++) {
-    if (Math.abs(turnAngle(path[k - 1], path[k], path[k + 1])) > 0.5) {
-      allowed = Math.min(allowed, Math.sqrt(cornerSpeed ** 2 + 2 * decel * Math.max(0, along - 8)));
+    const turn = Math.abs(turnAngle(path[k - 1], path[k], path[k + 1]));
+    if (turn > 0.5) {
+      const v = byAngle ? cornerSpeed * Math.sqrt(THREE.MathUtils.clamp(Math.PI / 2 / turn, 0.55, 1.3)) : cornerSpeed;
+      allowed = Math.min(allowed, Math.sqrt(v ** 2 + 2 * decel * Math.max(0, along - 8)));
     }
     along += Math.hypot(path[k + 1].x - path[k].x, path[k + 1].z - path[k].z);
   }
   return allowed;
+}
+
+/** Metres from `pos` along the path to its next sharp bend (Infinity if it runs straight to the end). */
+export function distanceToBend(path: P[], segment: number, pos: P): number {
+  if (segment + 1 >= path.length) return Infinity;
+  let along = Math.hypot(path[segment + 1].x - pos.x, path[segment + 1].z - pos.z);
+  for (let k = segment + 1; k + 1 < path.length; k++) {
+    if (Math.abs(turnAngle(path[k - 1], path[k], path[k + 1])) > 0.5) return along;
+    along += Math.hypot(path[k + 1].x - path[k].x, path[k + 1].z - path[k].z);
+  }
+  return Infinity;
 }
