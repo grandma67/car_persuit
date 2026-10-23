@@ -13,7 +13,8 @@
     "t": "node scripts/test.mjs",
     "stats": "node scripts/run-ts.mjs scripts/district-stats.ts",
     "find": "node scripts/run-ts.mjs scripts/district-find.ts",
-    "budget": "node scripts/run-ts.mjs scripts/district-budget.ts"
+    "budget": "node scripts/run-ts.mjs scripts/district-budget.ts",
+    "cops": "node scripts/cop-bench.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.18.2",

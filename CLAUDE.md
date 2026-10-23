@@ -10,6 +10,7 @@ destinations, cops, civilian traffic, themed districts.
 | `knowledge/plans/PLAN_GAME.md` | the game: rules, layout, world, police, URL flags, versions | tracked |
 | `knowledge/DISTRICTS.md` | what each district is (table + descriptions) | tracked |
 | `knowledge/DISTRICTS_DEV.md` | **read before district work**: framework, rules, budgets, pitfalls, tests | tracked |
+| `knowledge/COPS_DEV.md` | **read before cop AI work**: brain, tuning and why, pitfalls, `npm run cops` metrics | tracked |
 | `knowledge/BROWSER_CHECKS.md` | **read before a browser run**: `check:browser`, evals, `window.dbg`, pitfalls | tracked |
 | `knowledge/RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
 | `knowledge/TASKS.md` | current district branch, open items | **local, never commit** |
@@ -23,7 +24,10 @@ destinations, cops, civilian traffic, themed districts.
 - Tests: `npm run t` (~20 s, prints only failures + summary, killed after 300 s, `T_LIMIT=`). Area:
   `npm run t -- src/world/districts`, `-t "name"`. Never pipe vitest through `grep`/`tail` without a limit.
 - One-off TS script: `node scripts/run-ts.mjs <file.ts> [args]` (default export gets args). Use it for
-  numbers instead of scratch tests (vitest swallows `console.log`).
+  numbers instead of scratch tests (vitest swallows `console.log`). A script in the scratchpad needs
+  absolute `src/` imports and `node_modules` symlinked next to it.
+- Cop driving: `npm run cops -- --vs main` (3★, 5★, ghost 3★ chase sims, Δ% vs a ref, ~2 min);
+  `--diag hits|uturns|recovers` says why. Never write a chase sim for this.
 - District numbers: `npm run stats -- oldtown [seeds=100]` (placement rate forced/natural, shapes, gates,
   avg lots/landmarks/props/structures, gen ms on vs off).
 - Seeds to look at: `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`
