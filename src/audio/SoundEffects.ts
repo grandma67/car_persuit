@@ -1,5 +1,6 @@
 // One-shot procedural sounds: crashes, explosions, breaking props, musical cues and UI blips.
 // Each builds its own short-lived nodes and lets them stop; nothing here runs continuously.
+import type { Honk } from '../ai/horn';
 import type { TreeKind } from '../world/Climate';
 import type { PropKind } from '../world/StreetProps';
 
@@ -431,6 +432,45 @@ export class SoundEffects {
     crunch.connect(crunchFilter).connect(crunchGain).connect(this.master);
     crunch.start(now, Math.random() * 1.5);
     crunch.stop(now + 0.5 + strength * 0.3);
+  }
+
+  /**
+   * A civilian's horn: two buzzy tones about a major third apart (a car's twin horns) through a
+   * nasal band, a deep pair for a bus or truck. 'beep' is a quick double toot, 'blast' a long lean.
+   * `pitch` ~0.9..1.1 gives each car its own horn.
+   */
+  horn(kind: Honk, volume: number, pan: number, heavy: boolean, pitch: number): void {
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const base = (heavy ? 220 : 400) * pitch;
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = pan * 0.8;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = heavy ? 900 : 1500;
+    band.Q.value = 0.8;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    band.connect(gain).connect(panner).connect(this.master);
+    // [start offset, duration] of each toot.
+    const toots = kind === 'beep' ? [[0, 0.13], [0.22, 0.16]] : [[0, heavy ? 1.1 : 0.8]];
+    const level = 0.16 * volume;
+    for (const [at, duration] of toots) {
+      const t = now + at;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(level, t + 0.012);
+      gain.gain.setValueAtTime(level, t + duration - 0.04);
+      gain.gain.linearRampToValueAtTime(0, t + duration);
+    }
+    const end = now + toots[toots.length - 1][0] + toots[toots.length - 1][1];
+    for (const ratio of [1, 1.26]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = base * ratio;
+      osc.connect(band);
+      osc.start(now);
+      osc.stop(end + 0.05);
+    }
   }
 
   /**

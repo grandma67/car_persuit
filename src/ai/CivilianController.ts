@@ -12,6 +12,7 @@ import type { Vehicle } from '../vehicles/Vehicle';
 import { cornerSpeedLimit, purePursuit, turnAngle } from './pursuit';
 import { CrashRecovery, hazardSpeedLimit, type Awareness, type Obstacle, type Self } from './awareness';
 import type { Keep } from '../world/driveSide';
+import { Horn, type Honk } from './horn';
 import { addFootprint, alongTrack, type JunctionClaim, type Junctions } from './junctions';
 import type { DistrictTrafficRules } from '../world/districts/runtime';
 
@@ -132,6 +133,7 @@ export class CivilianController {
   private stoppedAt: number | null = null; // junction where we've already stopped at the sign
   private stopWait = 0;
   private recovery: CrashRecovery;
+  private horn: Horn;
   private rear = new THREE.Vector3();
   private fwd = new THREE.Vector3();
   /** The junction control on the leg we're driving, looked up once per leg rather than every step. */
@@ -171,6 +173,8 @@ export class CivilianController {
     private districts: DistrictTrafficRules | null = null,
   ) {
     this.recovery = new CrashRecovery(keep);
+    // Patience from the body handle, not the rng: drawing from it would move every route.
+    this.horn = new Horn(0.75 + (((vehicle.body.handle * 2654435761) >>> 0) % 1000) / 2000);
     this.route = [from, to];
     // Buses and trucks cruise a little slower than cars.
     this.cruise = Math.min(rng.range(10, 13.5), vehicle.spec.maxSpeed - 3);
@@ -182,10 +186,16 @@ export class CivilianController {
     this.rebuild();
   }
 
-  /** Bump from a collision: stop and collect yourself for a moment, then carry on. */
-  hit(): void {
+  /** Bump from a collision: stop and collect yourself for a moment, then carry on. `honk`: lean on the horn too. */
+  hit(honk = true): void {
     this.panicFor = PANIC_TIME;
     this.recovery.hit();
+    if (honk) this.horn.bumped();
+  }
+
+  /** The honk due this step, if any (see horn.ts). */
+  honk(): Honk | null {
+    return this.horn.take();
   }
 
   update(dt: number, time: number): DriveInput {
@@ -199,6 +209,7 @@ export class CivilianController {
     if (backing) {
       v.indicator = null;
       this.stuckFor = Math.abs(speed) < 0.3 ? this.stuckFor + dt : 0;
+      this.horn.update(dt, false);
       return backing;
     }
 
@@ -293,6 +304,9 @@ export class CivilianController {
     if (!this.mayEnter && toStop > -1) desired = Math.min(desired, toStop < STOP_MARGIN ? 0 : Math.sqrt(2 * decel * (toStop - STOP_MARGIN)));
     const { ahead, free } = this;
     const gap = dodging ? DODGE_GAP : GAP + GAP_TIME * Math.max(0, speed);
+    // Free to go but for what's in front, and it isn't traffic queueing like us: honk at it.
+    const blocked = desired > 2 && this.panicFor <= 0 && Math.abs(speed) < 1 && !!ahead && ahead.distance < gap + 2 && !(ahead.civilian && ahead.aligned);
+    this.horn.update(dt, blocked);
     // Planned braking down to the gap (as for a stop line), tightening to a crawl in the last metres.
     if (free < Infinity) {
       const room = Math.max(0, free - gap);

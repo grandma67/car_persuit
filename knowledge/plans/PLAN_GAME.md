@@ -76,7 +76,8 @@ crashes. Checked by headless junction and real-city traffic sims.
 ## Presentation
 
 Damage (smoke, fire, explosion, scratches/dents, delta-V crash damage), skid marks and tyre smoke, body
-dive/squat, lights and indicators, sea and canal sounds, pass-by whoosh, minimap, end-screen run map
+dive/squat, lights and indicators, sea and canal sounds, pass-by whoosh, civilian horns (a blast when bumped, beeps when
+the player or a crashed car blocks them, never at a queue), minimap, end-screen run map
 (route by speed plus incidents, shareable as an image), splash scene, local leaderboard, touch controls
 (optional tilt steering), fullscreen.
 

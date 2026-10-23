@@ -612,12 +612,12 @@ export class Game {
         if (hit > 0) this.markWall(car.vehicle, hit);
         if (hit > 3) crashSound = Math.max(crashSound, this.crashLoudness(car.vehicle, hit));
         if (hit > 3) {
-          car.controller.hit();
           // Hitting a civilian draws attention — but driving up the ramp truck's deck isn't a crash.
           // Measured along the truck's own up axis, so it still holds parked on a slope.
           const onRamp =
             car.vehicle.spec.body === 'ramptruck' &&
             this.player.position.clone().sub(car.vehicle.position).dot(new THREE.Vector3(0, 1, 0).applyQuaternion(car.vehicle.quaternion)) > -0.5;
+          car.controller.hit(!onRamp);
           if (this.state === 'playing' && !onRamp && car.vehicle.position.distanceTo(this.player.position) < 8) {
             this.logIncident('civilian', `Crashed into a ${car.vehicle.spec.name.toLowerCase()}`);
             this.raiseStars(this.wanted.civilianHit());
@@ -1103,9 +1103,28 @@ export class Game {
     if (grid && !this.onGrid) this.audio.rattle(p.speed);
     this.onGrid = grid;
     if (this.state === 'playing') this.whooshes();
+    this.honks();
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
     const w = waterNearby(p.position.x, p.position.z, this.city.islandSize / 2, this.city.terrain.canals);
     this.audio.setWater(dt, { sea: w.sea, surge: swellAtWall(w.wallX, w.wallZ, this.sea.elapsed), canal: w.canal });
+  }
+
+  /** Civilians leaning on the horn (see horn.ts): fading with distance, panned to where they are. */
+  private honks(): void {
+    const p = this.player.position;
+    const right = this.player.forward(new THREE.Vector3()).cross(new THREE.Vector3(0, 1, 0)); // forward × up
+    for (const car of this.traffic.cars) {
+      const honk = car.controller.honk();
+      if (!honk || this.state !== 'playing') continue;
+      const rx = car.vehicle.position.x - p.x;
+      const rz = car.vehicle.position.z - p.z;
+      const near = THREE.MathUtils.clamp(1 - Math.hypot(rx, rz) / 90, 0, 1);
+      if (near <= 0) continue;
+      const pan = THREE.MathUtils.clamp((rx * right.x + rz * right.z) / 15, -1, 1);
+      // Each car its own horn pitch, from its body handle: buses and trucks a deep one.
+      const pitch = 0.9 + (((car.vehicle.body.handle * 40503) >>> 0) % 100) / 500;
+      this.audio.horn(honk, near * near, pan, car.vehicle.spec.mass > 3000, pitch);
+    }
   }
 
   /** A whoosh for each car the player flashes past close (or that flashes past them). */

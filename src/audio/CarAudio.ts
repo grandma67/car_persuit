@@ -5,6 +5,7 @@ import { MenuMusic, WIN_SONG } from './MenuMusic';
 import { SeaAudio, type WaterSound } from './SeaAudio';
 import { SoundEffects } from './SoundEffects';
 import { gearFor, GEAR_TOP_SPEEDS } from '../vehicles/gears';
+import type { Honk } from '../ai/horn';
 import type { TreeKind } from '../world/Climate';
 import type { PropKind } from '../world/StreetProps';
 
@@ -298,6 +299,11 @@ export class CarAudio {
   /** Wanted level went up to `stars`. */
   wantedUp(stars: number): void {
     this.sfx?.wantedUp(stars);
+  }
+
+  /** A civilian's horn. volume 0..1 (distance), pan -1 left .. 1 right. */
+  horn(kind: Honk, volume: number, pan: number, heavy: boolean, pitch: number): void {
+    if (!this.engineOff && volume > 0.01) this.sfx?.horn(kind, volume, pan, heavy, pitch);
   }
 
   /** Car explosion. volume 0..1 (distance). */
