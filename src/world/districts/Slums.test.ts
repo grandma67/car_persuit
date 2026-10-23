@@ -3,12 +3,13 @@ import { DISTRICTS } from '../../gameplay/balance';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 import { generateCity, type CityData, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
-import { footprintsOverlap, rectFootprint } from '../StreetProps';
+import { footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
 import type { District } from './District';
 import { isJunctionControl } from './apply';
 import { DISTRICT_DEFS } from './index';
 import { rollDistricts } from './place';
 import { SLUMS_DEF, roleBlocks, ruinsOf, vacantLots } from './Slums';
+import type { Decal } from './SlumsStreet';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const ALONE = { slums: true, oldtown: false, chinatown: false, harbor: false, farm: false };
@@ -168,5 +169,74 @@ describe('Slums set pieces', () => {
     for (const s of q.dressing.structures.filter((st) => st.kind === 'camp')) {
       for (const fp of s.footprints) for (const d of q.dressing.drivable) expect(footprintsOverlap(fp, shrunk(d))).toBe(false);
     }
+  });
+});
+
+/** A footprint's four corners. */
+const corners = (f: Footprint) => {
+  const c = Math.cos(f.yaw), s = Math.sin(f.yaw);
+  return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => ({ x: f.x + c * u * f.hx + s * v * f.hz, z: f.z - s * u * f.hx + c * v * f.hz }));
+};
+
+describe('Slums streets', () => {
+  const CLUTTER = ['trashBags', 'shoppingCart', 'tyres', 'mattress', 'couch', 'burnBarrel', 'pallet', 'crates', 'drums'];
+
+  it.each(placed)('seed %i: kerb clutter keeps off the centre line; props off solids and each other', (_seed, c, q) => {
+    const mine = q.dressing.props;
+    for (const p of mine) expect(q.dressing.solids.filter((f) => footprintsOverlap(propFootprint(p), f))).toEqual([]);
+    for (let i = 0; i < mine.length; i++) for (let j = i + 1; j < mine.length; j++) expect(footprintsOverlap(propFootprint(mine[i]), propFootprint(mine[j]))).toBe(false);
+    for (const p of mine.filter((m) => CLUTTER.includes(m.kind))) {
+      const road = c.roads.find((r) => footprintsOverlap(propFootprint(p, c.config.sidewalk), rectFootprint(r.rect)));
+      if (!road) continue;
+      const alongX = road.rect.w > road.rect.d;
+      const lateral = alongX ? Math.abs(p.z - road.rect.z) : Math.abs(p.x - road.rect.x);
+      const fp = propFootprint(p);
+      expect(lateral - Math.hypot(fp.hx, fp.hz)).toBeGreaterThanOrEqual(DISTRICTS.clutterMinOffset - 1e-6);
+    }
+  });
+
+  it.each(placed)('seed %i: wrecks are never in a lane: off junctions, at most a kerb lane deep into a road', (_seed, c, q) => {
+    const wrecks = q.dressing.props.filter((p) => p.kind === 'wreck');
+    expect(wrecks.length).toBeGreaterThan(0);
+    expect(wrecks.length).toBeLessThanOrEqual(40);
+    for (const w of wrecks) {
+      const fp = propFootprint(w);
+      for (const j of c.intersections) expect(footprintsOverlap(fp, rectFootprint(j))).toBe(false);
+      for (const r of c.roads.map((road) => road.rect)) {
+        const alongX = r.w > r.d;
+        for (const p of corners(fp)) {
+          if (!inRect(r, p)) continue;
+          // How far in from the road's kerb edge this corner reaches.
+          const depth = alongX ? r.d / 2 - Math.abs(p.z - r.z) : r.w / 2 - Math.abs(p.x - r.x);
+          expect(depth).toBeLessThanOrEqual(1.2);
+        }
+      }
+    }
+  });
+
+  it.each(placed)('seed %i: graffiti stands 2–3 cm proud of its wall, within the face, capped', (_seed, _c, q) => {
+    const decals = (q.dressing.extra?.decals ?? []) as Decal[];
+    expect(decals.length).toBeGreaterThan(0);
+    expect(decals.length).toBeLessThanOrEqual(260);
+    for (const d of decals) {
+      const { wall } = d;
+      const proud = (d.x - wall.x) * wall.nx + (d.z - wall.z) * wall.nz;
+      expect(proud).toBeGreaterThanOrEqual(0.02 - 1e-9);
+      expect(proud).toBeLessThanOrEqual(0.03 + 1e-9);
+      const u = (d.x - wall.x) * wall.nz - (d.z - wall.z) * wall.nx;
+      expect(Math.abs(u) + d.w / 2).toBeLessThanOrEqual(wall.half + 1e-6);
+      expect(d.y - d.h / 2).toBeGreaterThanOrEqual(wall.y0 - 1e-6);
+      expect(d.y + d.h / 2).toBeLessThanOrEqual(wall.y1 + 1e-6);
+      expect(d.yaw).toBeCloseTo(Math.atan2(wall.nx, wall.nz), 6);
+    }
+  });
+
+  it.each(placed)('seed %i: lamps are mostly dead, one working by each junction; no bench or tree left', (_seed, c, q) => {
+    const props = c.streetProps.filter((p) => inRect(q.bounds, p));
+    const dead = props.filter((p) => p.kind === 'brokenLamp').length, working = props.filter((p) => p.kind === 'lamp').length;
+    expect(dead).toBeGreaterThan(working);
+    expect(working).toBeGreaterThan(0);
+    expect(props.filter((p) => p.kind === 'bench')).toEqual([]);
+    expect(c.trees.filter((t) => inRect(q.bounds, t))).toEqual([]);
   });
 });

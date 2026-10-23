@@ -228,6 +228,7 @@ export class Game {
       theme, climate, lampGlow: time.lampGlow, night, ground: this.ground, hour0: startHour(seed, time.name),
       bell: (strikes, at) => this.audio.bell(strikes, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.position) / 450, 0, 1)),
       firework: (at, colour) => this.effects.firework(at, colour),
+      steam: (at) => this.effects.steamPuff(at),
       movers: () => [this.player, ...this.director.cops.map((c) => c.vehicle)],
     });
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));

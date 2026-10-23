@@ -28,6 +28,8 @@ export interface DistrictRenderContext {
   movers?: () => { position: THREE.Vector3 }[];
   /** A firework bursts at `at` in one of a few colours (Chinatown's festival nights). */
   firework?: (at: THREE.Vector3, colour: number) => void;
+  /** A puff of steam at `at` (the Slums' manholes). */
+  steam?: (at: THREE.Vector3) => void;
 }
 
 /** A district's meshes, with whatever moves each frame. */

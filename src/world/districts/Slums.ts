@@ -7,12 +7,13 @@ import { SLUMS } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
 import { propFootprint, type StreetProp } from '../StreetProps';
-import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook } from './District';
+import { emptyDressing, type TrimKind, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook } from './District';
 import { isJunctionControl } from './apply';
 import { frontMask, streetSides } from './Harbor';
 import { clearOf } from './HarborYard';
 import { shuffle } from './place';
 import { campLayout, junkyardLayout, overpassAt, ruinLayout } from './SlumsSet';
+import { streetDressing } from './SlumsStreet';
 import { footprintsOverlap } from '../StreetProps';
 
 export type SlumsLot = 'tenement' | 'boarded' | 'gutted' | 'cornerStore' | 'squat';
@@ -101,19 +102,20 @@ function lots(q: District, buildings: Building[], city: CityData, rng: Rng): voi
 }
 
 /** Street furniture that doesn't belong (junction controls, hydrants and bus stops stay). */
-const DROP_SIGNS = new Set(['noSmoking', 'children', 'pedestrian']);
+const DROP_SIGNS = new Set(['noSmoking', 'children', 'pedestrian', 'noParking']);
 const drop = (p: StreetProp) => p.kind === 'bench' || p.kind === 'umbrella' || (p.kind === 'sign' && DROP_SIGNS.has(p.variant ?? ''));
 
-/** Grimy brick walk-ups (stand-in facades until the Slums' own). */
+/** Grimy brick walk-ups over shut shops; burnt-out shells open to the sky; squats under a tarp. */
 function SLUMS_LOOKS(): Record<SlumsLot, LotLook> {
   const brick = [0x8a5a48, 0x7a4e40, 0x6e5a50, 0x8a6a58, 0x5e4a42];
-  const soot = [0x4a423e, 0x3e3836, 0x524a44];
+  const soot = [0x6a5a52, 0x5a4e48, 0x625650];
+  const walkUp: TrimKind[] = ['brokenParapet', 'fireEscape', 'roofJunk'];
   return {
-    tenement: { facade: 'brick', roof: 'flat', palette: brick },
-    boarded: { facade: 'brick', ground: 'storefront', roof: 'flat', palette: brick },
-    gutted: { facade: 'brick', roof: 'flat', palette: soot },
-    cornerStore: { facade: 'brick', ground: 'storefront', roof: 'flat', palette: brick },
-    squat: { facade: 'brick', roof: 'flat', palette: brick },
+    tenement: { facade: 'tenement', ground: 'boarded', roof: 'flat', palette: brick, trims: walkUp },
+    boarded: { facade: 'tenement', ground: 'boarded', roof: 'flat', palette: brick, trims: ['brokenParapet', 'roofJunk'] },
+    gutted: { facade: 'charred', roof: 'open', palette: soot },
+    cornerStore: { facade: 'tenement', ground: 'boarded', roof: 'flat', palette: brick, trims: ['brokenParapet', 'roofJunk'] },
+    squat: { facade: 'tenement', roof: 'flat', palette: brick, trims: ['brokenParapet', 'tarp'] },
   };
 }
 
@@ -134,7 +136,7 @@ export const SLUMS_DEF: DistrictDef = {
   roles,
   lots,
   drop,
-  swap: {},
+  swap: { lamp: 'brokenLamp' },
   keepZebras: false,
   traffic: { density: SLUMS.density, heavy: false, weights: { Pickup: SLUMS.pickupWeight, Van: SLUMS.vanWeight } },
   copSpawnSkip: SLUMS.copSpawnSkip,
@@ -272,5 +274,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const bricks = clearOf(extra, [...out.solids, ...controls], [...kept, ...city.streetProps.filter((p) => inRect(q.bounds, p, 2))].map((p) => propFootprint(p, 0.1)));
   out.props = [...kept, ...bricks];
   out.extra = { vacant, ruins };
+  // The streets: junk, wrecks, lamps, graffiti, wires and laundry, worn roads (last on the stream).
+  streetDressing(q, city, out, rng);
   return out;
 }

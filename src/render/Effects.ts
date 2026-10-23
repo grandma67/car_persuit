@@ -126,6 +126,11 @@ export class Effects {
     }
   }
 
+  /** A puff of steam rising from `at` (a manhole). */
+  steamPuff(at: THREE.Vector3): void {
+    this.steam.emit(at, this.tmpVel.set(0, 0, 0), 0);
+  }
+
   /** A firework burst at `at`: a sphere of sparks in one of three colours (festival nights in Chinatown). */
   firework(at: THREE.Vector3, colour: number): void {
     const f = this.fireworks[colour % this.fireworks.length];
@@ -148,6 +153,15 @@ export class Effects {
       case 'barrels': case 'pillory': case 'signpost': return burst(this.chips, 18);
       case 'pot': case 'amphora': return burst(this.shards, 16);
       case 'rubble': burst(this.steam, 8); return burst(this.chips, 16); // brick dust
+      case 'dumpster': burst(this.paper, 40); burst(this.chips, 12); return burst(this.sparks, 10); // the lid flies, trash bursts
+      case 'trashBags': burst(this.paper, 36); return burst(this.chips, 6); // litter everywhere
+      case 'shoppingCart': case 'brokenLamp': return burst(this.sparks, 8);
+      case 'mattress': burst(this.cloth, 8); return burst(this.straw, 14);
+      case 'couch': burst(this.cloth, 10); burst(this.straw, 12); return burst(this.chips, 10);
+      case 'tyres': return burst(this.steam, 6); // a puff of dust (the tyres scatter and roll)
+      case 'burnBarrel': burst(this.fire, 14); return burst(this.sparks, 24); // embers
+      case 'payphone': burst(this.shards, 14); return burst(this.sparks, 10);
+      case 'wreck': burst(this.shards, 12); burst(this.steam, 10); return burst(this.sparks, 18);
       case 'oilLamp': case 'dragonLamp': return burst(this.fire, 10);
       case 'produceStall': burst(this.fruit, 30); burst(this.cloth, 8); return burst(this.chips, 12);
       case 'lanternStand': return burst(this.paper, 30);

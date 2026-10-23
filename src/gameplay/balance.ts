@@ -315,6 +315,25 @@ export const SLUMS_SET = {
   campDensity: 0.65, // share of the camp's grid cells with a shelter
 };
 
+/** The Slums' streets: clutter, wrecks, graffiti, wires and laundry, road wear (world/districts/SlumsStreet.ts), metres. */
+export const SLUMS_STREET = {
+  wreckOnKerb: 0.7, // how far a kerb wreck stands up on the kerb (less into the lane than a parked van)
+  kerbWrecks: [6, 14] as [number, number],
+  lotWrecks: [1, 3] as [number, number], // per rubble lot
+  dumpsterChance: 0.4, // per street end and side, at the alley mouths
+  tornFence: 0.3, // share of a rubble lot's chain-link panels torn
+  payphones: [1, 2] as [number, number], // outside the corner store
+  heavenSpot: 0.18, // share of walk-ups with a tag up by the roof
+  poleSpacing: 24,
+  poleHeight: 8.6,
+  wireSag: 0.9,
+  laundryLines: [2, 6] as [number, number],
+  potholesPer100m2: 0.5, // on the district's roads
+  wearPer100m2: 1.2, // oil stains, puddles, cracks
+  fadedMarks: 0.45, // share of lane markings worn away in a patch
+  litterPer10m: 1.4, // along each sidewalk
+};
+
 /** The Harbor's quay: bollards, gantry cranes and the moored ship (world/districts/HarborQuay.ts), metres. */
 export const HARBOR_QUAY = {
   bollardSpacing: 15,

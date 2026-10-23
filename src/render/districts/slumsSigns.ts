@@ -1,4 +1,5 @@
-// The Slums' lettering: the ruins' KEEP OUT hoardings and the junkyard's BEWARE OF DOG sign. One
+// The Slums' lettering: the ruins' KEEP OUT hoardings, the junkyard's BEWARE OF DOG sign and the
+// corner store's OPEN 24 band. One
 // canvas atlas drawn at load; plates carry white vertex colours and use the facade walls' material
 // settings (vertex colours and four maps), so they add no shader program.
 import * as THREE from 'three';
@@ -7,12 +8,13 @@ const W = 512;
 const H = 512;
 const SANS = '"Helvetica Neue", Arial, sans-serif';
 
-export type SlumsCell = 'keepOut' | 'dog';
+export type SlumsCell = 'keepOut' | 'dog' | 'open24';
 
 /** Each cell's rectangle in atlas pixels (top-left origin). */
 const CELLS: Record<SlumsCell, { x: number; y: number; w: number; h: number }> = {
   keepOut: { x: 0, y: 0, w: 512, h: 256 },
   dog: { x: 0, y: 256, w: 512, h: 192 },
+  open24: { x: 0, y: 448, w: 512, h: 64 },
 };
 
 /** Seeded scatter for the grime, so every load draws the same boards. */
@@ -69,6 +71,18 @@ function draw(g: CanvasRenderingContext2D): void {
     const x = d.x + 12 + rnd() * (d.w - 24);
     g.fillRect(x, d.y + 12, 2 + rnd() * 4, 6 + rnd() * 40); // rust runs from the top
   }
+  // OPEN 24: red neon on a dark band (the plate's glow lights it at night).
+  const o = CELLS.open24;
+  g.fillStyle = '#16181a';
+  g.fillRect(o.x, o.y, o.w, o.h);
+  g.font = `bold 46px ${SANS}`;
+  g.shadowColor = '#ff3a2a';
+  g.shadowBlur = 14;
+  g.fillStyle = '#ff5a48';
+  g.fillText('OPEN 24 HRS', o.x + o.w * 0.4, o.y + o.h / 2 + 2, o.w * 0.7);
+  g.shadowBlur = 0;
+  g.fillStyle = '#e8c21a';
+  g.fillText('★', o.x + o.w * 0.86, o.y + o.h / 2 + 2);
 }
 
 let atlas: THREE.Texture | null = null;

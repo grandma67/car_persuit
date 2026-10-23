@@ -18,7 +18,9 @@ export type PropKind =
   | 'mailbox' | 'woodLamp' | 'milkChurn' | 'feedSacks' | 'wheelbarrow' | 'waterTrough' | 'fruitBin' | 'pumpkin' | 'farmStand' | 'scarecrow'
   | 'toolRack' | 'parkedTractor' | 'hayRake' | 'plough' | 'seedDrill' | 'baler' | 'hayWagon' | 'jackOLantern' | 'roundBale'
   // Slums
-  | 'rubble';
+  | 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp' | 'wreck';
+/** A wrecked car's state: burnt out, up on bricks, stripped (doors open), on its roof, or crushed flat. */
+export type WreckKind = 'burnt' | 'bricks' | 'stripped' | 'flipped' | 'crushed';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop';
 
 export interface StreetProp {
@@ -34,8 +36,9 @@ export interface StreetProp {
   tree?: TreeKind; // trees
   scale?: number; // trees: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
-  style?: 'old' | 'chainlink' | 'rail' | 'pear'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
+  style?: 'old' | 'chainlink' | 'rail' | 'pear' | 'torn'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
+  wreck?: WreckKind; // wrecks
 }
 
 export interface PropSpec {
@@ -119,7 +122,23 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   roundBale: { hx: 0.75, hz: 0.8, height: 1.6, mass: 350, breakSpeed: 3, slowdown: 0.1 },
   // Slums: a pile of loose bricks off a ruin's heap.
   rubble: { hx: 0.45, hz: 0.4, height: 0.5, mass: 80, breakSpeed: 1.2, slowdown: 0.03 },
+  // Kerb junk: a dumpster takes a real hit; bags, carts and the mattress barely slow a car (small
+  // colliders on the mattress and couch, so debris doesn't wall a lane off).
+  dumpster: { hx: 0.95, hz: 0.75, height: 1.4, mass: 600, breakSpeed: 5, slowdown: 0.14 },
+  trashBags: { hx: 0.5, hz: 0.4, height: 0.6, mass: 15, breakSpeed: 0.8, slowdown: 0.01 },
+  shoppingCart: { hx: 0.3, hz: 0.48, height: 1.05, mass: 18, breakSpeed: 0.8, slowdown: 0.01 },
+  mattress: { hx: 0.5, hz: 0.8, height: 0.25, mass: 20, breakSpeed: 0.8, slowdown: 0.02 },
+  couch: { hx: 0.7, hz: 0.3, height: 0.8, mass: 45, breakSpeed: 1.5, slowdown: 0.03 },
+  tyres: { hx: 0.34, hz: 0.34, height: 0.9, mass: 40, breakSpeed: 1.2, slowdown: 0.02 },
+  burnBarrel: { hx: 0.3, hz: 0.3, height: 0.9, mass: 45, breakSpeed: 1.2, slowdown: 0.02 },
+  payphone: { hx: 0.3, hz: 0.25, height: 2.2, mass: 90, breakSpeed: 3, slowdown: 0.05 },
+  brokenLamp: { hx: 0.15, hz: 0.15, height: 6.2, mass: 120, breakSpeed: 4, slowdown: 0.08 },
+  // A wreck at the kerb: heavy, a real hit to shove (on bricks or on its roof it doesn't move at all).
+  wreck: { hx: 0.92, hz: 2.15, height: 1.4, mass: 1100, breakSpeed: 8, slowdown: 0.3 },
 };
+
+/** Wrecks that don't budge: up on bricks or on their roof. */
+export const SOLID_WRECKS = new Set<WreckKind>(['bricks', 'flipped']);
 
 /** Per tree kind: trunk half-width at scale 1, how tall the collider is, and how sturdy. */
 const TREE_SPECS: Record<TreeKind, Partial<PropSpec>> = {
@@ -133,6 +152,10 @@ const TREE_SPECS: Record<TreeKind, Partial<PropSpec>> = {
 /** The spec for this particular prop: trees vary by kind and size. */
 export function propSpec(p: StreetProp): PropSpec {
   const base = PROP_SPECS[p.kind];
+  if (p.kind === 'wreck') {
+    if (SOLID_WRECKS.has(p.wreck ?? 'burnt')) return { ...base, breakSpeed: Infinity };
+    return p.wreck === 'crushed' ? { ...base, height: 0.8 } : base;
+  }
   if (p.kind !== 'tree') return base;
   const s = p.scale ?? 1;
   const t = { ...base, ...TREE_SPECS[p.tree ?? 'round'] };

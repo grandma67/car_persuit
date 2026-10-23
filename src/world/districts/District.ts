@@ -19,8 +19,9 @@ export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'c
 
 // --- Building looks (rendered by CityBuilder's addBuilding through the facade pipeline) ---
 
-export type RoofShape = 'flat' | 'gable' | 'steepGable' | 'hip' | 'gambrel' | 'sawtooth' | 'barrel' | 'monopitch' | 'pagoda';
-export type TrimKind = 'jetty' | 'colonnade' | 'balcony' | 'loadingDock' | 'porch' | 'chimney' | 'hoist' | 'clockTower' | 'radarMast' | 'stilts';
+export type RoofShape = 'flat' | 'gable' | 'steepGable' | 'hip' | 'gambrel' | 'sawtooth' | 'barrel' | 'monopitch' | 'pagoda' | 'open';
+export type TrimKind = 'jetty' | 'colonnade' | 'balcony' | 'loadingDock' | 'porch' | 'chimney' | 'hoist' | 'clockTower' | 'radarMast' | 'stilts'
+  | 'fireEscape' | 'brokenParapet' | 'roofJunk' | 'tarp';
 
 /** How a lot's building looks: facade per floor band, roof, palette and merged trims. */
 export interface LotLook {

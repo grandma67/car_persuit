@@ -487,6 +487,9 @@ const CAPS: Record<FacadeStyle, { over: number; up: number; down: number; stone:
   panel: { over: 0.08, up: 0.25, down: 0.15, stone: false }, // a low cap
   boards: { over: 0.2, up: 0.25, down: 0.25, stone: false },
   barnDoors: { over: 0.2, up: 0.25, down: 0.25, stone: false },
+  tenement: { over: 0.2, up: 0.25, down: 0.4, stone: true }, // a low coping (the broken parapet stands on it)
+  boarded: { over: 0.15, up: 0.5, down: 0.25, stone: false },
+  charred: { over: 0.1, up: 0.2, down: 0.2, stone: false },
 };
 const WHITE = new THREE.Color(0xffffff);
 /** Building.street / Building.open bits for the wall faces in order: +Z, -Z, +X, -X. */
@@ -612,7 +615,7 @@ function addBuilding(
     const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2, yc = y1 - 0.02;
     roofs.quad([[x0, yc, z0], [x1, yc, z0], [x1, yc, z1], [x0, yc, z1]], [0, -1, 0], inside);
   }
-  addTrims(trims, b, { y0, floor, jetty, jetFloor, roofB, roof: look.roof, tile: roofColor }, roofs, wallColor, snowy);
+  addTrims(trims, b, { y0, floor, jetty, jetFloor, roofB, roof: look.roof, tile: roofColor, capUp: CAPS[look.facade].up }, roofs, wallColor, snowy);
 }
 
 const grow = (r: Rect, m: number): Rect => ({ x: r.x, z: r.z, w: r.w + m * 2, d: r.d + m * 2 });
@@ -667,6 +670,62 @@ function addRoof(look: LotLook, b: Building, f: RoofFrame, roofs: GeometryBuilde
       return;
     case 'flat':
       addFlatRoof(look.facade, b, f, roofs, rng, wallColor, roofColor, snowy);
+      return;
+    case 'open':
+      addOpenShell(b, f, roofs, wallColor, snowy);
+  }
+}
+
+/** A deterministic 0…1 per building and index, for trims that mustn't draw from the visual stream. */
+const hashOf = (b: Building, i: number) => {
+  const v = Math.sin(b.variant * 9301.7 + i * 49.297) * 43758.5453;
+  return v - Math.floor(v);
+};
+
+/** A double-sided sheet through four corners (stairs, tarps, dishes): two quads facing apart. */
+function sheet(roofs: GeometryBuilder, pts: number[][], color: THREE.Color): void {
+  const [p0, p1, , p3] = pts;
+  const a = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+  const c = [p3[0] - p0[0], p3[1] - p0[1], p3[2] - p0[2]];
+  const n = [a[1] * c[2] - a[2] * c[1], a[2] * c[0] - a[0] * c[2], a[0] * c[1] - a[1] * c[0]];
+  const k = Math.hypot(n[0], n[1], n[2]) || 1;
+  roofs.quad(pts, n.map((v) => v / k), color);
+  roofs.quad([...pts].reverse(), n.map((v) => -v / k), color.clone().multiplyScalar(0.8));
+}
+
+/**
+ * A burnt-out shell with no roof: a charred coping round the wall tops, the walls' blackened
+ * inner faces down to the top floor's rubble-strewn floor, and what's left of the joists across.
+ */
+function addOpenShell(b: Building, f: RoofFrame, roofs: GeometryBuilder, wallColor: THREE.Color, snowy: boolean): void {
+  const floor = b.h / f.floors;
+  const yf = f.y1 - Math.min(floor, b.h - 0.5);
+  const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2;
+  const soot = wallColor.clone().multiplyScalar(0.25);
+  const t = 0.35;
+  const coping = wallColor.clone().multiplyScalar(0.6);
+  const top = snowy ? new THREE.Color(SNOW) : coping;
+  roofs.box({ x: b.x, z: z1 - t / 2, w: b.w, d: t }, f.y1 - 0.1, 0.3, coping, null, top);
+  roofs.box({ x: b.x, z: z0 + t / 2, w: b.w, d: t }, f.y1 - 0.1, 0.3, coping, null, top);
+  roofs.box({ x: x1 - t / 2, z: b.z, w: t, d: b.d - 2 * t }, f.y1 - 0.1, 0.3, coping, null, top);
+  roofs.box({ x: x0 + t / 2, z: b.z, w: t, d: b.d - 2 * t }, f.y1 - 0.1, 0.3, coping, null, top);
+  // The inner faces, inside the coping, down to the floor.
+  const ix0 = x0 + t, ix1 = x1 - t, iz0 = z0 + t, iz1 = z1 - t, ya = yf, yb = f.y1 - 0.1;
+  roofs.quad([[ix1, ya, iz1], [ix0, ya, iz1], [ix0, yb, iz1], [ix1, yb, iz1]], [0, 0, -1], soot);
+  roofs.quad([[ix0, ya, iz0], [ix1, ya, iz0], [ix1, yb, iz0], [ix0, yb, iz0]], [0, 0, 1], soot);
+  roofs.quad([[ix1, ya, iz0], [ix1, ya, iz1], [ix1, yb, iz1], [ix1, yb, iz0]], [-1, 0, 0], soot);
+  roofs.quad([[ix0, ya, iz1], [ix0, ya, iz0], [ix0, yb, iz0], [ix0, yb, iz1]], [1, 0, 0], soot);
+  roofs.quad([[ix0, ya, iz1], [ix1, ya, iz1], [ix1, ya, iz0], [ix0, ya, iz0]], [0, 1, 0], snowy ? new THREE.Color(0xd8dce0) : new THREE.Color(0x2e2a26));
+  // Charred joists across the short way, some burnt through.
+  const char = new THREE.Color(0x1e1610);
+  const alongX = b.w <= b.d; // joists span the short side
+  const span = alongX ? b.w - 2 * t : b.d - 2 * t;
+  const run = alongX ? b.d - 2 * t : b.w - 2 * t;
+  for (let k = 0, u = -run / 2 + 0.8; u < run / 2 - 0.4; u += 1.3, k++) {
+    if (hashOf(b, k) < 0.35) continue;
+    const len = hashOf(b, k + 50) < 0.3 ? span * (0.3 + hashOf(b, k + 90) * 0.4) : span; // a broken one hangs short
+    const off = (span - len) / 2 * (hashOf(b, k + 70) < 0.5 ? -1 : 1);
+    roofs.box(alongX ? { x: b.x + off, z: b.z + u, w: len, d: 0.16 } : { x: b.x + u, z: b.z + off, w: 0.16, d: len }, f.y1 - 0.75, 0.26, char, null, char);
   }
 }
 
@@ -751,6 +810,7 @@ interface TrimFrame {
   roofB: Rect; // the footprint the roof covers
   roof: LotLook['roof'];
   tile: THREE.Color;
+  capUp: number; // the roof cap's height above the wall tops
 }
 
 /**
@@ -979,6 +1039,110 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
         const tip = at(end * (A + 1.3), 0);
         roofs.box({ ...tip, w: 0.03, d: 0.03 }, yb - 2.2, 2.2, new THREE.Color(0xb8a070), null, oak);
         roofs.box({ ...tip, w: 0.12, d: 0.12 }, yb - 2.35, 0.15, dark, null, dark);
+        break;
+      }
+      case 'fireEscape': {
+        // Zigzag stairs and landings up a street face from the first floor, a drop ladder under them.
+        const bits: [number, number, number][] = [[1, 0, 1], [2, 0, -1], [4, 1, 0], [8, -1, 0]];
+        const side = bits.find(([bit, nx]) => ((b.street ?? 1) & bit) && (nx ? b.d : b.w) >= 7) ?? bits.find(([, nx]) => (nx ? b.d : b.w) >= 7);
+        const floors = Math.round(b.h / f.floor);
+        if (!side || floors < 3) break;
+        const [, nx, nz] = side;
+        const len = nx ? b.d : b.w;
+        const half = nx ? b.w / 2 : b.d / 2;
+        const tx = Math.abs(nz), tz = Math.abs(nx);
+        const W = 3.2, D = 0.95;
+        const uc = (hashOf(b, 1) < 0.5 ? -1 : 1) * (len / 2 - W / 2 - 1.2);
+        const at = (u: number, v: number, y: number) => [b.x + nx * (half + v) + tx * (uc + u), y, b.z + nz * (half + v) + tz * (uc + u)];
+        const box = (u: number, v: number, y: number, lu: number, lv: number, h: number) => {
+          const c = at(u, v, 0);
+          roofs.box({ x: c[0], z: c[2], w: tx ? lu : lv, d: tx ? lv : lu }, y, h, iron, null, iron);
+        };
+        const iron = new THREE.Color(0x2a2826);
+        for (let k = 1; k < floors; k++) {
+          const y = f.y0 + k * f.floor - 0.1;
+          box(0, D / 2, y, W, D, 0.07); // the landing
+          box(0, D - 0.03, y + 1.0, W, 0.05, 0.05); // its rail
+          for (const e of [-1, 1]) box(e * (W / 2 - 0.03), D / 2, y + 1.0, 0.05, D, 0.05);
+          for (let j = 0; j <= 6; j++) box(-W / 2 + (W * j) / 6, D - 0.03, y, 0.04, 0.04, 1.0);
+          if (k < floors - 1) {
+            // The flight up to the next landing, alternating ends.
+            const dir = k % 2 ? 1 : -1;
+            const u0 = -dir * (W / 2 - 0.2), u1 = dir * (W / 2 - 0.6), y1 = y + f.floor;
+            sheet(roofs, [at(u0, 0.35, y + 0.07), at(u1, 0.35, y1), at(u1, D - 0.1, y1), at(u0, D - 0.1, y + 0.07)], iron);
+            sheet(roofs, [at(u0, D - 0.08, y + 0.95), at(u1, D - 0.08, y1 + 0.95), at(u1, D - 0.08, y1 + 1.0), at(u0, D - 0.08, y + 1.0)], iron); // the handrail
+          }
+        }
+        // The drop ladder, pulled up under the first landing.
+        const yl = f.y0 + f.floor - 0.1;
+        for (const e of [-0.22, 0.22]) box(W / 2 - 0.5 + e, D - 0.15, yl - 1.6, 0.04, 0.04, 1.6);
+        for (let y = yl - 1.5; y < yl; y += 0.3) box(W / 2 - 0.5, D - 0.15, y, 0.44, 0.03, 0.03);
+        break;
+      }
+      case 'brokenParapet': {
+        // A brick parapet round the roof, crumbled: stretches of different heights, gaps where it fell.
+        const brick = wallColor.clone().multiplyScalar(0.85);
+        const cap = snowy ? new THREE.Color(SNOW) : brick.clone().multiplyScalar(0.9);
+        const r = f.roofB, yb = y1 + f.capUp, t = 0.3;
+        const edges: [number, number, number, number, boolean][] = [
+          [r.x, r.z + r.d / 2 - t / 2, r.w, t, true], [r.x, r.z - r.d / 2 + t / 2, r.w, t, true],
+          [r.x + r.w / 2 - t / 2, r.z, r.d - 2 * t, t, false], [r.x - r.w / 2 + t / 2, r.z, r.d - 2 * t, t, false],
+        ];
+        edges.forEach(([cx, cz, len, th, alongX], e) => {
+          const n = Math.max(1, Math.round(len / 1.3));
+          for (let k = 0; k < n; k++) {
+            const h = hashOf(b, e * 40 + k);
+            if (h < 0.18) continue; // fallen
+            const u = -len / 2 + (len * (k + 0.5)) / n;
+            const ht = 0.35 + 0.75 * hashOf(b, e * 40 + k + 20);
+            roofs.box(alongX ? { x: cx + u, z: cz, w: len / n + 0.01, d: th } : { x: cx, z: cz + u, w: th, d: len / n + 0.01 }, yb, ht, brick, null, cap);
+          }
+        });
+        break;
+      }
+      case 'roofJunk': {
+        // On some roofs: a timber water tank on a steel stand, and a satellite dish or two.
+        if (hashOf(b, 3) > 0.65) break;
+        const r = f.roofB, yb = y1 + f.capUp;
+        const tank = new THREE.Color(0x6a5440), steel = new THREE.Color(0x3a3a3a);
+        const tx = r.x + (hashOf(b, 4) - 0.5) * Math.max(0, r.w - 5), tz = r.z + (hashOf(b, 5) - 0.5) * Math.max(0, r.d - 5);
+        for (const [dx, dz] of [[-0.9, -0.9], [0.9, -0.9], [0.9, 0.9], [-0.9, 0.9]]) roofs.box({ x: tx + dx, z: tz + dz, w: 0.12, d: 0.12 }, yb, 2.2, steel, null, steel);
+        roofs.box({ x: tx, z: tz, w: 2.2, d: 2.2 }, yb + 2.0, 0.12, steel, null, steel);
+        // The tank: an octagonal barrel and a cone lid.
+        const R = 1.2, H = 2.4, y2 = yb + 2.12;
+        for (let k = 0; k < 8; k++) {
+          const a0 = (k / 8) * Math.PI * 2, a1 = ((k + 1) / 8) * Math.PI * 2, am = (a0 + a1) / 2;
+          const p0 = [tx + Math.cos(a0) * R, tz + Math.sin(a0) * R], p1 = [tx + Math.cos(a1) * R, tz + Math.sin(a1) * R];
+          roofs.quad([[p1[0], y2, p1[1]], [p0[0], y2, p0[1]], [p0[0], y2 + H, p0[1]], [p1[0], y2 + H, p1[1]]], [Math.cos(am), 0, Math.sin(am)], k % 2 ? tank : tank.clone().multiplyScalar(0.9));
+          const n = [Math.cos(am) * 0.5, 0.87, Math.sin(am) * 0.5];
+          roofs.quad([[p1[0], y2 + H, p1[1]], [p0[0], y2 + H, p0[1]], [tx, y2 + H + 0.7, tz], [tx, y2 + H + 0.7, tz]], n, snowy ? new THREE.Color(SNOW) : new THREE.Color(0x3a3430));
+        }
+        for (let d = 0, n = hashOf(b, 6) < 0.5 ? 1 : 2; d < n; d++) {
+          const dx = r.x + (hashOf(b, 7 + d) - 0.5) * (r.w - 1.5), dz = r.z + (hashOf(b, 9 + d) - 0.5) * (r.d - 1.5);
+          roofs.box({ x: dx, z: dz, w: 0.08, d: 0.08 }, yb, 0.8, steel, null, steel);
+          const s = 0.45, yc = yb + 1.0;
+          sheet(roofs, [[dx - s, yc - s * 0.6, dz + s * 0.3], [dx + s, yc - s * 0.6, dz + s * 0.3], [dx + s, yc + s * 0.6, dz - s * 0.3], [dx - s, yc + s * 0.6, dz - s * 0.3]], new THREE.Color(0xd8d8d4));
+        }
+        break;
+      }
+      case 'tarp': {
+        // A squat: one bay of the roof fallen in, a blue tarp over it and hanging down the street face.
+        const bits: [number, number, number][] = [[1, 0, 1], [2, 0, -1], [4, 1, 0], [8, -1, 0]];
+        const [, nx, nz] = bits.find(([bit]) => (b.street ?? 1) & bit) ?? bits[0];
+        const len = nx ? b.d : b.w, half = nx ? b.w / 2 : b.d / 2, deep = nx ? b.w : b.d;
+        const tx = Math.abs(nz), tz = Math.abs(nx);
+        const W = Math.min(4, len * 0.4);
+        const uc = (hashOf(b, 2) < 0.5 ? -1 : 1) * (len / 2 - W / 2 - 0.3);
+        const at = (u: number, v: number, y: number) => [b.x + nx * (half + v) + tx * (uc + u), y, b.z + nz * (half + v) + tz * (uc + u)];
+        const blue = new THREE.Color(0x2f5f9a);
+        const yt = y1 + f.capUp + 0.05, drop = Math.min(b.h - 3, f.floor * 2);
+        const back = -Math.min(4, deep * 0.5);
+        // Over the hole: sagging from the coping back into the roof.
+        sheet(roofs, [at(-W / 2, 0.06, yt), at(W / 2, 0.06, yt), at(W / 2, back / 2, yt - 0.5), at(-W / 2, back / 2, yt - 0.5)], blue);
+        sheet(roofs, [at(-W / 2, back / 2, yt - 0.5), at(W / 2, back / 2, yt - 0.5), at(W / 2, back, yt), at(-W / 2, back, yt)], blue);
+        // Down the face, bellied out a little, 3 cm proud of the wall at its edges.
+        sheet(roofs, [at(-W / 2, 0.03, yt - drop * 0.5), at(W / 2, 0.03, yt - drop * 0.5), at(W / 2, 0.06, yt), at(-W / 2, 0.06, yt)].map((p, i) => (i < 2 ? [p[0] + nx * 0.12, p[1], p[2] + nz * 0.12] : p)), blue);
+        sheet(roofs, [at(-W / 2, 0.03, yt - drop), at(W / 2 - 0.4, 0.03, yt - drop + 0.3), at(W / 2, 0.15, yt - drop * 0.5), at(-W / 2, 0.15, yt - drop * 0.5)], blue);
         break;
       }
       case 'stilts': {

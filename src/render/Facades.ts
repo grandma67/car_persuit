@@ -7,7 +7,7 @@ import type { Rng } from '../core/Rng';
 
 export type FacadeStyle =
   | 'curtain' | 'office' | 'brick' | 'stucco' | 'shutters' | 'siding' | 'adobe' | 'industrial' | 'halfTimber' | 'ashlar' | 'shophouse' | 'storefront'
-  | 'rollerDoors' | 'panel' | 'boards' | 'barnDoors';
+  | 'rollerDoors' | 'panel' | 'boards' | 'barnDoors' | 'tenement' | 'boarded' | 'charred';
 
 export const WINDOW_CELLS = 8;
 const PX = 64; // pixels per cell
@@ -34,7 +34,11 @@ interface StyleSpec {
   mullions?: 'cross' | 'vertical' | 'none';
   frame?: string; // window frame colour
   extras?: (c: Ctx, x: number, y: number) => void; // drawn per cell after the window
+  /** Drawn per cell last, on all three maps (a boarded window mustn't glow): diffuse, emissive, surface. */
+  cell?: (m: CellMaps, x: number, y: number, rng: Rng, lit: boolean) => void;
 }
+
+interface CellMaps { d: Ctx; e: Ctx; s: Ctx; wall: string }
 
 const grey = (v: number) => `rgb(${v},${v},${v})`;
 
@@ -338,7 +342,193 @@ const STYLES: Record<FacadeStyle, StyleSpec> = {
       }
     },
   },
+  tenement: {
+    // The Slums' walk-ups: grimy brick, a plain window per bay with a concrete sill, every window
+    // its own story (dirty, cracked, smashed, boarded, curtained), stains running down from the sills.
+    wall: (c, rng) => {
+      c.fillStyle = grey(190);
+      c.fillRect(0, 0, SIZE, SIZE);
+      const course = PX / 12;
+      for (let r = 0; r * course < SIZE; r++) {
+        const brick = PX / 4;
+        for (let x = (r % 2) * -brick / 2; x < SIZE; x += brick) {
+          c.fillStyle = grey(150 + Math.floor(rng.next() * 45));
+          c.fillRect(x + 1, r * course + 1, brick - 1, course - 1);
+        }
+      }
+      grime(c, rng);
+    },
+    panes: [{ x: 0.3, y: 0.2, w: 0.4, h: 0.56 }],
+    glass: '#1e2328', wallRough: 0.97, glassRough: 0.35, glassMetal: 0.1, lit: 0.18, mullions: 'vertical', frame: '#8a8478',
+    extras: (c, x, y) => {
+      c.fillStyle = grey(200); // sill and lintel
+      c.fillRect(x + PX * 0.26, y + PX * 0.76, PX * 0.48, PX * 0.05);
+      c.fillRect(x + PX * 0.27, y + PX * 0.15, PX * 0.46, PX * 0.05);
+    },
+    cell: (m, x, y, rng, lit) => {
+      const p = { x: 0.3, y: 0.2, w: 0.4, h: 0.56 };
+      const roll = rng.next();
+      if (roll < 0.14) boardOver(m, p, x, y, rng);
+      else if (roll < 0.24) smashed(m, p, x, y, rng);
+      else if (roll < 0.4) cracks(m.d, p, x, y, rng);
+      else if (roll < 0.6) curtains(m, p, x, y, rng, lit);
+      // Dirt runs from the sill.
+      if (rng.next() < 0.6) streak(m.d, x + PX * (0.3 + rng.next() * 0.4), y + PX * 0.81, PX * (0.15 + rng.next() * 0.3), 'rgba(40,30,20,0.35)');
+    },
+  },
+  boarded: {
+    // Shut shops on the ground floor: plywood over the windows, rusted roller shutters, barred glass.
+    wall: (c, rng) => {
+      speckle(c, rng, 200, 24);
+      grime(c, rng);
+    },
+    panes: [{ x: 0.06, y: 0.3, w: 0.88, h: 0.66 }],
+    glass: '#1a1e22', wallRough: 0.9, glassRough: 0.3, glassMetal: 0.15, lit: 0.06, mullions: 'none', frame: '#3a3430',
+    extras: (c, x, y) => {
+      c.fillStyle = grey(120); // the old signboard band
+      c.fillRect(x, y + PX * 0.08, PX, PX * 0.16);
+    },
+    cell: (m, x, y, rng) => {
+      const p = { x: 0.06, y: 0.3, w: 0.88, h: 0.66 };
+      const roll = rng.next();
+      if (roll < 0.4) boardOver(m, p, x, y, rng);
+      else if (roll < 0.75) {
+        // A rusted roller shutter, all the way down.
+        const px = x + p.x * PX, py = y + p.y * PX, w = p.w * PX, h = p.h * PX;
+        for (const c of [m.d, m.e, m.s]) { c.fillStyle = c === m.d ? '#8a8e90' : c === m.e ? '#000' : m.wall; c.fillRect(px, py, w, h); }
+        m.d.fillStyle = '#6a6e72';
+        for (let k = 0; k < 16; k++) m.d.fillRect(px, py + (k * h) / 16, w, 1);
+        for (let k = 0; k < 5; k++) streak(m.d, px + rng.next() * w, py, h * (0.3 + rng.next() * 0.7), 'rgba(130,60,25,0.45)');
+        m.d.fillStyle = '#2a2a2a';
+        m.d.fillRect(px + w / 2 - 3, py + h - 5, 6, 3); // the padlock
+      } else {
+        // Barred glass.
+        m.d.fillStyle = '#2a2a2a';
+        for (let k = 1; k < 8; k++) m.d.fillRect(x + (p.x + (p.w * k) / 8) * PX - 1, y + p.y * PX, 2, p.h * PX);
+        m.d.fillRect(x + p.x * PX, y + (p.y + p.h * 0.5) * PX, p.w * PX, 2);
+        cracks(m.d, p, x, y, rng);
+      }
+    },
+  },
+  charred: {
+    // Burnt-out shells: soot-blackened brick, empty window holes, scorch plumes up from each.
+    wall: (c, rng) => {
+      c.fillStyle = grey(120);
+      c.fillRect(0, 0, SIZE, SIZE);
+      const course = PX / 12;
+      for (let r = 0; r * course < SIZE; r++) {
+        const brick = PX / 4;
+        for (let x = (r % 2) * -brick / 2; x < SIZE; x += brick) {
+          c.fillStyle = grey(95 + Math.floor(rng.next() * 40));
+          c.fillRect(x + 1, r * course + 1, brick - 1, course - 1);
+        }
+      }
+      grime(c, rng);
+    },
+    panes: [{ x: 0.3, y: 0.2, w: 0.4, h: 0.56 }],
+    glass: '#0a0a0a', wallRough: 1, glassRough: 1, glassMetal: 0, lit: 0, mullions: 'none',
+    cell: (m, x, y, rng) => {
+      // Soot plume up from the window head, darkest at the hole.
+      const px = x + PX * 0.3, w = PX * 0.4, top = y + PX * 0.2;
+      const g = m.d.createLinearGradient(0, top, 0, top - PX * (0.25 + rng.next() * 0.35));
+      g.addColorStop(0, 'rgba(10,10,10,0.85)');
+      g.addColorStop(1, 'rgba(10,10,10,0)');
+      m.d.fillStyle = g;
+      m.d.beginPath();
+      m.d.moveTo(px - 2, top);
+      m.d.lineTo(px + w + 2, top);
+      m.d.lineTo(px + w + PX * 0.12, top - PX * 0.5);
+      m.d.lineTo(px - PX * 0.12, top - PX * 0.5);
+      m.d.fill();
+      if (rng.next() < 0.3) boardOver(m, { x: 0.3, y: 0.2, w: 0.4, h: 0.56 }, x, y, rng);
+    },
+  },
 };
+
+/** Grime: darker drifts down the wall and a dirty band along each floor. */
+function grime(c: Ctx, rng: Rng): void {
+  for (let k = 0; k < 30; k++) streak(c, rng.next() * SIZE, rng.next() * SIZE, PX * (0.4 + rng.next()), `rgba(30,24,18,${0.08 + rng.next() * 0.12})`, PX * (0.05 + rng.next() * 0.2));
+  for (let y = 0; y < WINDOW_CELLS; y++) {
+    const g = c.createLinearGradient(0, y * PX + PX * 0.7, 0, y * PX + PX);
+    g.addColorStop(0, 'rgba(30,24,18,0)');
+    g.addColorStop(1, 'rgba(30,24,18,0.18)');
+    c.fillStyle = g;
+    c.fillRect(0, y * PX + PX * 0.7, SIZE, PX * 0.3);
+  }
+}
+
+/** A streak fading downwards from (x, y). */
+function streak(c: Ctx, x: number, y: number, len: number, colour: string, w = 2): void {
+  const g = c.createLinearGradient(0, y, 0, y + len);
+  g.addColorStop(0, colour);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g;
+  c.fillRect(x - w / 2, y, w, len);
+}
+
+/** Plywood nailed over a pane: no glow, no gloss. */
+function boardOver(m: CellMaps, p: Pane, x: number, y: number, rng: Rng): void {
+  const px = x + p.x * PX - 2, py = y + p.y * PX - 2, w = p.w * PX + 4, h = p.h * PX + 4;
+  const tone = 150 + Math.floor(rng.next() * 50);
+  m.d.fillStyle = `rgb(${tone},${Math.floor(tone * 0.8)},${Math.floor(tone * 0.55)})`;
+  m.d.fillRect(px, py, w, h);
+  m.d.fillStyle = 'rgba(60,40,20,0.25)';
+  for (let k = 0; k < 4; k++) m.d.fillRect(px, py + rng.next() * h, w, 1);
+  if (w > PX * 0.5) m.d.fillRect(px + w / 2, py, 1, h); // the sheets' joint
+  m.e.fillStyle = '#000';
+  m.e.fillRect(px, py, w, h);
+  m.s.fillStyle = m.wall;
+  m.s.fillRect(px, py, w, h);
+}
+
+/** A smashed pane: a dark hole with shards left in the frame. */
+function smashed(m: CellMaps, p: Pane, x: number, y: number, rng: Rng): void {
+  const px = x + p.x * PX, py = y + p.y * PX, w = p.w * PX, h = p.h * PX;
+  m.d.fillStyle = '#0c0c0c';
+  m.d.fillRect(px, py, w, h);
+  m.e.fillStyle = '#000';
+  m.e.fillRect(px, py, w, h);
+  m.d.fillStyle = '#3a4650';
+  for (const [cx, cy] of [[px, py], [px + w, py], [px, py + h], [px + w, py + h]]) {
+    if (rng.next() < 0.5) continue;
+    m.d.beginPath();
+    m.d.moveTo(cx, cy);
+    m.d.lineTo(cx + (px + w / 2 - cx) * rng.range(0.3, 0.8), cy);
+    m.d.lineTo(cx, cy + (py + h / 2 - cy) * rng.range(0.3, 0.8));
+    m.d.fill();
+  }
+}
+
+/** Cracks across a pane. */
+function cracks(c: Ctx, p: Pane, x: number, y: number, rng: Rng): void {
+  const px = x + p.x * PX, py = y + p.y * PX, w = p.w * PX, h = p.h * PX;
+  const ox = px + rng.next() * w, oy = py + rng.next() * h;
+  c.strokeStyle = 'rgba(220,225,230,0.7)';
+  c.lineWidth = 1;
+  c.beginPath();
+  for (let k = 0; k < 5; k++) {
+    const a = rng.next() * Math.PI * 2, r = rng.range(0.3, 0.7) * Math.max(w, h);
+    c.moveTo(ox, oy);
+    c.lineTo(Math.min(px + w, Math.max(px, ox + Math.cos(a) * r)), Math.min(py + h, Math.max(py, oy + Math.sin(a) * r)));
+  }
+  c.stroke();
+}
+
+/** Curtains or a sheet hung inside: a colour, glowing through when the window's lit. */
+function curtains(m: CellMaps, p: Pane, x: number, y: number, rng: Rng, lit: boolean): void {
+  const colours = ['#8a3a30', '#3a5a7a', '#c8b88a', '#5a7a4a', '#d8d0c0', '#7a4a6a'];
+  const colour = colours[Math.floor(rng.next() * colours.length)];
+  const px = x + p.x * PX, py = y + p.y * PX, w = p.w * PX, h = p.h * PX;
+  const gap = rng.range(0, 0.5) * w;
+  m.d.fillStyle = colour;
+  m.d.fillRect(px, py, (w - gap) / 2, h);
+  m.d.fillRect(px + (w + gap) / 2, py, (w - gap) / 2, h);
+  if (lit) {
+    m.e.fillStyle = colour;
+    m.e.fillRect(px, py, (w - gap) / 2, h);
+    m.e.fillRect(px + (w + gap) / 2, py, (w - gap) / 2, h);
+  }
+}
 
 /** The barn red painted into the farm's board textures (Farm.ts BARN_RED). */
 const BARN_RED = '#a8322a';
@@ -444,6 +634,7 @@ export function createFacadeTextures(style: FacadeStyle, rng: Rng): FacadeTextur
         }
       }
       spec.extras?.(d, x, y);
+      spec.cell?.({ d, e, s, wall: wallSurface }, x, y, rng, !!lit);
     }
   }
   const toTexture = (canvas: HTMLCanvasElement, srgb: boolean) => {

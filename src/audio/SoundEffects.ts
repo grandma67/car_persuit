@@ -271,6 +271,21 @@ export class SoundEffects {
       this.burst(0.02, 0.25, 'bandpass', 3800, 1.5, gain * 0.9);
       return;
     }
+    // Slums junk: heavy metal for the dumpster and wrecks, soft thumps for bags and furniture.
+    if (kind === 'dumpster' || kind === 'wreck') {
+      this.impact(Math.min(1, strength + 0.3));
+      return;
+    }
+    if (kind === 'trashBags' || kind === 'mattress' || kind === 'couch') {
+      this.burst(0, 0.3, 'lowpass', 700, 0.7, gain * 1.3);
+      this.burst(0.02, 0.4, 'highpass', 2400, 0.5, gain * (kind === 'trashBags' ? 0.7 : 0.35)); // plastic rustle
+      return;
+    }
+    if (kind === 'tyres') {
+      this.burst(0, 0.18, 'lowpass', 400, 1, gain * 1.4); // rubber thud
+      return;
+    }
+    if (kind === 'payphone') this.burst(0.01, 0.2, 'highpass', 5000, 0.6, gain * 0.8); // the booth glass, then the metal ring below
     if (kind === 'cannonballs' || kind === 'rubble') {
       this.impact(Math.min(0.6, strength + 0.2));
       return;

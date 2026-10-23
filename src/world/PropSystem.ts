@@ -6,7 +6,7 @@ import { SUNK_BELOW } from '../render/Sea';
 import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
 import { CAR_PASSES, type Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
-import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp } from './StreetProps';
+import { footprintsOverlap, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp, type WreckKind } from './StreetProps';
 import type { TreeKind } from './Climate';
 import { signalState, type SignalLight } from './TrafficControl';
 import { groundBase, groundHeight, groundNormal } from './Terrain';
@@ -70,10 +70,12 @@ const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   }
 };
 
-type PlainKind = Exclude<PropKind, 'sign' | 'tree'>;
-type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink' | 'fence-rail' | 'tree-fruit-pear';
+type PlainKind = Exclude<PropKind, 'sign' | 'tree' | 'wreck'>;
+type ModelKey = PlainKind | `sign-${SignShape}` | 'signal-right' | `tree-${TreeKind}` | `sign-${SignShape}-old` | 'signal-old' | 'signal-right-old' | 'fence-chainlink' | 'fence-rail' | 'tree-fruit-pear' | 'fence-torn' | `wreck-${WreckKind}`;
 export const modelKey = (p: StreetProp): ModelKey => {
   if (p.kind === 'fence' && p.style === 'chainlink') return 'fence-chainlink';
+  if (p.kind === 'fence' && p.style === 'torn') return 'fence-torn';
+  if (p.kind === 'wreck') return `wreck-${p.wreck ?? 'burnt'}`;
   if (p.kind === 'fence' && p.style === 'rail') return 'fence-rail';
   if (p.kind === 'tree' && p.tree === 'fruit' && p.style === 'pear') return 'tree-fruit-pear';
   const key: ModelKey =
@@ -81,12 +83,12 @@ export const modelKey = (p: StreetProp): ModelKey => {
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
 /** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale']);
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale', 'dumpster', 'couch', 'wreck']);
 /**
  * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
  * standing on its rim or a round bale on its side (the axle along local X).
  */
-const ROUND: Partial<Record<PropKind, 'upright' | 'axleX'>> = { drums: 'upright', cableReel: 'axleX', roundBale: 'axleX' };
+const ROUND: Partial<Record<PropKind, 'upright' | 'axleX'>> = { drums: 'upright', cableReel: 'axleX', roundBale: 'axleX', tyres: 'upright', burnBarrel: 'upright' };
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -135,6 +137,11 @@ function plateBox(shape: SignShape): THREE.Box3 {
 /** The pieces of a knocked-loose prop the ground must hold up besides its pole (see `DebrisPart`). */
 export function debrisParts(def: StreetProp): DebrisPart[] {
   switch (def.kind) {
+    case 'brokenLamp':
+      return [
+        { x: 0, y: 5.95, z: 0.38, hx: 0.035, hy: 0.035, hz: 0.4 }, // arm
+        { x: 0, y: 5.4, z: 1.15, hx: 0.225, hy: 0.25, hz: 0.2 }, // the hanging head
+      ];
     case 'lamp':
     case 'woodLamp':
       return [
@@ -380,7 +387,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     ...chinatownModels(),
     ...harborModels(),
     ...farmModels(),
-    rubble: rubblePile(),
+    ...slumsModels(),
     'tree-fruit-pear': fruitTree(look, 0xc8c43a),
   };
 }
@@ -861,17 +868,150 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
   };
 }
 
-/** The Slums' loose bricks: a low pile of bricks and broken block, off a ruin's heap. */
-function rubblePile(): THREE.BufferGeometry {
+type SlumsKind = 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp' | 'fence-torn' | `wreck-${WreckKind}`;
+/** The Slums' junk: loose bricks, kerb clutter, a dead street lamp, a payphone, torn chain-link, the wrecks. */
+function slumsModels(): Record<SlumsKind, THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (rt: number, rb: number, h: number, seg = 10) => new THREE.CylinderGeometry(rt, rb, h, seg);
+  const dark = 0x1e1e20, steel = 0x6a6e72, rubber = 0x262628;
+  // Loose bricks: a low pile of bricks and broken block, off a ruin's heap.
   const bricks: [number, number, number, number, number][] = [
     [-0.25, 0.06, -0.1, 0.3, 0x8a4a3a], [0.15, 0.06, 0.12, -0.5, 0x7a4234], [0.05, 0.06, -0.22, 1.1, 0x9a5a48],
     [-0.1, 0.17, 0.02, 0.8, 0x8a4a3a], [0.22, 0.17, -0.05, -0.2, 0x6e3e30], [-0.3, 0.06, 0.22, 1.6, 0x9a8a7a],
     [0.0, 0.28, -0.04, 0.1, 0x7a4234],
   ];
-  return mergeGeometries([
+  const rubble = mergeGeometries([
     part(new THREE.DodecahedronGeometry(0.32, 0).scale(1.3, 0.45, 1.1), 0x8a8478, 0, 0.1, 0),
-    ...bricks.map(([x, y, z, yaw, c]) => part(new THREE.BoxGeometry(0.23, 0.08, 0.11).rotateY(yaw), c, x, y + 0.04, z)),
+    ...bricks.map(([x, y, z, yaw, c]) => part(box(0.23, 0.08, 0.11).rotateY(yaw), c, x, y + 0.04, z)),
   ]);
+  // A wheeled dumpster (tinted per instance): tapered body, a sloped lid propped half open, side pockets.
+  const dumpster = mergeGeometries([
+    part(box(1.85, 1.05, 1.3), 0xffffff, 0, 0.75),
+    part(box(1.9, 0.08, 1.4), 0xd8d8d8, 0, 1.28),
+    part(box(0.92, 0.04, 1.3).rotateZ(-0.35), 0x2a2a2a, -0.42, 1.48, 0), // the lid, thrown up
+    part(box(0.92, 0.04, 1.3), 0x2a2a2a, 0.46, 1.33, 0),
+    ...[-0.75, 0.75].flatMap((x) => [-0.5, 0.5].map((z) => part(cyl(0.1, 0.1, 0.06, 8).rotateX(Math.PI / 2), dark, x, 0.12, z))),
+    part(box(0.6, 0.35, 0.02), 0x8a5a3a, 0.4, 0.7, 0.66), // rust
+  ]);
+  // Three or four black bags slumped together.
+  const trashBags = mergeGeometries([
+    part(new THREE.DodecahedronGeometry(0.32, 0).scale(1, 0.85, 1), 0x1a1c1e, -0.18, 0.27, -0.08),
+    part(new THREE.DodecahedronGeometry(0.28, 0).scale(1, 0.8, 1), 0x22262a, 0.24, 0.22, 0.1),
+    part(new THREE.DodecahedronGeometry(0.25, 0).scale(1, 0.9, 1), 0x2a3a2a, 0.0, 0.5, 0.04),
+    part(new THREE.DodecahedronGeometry(0.22, 0), 0x1a1c1e, -0.05, 0.18, 0.28),
+  ]);
+  // A shopping cart: wire basket (rails), the handle, four casters.
+  const chrome = 0xb8bcc0;
+  const shoppingCart = mergeGeometries([
+    part(box(0.55, 0.02, 0.85), chrome, 0, 0.5),
+    ...[-0.27, 0.27].map((x) => part(box(0.02, 0.45, 0.85), chrome, x, 0.73)),
+    part(box(0.55, 0.45, 0.02), chrome, 0, 0.73, 0.42),
+    part(box(0.55, 0.45, 0.02), chrome, 0, 0.73, -0.42),
+    ...[0.6, 0.8].map((y) => part(box(0.56, 0.02, 0.86), chrome, 0, y)),
+    part(box(0.55, 0.04, 0.04), 0xc8302a, 0, 1.02, -0.52), // the handle
+    ...[-0.22, 0.22].flatMap((x) => [-0.36, 0.36].map((z) => part(box(0.03, 0.42, 0.03), chrome, x, 0.29, z))),
+    ...[-0.22, 0.22].flatMap((x) => [-0.36, 0.36].map((z) => part(cyl(0.05, 0.05, 0.04, 6).rotateZ(Math.PI / 2), dark, x, 0.05, z))),
+  ]);
+  // A stained mattress dumped flat, a little curled.
+  const mattress = mergeGeometries([
+    part(box(1.3, 0.22, 1.9), 0xd8d0bc, 0, 0.12),
+    part(box(1.31, 0.03, 1.91), 0xa8a08a, 0, 0.18),
+    part(box(0.5, 0.01, 0.6), 0x9a8a5a, 0.2, 0.235, -0.3), // a stain
+  ]);
+  // A sagging couch (tinted per instance).
+  const couch = mergeGeometries([
+    part(box(1.6, 0.4, 0.75), 0xffffff, 0, 0.3),
+    part(box(1.6, 0.5, 0.2), 0xe0e0e0, 0, 0.65, -0.3).rotateX(-0.1),
+    ...[-1, 1].map((sx) => part(box(0.2, 0.55, 0.75), 0xe0e0e0, sx * 0.72, 0.38, 0)),
+    part(box(0.6, 0.15, 0.6).rotateZ(0.2), 0xd0d0d0, -0.35, 0.56, 0.05), // a cushion askew
+  ]);
+  // A stack of four bald tyres.
+  const tyres = mergeGeometries(Array.from({ length: 4 }, (_, k) => [
+    part(cyl(0.34, 0.34, 0.22, 12), rubber, (k % 2) * 0.03, 0.11 + k * 0.22),
+    part(cyl(0.18, 0.18, 0.225, 10), 0x0e0e0e, (k % 2) * 0.03, 0.11 + k * 0.22),
+  ]).flat());
+  // A burn barrel: a rusted drum punched with air holes, charred at the rim.
+  const burnBarrel = mergeGeometries([
+    part(cyl(0.3, 0.3, 0.88, 12), 0x7a4a2e, 0, 0.44),
+    ...Array.from({ length: 6 }, (_, k) => part(box(0.08, 0.08, 0.02), 0x140c08, Math.cos((k * Math.PI) / 3) * 0.3, 0.25, Math.sin((k * Math.PI) / 3) * 0.3).rotateY(0)),
+    part(cyl(0.31, 0.31, 0.12, 12), 0x2a1a12, 0, 0.84),
+    part(cyl(0.26, 0.26, 0.02, 10), 0x1a1210, 0, 0.8), // ash
+  ]);
+  // A payphone on its post under a little hood, the handset hanging off its cord.
+  const payphone = mergeGeometries([
+    part(box(0.1, 1.2, 0.1), steel, 0, 0.6, -0.08),
+    part(box(0.5, 0.75, 0.3), 0x8a8e92, 0, 1.45),
+    part(box(0.6, 0.06, 0.42), 0x2f5f9a, 0, 1.96, 0.04), // the hood
+    part(box(0.42, 0.3, 0.02), 0x2a3a48, 0, 1.6, 0.16), // the dial panel
+    part(box(0.07, 0.25, 0.07).rotateZ(0.4), dark, 0.32, 1.05, 0.12), // the handset, dangling
+  ]);
+  // A dead street lamp: the city's pole, the arm bent down, the head hanging, glass gone.
+  const metal = 0x3a3f47;
+  const brokenLamp = mergeGeometries([
+    part(cyl(0.18, 0.18, 0.4, 8), metal, 0, 0.2),
+    part(cyl(0.08, 0.08, 6, 8), metal, 0, 3),
+    part(box(0.07, 0.07, 0.8), metal, 0, 5.95, 0.38),
+    part(box(0.07, 0.07, 0.75).rotateX(0.75), metal, 0, 5.72, 0.98),
+    part(box(0.45, 0.12, 0.32).rotateX(1.1), metal, 0, 5.32, 1.25),
+  ]);
+  // Torn chain-link: the posts and top rail, the mesh peeled back off one post and sagging.
+  const wire = 0xa8aeb4;
+  const fenceTorn = mergeGeometries([
+    ...[-1.45, 1.45].map((x) => part(box(0.07, 2.1, 0.07), 0x9aa0a6, x, 1.05)),
+    part(box(2.9, 0.05, 0.05).rotateZ(0.06), 0x9aa0a6, 0, 2.0),
+    ...Array.from({ length: 8 }, (_, k) => part(box(0.018, 1.95 - k * 0.12, 0.018), wire, -1.35 + k * 0.225, 1.0 - k * 0.06)),
+    ...Array.from({ length: 6 }, (_, k) => part(box(1.6 - k * 0.12, 0.018, 0.018), wire, -0.6 - k * 0.06, 0.1 + k * 0.3)),
+    part(box(1.0, 0.9, 0.018).rotateY(0.9).rotateX(0.5), wire, 0.9, 0.35, 0.35), // the peeled flap
+  ]);
+  return { rubble, dumpster, trashBags, shoppingCart, mattress, couch, tyres, burnBarrel, payphone, brokenLamp, 'fence-torn': fenceTorn, ...wreckModels() };
+}
+
+/**
+ * The wrecks, along local Z, wheels on the ground at y 0, white where the paint tint shows: burnt
+ * out (blackened, no glass, bare rims), up on bricks (wheels gone), stripped (doors and bonnet
+ * open), on its roof, and crushed flat.
+ */
+function wreckModels(): Record<`wreck-${WreckKind}`, THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (r: number, h: number, seg = 10) => new THREE.CylinderGeometry(r, r, h, seg).rotateZ(Math.PI / 2);
+  const glass = 0x1c2228, hole = 0x0c0c0c, rubber = 0x1e1e20, rim = 0x6a6e72, brick = 0x8a4a3a;
+  const W = 1.78, L = 4.2;
+  /** The shell at height y: lower body, cabin, glass (or holes), lamps. */
+  const shell = (y: number, paint: number, windows: number, extras: THREE.BufferGeometry[] = []) => [
+    part(box(W, 0.62, L), paint, 0, y + 0.31, 0),
+    part(box(W * 0.88, 0.52, L * 0.5), paint, 0, y + 0.88, -0.15),
+    part(box(W * 0.9, 0.36, L * 0.46), windows, 0, y + 0.88, -0.15),
+    part(box(W * 0.6, 0.1, 0.03), 0x9a9a9a, 0, y + 0.42, L / 2 + 0.01), // the grille
+    ...extras,
+  ];
+  const wheels = (r: number, colour: number) => [-1, 1].flatMap((sx) => [-1.35, 1.35].map((z) => part(cyl(r, 0.24), colour, sx * (W / 2 - 0.08), r, z)));
+  const burnt = mergeGeometries([
+    ...shell(0.32, 0x4a4442, hole, [part(box(W * 0.9, 0.02, L * 0.5), 0x2a2420, 0, 1.47, -0.15)]),
+    ...wheels(0.26, rim),
+  ]);
+  const bricksUnder = [-1, 1].flatMap((sx) => [-1.35, 1.35].map((z) => part(box(0.3, 0.42, 0.22), brick, sx * (W / 2 - 0.25), 0.21, z)));
+  const bricks = mergeGeometries([...shell(0.42, 0xffffff, glass), ...bricksUnder]);
+  const door = (sx: number, z: number) => part(box(0.05, 0.58, 1.0).translate(0, 0, 0.5).rotateY(sx * 1.0), 0xf0f0f0, sx * W / 2, 0.68, z);
+  const stripped = mergeGeometries([
+    ...shell(0.38, 0xffffff, hole, [
+      door(1, 0.1), door(-1, -0.2),
+      part(box(W * 0.9, 0.04, 1.2).translate(0, 0, -0.6).rotateX(-1.1), 0xf0f0f0, 0, 1.0, L / 2 - 0.05), // the bonnet, up
+      part(box(W * 0.8, 0.3, 0.9), 0x3a3a3a, 0, 0.75, L / 2 - 0.6), // the engine bay, empty
+    ]),
+    ...wheels(0.3, rubber).slice(0, 2), // one side's wheels left
+    ...[-1.35, 1.35].map((z) => part(box(0.3, 0.38, 0.22), brick, W / 2 - 0.25, 0.19, z)), // bricks under the other
+  ]);
+  const flipped = mergeGeometries(
+    [...shell(0, 0xffffff, glass), ...wheels(0.3, rubber).map((g) => g.translate(0, 0.62, 0))]
+      .map((g) => g.rotateZ(Math.PI).translate(0, 1.72, 0)),
+  );
+  const crushed = mergeGeometries([
+    part(box(W, 0.4, L), 0xffffff, 0, 0.32),
+    part(box(W * 0.86, 0.22, L * 0.48), 0xe0e0e0, 0, 0.62, -0.15),
+    part(box(W * 0.88, 0.1, L * 0.44), glass, 0, 0.6, -0.15),
+    ...wheels(0.22, rubber),
+  ]);
+  return { 'wreck-burnt': burnt, 'wreck-bricks': bricks, 'wreck-stripped': stripped, 'wreck-flipped': flipped, 'wreck-crushed': crushed };
 }
 
 function canvasTexture(draw: (g: CanvasRenderingContext2D, s: number) => void, size = 256): THREE.Texture {
@@ -1095,7 +1235,8 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'pallet', 'crates', 'drums', 'cableReel', 'lifebuoy', 'forklift', 'boomGate', 'crossbuck', 'fence-chainlink',
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
-  'rubble']);
+  'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
+  'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed']);
 
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel

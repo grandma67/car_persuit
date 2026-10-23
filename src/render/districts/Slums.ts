@@ -16,6 +16,9 @@ import { SLUMS_SET as SS } from '../../gameplay/balance';
 import { groundBase } from '../../world/Terrain';
 import type { GroundHeight } from '../../world/Terrain';
 import { slumsPlate, slumsSignMaterial } from './slumsSigns';
+import { graffitiMaterial, graffitiPlate } from './slumsGraffiti';
+import type { Decal, LaundryData, WireData } from '../../world/districts/SlumsStreet';
+import type { Overhead } from '../../world/districts/District';
 import type { DistrictRenderContext, DistrictView } from './index';
 
 const RUST = 0x7a4a32;
@@ -218,13 +221,15 @@ function junkFence(s: Structure, ground: GroundHeight, solid: THREE.BufferGeomet
     const n = Math.max(1, Math.round(len / 1.2));
     const cw = len / n;
     const g: THREE.BufferGeometry[] = [];
+    // Posts on the yard side (the outside is for graffiti).
+    const pz = ((r.a.x + r.b.x) / 2 - s.x) * Math.sin(yaw) + ((r.a.z + r.b.z) / 2 - s.z) * Math.cos(yaw) > 0 ? -0.07 : 0.07;
     for (let i = 0; i < n; i++) {
       const x = -len / 2 + cw * (i + 0.5);
       const h = d.height - rnd() * 0.25;
       g.push(part(box(cw + 0.02, h, 0.05), sheets[Math.floor(rnd() * sheets.length)], x, h / 2, (i % 2) * 0.03 - 0.015));
-      if (i % 2 === 0) g.push(part(box(0.09, d.height + 0.2, 0.09), STEEL, x - cw / 2, (d.height + 0.2) / 2, -0.07));
+      if (i % 2 === 0) g.push(part(box(0.09, d.height + 0.2, 0.09), STEEL, x - cw / 2, (d.height + 0.2) / 2, pz));
     }
-    g.push(part(box(0.09, d.height + 0.2, 0.09), STEEL, len / 2, (d.height + 0.2) / 2, -0.07));
+    g.push(part(box(0.09, d.height + 0.2, 0.09), STEEL, len / 2, (d.height + 0.2) / 2, pz));
     const mx = (r.a.x + r.b.x) / 2, mz = (r.a.z + r.b.z) / 2;
     const m = frameOf(mx, ground(mx, mz) - 0.05, mz, yaw);
     solid.push(...g.map((p) => p.applyMatrix4(m)));
@@ -426,6 +431,64 @@ function camp(pieces: CampPiece[], ground: GroundHeight, material: THREE.Materia
   }
 }
 
+// --- The streets ---
+
+/** A timber utility pole: the crossarm across the street, insulators, a transformer can on some. */
+function utilityPole(s: Structure, out: THREE.BufferGeometry[]): void {
+  const d = s.data as { y: number; h: number };
+  const tar = 0x4a3a2c;
+  const g = [
+    part(cyl(0.13, 0.17, d.h, 7), tar, 0, d.h / 2, 0),
+    part(box(2.2, 0.12, 0.12), tar, 0, d.h - 0.8, 0),
+    ...[-0.95, 0, 0.95].map((x) => part(cyl(0.05, 0.05, 0.18, 6), 0x8a9a8a, x, d.h - 0.65, 0)),
+  ];
+  if ((Math.abs(s.x * 13 + s.z * 7) % 10) < 3) g.push(part(cyl(0.3, 0.3, 0.8, 8), 0x7a8288, 0, d.h - 2.0, 0.32)); // a transformer can
+  const m = frameOf(s.x, d.y, s.z, s.yaw);
+  out.push(...g.map((p) => p.applyMatrix4(m)));
+}
+
+/** Points along a sagging line from a to b, heights y0 → y1 (world), `n` segments. */
+function sagLine(o: Overhead, y0: number, y1: number, sag: number, n: number): V3[] {
+  const [a, b] = o.points;
+  return Array.from({ length: n + 1 }, (_, k) => {
+    const t = k / n;
+    return { x: a.x + (b.x - a.x) * t, y: y0 + (y1 - y0) * t - sag * 4 * t * (1 - t), z: a.z + (b.z - a.z) * t };
+  });
+}
+
+function wires(o: Overhead, out: THREE.BufferGeometry[]): void {
+  const d = o.data as unknown as WireData;
+  const pts = sagLine(o, d.y0, d.y1, d.sag, 10);
+  for (let k = 1; k < pts.length; k++) out.push(beam(box(0.035, 1, 0.035), pts[k - 1], pts[k], 0x1a1a1a));
+  if (!d.sneakers) return;
+  // A pair of sneakers by their laces, mid-span.
+  const m = pts[5];
+  for (const [dx, drop, c] of [[-0.1, 0.45, 0xf2f2ee], [0.12, 0.6, 0xd83a2e]] as [number, number, number][]) {
+    out.push(beam(box(0.01, 1, 0.01), m, { x: m.x + dx, y: m.y - drop + 0.08, z: m.z }, 0x8a8a8a));
+    out.push(part(box(0.28, 0.11, 0.1).rotateZ(1.2 * Math.sign(dx)), c, m.x + dx, m.y - drop, m.z));
+  }
+}
+
+function laundry(o: Overhead, out: THREE.BufferGeometry[]): void {
+  const d = o.data as unknown as LaundryData;
+  const pts = sagLine(o, d.y0, d.y1, d.sag, 10);
+  for (let k = 1; k < pts.length; k++) out.push(beam(box(0.02, 1, 0.02), pts[k - 1], pts[k], 0xd8d8d0));
+  const [a, b] = o.points;
+  const yaw = Math.atan2(-(b.z - a.z), b.x - a.x);
+  for (const c of d.clothes) {
+    const t = c.t;
+    const y = d.y0 + (d.y1 - d.y0) * t - d.sag * 4 * t * (1 - t);
+    const x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t;
+    out.push(part(box(c.w, c.h, 0.02), c.color).applyMatrix4(frameOf(x, y - c.h / 2 - 0.02, z, yaw)));
+  }
+}
+
+/** Graffiti, merged: each piece a plate on its wall, a little darker the higher it sits (weathered). */
+function graffiti(decals: Decal[]): THREE.BufferGeometry | null {
+  if (!decals.length) return null;
+  return mergeGeometries(decals.map((d) => graffitiPlate(d.w, d.h, d.cell, 0.82 + ((d.cell * 37) % 18) / 100).applyMatrix4(frameOf(d.x, d.y, d.z, d.yaw))));
+}
+
 // --- Ground ---
 
 /** Flecks of another colour over a patch: debris, oil, gravel. */
@@ -455,13 +518,43 @@ function ground(flat: GeometryBuilder, p: GroundPatch, city: CityData, snowy: bo
   }
 }
 
+/** The roads worn through and the sidewalks littered: 4 cm over the asphalt (2 cm over its markings), puddles glossy. */
+function wear(flat: GeometryBuilder, wet: GeometryBuilder, p: GroundPatch, city: CityData, asphalt: THREE.Color, rnd: Rnd): void {
+  const t = city.terrain;
+  const c = (hex: number) => new THREE.Color(hex);
+  switch (p.kind) {
+    case 'faded': return flat.drape(p, 0.04, asphalt.clone().multiplyScalar(1.08), t);
+    case 'oil': return flat.drape(p, 0.04, c(0x141418), t);
+    case 'crack': return flat.drape(p, 0.04, c(0x121212), t);
+    case 'patch': return flat.drape(p, 0.04, asphalt.clone().multiplyScalar(0.7), t);
+    case 'pothole':
+      flat.drape({ ...p, w: p.w + 0.2, d: p.d + 0.2 }, 0.04, c(0x3a3836), t); // the broken edge
+      return flat.drape(p, 0.06, c(0x0e0e0e), t);
+    case 'manhole':
+      flat.drape(p, 0.04, c(0x4a4844), t);
+      return flat.drape({ ...p, w: p.w - 0.2, d: p.d - 0.2 }, 0.06, c(0x2e2c2a), t);
+    case 'puddle': return wet.drape(p, 0.04, c(0x2c3239), t);
+    case 'litter': return flat.drape(p, 0.055, c([0xe8e4da, 0xa88a5a, 0xc83a2e, 0x6a6e72, 0x2f5f9a][Math.floor(rnd() * 5)]), t);
+  }
+}
+
 export function renderSlums(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
   const snowy = ctx.climate.snowRoofs;
   const rnd = rand(city.seed * 31 + q.bounds.x * 7 + q.bounds.z);
   const flat = new GeometryBuilder();
-  for (const p of q.dressing.ground) ground(flat, p, city, snowy, rnd);
+  const wet = new GeometryBuilder();
+  const asphalt = new THREE.Color(ctx.theme.asphalt);
+  for (const p of q.dressing.ground) {
+    ground(flat, p, city, snowy, rnd);
+    wear(flat, wet, p, city, asphalt, rnd);
+  }
   if (flat.positions.length) {
     const mesh = new THREE.Mesh(flat.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  }
+  if (wet.positions.length) {
+    const mesh = new THREE.Mesh(wet.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.12, metalness: 0.1 }));
     mesh.receiveShadow = true;
     scene.add(mesh);
   }
@@ -479,7 +572,32 @@ export function renderSlums(q: District, city: CityData, scene: THREE.Scene, ctx
     else if (s.kind === 'tyres') tyres(s, ctx.ground, snowy, solid, rnd);
     else if (s.kind === 'wreckStack') stacked.push(...((s.data as { wrecks: Wreck[] }).wrecks));
     else if (s.kind === 'camp') camp((s.data as { pieces: CampPiece[] }).pieces, ctx.ground, instanced, scene);
+    else if (s.kind === 'utilityPole') utilityPole(s, solid);
   }
+  for (const o of q.dressing.overhead) {
+    if (o.kind === 'wire') wires(o, solid);
+    else if (o.kind === 'laundry') laundry(o, solid);
+  }
+  // Stumps where the trees were cut down.
+  for (const t of (q.dressing.extra?.stumps ?? []) as { x: number; z: number }[]) {
+    const y = ctx.ground(t.x, t.z);
+    solid.push(part(cyl(0.26, 0.32, 0.35, 7), 0x4a3426, t.x, y + 0.15, t.z), part(cyl(0.24, 0.24, 0.02, 7), 0xb89a70, t.x, y + 0.33, t.z));
+  }
+  // The corner store's OPEN 24 band over its doors, on each street face.
+  const lit: THREE.BufferGeometry[] = [];
+  for (const b of city.buildings) {
+    if (b.district !== 'slums' || b.lot !== 'cornerStore' || Math.abs(b.x - q.bounds.x) > q.bounds.w / 2 || Math.abs(b.z - q.bounds.z) > q.bounds.d / 2) continue;
+    const floor = b.h / Math.max(1, Math.round(b.h / 3.5));
+    const y = groundBase(city.terrain, b.x, b.z, Math.max(b.w, b.d) / 2) - 0.3 + floor - 0.45;
+    for (const [bit, nx, nz] of [[1, 0, 1], [2, 0, -1], [4, 1, 0], [8, -1, 0]] as [number, number, number][]) {
+      if (!((b.street ?? 0) & bit)) continue;
+      const w = Math.min(3.6, (nx ? b.d : b.w) - 1);
+      lit.push(slumsPlate(w, w / 8, 'open24').applyMatrix4(frameOf(b.x + nx * (b.w / 2 + 0.04), y, b.z + nz * (b.d / 2 + 0.04), Math.atan2(nx, nz))));
+    }
+  }
+  if (lit.length) scene.add(new THREE.Mesh(mergeGeometries(lit), slumsSignMaterial(0.35 + ctx.lampGlow * 1.6)));
+  const tags = graffiti((q.dressing.extra?.decals ?? []) as Decal[]);
+  if (tags) scene.add(new THREE.Mesh(tags, graffitiMaterial(0.04 + ctx.lampGlow * 0.04)));
   if (solid.length) {
     const mesh = new THREE.Mesh(mergeGeometries(solid), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 }));
     mesh.castShadow = mesh.receiveShadow = true;
@@ -488,5 +606,18 @@ export function renderSlums(q: District, city: CityData, scene: THREE.Scene, ctx
   if (signs.length) scene.add(new THREE.Mesh(mergeGeometries(signs), slumsSignMaterial(0.06 + ctx.lampGlow * 0.1)));
   const stack = wrecks(stacked, ctx.ground, instanced);
   if (stack) scene.add(stack);
-  return {};
+  // Steam from half the manholes, puffing while the camera is near.
+  const steaming = ((q.dressing.extra?.manholes ?? []) as { x: number; z: number }[]).filter((_, i) => i % 2 === 0)
+    .map((m) => ({ at: new THREE.Vector3(m.x, ctx.ground(m.x, m.z) + 0.1, m.z), next: 0 }));
+  const puff = ctx.steam;
+  return {
+    update(_dt, time, camera) {
+      if (!puff) return;
+      for (const m of steaming) {
+        if (time < m.next || m.at.distanceToSquared(camera.position) > 80 * 80) continue;
+        m.next = time + 0.35;
+        puff(m.at);
+      }
+    },
+  };
 }
