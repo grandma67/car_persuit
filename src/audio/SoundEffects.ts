@@ -1,5 +1,6 @@
 // One-shot procedural sounds: crashes, explosions, breaking props, musical cues and UI blips.
-// Each builds its own short-lived nodes and lets them stop; nothing here runs continuously.
+// Each builds its own short-lived nodes and lets them stop; only the player's held horn runs on
+// until let go.
 import type { Honk } from '../ai/horn';
 import type { TreeKind } from '../world/Climate';
 import type { PropKind } from '../world/StreetProps';
@@ -8,6 +9,7 @@ export class SoundEffects {
   private jingleBus: GainNode; // short echo for musical cues
   private lastImpactTime = 0;
   private lastImpactStrength = 0;
+  private held: { gain: GainNode; oscs: OscillatorNode[] } | null = null; // the player's horn, while H is down
 
   constructor(
     private ctx: AudioContext,
@@ -435,23 +437,12 @@ export class SoundEffects {
   }
 
   /**
-   * A civilian's horn: two buzzy tones about a major third apart (a car's twin horns) through a
-   * nasal band, a deep pair for a bus or truck. 'beep' is a quick double toot, 'blast' a long lean.
+   * A civilian's horn (see hornVoice). 'beep' is a quick double toot, 'blast' a long lean.
    * `pitch` ~0.9..1.1 gives each car its own horn.
    */
   horn(kind: Honk, volume: number, pan: number, heavy: boolean, pitch: number): void {
-    const ctx = this.ctx;
-    const now = ctx.currentTime;
-    const base = (heavy ? 220 : 400) * pitch;
-    const panner = ctx.createStereoPanner();
-    panner.pan.value = pan * 0.8;
-    const band = ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.value = heavy ? 900 : 1500;
-    band.Q.value = 0.8;
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    band.connect(gain).connect(panner).connect(this.master);
+    const now = this.ctx.currentTime;
+    const { gain, oscs } = this.hornVoice(heavy, pitch, pan * 0.8);
     // [start offset, duration] of each toot.
     const toots = kind === 'beep' ? [[0, 0.13], [0.22, 0.16]] : [[0, heavy ? 1.1 : 0.8]];
     const level = 0.16 * volume;
@@ -463,14 +454,49 @@ export class SoundEffects {
       gain.gain.linearRampToValueAtTime(0, t + duration);
     }
     const end = now + toots[toots.length - 1][0] + toots[toots.length - 1][1];
-    for (const ratio of [1, 1.26]) {
+    for (const osc of oscs) osc.stop(end + 0.05);
+  }
+
+  /** The player's own horn: sounds from `on` until let go. */
+  holdHorn(on: boolean): void {
+    if (on === !!this.held) return;
+    const now = this.ctx.currentTime;
+    if (on) {
+      this.held = this.hornVoice(false, 1.05, 0);
+      this.held.gain.gain.linearRampToValueAtTime(0.2, now + 0.012);
+      return;
+    }
+    const { gain, oscs } = this.held!;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setTargetAtTime(0, now, 0.012);
+    for (const osc of oscs) osc.stop(now + 0.1);
+    this.held = null;
+  }
+
+  /**
+   * Twin buzzy tones about a major third apart (a car's twin horns) through a nasal band, a deep
+   * pair for a bus or truck; started, silent until the caller shapes `gain`, and left to it to stop.
+   */
+  private hornVoice(heavy: boolean, pitch: number, pan: number): { gain: GainNode; oscs: OscillatorNode[] } {
+    const ctx = this.ctx;
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = pan;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = heavy ? 900 : 1500;
+    band.Q.value = 0.8;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    band.connect(gain).connect(panner).connect(this.master);
+    const oscs = [1, 1.26].map((ratio) => {
       const osc = ctx.createOscillator();
       osc.type = 'sawtooth';
-      osc.frequency.value = base * ratio;
+      osc.frequency.value = (heavy ? 220 : 400) * pitch * ratio;
       osc.connect(band);
-      osc.start(now);
-      osc.stop(end + 0.05);
-    }
+      osc.start();
+      return osc;
+    });
+    return { gain, oscs };
   }
 
   /**

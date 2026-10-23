@@ -306,6 +306,11 @@ export class CarAudio {
     if (!this.engineOff && volume > 0.01) this.sfx?.horn(kind, volume, pan, heavy, pitch);
   }
 
+  /** The player's horn, sounding while `on` (not once wrecked). */
+  holdHorn(on: boolean): void {
+    this.sfx?.holdHorn(on && !this.engineOff);
+  }
+
   /** Car explosion. volume 0..1 (distance). */
   explosion(volume = 1): void {
     this.sfx?.explosion(volume);

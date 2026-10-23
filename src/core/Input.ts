@@ -54,6 +54,11 @@ export class Input {
     return this.down.has('KeyB');
   }
 
+  /** H held: sound the horn. Keyboard only, so desktop only. */
+  horn(): boolean {
+    return this.down.has('KeyH');
+  }
+
   /** Keys pressed since the last endFrame(), each once per press. */
   pressedKeys(): string[] {
     return [...this.pressed];

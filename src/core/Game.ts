@@ -1104,6 +1104,7 @@ export class Game {
     this.onGrid = grid;
     if (this.state === 'playing') this.whooshes();
     this.honks();
+    this.audio.holdHorn(this.state === 'playing' && this.input.horn());
     this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
     const w = waterNearby(p.position.x, p.position.z, this.city.islandSize / 2, this.city.terrain.canals);
     this.audio.setWater(dt, { sea: w.sea, surge: swellAtWall(w.wallX, w.wallZ, this.sea.elapsed), canal: w.canal });
