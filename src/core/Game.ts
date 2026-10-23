@@ -8,7 +8,7 @@ import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { buildCarMesh, setCarEnvironment, setCarShadow, type CarMesh } from '../vehicles/carMesh';
 import { createEnvironment } from '../render/Environment';
 import { ChaseCamera } from '../render/ChaseCamera';
-import { DEFAULT_CITY, generateCity, type CityConfig, type CityData, type Rect } from '../world/CityGenerator';
+import { DEFAULT_CITY, generateCity, rollCityBlocks, type CityConfig, type CityData, type Rect } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDayName } from '../world/CityTheme';
@@ -188,8 +188,10 @@ export class Game {
 
     this.world.timestep = FIXED_DT;
     // ?roadworks forces every (rare) roadworks slot, ?canalramp the canal jumps and ?england left-hand traffic, for testing. With ?debug, ?canals=0|1|2 and
-    // ?hill=0|1 force the terrain.
+    // ?hill=0|1 force the terrain. The grid size is rolled per seed; ?blocks=N forces it.
     const config: CityConfig = { ...DEFAULT_CITY };
+    const blocks = Number.parseInt(params.get('blocks') ?? '', 10);
+    config.blocks = blocks >= 4 && blocks <= 30 ? blocks : rollCityBlocks(seed, config);
     if (params.has('roadworks')) config.roadworksChance = 1;
     if (params.has('canalramp')) config.canalRampChance = 1;
     if (params.has('england')) config.leftHandChance = 1;

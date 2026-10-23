@@ -16,6 +16,7 @@ import { DISTRICT_DEFS } from './districts/index';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
+  blocksRange: [number, number]; // a run's grid size, rolled per seed by rollCityBlocks
   blockSize: number; // metres
   roadWidth: number;
   sidewalk: number; // margin inside each block before lots start
@@ -30,6 +31,7 @@ export interface CityConfig extends TerrainConfig {
 
 export const DEFAULT_CITY: CityConfig = {
   blocks: 12,
+  blocksRange: [8, 15],
   blockSize: 60,
   roadWidth: 12,
   sidewalk: 3,
@@ -125,6 +127,11 @@ interface Edge {
 /** Rarely the city is English and drives on the left: its own RNG stream, decided by the seed. */
 export function rollDriveSide(seed: number, config: CityConfig = DEFAULT_CITY): DriveSide {
   return new Rng(seed ^ 0x1e7f5d).next() < config.leftHandChance ? 'left' : 'right';
+}
+
+/** Blocks per side for a run, from its own stream so nothing else in the seed moves. */
+export function rollCityBlocks(seed: number, config: CityConfig = DEFAULT_CITY): number {
+  return new Rng(seed ^ 0x512e0b).int(...config.blocksRange);
 }
 
 export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, districtOpts: DistrictOptions = {}): CityData {

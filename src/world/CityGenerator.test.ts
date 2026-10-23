@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CITY, generateCity, type Rect } from './CityGenerator';
+import { DEFAULT_CITY, generateCity, rollCityBlocks, type Rect } from './CityGenerator';
 import { RoadGraph, type RoadNode } from './RoadGraph';
 
 const overlaps = (a: Rect, b: Rect) =>
   Math.abs(a.x - b.x) < (a.w + b.w) / 2 - 1e-6 && Math.abs(a.z - b.z) < (a.d + b.d) / 2 - 1e-6;
 
 const SEEDS = [1, 42, 1234, 99999, 314159];
+/** [seed, blocks per side]: the default grid, plus a mid and the largest run size. */
+const CASES: [number, number][] = [...SEEDS.map((s): [number, number] => [s, DEFAULT_CITY.blocks]), [42, 16], [1234, 20]];
+const sized = (seed: number, blocks: number, extra = {}) => generateCity(seed, { ...DEFAULT_CITY, blocks, ...extra });
 
 describe('generateCity', () => {
   it('is deterministic for a seed', () => {
@@ -17,9 +20,15 @@ describe('generateCity', () => {
     expect(generateCity(43).buildings).not.toEqual(a.buildings);
   });
 
-  it.each(SEEDS)('seed %i: road network is connected with no dead ends', (seed) => {
+  it('rolls a grid of 12 to 20 blocks per seed, the same every time', () => {
+    const rolls = Array.from({ length: 200 }, (_, s) => rollCityBlocks(s));
+    expect(new Set(rolls)).toEqual(new Set([12, 13, 14, 15, 16, 17, 18, 19, 20]));
+    expect(rollCityBlocks(42)).toBe(rolls[42]);
+  });
+
+  it.each(CASES)('seed %i, %i blocks: road network is connected with no dead ends', (seed, blocks) => {
     // Before any roadworks close junctions (Roadworks.test checks the network around those).
-    const city = generateCity(seed, { ...DEFAULT_CITY, roadworksChance: 0 });
+    const city = sized(seed, blocks, { roadworksChance: 0 });
     // Junctions in a canal's line are open water unless a bridge carries a road through them.
     const open = city.graph.nodes.filter((n) => n.neighbors.length);
     const { canals, bridges } = city.terrain;
@@ -30,16 +39,16 @@ describe('generateCity', () => {
     expect(city.plazas.length).toBeGreaterThan(0);
   });
 
-  it.each(SEEDS)('seed %i: nothing solid sits on a road or intersection', (seed) => {
-    const city = generateCity(seed);
+  it.each(CASES)('seed %i, %i blocks: nothing solid sits on a road or intersection', (seed, blocks) => {
+    const city = sized(seed, blocks);
     const paved = [...city.roads.map((r) => r.rect), ...city.intersections];
     const solids: Rect[] = [...city.buildings, ...city.props, ...city.trees.map((t) => ({ ...t, w: 1, d: 1 }))];
     const hits = solids.filter((s) => paved.some((p) => overlaps(s, p)));
     expect(hits).toEqual([]);
   });
 
-  it.each(SEEDS)('seed %i: buildings do not overlap each other and stay inside the city', (seed) => {
-    const city = generateCity(seed);
+  it.each(CASES)('seed %i, %i blocks: buildings do not overlap each other and stay inside the city', (seed, blocks) => {
+    const city = sized(seed, blocks);
     const half = city.size / 2;
     const outside = city.buildings.filter((b) => Math.abs(b.x) + b.w / 2 > half || Math.abs(b.z) + b.d / 2 > half || b.h <= 0);
     expect(outside).toEqual([]);
@@ -50,8 +59,8 @@ describe('generateCity', () => {
     expect(overlapping).toBe(0);
   });
 
-  it.each(SEEDS)('seed %i: spawn is on a drivable road', (seed) => {
-    const city = generateCity(seed);
+  it.each(CASES)('seed %i, %i blocks: spawn is on a drivable road', (seed, blocks) => {
+    const city = sized(seed, blocks);
     const onRoad = [...city.roads.map((r) => r.rect), ...city.intersections].some((r) =>
       overlaps({ x: city.spawn.x, z: city.spawn.z, w: 0.1, d: 0.1 }, r),
     );

@@ -37,9 +37,10 @@ Generation and gameplay logic are pure data (no Three.js), unit-tested with Vite
 
 ## World
 
-- 12×12 grid of 60 m blocks, 12 m roads, on a seeded hill, ringed by a 10 m promenade (lamps, benches
-  facing the sea), a quay and an animated sea; 0–2 canals (12–100 m wide) with bridges every few blocks.
-- Zones by distance: downtown towers (~12 blocks), a thin midtown ring (~32), residential/industrial
+- 8x8 to 15×15 grid (rolled per seed, own RNG stream) of 60 m blocks, 12 m roads, on a seeded hill,
+  ringed by a 10 m promenade (lamps, benches facing the sea), a quay and an animated sea; 0–2 canals
+  (12–100 m wide) with bridges every few blocks.
+- Zones by distance, scaling with the grid: at 12×12 downtown towers (~12 blocks), a thin midtown ring (~32), residential/industrial
   outside by noise (the two outer rows always). Parks, drivable plazas (shortcuts cops don't path
   through), town squares with fountains and statues, jump ramps ("The Leap", canal ramps).
 - The seed picks style, time of day, climate (temperate, snow, beach, desert), weather (rain/snow) and,
@@ -79,7 +80,7 @@ dive/squat, lights and indicators, sea and canal sounds, pass-by whoosh, minimap
 ## URL flags
 
 - Anyone: `?seed=`, `?time=day|afternoon|night`, `?<district>=0|1` (`oldtown`, `chinatown`, `harbor`,
-  `farm`, `slums`), `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?touch`.
+  `farm`, `slums`), `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?blocks=N` (grid size), `?touch`.
 - `?debug`: FPS counter; keys C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`,
   `?weather=`, `?hill=0|1`; `window.game` and `window.dbg` in the console (see `BROWSER_CHECKS.md`).
 
