@@ -1122,9 +1122,9 @@ export class Game {
       const near = THREE.MathUtils.clamp(1 - Math.hypot(rx, rz) / 90, 0, 1);
       if (near <= 0) continue;
       const pan = THREE.MathUtils.clamp((rx * right.x + rz * right.z) / 15, -1, 1);
-      // Each car its own horn pitch, from its body handle: buses and trucks a deep one.
+      // Each car its own horn pitch, from its body handle: buses and trucks (not the tractor) an air horn.
       const pitch = 0.9 + (((car.vehicle.body.handle * 40503) >>> 0) % 100) / 500;
-      this.audio.horn(honk, near * near, pan, car.vehicle.spec.mass > 3000, pitch);
+      this.audio.horn(honk, near * near, pan, car.vehicle.spec.mass >= 5000, pitch);
     }
   }
 

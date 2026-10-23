@@ -437,21 +437,30 @@ export class SoundEffects {
   }
 
   /**
-   * A civilian's horn (see hornVoice). 'beep' is a quick double toot, 'blast' a long lean.
+   * A civilian's horn (see hornVoice). 'beep' is a quick double toot, 'blast' a long lean; a bus
+   * or truck's air horn toots longer and louder, building up as the air comes and scooping up to pitch.
    * `pitch` ~0.9..1.1 gives each car its own horn.
    */
   horn(kind: Honk, volume: number, pan: number, heavy: boolean, pitch: number): void {
     const now = this.ctx.currentTime;
-    const { gain, oscs } = this.hornVoice(heavy, pitch, pan * 0.8);
+    const { gain, oscs, freqs } = this.hornVoice(heavy, pitch, pan * 0.8);
     // [start offset, duration] of each toot.
-    const toots = kind === 'beep' ? [[0, 0.13], [0.22, 0.16]] : [[0, heavy ? 1.1 : 0.8]];
-    const level = 0.16 * volume;
+    const toots = heavy
+      ? kind === 'beep' ? [[0, 0.28], [0.42, 0.34]] : [[0, 1.6]]
+      : kind === 'beep' ? [[0, 0.13], [0.22, 0.16]] : [[0, 0.8]];
+    const level = (heavy ? 0.14 : 0.16) * volume;
+    const attack = heavy ? 0.05 : 0.012;
     for (const [at, duration] of toots) {
       const t = now + at;
       gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(level, t + 0.012);
-      gain.gain.setValueAtTime(level, t + duration - 0.04);
+      gain.gain.linearRampToValueAtTime(level, t + attack);
+      gain.gain.setValueAtTime(level, t + duration - 0.05);
       gain.gain.linearRampToValueAtTime(0, t + duration);
+      if (!heavy) continue;
+      oscs.forEach((osc, i) => {
+        osc.frequency.setValueAtTime(freqs[i] * 0.88, t);
+        osc.frequency.exponentialRampToValueAtTime(freqs[i], t + 0.09);
+      });
     }
     const end = now + toots[toots.length - 1][0] + toots[toots.length - 1][1];
     for (const osc of oscs) osc.stop(end + 0.05);
@@ -474,29 +483,38 @@ export class SoundEffects {
   }
 
   /**
-   * Twin buzzy tones about a major third apart (a car's twin horns) through a nasal band, a deep
-   * pair for a bus or truck; started, silent until the caller shapes `gain`, and left to it to stop.
+   * A car's twin horns: two buzzy tones about a major third apart through a nasal band. A bus or
+   * truck's air horn: a low three-trumpet major chord through a wide lowpass, over a sine an
+   * octave below for weight. Started, silent until the caller shapes `gain`, left to it to stop.
    */
-  private hornVoice(heavy: boolean, pitch: number, pan: number): { gain: GainNode; oscs: OscillatorNode[] } {
+  private hornVoice(heavy: boolean, pitch: number, pan: number): { gain: GainNode; oscs: OscillatorNode[]; freqs: number[] } {
     const ctx = this.ctx;
     const panner = ctx.createStereoPanner();
     panner.pan.value = pan;
-    const band = ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.value = heavy ? 900 : 1500;
-    band.Q.value = 0.8;
+    const filter = ctx.createBiquadFilter();
+    filter.type = heavy ? 'lowpass' : 'bandpass';
+    filter.frequency.value = heavy ? 1400 : 1500;
+    filter.Q.value = heavy ? 1.2 : 0.8;
     const gain = ctx.createGain();
     gain.gain.value = 0;
-    band.connect(gain).connect(panner).connect(this.master);
-    const oscs = [1, 1.26].map((ratio) => {
+    filter.connect(gain).connect(panner).connect(this.master);
+    const root = (heavy ? 140 : 400) * pitch;
+    // [frequency ratio, wave, level]
+    const tones: [number, OscillatorType, number][] = heavy
+      ? [[1, 'sawtooth', 1], [1.26, 'sawtooth', 0.8], [1.5, 'sawtooth', 0.7], [0.5, 'sine', 1.8]]
+      : [[1, 'sawtooth', 1], [1.26, 'sawtooth', 1]];
+    const freqs = tones.map(([ratio]) => root * ratio);
+    const oscs = tones.map(([, type, level], i) => {
       const osc = ctx.createOscillator();
-      osc.type = 'sawtooth';
-      osc.frequency.value = (heavy ? 220 : 400) * pitch * ratio;
-      osc.connect(band);
+      osc.type = type;
+      osc.frequency.value = freqs[i];
+      const g = ctx.createGain();
+      g.gain.value = level;
+      osc.connect(g).connect(type === 'sine' ? gain : filter); // the sub skips the filter
       osc.start();
       return osc;
     });
-    return { gain, oscs };
+    return { gain, oscs, freqs };
   }
 
   /**
