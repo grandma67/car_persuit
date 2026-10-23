@@ -4,86 +4,40 @@
 // corridors, never through the camp, a wreck stack or a ruin.
 import { beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
-import * as THREE from 'three';
-import { Rng } from '../../core/Rng';
 import { SLUMS } from '../../gameplay/balance';
-import { CivilianTraffic, TRAFFIC } from '../../ai/CivilianTraffic';
+import { TRAFFIC } from '../../ai/CivilianTraffic';
 import { NavGrid } from '../../ai/NavGrid';
 import { generateCity, type CityData } from '../CityGenerator';
 import { footprintsOverlap, propFootprint } from '../StreetProps';
-import { approachControls, busStops, fastStreets } from '../TrafficControl';
-import { keepOf } from '../driveSide';
 import { copSpawnSkips, districtTraffic, roadblockGates } from './runtime';
 import type { District } from './District';
 import { inDistrict } from './apply';
+import { addBox, carFootprint, cityWorld, DT, flatSeeds, simulate } from './trafficSim';
 import { vacantLots } from './Slums';
 
-const DT = 1 / 60;
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const ALONE = { slums: true, oldtown: false, chinatown: false, harbor: false, farm: false };
 
-/** Seeds on flat ground with no canals (the sim's ground is a plane). */
-function flatSeeds(count: number): [number, CityData, District][] {
-  const out: [number, CityData, District][] = [];
-  for (let i = 0; out.length < count && i < 300; i++) {
-    const seed = i * 7919 + 11;
-    const city = generateCity(seed, undefined, { force: ALONE });
-    const q = city.districts.find((d) => d.kind === 'slums');
-    if (q && !city.terrain.hill && !city.terrain.canals.length) out.push([seed, city, q]);
-  }
-  return out;
-}
-
-/** The ground, the buildings, every district solid, and the wrecks (fixed: the worst case, none shoved aside). */
-function cityWorld(city: CityData, q: District): RAPIER.World {
-  const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-  world.createCollider(RAPIER.ColliderDesc.cuboid(2000, 0.5, 2000).setTranslation(0, -0.5, 0).setFriction(1));
-  for (const b of city.buildings) world.createCollider(RAPIER.ColliderDesc.cuboid(b.w / 2, b.h / 2, b.d / 2).setTranslation(b.x, b.h / 2, b.z));
-  const box = (s: { x: number; z: number; hx: number; hz: number; yaw: number }, h: number) =>
-    world.createCollider(RAPIER.ColliderDesc.cuboid(s.hx, h, s.hz).setTranslation(s.x, h, s.z).setRotation({ x: 0, y: Math.sin(s.yaw / 2), z: 0, w: Math.cos(s.yaw / 2) }));
-  for (const d of city.districts) for (const s of d.dressing.solids) box(s, 5);
-  for (const p of q.dressing.props.filter((w) => w.kind === 'wreck')) box(propFootprint(p), 0.7);
-  for (const l of city.landmarks) {
-    if (l.kind === 'ramp') continue;
-    world.createCollider(RAPIER.ColliderDesc.cuboid(l.radius * 0.8, 2, l.radius * 0.8).setTranslation(l.x, 2, l.z));
-  }
-  return world;
-}
-
-function simulate(seed: number, city: CityData, q: District) {
-  const world = cityWorld(city, q);
-  const traffic = new CivilianTraffic(
-    world, new THREE.Scene(), city.graph, approachControls(city.graph, city.streetProps), new Rng(seed ^ 0x7a4f1c), 0,
-    undefined, keepOf(city.driveSide), fastStreets(city.graph, city.streetProps), busStops(city.graph, city.streetProps), districtTraffic(city),
-  );
-  traffic.count = 30;
-  const centre = new THREE.Vector3(q.bounds.x, 0, q.bounds.z);
-  const solids = [...q.dressing.solids, ...q.dressing.props.filter((p) => p.kind === 'wreck').map((p) => propFootprint(p))];
-  const stats = { seed, cars: 0, wrecks: solids.length - q.dressing.solids.length, solidTouches: 0, jammed: 0, insideSeconds: 0 };
+/** The wrecks stand fixed: the worst case, none shoved aside. */
+function wreckSim(seed: number, city: CityData, q: District) {
+  const world = cityWorld(city);
+  const wrecks = q.dressing.props.filter((p) => p.kind === 'wreck').map((p) => propFootprint(p));
+  for (const w of wrecks) addBox(world, w, 0.7);
+  const solids = [...q.dressing.solids, ...wrecks];
+  const stats = { seed, cars: 0, wrecks: wrecks.length, solidTouches: 0, jammed: 0, insideSeconds: 0 };
   const seen = new Set<object>();
-  for (let step = 0; step < 120 / DT; step++) {
-    const t = step * DT;
-    const player = centre.clone().add(new THREE.Vector3(Math.cos(t / 20) * 200, 0, Math.sin(t / 20) * 200));
-    for (const car of traffic.cars) car.vehicle.drive(car.controller.update(DT, t), DT);
-    world.step();
-    for (const car of traffic.cars) car.vehicle.snapshot();
-    for (const car of traffic.cars) {
-      const v = car.vehicle;
-      const p = v.position;
-      if (!inDistrict(q, p)) continue;
-      stats.insideSeconds += DT;
-      if (!seen.has(car)) {
-        seen.add(car);
-        stats.cars++;
-      }
-      const he = v.spec.halfExtents;
-      const fwd = v.forward(new THREE.Vector3());
-      const body = { x: p.x, z: p.z, hx: he.x, hz: he.z, yaw: Math.atan2(fwd.x, fwd.z) };
-      if (solids.some((f) => footprintsOverlap(body, f))) stats.solidTouches++;
-      if (car.controller.stuckFor > TRAFFIC.stuckLimit) stats.jammed++;
+  simulate(seed, city, { world, centre: q.bounds, radius: 200, seconds: 120 }, (car) => {
+    const v = car.vehicle;
+    if (!inDistrict(q, v.position)) return;
+    stats.insideSeconds += DT;
+    if (!seen.has(car)) {
+      seen.add(car);
+      stats.cars++;
     }
-    traffic.update(player, []);
-  }
+    const body = carFootprint(v);
+    if (solids.some((f) => footprintsOverlap(body, f))) stats.solidTouches++;
+    if (car.controller.stuckFor > TRAFFIC.stuckLimit) stats.jammed++;
+  });
   return stats;
 }
 
@@ -91,7 +45,7 @@ describe('Slums traffic', () => {
   beforeAll(() => RAPIER.init());
 
   it('civilians come in and pass the kerb wrecks without jamming or touching a solid', () => {
-    const report = flatSeeds(2).map(([seed, city, q]) => simulate(seed, city, q));
+    const report = flatSeeds('slums', 2, ALONE).map(([seed, city, q]) => wreckSim(seed, city, q));
     expect(report.length).toBeGreaterThan(0);
     for (const r of report) {
       expect(r.wrecks, JSON.stringify(r)).toBeGreaterThan(0);

@@ -177,8 +177,9 @@ Pitfalls:
   intended (then `npx vitest run -u`, explain in commit).
 - Refactor meant to change nothing: first hash `generateCity` for ~60 seeds (`run-ts.mjs` in scratchpad),
   then compare after.
-- Traffic/cops on a real city: copy `OldCityTraffic.test.ts` (civilian sim + spawn count), don't
-  extend the synthetic junction sims.
+- Traffic/cops on a real city: `districts/trafficSim.ts` (`flatSeeds`, `cityWorld`, `simulate` hands each car per step; see `SlumsTraffic.test.ts`), don't
+  extend the synthetic junction sims (`ai/junctionSim.ts`). Files run in parallel, tests in a file don't: give a
+  sim over ~8 s its own file.
 - Run area tests while editing; full suite once per milestone before commit.
 - Browser check per milestone, on and off (`?<kind>=1`/`=0`, same seed): views, `dbg.stats()`
   (programs must not grow), empty console; perf with `--size 390x844` + `dbg.fps()` (capped at 60, shows

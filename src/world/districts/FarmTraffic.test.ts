@@ -3,54 +3,23 @@
 // values; cops' off-road routes cross the fields and the orchard's aisles, round the bales and trunks.
 import { beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
-import * as THREE from 'three';
-import { Rng } from '../../core/Rng';
 import { FARM, FARM_GATE } from '../../gameplay/balance';
-import { CivilianTraffic, TRAFFIC } from '../../ai/CivilianTraffic';
+import { TRAFFIC } from '../../ai/CivilianTraffic';
 import { NavGrid } from '../../ai/NavGrid';
-import { generateCity, type CityData } from '../CityGenerator';
 import { inRect } from '../lots';
 import { footprintsOverlap, propFootprint } from '../StreetProps';
-import { approachControls, busStops, fastStreets } from '../TrafficControl';
-import { keepOf } from '../driveSide';
 import { copSpawnSkips, districtTraffic, roadblockGates } from './runtime';
-import type { District, DistrictTraffic } from './District';
+import type { DistrictTraffic } from './District';
 import { farmFields, fenceGaps, ranchGate } from './Farm';
+import { cityWorld, DT, flatSeeds, simulate } from './trafficSim';
 
-const DT = 1 / 60;
 const ALONE = { farm: true, oldtown: false, chinatown: false, harbor: false, slums: false };
-
-/** Seeds whose forced Farm sits on flat ground (the sim's ground is a plane). */
-function flatSeeds(count: number): [number, CityData, District][] {
-  const out: [number, CityData, District][] = [];
-  for (let i = 0; out.length < count && i < 200; i++) {
-    const seed = i * 7919 + 11;
-    const city = generateCity(seed, undefined, { force: ALONE });
-    const q = city.districts.find((d) => d.kind === 'farm');
-    if (q && !city.terrain.hill && !city.terrain.canals.length) out.push([seed, city, q]);
-  }
-  return out;
-}
-
-function cityWorld(city: CityData, q: District): RAPIER.World {
-  const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-  world.createCollider(RAPIER.ColliderDesc.cuboid(2000, 0.5, 2000).setTranslation(0, -0.5, 0).setFriction(1));
-  for (const b of city.buildings) world.createCollider(RAPIER.ColliderDesc.cuboid(b.w / 2, b.h / 2, b.d / 2).setTranslation(b.x, b.h / 2, b.z));
-  for (const s of q.dressing.solids) {
-    world.createCollider(RAPIER.ColliderDesc.cuboid(s.hx, 5, s.hz).setTranslation(s.x, 5, s.z).setRotation({ x: 0, y: Math.sin(s.yaw / 2), z: 0, w: Math.cos(s.yaw / 2) }));
-  }
-  for (const l of city.landmarks) {
-    if (l.kind === 'ramp') continue;
-    world.createCollider(RAPIER.ColliderDesc.cuboid(l.radius * 0.8, 2, l.radius * 0.8).setTranslation(l.x, 2, l.z));
-  }
-  return world;
-}
 
 describe('Farm traffic', () => {
   beforeAll(() => RAPIER.init());
 
   it('the hooks carry the Farm\'s values', () => {
-    for (const [, city, q] of flatSeeds(3)) {
+    for (const [, city, q] of flatSeeds('farm', 3, ALONE)) {
       const rules = districtTraffic(city);
       for (const id of q.interior) {
         const t = rules.nodes.get(id)!;
@@ -71,46 +40,31 @@ describe('Farm traffic', () => {
 
   it('tractors spawn only in the Farm and round it, and nobody jams behind them', () => {
     const report: Record<string, number>[] = [];
-    for (const [seed, city, q] of flatSeeds(2)) {
-      const world = cityWorld(city, q);
+    for (const [seed, city, q] of flatSeeds('farm', 2, ALONE)) {
       // Tractors made common, so there is always one in somebody's lane.
       const rules = districtTraffic(city);
       const more = (t: DistrictTraffic): DistrictTraffic => ({ ...t, weights: { ...t.weights, Tractor: 12 } });
       for (const [k, t] of rules.nodes) rules.nodes.set(k, more(t));
       for (const [k, t] of rules.edges) rules.edges.set(k, more(t));
-      const traffic = new CivilianTraffic(
-        world, new THREE.Scene(), city.graph, approachControls(city.graph, city.streetProps), new Rng(seed ^ 0x7a4f1c), 0,
-        undefined, keepOf(city.driveSide), fastStreets(city.graph, city.streetProps), busStops(city.graph, city.streetProps), rules,
-      );
-      traffic.count = 30;
-      const centre = new THREE.Vector3(q.bounds.x, 0, q.bounds.z);
       const around = { ...q.bounds, w: q.bounds.w + 2 * city.config.roadWidth + 2, d: q.bounds.d + 2 * city.config.roadWidth + 2 };
       const stats = { seed, tractors: 0, strayTractors: 0, tractorSeconds: 0, jammed: 0, carsNear: 0 };
       const seen = new Set<object>();
-      for (let step = 0; step < 150 / DT; step++) {
-        const t = step * DT;
-        const player = centre.clone().add(new THREE.Vector3(Math.cos(t / 20) * 200, 0, Math.sin(t / 20) * 200));
-        for (const car of traffic.cars) car.vehicle.drive(car.controller.update(DT, t), DT);
-        world.step();
-        for (const car of traffic.cars) car.vehicle.snapshot();
-        for (const car of traffic.cars) {
-          const v = car.vehicle;
-          const tractor = v.spec.body === 'tractor';
-          if (!seen.has(car)) {
-            seen.add(car);
-            if (tractor) {
-              stats.tractors++;
-              if (!inRect(around, v.position)) stats.strayTractors++;
-            }
-          }
-          if (tractor) stats.tractorSeconds += DT;
-          if (inRect(around, v.position)) {
-            stats.carsNear += DT;
-            if (car.controller.stuckFor > TRAFFIC.stuckLimit) stats.jammed++;
+      simulate(seed, city, { world: cityWorld(city, [q]), centre: q.bounds, radius: 200, seconds: 150, rules }, (car) => {
+        const v = car.vehicle;
+        const tractor = v.spec.body === 'tractor';
+        if (!seen.has(car)) {
+          seen.add(car);
+          if (tractor) {
+            stats.tractors++;
+            if (!inRect(around, v.position)) stats.strayTractors++;
           }
         }
-        traffic.update(player, []);
-      }
+        if (tractor) stats.tractorSeconds += DT;
+        if (inRect(around, v.position)) {
+          stats.carsNear += DT;
+          if (car.controller.stuckFor > TRAFFIC.stuckLimit) stats.jammed++;
+        }
+      });
       report.push(stats);
     }
     expect(report.length).toBeGreaterThan(0);
@@ -123,7 +77,7 @@ describe('Farm traffic', () => {
 });
 
 describe('Farm off-road routes', () => {
-  const placed = flatSeeds(8);
+  const placed = flatSeeds('farm', 8, ALONE);
   const onPath = (path: { x: number; z: number }[], r: { x: number; z: number; w: number; d: number }) => path.some((p) => inRect(r, p));
   /** Points along a path every half metre. */
   const dense = (path: { x: number; z: number }[]) => path.flatMap((p, i) => {

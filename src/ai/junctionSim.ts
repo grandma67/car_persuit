@@ -4,6 +4,9 @@
 // traffic drives or queues. The kerbs carry what the city puts there (signal poles or stop signs,
 // hydrants, lamps), unbreakable here: a vehicle that snags one is a failure, as in the game, where
 // a bus stuck on a pole gets written off and vanishes.
+//
+// The sim and its checks live here; IntersectionSim.<mode>.test.ts run a share each, so the sims
+// spread over the test workers (one file took 23 s, the whole suite's length).
 import { beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
@@ -113,7 +116,7 @@ interface Car {
  * 'priority': the x road has priority (no stop), the z road stops for it. 'fast': the same, with
  * the x road signed 90 and its traffic arriving from twice as far out, up to speed.
  */
-type Mode = 'stop' | 'signal' | 'priority' | 'fast';
+export type Mode = 'stop' | 'signal' | 'priority' | 'fast';
 const FAST_SPAWN_AT = 130;
 
 /** Run the junction for SECONDS, a new arrival on each arm every `gap` seconds (min, max). */
@@ -312,47 +315,52 @@ function report(r: ReturnType<typeof simulate>) {
   };
 }
 
-describe('four-way junction simulation', () => {
-  beforeAll(() => RAPIER.init());
+/** The junction cases for one control mode: each seed with each of `keeps`, and the rush hour if `rush`. */
+export function junctionSuite(mode: Mode, keeps: readonly Keep[], rush: boolean): void {
+  describe('four-way junction simulation', () => {
+    beforeAll(() => RAPIER.init());
 
-  const safe = (r: ReturnType<typeof report>) => {
-    expect(r.collisions).toEqual([]);
-    expect(r.redRuns).toEqual([]);
-    expect(r.stopRuns).toEqual([]);
-    expect(r.wrongLane).toEqual([]);
-    expect(r.offRoad).toEqual([]);
-    expect(r.poleHits).toEqual([]);
-    expect(r.writtenOff).toEqual([]);
-    expect(r.dodged).toBe(0);
-    expect(r.hardBrake).toEqual([]);
-    expect(r.offTrack).toEqual([]); // the ground it claimed is the ground it drove over
-  };
+    const safe = (r: ReturnType<typeof report>) => {
+      expect(r.collisions).toEqual([]);
+      expect(r.redRuns).toEqual([]);
+      expect(r.stopRuns).toEqual([]);
+      expect(r.wrongLane).toEqual([]);
+      expect(r.offRoad).toEqual([]);
+      expect(r.poleHits).toEqual([]);
+      expect(r.writtenOff).toEqual([]);
+      expect(r.dodged).toBe(0);
+      expect(r.hardBrake).toEqual([]);
+      expect(r.offTrack).toEqual([]); // the ground it claimed is the ground it drove over
+    };
 
-  // An arrival on each arm every 15–25 s: a dozen vehicles a minute through one junction, several
-  // times what one sees in a game. Keeping right and keeping left.
-  const CASES = (['stop', 'priority', 'fast', 'signal'] as const).flatMap((mode) => ([1, -1] as const).flatMap((keep) => (mode === 'fast' ? [1, 2, 3, 4, 5, 6, 7, 8] : [1, 2, 3]) /* the fast road: more seeds, it's the hardest */.map((seed) => ({ mode, keep, seed }))));
-  it.each(CASES)('$mode, keep $keep, seed $seed: everyone through, safely and in their lane', ({ mode, keep, seed }) => {
-    const r = report(simulate(mode, seed, keep, [15, 25]));
-    expect(r.through).toBeGreaterThanOrEqual(20);
-    expect(r.stuck).toEqual([]);
-    // Behind a bus swinging wide through a turn, a queue can wait a while (at a light, a green or
-    // two; on the side road of a priority junction, for a gap in the main road's traffic, which
-    // at 90, both ways, takes longer).
-    expect(r.slowest).toBeLessThan(mode === 'stop' ? 60 : mode === 'fast' ? 120 : 80);
-    safe(r);
-    if (mode === 'fast') {
-      // Up to 90 on the run in (most of them; one stuck behind a bus may not get there), never over.
-      expect(r.fastTops.length).toBeGreaterThan(0);
-      expect(r.fastTops.filter((v) => v > 21).length).toBeGreaterThan(r.fastTops.length / 2);
-      expect(Math.max(...r.fastTops)).toBeLessThan(25.5);
+    // An arrival on each arm every 15–25 s: a dozen vehicles a minute through one junction, several
+    // times what one sees in a game. Keeping right and keeping left.
+    const CASES = keeps.flatMap((keep) => (mode === 'fast' ? [1, 2, 3, 4, 5, 6, 7, 8] : [1, 2, 3]) /* the fast road: more seeds, it's the hardest */.map((seed) => ({ mode, keep, seed })));
+    it.each(CASES)('$mode, keep $keep, seed $seed: everyone through, safely and in their lane', ({ mode, keep, seed }) => {
+      const r = report(simulate(mode, seed, keep, [15, 25]));
+      expect(r.through).toBeGreaterThanOrEqual(20);
+      expect(r.stuck).toEqual([]);
+      // Behind a bus swinging wide through a turn, a queue can wait a while (at a light, a green or
+      // two; on the side road of a priority junction, for a gap in the main road's traffic, which
+      // at 90, both ways, takes longer).
+      expect(r.slowest).toBeLessThan(mode === 'stop' ? 60 : mode === 'fast' ? 120 : 80);
+      safe(r);
+      if (mode === 'fast') {
+        // Up to 90 on the run in (most of them; one stuck behind a bus may not get there), never over.
+        expect(r.fastTops.length).toBeGreaterThan(0);
+        expect(r.fastTops.filter((v) => v > 21).length).toBeGreaterThan(r.fastTops.length / 2);
+        expect(Math.max(...r.fastTops)).toBeLessThan(25.5);
+      }
+    }, 120_000);
+
+    // Rush hour: more arrivals than a stop junction can take. Queues grow, but nobody pushes in,
+    // cuts across or drives round the queue.
+    if (rush) {
+      it(`${mode}, rush hour: queues, never a crash or a shortcut`, () => {
+        const r = report(simulate(mode, 7, 1, [4, 7]));
+        expect(r.through).toBeGreaterThan(30);
+        safe(r);
+      }, 120_000);
     }
-  }, 120_000);
-
-  // Rush hour: more arrivals than a stop junction can take. Queues grow, but nobody pushes in,
-  // cuts across or drives round the queue.
-  it.each(['stop', 'priority', 'fast', 'signal'] as const)('%s, rush hour: queues, never a crash or a shortcut', (mode) => {
-    const r = report(simulate(mode, 7, 1, [4, 7]));
-    expect(r.through).toBeGreaterThan(30);
-    safe(r);
-  }, 120_000);
-});
+  });
+}
