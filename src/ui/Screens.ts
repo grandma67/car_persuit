@@ -151,7 +151,7 @@ export class Screens {
       <p class="screen-lead">Reach all destinations before the timer buzz!<br>Follow the route on the map. Don't get wrecked.</p>
       <ul class="screen-keys">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive</li>
-        <li><kbd>Space</kbd> handbrake</li>
+        <li><kbd>Space</kbd> handbrake · <kbd>B</kbd> look back</li>
         <li><kbd>R</kbd> reset car</li>
         <li><kbd>P</kbd> pause · <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen</li>
       </ul>

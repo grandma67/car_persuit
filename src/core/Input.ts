@@ -49,6 +49,11 @@ export class Input {
     };
   }
 
+  /** B held: look behind the car. Keyboard only, so desktop only. */
+  lookBack(): boolean {
+    return this.down.has('KeyB');
+  }
+
   /** Keys pressed since the last endFrame(), each once per press. */
   pressedKeys(): string[] {
     return [...this.pressed];

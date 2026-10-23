@@ -15,12 +15,14 @@ export class ChaseCamera {
   private lastTarget = new THREE.Vector3();
   private initialised = false;
   private shakeAmount = 0;
+  private lookingBack = false;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1200);
   }
 
-  update(dt: number, target: THREE.Object3D, speedRatio: number): void {
+  /** lookBack: same rig mirrored in front of the car, facing backwards (hold B). */
+  update(dt: number, target: THREE.Object3D, speedRatio: number, lookBack = false): void {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(target.quaternion);
     fwd.y = 0;
     if (fwd.lengthSq() > 1e-4) {
@@ -34,12 +36,15 @@ export class ChaseCamera {
 
     const distance = 6.5 + speedRatio * 1;
     const height = 2.6 - speedRatio * 0.5;
-    this.desired.copy(target.position).addScaledVector(this.heading, -distance).addScaledVector(UP, height);
-    this.lookAt.copy(target.position).addScaledVector(this.heading, 3).addScaledVector(UP, 0.8);
+    const dir = lookBack ? -1 : 1;
+    this.desired.copy(target.position).addScaledVector(this.heading, -distance * dir).addScaledVector(UP, height);
+    this.lookAt.copy(target.position).addScaledVector(this.heading, 3 * dir).addScaledVector(UP, 0.8);
 
-    if (!this.initialised) {
+    // Cut straight to the other side: easing there would swing the camera through the car.
+    if (!this.initialised || lookBack !== this.lookingBack) {
       this.camera.position.copy(this.desired);
       this.initialised = true;
+      this.lookingBack = lookBack;
     } else {
       // Carry the camera along with the car, then smooth only the rest (turns, bumps). Lerping the
       // whole way left it trailing ~speed/10 metres behind: 4m of extra pull-back at top speed.

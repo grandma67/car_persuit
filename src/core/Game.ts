@@ -698,7 +698,7 @@ export class Game {
     this.updateCrashAudio(frameDt, impact, crashSound);
 
     const speedRatio = Math.min(Math.abs(this.player.speed) / this.player.spec.maxSpeed, 1);
-    this.chase.update(frameDt, this.player.mesh.root, speedRatio);
+    this.chase.update(frameDt, this.player.mesh.root, speedRatio, this.state === 'playing' && this.input.lookBack());
     this.effects.resize(window.innerHeight, this.chase.camera.fov);
     this.hud.update(frameDt, this.player.speed, {
       index: this.mission.index,

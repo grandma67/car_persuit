@@ -60,7 +60,7 @@ export class Hud {
       <div class="hud-fps" hidden></div>
       <div class="hud-toast"></div>
       <div class="hud-speed"><span id="hud-speed-value">0</span><small>km/h</small></div>
-      <div class="hud-help">W/↑ drive · S/↓ brake/reverse · A/D steer · Space handbrake · R reset · P pause · M mute · F fullscreen</div>
+      <div class="hud-help">W/↑ drive · S/↓ brake/reverse · A/D steer · Space handbrake · B look back · R reset · P pause · M mute · F fullscreen</div>
     `;
     root.querySelector('.hud-minimap-slot')!.appendChild(minimap);
     this.speedEl = root.querySelector('#hud-speed-value')!;
