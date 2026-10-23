@@ -117,7 +117,7 @@ export function debugTools(game: Game) {
       await sleep(wait);
     },
     /**
-     * The studio: prop models and district lot buildings on a plain floor, labelled, away from the
+     * The studio: prop models, vehicles, zone and district lot buildings on a plain floor, labelled, away from the
      * city (names: `dumpster`, prefixes like `wreck-`, tints `couch~6a3a2a`, lots `lot:slums/tenement`
      * or `lot:slums/tenement@18`). Returns what it laid out; `false` closes it. Then `studioShot`.
      */

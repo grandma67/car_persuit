@@ -1,12 +1,17 @@
-// A photo studio for headless checks (`dbg.studio` with ?debug): prop models and district lot
-// buildings laid out on a grid on a plain floor, away from the city, each labelled, shot from any
+// A photo studio for headless checks (`dbg.studio` with ?debug): prop models, vehicles, zone
+// buildings and district lot buildings laid out on a grid on a plain floor, away from the city, each labelled, shot from any
 // angle or close up. The game keeps running underneath; the studio takes over the screen until
 // `dbg.studio(false)`. Its own lights compile their own shader programs: measure `dbg.stats()` first.
 import * as THREE from 'three';
 import { createFacadeTextures } from '../render/Facades';
 import { buildModels } from '../world/PropSystem';
 import { buildingGeometry } from '../world/CityBuilder';
-import type { Building, CityData } from '../world/CityGenerator';
+import type { Building, CityData, Zone } from '../world/CityGenerator';
+import { ZONE_STYLE } from '../world/lots';
+import { buildCarMesh } from '../vehicles/carMesh';
+import {
+  BOX_TRUCK_SPEC, BUS_SPEC, COP_SPECS, PICKUP_SPEC, PLAYER_SPEC, RAMP_TRUCK_SPEC, TRACTOR_SPEC, VAN_SPEC, type VehicleSpec,
+} from '../vehicles/VehicleSpecs';
 import { pickTheme } from '../world/CityTheme';
 import { pickClimate } from '../world/Climate';
 import { DISTRICT_DEFS } from '../world/districts/index';
@@ -51,11 +56,74 @@ function label(text: string): THREE.Sprite {
   return s;
 }
 
+/** Vehicles by studio key (`car:<key>`): the player, each cop, and each civilian body (civilian paint). */
+const CARS: Record<string, VehicleSpec> = {
+  player: PLAYER_SPEC,
+  'cop-patrol': COP_SPECS.patrol,
+  'cop-interceptor': COP_SPECS.interceptor,
+  'cop-suv': COP_SPECS.suv,
+  'cop-armored': COP_SPECS.armored,
+  sedan: { ...PLAYER_SPEC, body: 'sedan', color: 0x24345a },
+  sports: { ...PLAYER_SPEC, body: 'sports', color: 0xc9ccd1 },
+  suv: { ...COP_SPECS.suv, livery: undefined, color: 0x2f4a3a },
+  van: { ...VAN_SPEC, color: 0xf0f0ee },
+  pickup: { ...PICKUP_SPEC, color: 0x6e1a1f },
+  bus: { ...BUS_SPEC, color: 0xd8a21c },
+  boxtruck: { ...BOX_TRUCK_SPEC, color: 0xf0f0ee },
+  ramptruck: { ...RAMP_TRUCK_SPEC, color: 0xe8701a },
+  tractor: { ...TRACTOR_SPEC, color: 0x2f7a3a },
+};
+
+/** Default footprint (w × d, metres) of a `zone:` building: about a typical lot of that zone. */
+const ZONE_LOT: Record<Zone, [number, number]> = {
+  downtown: [22, 20],
+  midtown: [16, 14],
+  residential: [12, 10],
+  industrial: [20, 16],
+};
+
+/** A car standing at rest: wheels hung at their rest length, lifted so the tyres touch y = 0. */
+function parkedCar(spec: VehicleSpec): THREE.Group {
+  const car = buildCarMesh(spec);
+  const wy = spec.wheelY ?? 0;
+  const ry = wy + (spec.rearWheelRadius ?? spec.wheelRadius) - spec.wheelRadius;
+  car.wheels.forEach(({ pivot }, i) => {
+    pivot.position.set(i % 2 ? -spec.wheelX : spec.wheelX, (i >= 2 ? ry : wy) - spec.suspensionRestLength, i >= 2 ? -spec.wheelZ : spec.wheelZ);
+  });
+  // Meshes only: the lamp glows are sprites with a box of their own, hidden or not.
+  car.root.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  car.root.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) box.expandByObject(o, false);
+  });
+  car.root.position.y = -box.min.y;
+  return car.root;
+}
+
+/** Walls (one mesh per facade style, textured as in game) and roofs of buildings on flat ground. */
+function buildingGroup(city: CityData, b: Building, theme: ReturnType<typeof pickTheme>, climate: ReturnType<typeof pickClimate>): THREE.Group {
+  const flat: CityData = { ...city, terrain: { hill: null, canals: [], bridges: [], land: [] }, buildings: [b] };
+  const { walls, roofs } = buildingGeometry(flat, theme, climate, new Rng(city.seed));
+  const group = new THREE.Group();
+  for (const [facade, builder] of walls) {
+    const tex = createFacadeTextures(facade, new Rng(city.seed));
+    group.add(new THREE.Mesh(builder.build(true), new THREE.MeshStandardMaterial({
+      vertexColors: true, map: tex.map, emissiveMap: tex.emissive, emissive: 0xffffff, emissiveIntensity: 0, roughnessMap: tex.surface, metalnessMap: tex.surface, roughness: 1, metalness: 1,
+    })));
+  }
+  group.add(new THREE.Mesh(roofs.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })));
+  group.position.y = 0.3; // buildings stand 0.3 below their footing's ground
+  return group;
+}
+
 /**
  * The studio's items from names: a prop model key (`dumpster`, `wreck-flipped`, `fence-torn`), a
  * prefix ending in `-` for every key that starts with it (`wreck-`), a key with a tint
  * (`couch~6a3a2a`; tinted models show white where the tint goes), or a district lot's building
- * (`lot:slums/tenement`, optionally `lot:slums/tenement@18` for its height).
+ * (`lot:slums/tenement`, optionally `lot:slums/tenement@18` for its height), a vehicle
+ * (`car:bus`, `car:cop-` for every cop, `car:` for all, `car:sedan~c9ccd1` repainted; keys in CARS), or
+ * an ordinary city building of a zone (`zone:residential`, `zone:` for all four, then optionally
+ * `@height`, `v<variant>` 0..1 for its colour, roof and trims, `=WxD` for its footprint).
  */
 function makeItems(names: string[], city: CityData): Item[] {
   const models = buildModels({ leaves: 0x3d7a3f, trunk: 0x4a3426, snowy: false });
@@ -76,18 +144,30 @@ function makeItems(names: string[], city: CityData): Item[] {
       const def = DISTRICT_DEFS.find((d) => d.kind === kind);
       if (!def?.looks[lot]) continue;
       const b: Building = { x: 0, z: 0, w: 12, d: 10, h: Number(h) || 13, zone: 'residential', variant: 0.37, district: def.kind, lot, street: 15 };
-      const flat: CityData = { ...city, terrain: { hill: null, canals: [], bridges: [], land: [] }, buildings: [b] };
-      const { walls, roofs } = buildingGeometry(flat, theme, climate, new Rng(city.seed));
-      const group = new THREE.Group();
-      for (const [facade, builder] of walls) {
-        const tex = createFacadeTextures(facade, new Rng(city.seed));
-        group.add(new THREE.Mesh(builder.build(true), new THREE.MeshStandardMaterial({
-          vertexColors: true, map: tex.map, emissiveMap: tex.emissive, emissive: 0xffffff, emissiveIntensity: 0, roughnessMap: tex.surface, metalnessMap: tex.surface, roughness: 1, metalness: 1,
-        })));
-      }
-      group.add(new THREE.Mesh(roofs.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })));
-      group.position.y = 0.3; // buildings stand 0.3 below their footing's ground
+      const group = buildingGroup(city, b, theme, climate);
       add(raw, group);
+      continue;
+    }
+    if (raw.startsWith('car:')) {
+      const [name, tint] = raw.slice(4).split('~');
+      const all = Object.keys(CARS);
+      const matched = name === '' || name.endsWith('-') ? all.filter((k) => k.startsWith(name)) : all.includes(name) ? [name] : [];
+      for (const key of matched) {
+        const spec = tint ? { ...CARS[key], color: parseInt(tint, 16) } : CARS[key];
+        add(`car:${key}${tint ? `~${tint}` : ''}`, parkedCar(spec));
+      }
+      continue;
+    }
+    if (raw.startsWith('zone:')) {
+      const m = /^zone:(\w*)(?:@([\d.]+))?(?:v([\d.]+))?(?:=([\d.]+)x([\d.]+))?$/.exec(raw);
+      if (!m) continue;
+      const zones = (Object.keys(ZONE_LOT) as Zone[]).filter((z) => !m[1] || z === m[1]);
+      for (const zone of zones) {
+        const [lo, hi] = ZONE_STYLE[zone].height;
+        const [w, d] = m[4] ? [Number(m[4]), Number(m[5])] : ZONE_LOT[zone];
+        const b: Building = { x: 0, z: 0, w, d, h: Number(m[2]) || Math.round((lo + hi) / 2), zone, variant: m[3] ? Number(m[3]) : 0.37 };
+        add(m[1] ? raw : `zone:${zone}${raw.slice(5)}`, buildingGroup(city, b, theme, climate));
+      }
       continue;
     }
     const [name, tint] = raw.split('~');
@@ -111,7 +191,7 @@ function makeItems(names: string[], city: CityData): Item[] {
 export function createStudio(city: () => CityData) {
   let scene: THREE.Scene | null = null;
   let camera: THREE.PerspectiveCamera | null = null;
-  let items: (Item & { at: THREE.Vector3 })[] = [];
+  let items: (Item & { at: THREE.Vector3; tag: THREE.Sprite })[] = [];
   let span = 10;
 
   return {
@@ -136,7 +216,7 @@ export function createStudio(city: () => CityData) {
         tag.scale.multiplyScalar(k);
         tag.position.set(at.x, it.size.y + 0.6 + 0.6 * k, at.z);
         scene!.add(tag);
-        return { ...it, at };
+        return { ...it, at, tag };
       });
       const floor = new THREE.Mesh(new THREE.PlaneGeometry(span + 40, span + 40).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: FLOOR, roughness: 1 }));
       floor.position.y = -0.01;
@@ -150,8 +230,11 @@ export function createStudio(city: () => CityData) {
     shoot({ focus, from = Math.PI * 0.25, height, dist }: StudioShot = {}) {
       if (!scene || !camera) return null;
       const it = focus !== undefined ? items[focus] : undefined;
-      const target = it ? it.at.clone().setY(it.size.y / 2) : new THREE.Vector3(0, 1, 0);
-      const reach = it ? Math.max(it.size.x, it.size.y, it.size.z) * 1.6 + 2 : span * 0.9 + 6;
+      // A close-up shows its item alone: neighbours (a tower beside a house) would stand in the way.
+      for (const i of items) i.object.visible = i.tag.visible = !it || i === it;
+      const tallest = Math.max(0, ...items.map((i) => i.size.y)); // towers need the grid camera further out
+      const target = it ? it.at.clone().setY(it.size.y / 2) : new THREE.Vector3(0, Math.max(1, tallest * 0.3), 0);
+      const reach = it ? Math.max(it.size.x, it.size.y, it.size.z) * 1.6 + 2 : Math.max(span * 0.9 + 6, tallest * 1.6);
       const d = dist ?? reach;
       camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();

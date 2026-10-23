@@ -15,9 +15,12 @@ Compare with main: `git worktree add <scratchpad>/mainwt main`, symlink `node_mo
   listed, every gate at 30 m/s, each off-road drivable rect end to end (`hit` = stopped inside what it
   tests, `exit` = past it, `stuck` = never moved). Use it instead of hand-written drive evals.
 - **Studio** `studio.js` with `?seed=N&debug&studio=dumpster,wreck-,couch~6a3a2a,lot:slums/gutted&angles=4&closeups=1`:
-  models and lot buildings alone on a grey floor (prop keys, `-` prefixes, `~tint`,
-  `lot:<kind>/<lot>[@height]`; `low=1` adds an eye-level shot, `city=` the climate's looks). Use it for
-  every new prop or look before placing it. It compiles its own programs: take `dbg.stats()` in another run.
+  models, vehicles and buildings alone on a grey floor (prop keys, `-` prefixes, `~tint`,
+  `lot:<kind>/<lot>[@height]`, `car:<key>[~hex]` (`car:` all, `car:cop-` cops; player, sedan, sports,
+  suv, van, pickup, bus, boxtruck, ramptruck, tractor), `zone:<zone>[@h][v<variant>][=WxD]` (`zone:` all
+  four, the seed picks the theme); `low=1` adds an eye-level shot, `city=` the climate's looks). Use it
+  for every new prop, vehicle or look before placing it. It compiles its own programs: take
+  `dbg.stats()` in another run.
 
 Write a custom eval (in the scratchpad) only for drives and chases:
 

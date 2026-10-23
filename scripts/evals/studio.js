@@ -3,9 +3,11 @@
 //     --start 1500 --out-dir <dir> --no-final --eval-file scripts/evals/studio.js
 // `studio=` names (comma separated): prop model keys (`dumpster`, `fence-torn`), prefixes ending in
 // `-` (`wreck-`, `sign-`), tints (`couch~6a3a2a`: tinted models show white where the tint goes),
-// lot buildings (`lot:slums/gutted`, `lot:farm/barn@9` with a height). Shots: `grid-<k>` from
+// lot buildings (`lot:slums/gutted`, `lot:farm/barn@9` with a height), vehicles (`car:bus`, `car:cop-`,
+// `car:` for all, `car:sedan~c9ccd1` repainted), zone buildings (`zone:residential`, `zone:` for all
+// four, then `@height`, `v<variant>` 0..1, `=WxD`; the seed picks the theme). Shots: `grid-<k>` from
 // `angles` directions round the whole grid (default 4), one low eye-level grid shot with `low=1`,
-// and with `closeups=1` each item alone from the front-left and back-right (`<i>-<name>-a|b`).
+// and with `closeups=1` each item alone (the others hidden) from the front-left and back-right (`<i>-<name>-a|b`).
 // `city=snow|desert|beach` picks the climate's looks. The studio has its own lights: it compiles
 // its own programs, so take `dbg.stats()` in another run.
 (async () => {
