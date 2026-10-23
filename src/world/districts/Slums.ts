@@ -140,6 +140,7 @@ export const SLUMS_DEF: DistrictDef = {
   keepZebras: false,
   traffic: { density: SLUMS.density, heavy: false, weights: { Pickup: SLUMS.pickupWeight, Van: SLUMS.vanWeight } },
   copSpawnSkip: SLUMS.copSpawnSkip,
+  softGround: { grip: SLUMS.rubbleGrip, drag: SLUMS.rubbleDrag },
   roadblockGates: true,
   mapColor: 0x8a4a2a,
   dress,

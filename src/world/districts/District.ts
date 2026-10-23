@@ -153,6 +153,8 @@ export interface DistrictDef {
   keepZebras: boolean;
   traffic: DistrictTraffic;
   copSpawnSkip: number; // 0..1 chance a cop spawn try inside is re-rolled
+  /** How its `dressing.soft` ground drives: tyre grip multiplier and extra rolling drag (m/s²). */
+  softGround?: { grip: number; drag: number };
   roadblockGates: boolean; // 4★+ roadblocks prefer a gate edge
   mapColor: number;
   label: string; // its display name, e.g. "Old City"

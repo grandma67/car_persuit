@@ -69,6 +69,12 @@ export const CAR_GROUPS = ((0xffff << 16) | (0xffff & ~CAR_PASSES)) >>> 0;
 
 // A Rapier raycast vehicle plus its mesh. The same class drives the player and (later) cops;
 // only the DriveInput source differs.
+/** Ground that gives under the tyres: their grip multiplier, and extra rolling drag (m/s²). */
+export interface SoftPatch {
+  grip: number;
+  drag: number;
+}
+
 export class Vehicle {
   readonly body: RAPIER.RigidBody;
   readonly collider: RAPIER.Collider;
@@ -120,13 +126,23 @@ export class Vehicle {
   readonly knock = [0, 0];
   private lastYawRate = 0;
   private gripScale = 1; // road grip (wet, ice)
-  /** On soft ground (a field) this step: less grip, more rolling drag. */
+  /** On soft ground (a field, a rubble lot) this step: less grip, more rolling drag. */
   onSoft = false;
+  private soft: SoftPatch | null = null;
   /**
-   * Soft ground for every car in the city (the Farm's fields), set once per city by the game: where
-   * it is, the tyre grip multiplier there and the extra rolling drag (m/s²). Null: none.
+   * Soft ground for every car in the city (the Farm's fields, the Slums' rubble lots), set once per
+   * city by the game: what is underfoot at a point (its tyre grip multiplier and extra rolling drag,
+   * m/s²), or null for firm ground. Null: none anywhere.
    */
-  static softGround: { at: (x: number, z: number) => boolean; grip: number; drag: number } | null = null;
+  static softGround: { at: (x: number, z: number) => SoftPatch | null } | null = null;
+  /**
+   * Potholes for every car (the Slums' roads): where they are, and the kick a wheel takes dropping
+   * into one (vertical m/s per 10 m/s of the car's speed). Null: none.
+   */
+  static potholes: { at: (x: number, z: number) => boolean; kick: number } | null = null;
+  private inHole = [false, false, false, false];
+  /** Pothole jolts taken so far (for tests and the sounds). */
+  jolts = 0;
   // Collision detection by sudden velocity change; contact forces don't scale usefully with impact speed.
   private lastVel = new THREE.Vector3();
   private impact = 0;
@@ -259,6 +275,25 @@ export class Vehicle {
     return p ? out.set(p.x, p.y, p.z) : null;
   }
 
+  /** A wheel dropping into a pothole: an upward kick at that wheel as it hits the far edge, harder the faster. */
+  private potholeJolt(): void {
+    const holes = Vehicle.potholes;
+    if (!holes) return;
+    const v = this.body.linvel();
+    const speed = Math.hypot(v.x, v.z);
+    for (let i = 0; i < 4; i++) {
+      const p = this.wheelContact(i, this.holeAt);
+      const inside = !!p && holes.at(p.x, p.z);
+      if (inside && !this.inHole[i] && speed > 2) {
+        const j = (this.body.mass() / 4) * holes.kick * (speed / 10);
+        this.body.applyImpulseAtPoint({ x: 0, y: j, z: 0 }, { x: p!.x, y: p!.y, z: p!.z }, true);
+        this.jolts++;
+      }
+      this.inHole[i] = inside;
+    }
+  }
+  private holeAt = new THREE.Vector3();
+
   /** Apply driver input. Call once per fixed step, before world.step(). */
   drive(input: DriveInput, dt: number): void {
     const s = this.spec;
@@ -306,6 +341,7 @@ export class Vehicle {
     }
 
     this.softDrag(dt);
+    this.potholeJolt();
     c.updateVehicle(dt, undefined, CAR_GROUPS);
     if (drifting && speed > 0) this.driftAssist(input, dt);
     this.lastInput = input;
@@ -627,24 +663,24 @@ export class Vehicle {
   }
 
   private applyFrictionSlip(): void {
-    const soft = this.onSoft && Vehicle.softGround ? Vehicle.softGround.grip : 1;
+    const soft = this.soft?.grip ?? 1;
     for (let i = 0; i < 4; i++) this.controller.setWheelFrictionSlip(i, this.spec.frictionSlip * this.gripScale * soft);
   }
 
   /** On soft ground: the tyres' grip drops and the ground drags at the wheels (on the ground only). */
   private softDrag(dt: number): void {
-    const g = Vehicle.softGround;
     const p = this.body.translation();
-    const soft = !!g && g.at(p.x, p.z);
-    if (soft !== this.onSoft) {
-      this.onSoft = soft;
+    const soft = Vehicle.softGround?.at(p.x, p.z) ?? null;
+    if (soft !== this.soft) {
+      this.soft = soft;
+      this.onSoft = !!soft;
       this.applyFrictionSlip();
     }
     if (!soft || !this.grounded) return;
     const v = this.body.linvel();
     const s = Math.hypot(v.x, v.z);
     if (s < 0.1) return;
-    const dv = Math.min(s, g!.drag * dt) * this.body.mass();
+    const dv = Math.min(s, soft.drag * dt) * this.body.mass();
     this.body.applyImpulse({ x: (-v.x / s) * dv, y: 0, z: (-v.z / s) * dv }, true);
   }
 

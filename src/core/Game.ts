@@ -8,7 +8,7 @@ import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { buildCarMesh, setCarEnvironment, setCarShadow, type CarMesh } from '../vehicles/carMesh';
 import { createEnvironment } from '../render/Environment';
 import { ChaseCamera } from '../render/ChaseCamera';
-import { DEFAULT_CITY, generateCity, type CityConfig, type CityData } from '../world/CityGenerator';
+import { DEFAULT_CITY, generateCity, type CityConfig, type CityData, type Rect } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, pickTimeOfDay, type TimeOfDayName } from '../world/CityTheme';
@@ -57,7 +57,7 @@ import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { TiltInput, detectTilt, requestTiltPermission } from './tilt';
 import { getPref, setPref } from './idbPrefs';
-import { COP_RAM, DAMAGE, FARM } from '../gameplay/balance';
+import { COP_RAM, DAMAGE, SLUMS } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
 
 const FIXED_DT = 1 / 60;
@@ -237,9 +237,19 @@ export class Game {
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
     this.player.gearShifts = true;
     this.player.headlights = Math.max({ day: 0, afternoon: 0.45, night: 1 }[time.name], weather === 'clear' ? 0 : 0.45);
-    // The Farm's fields: soft ground for every car (less grip, more drag).
-    const soft = this.city.districts.flatMap((q) => q.dressing.soft ?? []);
-    Vehicle.softGround = soft.length ? { at: (x, z) => soft.some((r) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2), grip: FARM.fieldGrip, drag: FARM.fieldDrag } : null;
+    // Soft ground for every car (the Farm's fields, the Slums' rubble lots: less grip, more drag),
+    // and the Slums' potholes jolting every wheel that drops into one.
+    const inside = (r: Rect, x: number, z: number) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2;
+    const soft = this.city.districts.flatMap((q) => {
+      const patch = DISTRICT_DEFS.find((d) => d.kind === q.kind)?.softGround;
+      return patch && q.dressing.soft?.length ? [{ bounds: q.bounds, rects: q.dressing.soft, patch }] : [];
+    });
+    Vehicle.softGround = soft.length ? { at: (x, z) => soft.find((s) => inside(s.bounds, x, z) && s.rects.some((r) => inside(r, x, z)))?.patch ?? null } : null;
+    const holes = this.city.districts.flatMap((q) => {
+      const rects = (q.dressing.extra?.potholes ?? []) as Rect[];
+      return rects.length ? [{ bounds: q.bounds, rects }] : [];
+    });
+    Vehicle.potholes = holes.length ? { at: (x, z) => holes.some((h) => inside(h.bounds, x, z) && h.rects.some((r) => inside(r, x, z))), kick: SLUMS.potholeKick } : null;
     this.player.setGrip(playerGrip(climate, weather));
     this.effects = new Effects(this.scene, climate.spray, weather === 'rain');
     if (weather !== 'clear') {

@@ -101,11 +101,17 @@ export function streetDressing(q: District, city: CityData, out: DistrictDressin
     ...city.streetProps.filter(inBounds).map((p) => propFootprint(p, 0.3)),
     ...out.props.map((p) => propFootprint(p, 0.3)),
   ];
-  // Ways in stay open: the junkyard's corridors across the sidewalk, the sidewalk in front of each torn fence hole.
-  for (const r of out.drivable) taken.push(rectFootprint(r));
-  for (const v of (out.extra?.vacant ?? []) as { holes: { x: number; z: number; nx: number; nz: number }[] }[]) {
+  // Ways in stay open: the junkyard's corridors across the sidewalk and out over the kerb lane, the
+  // same in front of each torn fence hole.
+  const lane = 3;
+  const vacant = (out.extra?.vacant ?? []) as { rect: Rect; holes: { x: number; z: number; nx: number; nz: number }[] }[];
+  for (const r of out.drivable) {
+    if (vacant.some((v) => v.rect === r)) continue;
+    taken.push(rectFootprint(r.w > r.d ? { ...r, w: r.w + lane * 2 } : { ...r, d: r.d + lane * 2 }));
+  }
+  for (const v of vacant) {
     for (const h of v.holes) {
-      const reach = sw + SLUMS.fenceInset;
+      const reach = sw + SLUMS.fenceInset + lane;
       const c = { x: h.x + (h.nx * reach) / 2, z: h.z + (h.nz * reach) / 2 };
       taken.push({ ...c, hx: h.nx ? reach / 2 : SLUMS.fenceHole / 2, hz: h.nx ? SLUMS.fenceHole / 2 : reach / 2, yaw: 0 });
     }

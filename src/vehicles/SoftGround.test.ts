@@ -28,10 +28,12 @@ function run(world: RAPIER.World, car: Vehicle, input: DriveInput, seconds: numb
   }
 }
 
+const FIELD_SOFT = { grip: FARM.fieldGrip, drag: FARM.fieldDrag };
+
 describe('soft ground (the Farm\'s fields)', () => {
   beforeAll(async () => {
     await RAPIER.init();
-    Vehicle.softGround = { at: (_x, z) => z >= FIELD.z0 && z <= FIELD.z1, grip: FARM.fieldGrip, drag: FARM.fieldDrag };
+    Vehicle.softGround = { at: (_x, z) => (z >= FIELD.z0 && z <= FIELD.z1 ? FIELD_SOFT : null) };
   });
   afterAll(() => {
     Vehicle.softGround = null;
@@ -67,9 +69,9 @@ describe('soft ground (the Farm\'s fields)', () => {
     const road = setup(PLAYER_SPEC, -400, 0);
     run(road.world, road.car, FULL, 3);
     const field = setup(PLAYER_SPEC, 50, 0);
-    Vehicle.softGround = { at: () => true, grip: FARM.fieldGrip, drag: FARM.fieldDrag };
+    Vehicle.softGround = { at: () => FIELD_SOFT };
     run(field.world, field.car, FULL, 3);
-    Vehicle.softGround = { at: (_x, z) => z >= FIELD.z0 && z <= FIELD.z1, grip: FARM.fieldGrip, drag: FARM.fieldDrag };
+    Vehicle.softGround = { at: (_x, z) => (z >= FIELD.z0 && z <= FIELD.z1 ? FIELD_SOFT : null) };
     expect(field.car.speed).toBeLessThan(road.car.speed);
     expect(field.car.speed).toBeGreaterThan(road.car.speed * 0.6);
   });

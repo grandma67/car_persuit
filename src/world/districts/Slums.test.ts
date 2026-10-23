@@ -231,6 +231,17 @@ describe('Slums streets', () => {
     }
   });
 
+  it.each(placed)('seed %i: nothing heavy parks across a junkyard corridor mouth or a torn fence hole', (_seed, c, q) => {
+    const heavy = q.dressing.props.filter((p) => p.kind === 'wreck' || p.kind === 'dumpster').map((p) => propFootprint(p));
+    const lots = vacantLots(q);
+    const mouths: Footprint[] = q.dressing.drivable.filter((d) => !lots.some((v) => v.rect === d)).map((r) => rectFootprint(r.w > r.d ? { ...r, w: r.w + 4 } : { ...r, d: r.d + 4 }));
+    for (const v of lots) for (const h of v.holes) {
+      const reach = c.config.sidewalk + 2;
+      mouths.push({ x: h.x + (h.nx * reach) / 2, z: h.z + (h.nz * reach) / 2, hx: h.nx ? reach / 2 : 3, hz: h.nx ? 3 : reach / 2, yaw: 0 });
+    }
+    for (const f of heavy) expect(mouths.filter((m) => footprintsOverlap(f, m))).toEqual([]);
+  });
+
   it.each(placed)('seed %i: lamps are mostly dead, one working by each junction; no bench or tree left', (_seed, c, q) => {
     const props = c.streetProps.filter((p) => inRect(q.bounds, p));
     const dead = props.filter((p) => p.kind === 'brokenLamp').length, working = props.filter((p) => p.kind === 'lamp').length;
