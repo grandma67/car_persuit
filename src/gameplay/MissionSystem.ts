@@ -20,8 +20,9 @@ export function pickDestinations(
   let from = startId;
   for (let k = 0; k < cfg.destinations; k++) {
     const dist = graph.distancesFrom(from);
+    // Unreachable junctions (Infinity: a grid node a canal swallowed) never count, even in the relaxed ranges.
     const within = (min: number, max: number) =>
-      graph.nodes.filter((n) => !used.has(n.id) && dist[n.id] >= min && dist[n.id] <= max && !visited.has(districtOf?.(n.id) ?? ''));
+      graph.nodes.filter((n) => !used.has(n.id) && Number.isFinite(dist[n.id]) && dist[n.id] >= min && dist[n.id] <= max && !visited.has(districtOf?.(n.id) ?? ''));
     // Relax the range rather than fail on an unusual map.
     let candidates = within(cfg.minRouteDistance, cfg.maxRouteDistance);
     if (!candidates.length) candidates = within(cfg.minRouteDistance, Infinity);

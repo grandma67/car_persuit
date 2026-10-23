@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../core/Rng';
-import { generateCity } from '../world/CityGenerator';
+import { DEFAULT_CITY, generateCity } from '../world/CityGenerator';
 import { MISSION } from './balance';
 import { MissionSystem, pickDestinations, routeAim } from './MissionSystem';
 
@@ -21,6 +21,18 @@ describe('pickDestinations', () => {
       const len = city.graph.pathLength(city.graph.path(from, d.id)!);
       expect(len).toBeGreaterThanOrEqual(MISSION.minRouteDistance);
       expect(len).toBeLessThanOrEqual(MISSION.maxRouteDistance + 1e-6);
+      from = d.id;
+    }
+  });
+
+  it('a map too small for the range still picks only reachable junctions (seed 10, 4×4, canal)', () => {
+    const city = generateCity(10, { ...DEFAULT_CITY, blocks: 4 });
+    const start = city.graph.nearest(city.spawn.x, city.spawn.z);
+    const destinations = pickDestinations(city.graph, new Rng(10), start.id);
+    expect(destinations).toHaveLength(MISSION.destinations);
+    let from = start.id;
+    for (const d of destinations) {
+      expect(city.graph.path(from, d.id)).not.toBeNull();
       from = d.id;
     }
   });
