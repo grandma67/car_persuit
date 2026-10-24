@@ -22,8 +22,12 @@ destinations, cops, civilian traffic, themed districts.
 ## Commands
 
 - Type check: `npx tsc --noEmit`. Build: `npm run build`.
-- Tests: `npm run t` (~20 s, prints only failures + summary, killed after 300 s, `T_LIMIT=`). Area:
-  `npm run t -- src/world/districts`, `-t "name"`. Never pipe vitest through `grep`/`tail` without a limit.
+- Tests: `npm run t` (~26–35 s wall, ~250 s CPU; prints only failures + summary, killed after 300 s,
+  `T_LIMIT=`). Area: `npm run t -- src/world/districts`, `-t "name"`. Never pipe vitest through
+  `grep`/`tail` without a limit.
+- Suite time: `npm run t -- --times` (CPU s, wall s, slowest files, Δ% vs the saved run; `--times save`
+  stores this run as the one to compare with). Wall time swings by a third with load: judge by CPU, and
+  don't rerun the full suite to measure by hand.
 - One-off TS script: `node scripts/run-ts.mjs <file.ts> [args]` (default export gets args). Use it for
   numbers instead of scratch tests (vitest swallows `console.log`). A script in the scratchpad needs
   absolute `src/` imports and `node_modules` symlinked next to it.
@@ -36,6 +40,9 @@ destinations, cops, civilian traffic, themed districts.
   roles; `flat` = no hill/canals, for physics sims). Never write a search script for this.
 - Building budget: `npm run budget -- harbor [seeds=20]` (walls + roofs triangles, facade styles, gen +
   geometry ms on vs off).
+- Seed guard: `npm run hash -- --vs HEAD` (or `main`, any ref on/after the city-params branch: hashes
+  120 cities on a temporary worktree and names those that moved; `--out f` / `--vs f` for a file;
+  `--reload` also proves every dump reloads as its city). Refs before city params need a file baseline.
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (see `knowledge/RAPIER.md`).
 - Browser: `npm run check:browser …` (see `knowledge/BROWSER_CHECKS.md`).
 - Restart/leaks: `npm run check:restart` (Retry/New city in place: fullscreen, splash, heap, GPU orphans
@@ -48,6 +55,8 @@ destinations, cops, civilian traffic, themed districts.
   at branch end **stop for the user's approval**, then merge to main and branch the next from main.
   Keep `knowledge/TASKS.md` ticked (it tells the next session where things stand).
 - **Storage:** the origin is shared; touch only the game's own localStorage/IndexedDB keys.
+- **Tests ship with the code.** Never commit part of a milestone without the tests for what it
+  adds: untested code left for the next session hides its bugs until then.
 - **Testing split:** Claude owns logic (unit tests + headless browser checks: no errors, draw calls,
   programs, fps, screenshots). The user judges feel.
 - No district names in the start toast; toasts are for game modes (England…).
@@ -85,4 +94,7 @@ destinations, cops, civilian traffic, themed districts.
   scratchpad), compare after.
 - A new prop, look or material: `renderer.info.programs` must not grow (browser run, on vs off).
 - Anything a run adds to the page or scene must be freed by `Game.dispose()`: `npm run check:restart`.
+- Shared test helpers that import vitest live in `src/` as plain `.ts` (`world/paramsTesting.ts`,
+  `districts/trafficSim.ts`). `src/` can't import from `scripts/`: `tsc` covers `src` only and has no
+  Node types (`node:fs`, `node:crypto` won't type-check), so a script's helper a test needs moves to `src/`.
 - District tests and rules: `knowledge/DISTRICTS_DEV.md`.

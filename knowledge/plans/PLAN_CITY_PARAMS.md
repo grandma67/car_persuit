@@ -200,8 +200,8 @@ committed.
 
 ## Status (branch `city-params`)
 
-Done: **M0–M4**. Hash identical for all 120 cities after every step (`npm run hash
--- --out <scratchpad>/base.txt` on main first, then `--vs` it); `npm run hash -- --reload` proves every
+Done: **M0–M4**. Hash identical for all 120 cities after every step (now `npm run hash -- --vs
+HEAD` before each commit; main predates city params, so compare with the branch's commits); `npm run hash -- --reload` proves every
 one of the 120 dumps reloads as its city (same hash, same dump). **Next: M5** (the game: `dbg.loadCity`
 / `dbg.dumpCity`).
 
@@ -255,7 +255,7 @@ one of the 120 dumps reloads as its city (same hash, same dump). **Next: M5** (t
   layout-dependent words (districts, features, ramps, canal ramps, roadworks, canal width) on all 10.
   The suite's round trip covers 20 seeds × 2 plus the URL flags (`?roadworks`, `?canalramp`, …);
   the full 60 × 2 is `npm run hash -- --reload`, run with the hash at each milestone. The new files
-  add ~4–8 s to `npm run t` (24.5–29 s without them, 33–35 s with them on this machine; noisy). M6
+  add ~4–8 s wall to `npm run t` (noisy; the saved `--times` run is the reference: CPU 250 s). M6
   should win some back.
 - **Found by the word tests:** `Harbor.built` read the tank farm from the lots, but `dress` swaps
   that lot for the tank structure, so `tankFarm` could never be made; the Slums junkyard roll is
@@ -351,8 +351,9 @@ Branch `city-params` from main. Commit per milestone; the full suite (`npm run t
 - New generator tests: each pinned field ends up in the built city (canal where asked, the district at
   its rect, the festival on), invalid params fail with the right reason, warnings come back for
   night-only features on a day run.
-- Per test file, compare the time before and after; the suite must stay within today's ~20 s.
-  Pinned scenarios should make some files faster (no seed hunting).
+- Per test file, compare the time before and after (`npm run t -- --times`, against the run saved
+  after M4: CPU 250 s, wall ~26 s); the suite's CPU must not grow. Pinned scenarios should make some
+  files faster (no seed hunting).
 
 **M7: docs.**
 - `CLAUDE.md`: the `npm run city` commands, "a test that needs a feature builds its params with
