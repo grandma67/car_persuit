@@ -35,6 +35,11 @@ src/
 Generation and gameplay logic are pure data (no Three.js), unit-tested with Vitest. Tuning lives in
 `gameplay/balance.ts`.
 
+Retry and New city don't reload the page (that would leave fullscreen on phones): `main.ts` disposes
+the Game (`Game.dispose()`: scene GPU resources, Rapier world, DOM, listeners, car mesh templates) and
+builds the next one behind the splash, keeping the renderer and audio (`GameShell`). The seed goes into
+the URL with `history.replaceState`. Anything a run adds to the page must be undone in `dispose()`.
+
 ## World
 
 - 8x8 to 15×15 grid (rolled per seed, own RNG stream) of 60 m blocks, 12 m roads, on a seeded hill,
@@ -87,6 +92,7 @@ the player or a crashed car blocks them, never at a queue), minimap, end-screen 
   `farm`, `slums`), `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?blocks=N` (grid size), `?touch`.
 - `?debug`: FPS counter; keys C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`,
   `?weather=`, `?hill=0|1`; `window.game` and `window.dbg` in the console (see `BROWSER_CHECKS.md`).
+- `?gputrace`: `window.gpuTrace` names every GPU resource with its creation site (leak hunting).
 
 ## Versions
 

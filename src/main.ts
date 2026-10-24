@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { Game } from './core/Game';
+import { CarAudio } from './audio/CarAudio';
+import { Game, createRenderer, type GameShell } from './core/Game';
 import { debugTools } from './core/debugTools';
 import { seedFromUrl } from './core/Rng';
 import { isTouchDevice } from './ui/TouchControls';
@@ -32,12 +33,28 @@ function stage(text: string, progress: number): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 }
 
+let hideTimer = 0;
+
+/** Fade the splash out, then take it out of layout (its animations stop) until the next city. */
+function hideSplash(): void {
+  splash.classList.add('done');
+  hideTimer = window.setTimeout(() => (splash.hidden = true), 700);
+}
+
+/** The splash again while Retry / New city builds the next city, at the start of its bar. */
+function showSplash(): void {
+  window.clearTimeout(hideTimer);
+  splash.hidden = false;
+  splash.classList.remove('done');
+  status.hidden = false;
+  bar.style.transform = 'translateX(-100%)';
+  [...stars.children].forEach((star) => star.classList.remove('on'));
+  stars.classList.remove('full');
+}
+
 /** Fade the splash out. After a reload (Retry / New city) skip the "press any key" step. */
 function dismissSplash(game: Game): void {
-  const done = () => {
-    splash.classList.add('done');
-    window.setTimeout(() => splash.remove(), 700);
-  };
+  const done = hideSplash;
   let seenBefore = false;
   try {
     seenBefore = sessionStorage.getItem('cp-splash-seen') === '1';
@@ -65,24 +82,63 @@ function dismissSplash(game: Game): void {
   window.addEventListener('pointerdown', go, true);
 }
 
-async function start(): Promise<void> {
-  const seed = seedFromUrl();
-  await stage('Starting physics engine', 25);
-  await RAPIER.init();
+const app = document.getElementById('app')!;
+const hud = document.getElementById('hud')!;
+let game: Game | null = null;
+let restarting = false;
+
+// Retry and New city build the next Game in this page rather than reloading it: a reload leaves
+// fullscreen, and the browser won't go back in without a fresh tap. Renderer and audio carry over.
+const shell: GameShell = {
+  renderer: createRenderer(app),
+  audio: new CarAudio(),
+  restart: (seed) => {
+    if (restarting) return;
+    restarting = true;
+    const url = new URL(window.location.href);
+    url.searchParams.set('seed', String(seed));
+    history.replaceState(history.state, '', url); // share links and a reload keep this city
+    game?.dispose();
+    game = null;
+    showSplash();
+    build(seed)
+      .then((next) => {
+        game = next;
+        next.audioUnlocked(); // the tap on Retry was the gesture: the menu loop plays as on first start
+        hideSplash();
+      })
+      .catch(failed)
+      .finally(() => (restarting = false));
+  },
+};
+
+async function build(seed: number): Promise<Game> {
   await stage(`Building city #${seed}`, 55);
-  const game = new Game(document.getElementById('app')!, document.getElementById('hud')!, seed);
+  const next = new Game(app, hud, seed, shell);
   // For browser checks: the game's renderer and city, and helpers to frame and measure (debugTools).
-  if (new URLSearchParams(window.location.search).has('debug')) Object.assign(window, { game, dbg: debugTools(game) });
+  if (new URLSearchParams(window.location.search).has('debug')) Object.assign(window, { game: next, dbg: debugTools(next) });
   await stage('Placing street furniture', 90);
-  game.start();
+  next.start();
   // After start(): the stage's two frames render the scene first, settling its lights.
   await stage('Warming up the engine', 95);
-  await game.prewarmShaders();
+  await next.prewarmShaders();
   await stage('Ready', 100);
+  return next;
+}
+
+async function start(): Promise<void> {
+  const seed = seedFromUrl();
+  // GPU leak hunting: window.gpuTrace names what the renderer still holds (see BROWSER_CHECKS.md).
+  if (new URLSearchParams(window.location.search).has('gputrace')) (await import('./core/gpuTrace')).installGpuTrace();
+  await stage('Starting physics engine', 25);
+  await RAPIER.init();
+  game = await build(seed);
   dismissSplash(game);
 }
 
-start().catch((err) => {
+function failed(err: unknown): void {
   status.textContent = `Failed to start: ${err}`;
   console.error(err);
-});
+}
+
+start().catch(failed);

@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 import type { TimeOfDay } from '../world/CityTheme';
 
-export function createEnvironment(renderer: THREE.WebGLRenderer, time: TimeOfDay): THREE.Texture {
+/** The prefiltered sky; `.texture` is the reflection map. Dispose the target itself to free it. */
+export function createEnvironment(renderer: THREE.WebGLRenderer, time: TimeOfDay): THREE.WebGLRenderTarget {
   const linear = (hex: number) => new THREE.Color(hex); // ColorManagement converts sRGB hex to linear
   const sunDir = new THREE.Vector3(...time.sunOffset).normalize();
   const material = new THREE.ShaderMaterial({
@@ -43,5 +44,5 @@ export function createEnvironment(renderer: THREE.WebGLRenderer, time: TimeOfDay
   pmrem.dispose();
   sphere.geometry.dispose();
   material.dispose();
-  return target.texture;
+  return target;
 }

@@ -5,7 +5,7 @@ import { Rng } from './Rng';
 import { safeStorage } from './storage';
 import { Vehicle } from '../vehicles/Vehicle';
 import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
-import { buildCarMesh, setCarEnvironment, setCarShadow, type CarMesh } from '../vehicles/carMesh';
+import { buildCarMesh, resetCarMeshes, setCarEnvironment, setCarShadow, type CarMesh } from '../vehicles/carMesh';
 import { createEnvironment } from '../render/Environment';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, rollCityBlocks, type CityConfig, type CityData, type Rect } from '../world/CityGenerator';
@@ -75,6 +75,32 @@ const CAR_SHADOW_RANGE = 65;
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
 
+/**
+ * Kept from one run to the next when Retry / New city builds the next Game in the same page
+ * (a reload would leave fullscreen): one WebGL context, one AudioContext. Without them the Game
+ * makes its own and Retry reloads the page.
+ */
+export interface GameShell {
+  renderer: THREE.WebGLRenderer;
+  audio: CarAudio;
+  /** Build the next city in place of this one (main.ts disposes this Game first). */
+  restart: (seed: number) => void;
+}
+
+/** The renderer every Game draws with. Created once, its canvas added to `container`. */
+export function createRenderer(container: HTMLElement): THREE.WebGLRenderer {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // Cap resolution at 1.5× on every screen: a 2× retina display costs ~80% more pixels to fill
+  // for detail antialiasing already smooths over (measured: render time −18% on a 2× laptop).
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // three r186 dropped PCFSoftShadowMap for this
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  container.appendChild(renderer.domElement);
+  return renderer;
+}
+
 export class Game {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -98,7 +124,7 @@ export class Game {
   private debug = new URLSearchParams(window.location.search).has('debug');
   private hud: Hud;
   private screens: Screens;
-  private audio = new CarAudio();
+  private audio: CarAudio;
   private effects: Effects;
   private marker = new DestinationMarker(MISSION.reachRadius);
   private sea: Sea;
@@ -142,18 +168,18 @@ export class Game {
   private accumulator = 0;
   private carShadowCull = isTouchDevice(); // measured: −10% render submission on a 4× slower CPU
   private timer = new THREE.Timer(); // ticked at the top of every frame, paused or not
+  private shell: GameShell | null;
+  private disposed = false;
+  private endTimer = 0; // the end screen's delayed show
+  private staging: THREE.Scene | null = null; // prewarmShaders' cars, kept so their shaders stay compiled
+  private unlisten: (() => void)[] = [];
+  private environment: THREE.WebGLRenderTarget;
 
-  constructor(container: HTMLElement, hudRoot: HTMLElement, seed: number) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+  constructor(container: HTMLElement, hudRoot: HTMLElement, seed: number, shell: GameShell | null = null) {
+    this.shell = shell;
+    this.renderer = shell?.renderer ?? createRenderer(container);
+    this.audio = shell?.audio ?? new CarAudio();
     const mobile = isTouchDevice();
-    // Cap resolution at 1.5× on every screen: a 2× retina display costs ~80% more pixels to fill
-    // for detail antialiasing already smooths over (measured: render time −18% on a 2× laptop).
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap; // three r186 dropped PCFSoftShadowMap for this
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    container.appendChild(this.renderer.domElement);
 
     // The seed picks a climate, a weather, a time of day and a building style that suits the climate.
     // Overrides for testing, only with ?debug: ?city=temperate|snow|beach|desert, ?weather=clear|rain|snow.
@@ -164,8 +190,8 @@ export class Game {
     const time = applyClimate(pickTimeOfDay(seed, params.get('time')), climate, weather);
     const theme = pickTheme(seed, climate);
     // The sky and sun as reflected by car paint, glass and rims.
-    const environment = createEnvironment(this.renderer, time);
-    setCarEnvironment(environment);
+    this.environment = createEnvironment(this.renderer, time);
+    setCarEnvironment(this.environment.texture);
     this.renderer.toneMappingExposure = time.exposure;
     this.fog = new THREE.Fog(time.skyHorizon, time.fogNear, time.fogFar);
     this.scene.background = new THREE.Color(time.skyHorizon);
@@ -312,11 +338,11 @@ export class Game {
       // The tilt option appears once a sensor answers. iOS only reads it after a tap allows it:
       // Start asks again (see startMission).
       void detectTilt().then(async (ok) => {
-        if (!ok) return;
+        if (!ok || this.disposed) return;
         this.tilt = new TiltInput();
         this.input.tilt = this.tilt;
         if ((await getPref<SteerMode>(STEER_PREF)) === 'tilt') this.applySteerMode('tilt');
-        if (this.state === 'menu') this.showMenu();
+        if (this.state === 'menu' && !this.disposed) this.showMenu();
       });
     }
     this.showMenu();
@@ -329,9 +355,14 @@ export class Game {
     onResize();
     window.addEventListener('resize', onResize);
     // Switching tab or app mid-run pauses it; the player resumes from the pause menu.
-    document.addEventListener('visibilitychange', () => {
+    const onHidden = () => {
       if (document.hidden) this.setPaused(true);
-    });
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    this.unlisten.push(
+      () => window.removeEventListener('resize', onResize),
+      () => document.removeEventListener('visibilitychange', onHidden),
+    );
 
     if (this.debug) (window as unknown as { __game: Game }).__game = this; // for browser tests
   }
@@ -340,6 +371,30 @@ export class Game {
     this.timer.connect(document); // no huge first frame back from a hidden tab
     this.timer.reset();
     this.renderer.setAnimationLoop(() => this.frame());
+  }
+
+  /**
+   * Free everything this run built so the next Game can take the page: GPU buffers, textures and
+   * shaders of its scene, the physics world, DOM and listeners. The shell's renderer and audio stay.
+   */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.renderer.setAnimationLoop(null);
+    window.clearTimeout(this.endTimer);
+    this.timer.dispose();
+    for (const off of this.unlisten) off();
+    this.input.dispose();
+    this.tilt?.setEnabled(false);
+    this.touch?.dispose();
+    this.screens.dispose();
+    this.audio.reset();
+    for (const scene of [this.scene, this.staging]) if (scene) disposeScene(scene);
+    resetCarMeshes();
+    this.environment.dispose();
+    this.renderer.renderLists.dispose();
+    this.world.free();
+    Vehicle.softGround = Vehicle.potholes = null;
   }
 
   /** The splash screen was dismissed with a key/click: audio may start; play the menu loop. */
@@ -423,7 +478,7 @@ export class Game {
    * frame.
    */
   async prewarmShaders(): Promise<void> {
-    const staging = new THREE.Scene();
+    const staging = (this.staging = new THREE.Scene());
     for (const spec of [...Object.values(COP_SPECS), ...civilianSpecVariants()]) staging.add(buildCarMesh(spec).root);
     const scratches = scratchPrewarmMesh();
     if (scratches) staging.add(scratches);
@@ -474,15 +529,19 @@ export class Game {
     this.audio.setPaused(paused);
   }
 
-  /** Reload with a seed: simplest way to guarantee a completely fresh world. */
+  /** The next run on a seed: built in this page by the shell (keeps fullscreen), else a reload. */
   private restart(seed: number): void {
+    if (this.shell) {
+      this.shell.restart(seed);
+      return;
+    }
     const url = new URL(window.location.href);
     url.searchParams.set('seed', String(seed));
     window.location.href = url.toString();
   }
 
   private handleKeys(): void {
-    for (const code of this.input.pressedKeys()) this.handleKey(code);
+    for (const code of this.input.pressedKeys()) if (!this.disposed) this.handleKey(code);
   }
 
   private handleKey(code: string): void {
@@ -567,6 +626,7 @@ export class Game {
     // Ticked while paused too, so the frame after a pause doesn't count the paused time.
     const frameDt = Math.min(this.timer.update().getDelta(), 0.1);
     this.handleKeys();
+    if (this.disposed) return; // Enter / N restarted: the physics world is gone
     if (this.state === 'paused') {
       this.input.endFrame();
       return;
@@ -1012,7 +1072,7 @@ export class Game {
     const reason = this.mission.loseReason;
     // Let an explosion play out before the end screen covers it.
     const showDelay = reason === 'destroyed' || reason === 'drowned' ? 2000 : 0;
-    window.setTimeout(() => this.showEndScreen(won), showDelay);
+    this.endTimer = window.setTimeout(() => this.showEndScreen(won), showDelay);
   }
 
   private showEndScreen(won: boolean): void {
@@ -1153,4 +1213,24 @@ export function startHour(seed: number, time: TimeOfDayName): number {
 
 function impactStrength(speed: number): number {
   return THREE.MathUtils.clamp((speed - 1.5) / 20, 0.1, 1);
+}
+
+/** Free the GPU side of everything in a scene: geometries, materials, their textures, shadow maps. */
+function disposeScene(scene: THREE.Scene): void {
+  const textures = new Set<THREE.Texture>();
+  const materials = new Set<THREE.Material>();
+  scene.traverse((o) => {
+    if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points || o instanceof THREE.Sprite) {
+      o.geometry.dispose();
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
+    }
+    if (o instanceof THREE.InstancedMesh) o.dispose();
+    if (o instanceof THREE.Light) o.dispose();
+  });
+  for (const m of materials) {
+    for (const value of Object.values(m)) if (value instanceof THREE.Texture) textures.add(value);
+    if (m instanceof THREE.ShaderMaterial) for (const u of Object.values(m.uniforms)) if (u.value instanceof THREE.Texture) textures.add(u.value);
+    m.dispose();
+  }
+  for (const t of textures) t.dispose();
 }

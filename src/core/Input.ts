@@ -22,15 +22,24 @@ export class Input {
   touch: TouchDrive | null = null;
   tilt: TiltInput | null = null;
   private pressed = new Set<string>();
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (!this.down.has(e.code)) this.pressed.add(e.code);
+    this.down.add(e.code);
+    if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+  };
+  private onKeyUp = (e: KeyboardEvent) => this.down.delete(e.code);
+  private onBlur = () => this.down.clear();
 
   constructor() {
-    window.addEventListener('keydown', (e) => {
-      if (!this.down.has(e.code)) this.pressed.add(e.code);
-      this.down.add(e.code);
-      if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
-    });
-    window.addEventListener('keyup', (e) => this.down.delete(e.code));
-    window.addEventListener('blur', () => this.down.clear());
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onBlur);
+  }
+
+  dispose(): void {
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.onBlur);
   }
 
   private any(...codes: string[]): boolean {

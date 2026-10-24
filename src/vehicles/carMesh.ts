@@ -95,6 +95,21 @@ function bodyGeometry(hx: number, hy: number, hz: number, noseDrop: number): THR
 const templates = new Map<string, CarMesh>();
 
 /**
+ * Free the templates (a new run in the same page): their materials reflect the old city's sky,
+ * so the next city's cars are built afresh around its own environment.
+ */
+export function resetCarMeshes(): void {
+  for (const t of templates.values()) {
+    t.root.traverse((o) => {
+      if (!(o instanceof THREE.Mesh || o instanceof THREE.Sprite)) return;
+      o.geometry.dispose();
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose();
+    });
+  }
+  templates.clear();
+}
+
+/**
  * A car for this spec, cloned from a cached template of its shape and given its own paint colour.
  * Building one from scratch (geometry, merging the body parts) took a frame-sized stall each
  * time a cop or civilian spawned. Clones share geometry and the materials nothing changes at run

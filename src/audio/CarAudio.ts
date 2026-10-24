@@ -274,6 +274,23 @@ export class CarAudio {
     this.water?.update(dt, w, this.engineRunning);
   }
 
+  /** A new run in the same page: engine off until the mission starts, horn, siren and win music off, unpaused. */
+  reset(): void {
+    this.engineOff = false;
+    this.engineRunning = false;
+    this.gear = 0;
+    this.rpm = 0.15;
+    this.winMusic?.stop();
+    this.winMusic = null;
+    this.sfx?.holdHorn(false);
+    this.setSiren(null);
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    this.engineGain.gain.setTargetAtTime(0, now, 0.02);
+    this.screechGain.gain.setTargetAtTime(0, now, 0.02);
+    void this.ctx.resume();
+  }
+
   /** Silence everything while the game is paused. */
   setPaused(paused: boolean): void {
     if (!this.ctx) return;

@@ -65,7 +65,7 @@ if (!url) {
 }
 
 const chrome = spawn(CHROME, [
-  '--headless=new', '--mute-audio', `--remote-debugging-port=${debugPort}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), 'cp-chrome-'))}`,
+  '--headless=new', '--mute-audio', '--js-flags=--expose-gc', `--remote-debugging-port=${debugPort}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), 'cp-chrome-'))}`,
   `--window-size=${w},${h}`, '--enable-gpu', '--ignore-gpu-blocklist',
   '--ignore-certificate-errors', // `npm run dev:https` serves a self-signed certificate
   'about:blank',
@@ -104,7 +104,7 @@ const send = (method, params = {}) =>
     pending.set(i, r);
     ws.send(JSON.stringify({ id: i, method, params }));
   });
-const evaluate = async (expression) => (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })).result?.result?.value;
+const evaluate = async (expression) => (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true })).result?.result?.value;
 
 const out = args.out ?? 'browser-check.png';
 const outDir = args['out-dir'] ?? dirname(out);

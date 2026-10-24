@@ -36,13 +36,19 @@ export interface MenuInfo {
 
 export class Screens {
   private el: HTMLElement;
+  private unlisten: () => void;
 
   constructor(parent: HTMLElement, private uiSound: (kind: 'hover' | 'click') => void = () => {}) {
     this.el = document.createElement('div');
     this.el.className = 'screen';
     this.el.hidden = true;
     parent.appendChild(this.el);
-    onFullscreenChange(() => this.syncFullscreenLabel());
+    this.unlisten = onFullscreenChange(() => this.syncFullscreenLabel());
+  }
+
+  dispose(): void {
+    this.unlisten();
+    this.el.remove();
   }
 
   /** Corner-arrows icon: pointing out to enter fullscreen, in to leave it. */

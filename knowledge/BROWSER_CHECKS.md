@@ -56,6 +56,16 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
 
+## GPU leaks (`?gputrace`, `src/core/gpuTrace.ts`)
+
+`window.gpuTrace` lists what the renderer holds, each as `texture#12 CanvasTexture 512×512 "name"`
+with the game code that created it (`fn file:line < caller`) and the meshes still using it.
+`gpuTrace.orphans([game.scene, game.staging])` after a restart (`game.restart(seed)`, wait for
+`window.game` to change and `#splash` to be hidden) is the leak list: only `MeshDepthMaterial` and
+`DFG_LUT` (three's own) belong there. Also `live()`, `mark()` / `since(mark)`, `bySite(entries)`.
+`check:browser` runs Chrome with `gc()` exposed (call it before reading heap sizes) and evals as a user
+gesture (so an eval may `requestFullscreen()`).
+
 ## What to check per milestone
 
 On and off (`?<kind>=1` / `=0`, same seed): views, `dbg.stats()` (programs must not grow), empty

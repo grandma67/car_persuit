@@ -69,6 +69,11 @@ export class TouchControls {
     this.state.left = this.state.right = false;
   }
 
+  /** Take the buttons off the page (their listeners go with them). */
+  dispose(): void {
+    this.el.remove();
+  }
+
   setVisible(visible: boolean): void {
     this.el.hidden = !visible;
     if (!visible) for (const k of Object.keys(this.state) as (keyof TouchDrive)[]) this.state[k] = false;

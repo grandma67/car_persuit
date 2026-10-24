@@ -344,6 +344,10 @@ kbd {
     transform 0.6s ease;
 }
 
+#splash[hidden] {
+  display: none;
+}
+
 #splash.done {
   opacity: 0;
   transform: scale(1.08);
