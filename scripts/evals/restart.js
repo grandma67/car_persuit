@@ -1,10 +1,12 @@
 // In-place restart check (Retry / New city build the next Game in the page, see PLAN_GAME.md Tech):
-//   npm run check:restart   (seed 42, 10 quick restarts, GPU trace on, every district forced on, night,
-//                            rain: URL flags carry through restarts, so every city has all of them)
+//   npm run check:restart   (seed 9, 10 quick restarts, GPU trace on, every district forced on, night,
+//                            rain: URL flags carry through restarts, so every city has all of them.
+//                            Seed 9 rolls Chinatown's festival and the Farm's harvest night, which no
+//                            flag forces: keep a seed with both if the rolls move)
 //   npm run check:browser -- --query "seed=N&debug&gputrace&restarts=10&shots=1" --start 1500 \
 //     --out-dir <dir> --no-final --eval-file scripts/evals/restart.js
 // Needs ?debug (window.game, dbg); ?gputrace adds the leak list. Returns `ok` and `failures` first.
-// (1) Fullscreen is entered once (the eval runs as a user gesture), then Retry, New city, Retry, New
+// (1) Fullscreen is entered once (`busy` ms of 5★ chase, default 8000, before the first two end screens) (the eval runs as a user gesture), then Retry, New city, Retry, New
 // city are clicked on the end screen (time's up via debug Y), each new mission started with Enter.
 // After each: still fullscreen, the seed kept (Retry) or changed (New city) and in the URL, the splash
 // hidden with no animation left running on it, one WebGL canvas, one .screen, at most one .touch, menu state.
@@ -17,6 +19,7 @@
   const params = new URLSearchParams(location.search);
   const quick = Number(params.get('restarts') ?? 10);
   const takeShots = params.has('shots');
+  const busy = Number(params.get('busy') ?? 8000); // ms of 5★ chase before the first two end screens; 0 skips
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const splash = document.getElementById('splash');
   const failures = [];
@@ -63,8 +66,18 @@
 
   // (1) Through the end screen's buttons.
   const steps = [];
+  const busyRuns = [];
   for (const action of ['retry', 'new', 'retry', 'new']) {
     const before = game.city.seed;
+    // The first two runs get busy first, so what only mid-run events make (cops spawning, scratches,
+    // broken props, crashes, festival fireworks) is in the game being disposed: a 5★ chase flat out.
+    if (busy && steps.length < 2) {
+      await dbg.stars(5);
+      await dbg.hold('KeyW', busy);
+      const busyRun = { cops: game.director.cops.length, speed: Math.round(dbg.car().speed), wanted: game.wanted.stars };
+      busyRuns.push(busyRun);
+      if (!busyRun.cops) fail(`busy run ${busyRuns.length}: no cops spawned`);
+    }
     key('KeyY'); // debug: 3 s left on the clock
     let button = null;
     for (let i = 0; i < 100 && !(button = document.querySelector(`[data-action="${action}"]`)); i++) await sleep(100);
@@ -116,7 +129,7 @@
     if (z.programs !== a.programs) fail(`programs ${a.programs} → ${z.programs}`);
   }
 
-  const out = { ok: failures.length === 0, failures, steps, restarts: rows.map((r) => `${r.heapMB}MB ${r.geometries}g ${r.textures}t ${r.programs}p`).join(' | ') };
+  const out = { ok: failures.length === 0, failures, busyRuns, steps, restarts: rows.map((r) => `${r.heapMB}MB ${r.geometries}g ${r.textures}t ${r.programs}p`).join(' | ') };
   if (window.gpuTrace) {
     const orphans = gpuTrace.orphans([game.scene, game.staging].filter(Boolean));
     out.orphans = orphans.map((e) => `${e.label} @ ${e.site}`);

@@ -64,7 +64,10 @@ fullscreen kept through Retry and New city on the end screen, seed kept/changed 
 hidden with no animation running on it (`document.getAnimations()`), one canvas/screen/touch layer;
 then 10 same-seed restarts with heap (after `gc()`), geometries, textures and programs per restart
 (must hold), every old Game collected (WeakRefs), and the GPU orphan list. Every district is forced on
-with night and rain, so their resources are in every city. Run it after anything that adds to the
+with night and rain, so their resources are in every city; seed 9 also rolls Chinatown's festival and
+the Farm's harvest night (no flag forces those: if the rolls move, find a seed with both again). The
+first two runs drive a 5★ chase first (`busy=ms`), so mid-run objects (cops, scratches, broken props,
+fireworks) are in the Game being disposed. Run it after anything that adds to the
 scene, the page or a listener. Own seed or flags: `npm run check:browser -- --query
 "seed=N&debug&gputrace&restarts=10&shots=1&<flags>" --start 1500 --out-dir <dir> --no-final
 --eval-file scripts/evals/restart.js` (`shots=1`: end screen and menu shots per step).
