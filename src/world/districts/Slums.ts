@@ -59,6 +59,7 @@ function roles(q: District, city: CityData, rng: Rng): Map<number, BlockRole> {
     const yard = left.find((k) => city.blocks[k].zone === 'industrial') ?? left[0];
     if (yard !== undefined) out.set(yard, 'junkyard');
   }
+  q.features.junkyard ??= false; // no block to spare: not tried (and not drawn)
   return out;
 }
 

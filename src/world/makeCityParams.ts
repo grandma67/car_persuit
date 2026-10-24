@@ -4,7 +4,7 @@
 // `!festival`, `ship=bulk`: a district's features, which bring their district; `flat`, `ramps=2` …).
 // makeCityParams pins what it can, builds, checks every word came true and otherwise tries the next
 // seed; it never hands back a city without what was asked.
-import { CityParamsError, type CityParams, type DistrictParams, type FeatureValue } from './CityParams';
+import { CityParamsError, PARAMS_VERSION, type CityParams, type DistrictParams, type FeatureValue } from './CityParams';
 import { generateCity, type CityConfig, type CityData } from './CityGenerator';
 import { ALL_THEMES, TIME_NAMES, type TimeOfDayName } from './CityTheme';
 import { CLIMATES, WEATHER_NAMES, type ClimateName, type WeatherName } from './Climate';
@@ -26,6 +26,7 @@ export interface Word {
   url?: 'flag' | 'value';
   debug?: boolean; // the URL reads it only with ?debug
   value?: string; // what follows `=`, for the help
+  negatable?: boolean; // `!name`: an on/off district feature, off
   help: string;
   /** Pin it; an error message when the value won't do. */
   apply(d: Draft, v: string | undefined, mode: Mode, word: string): string | void;
@@ -106,7 +107,7 @@ function featureWords(): Word[] {
         return v !== undefined && (kind as readonly string[]).includes(v) ? v : undefined;
       };
       const word = (name: string): Word => ({
-        name, value: kind === 'bool' ? undefined : kind === 'int' ? 'N' : (kind as readonly string[]).join('|'),
+        name, value: kind === 'bool' ? undefined : kind === 'int' ? 'N' : (kind as readonly string[]).join('|'), negatable: kind === 'bool',
         help: `${def.kind}'s ${f}${kind === 'bool' ? ' (!name: without)' : ''}${def.nightFeatures?.includes(f) ? ', night only' : ''}`,
         apply: (d, v, mode, w) => {
           if (mode === 'url') return 'not a URL flag';
@@ -257,7 +258,7 @@ export function parseWords(words: string[], mode: Mode = 'make'): { overrides: P
       continue;
     }
     if (neg) {
-      if (v !== undefined || w.value !== undefined || !w.check || w.url) {
+      if (v !== undefined || !w.negatable) {
         errors.push(`"${raw}": only a district feature that is on or off takes "!"`);
         continue;
       }
@@ -282,7 +283,8 @@ export function parseWords(words: string[], mode: Mode = 'make'): { overrides: P
 
 /**
  * Words → params with every word come true: from `seed` (1 by default), trying the next seeds in
- * order when a word depends on the layout and the seed's doesn't have it. Throws with the reasons
+ * order when a word depends on the layout and the seed's doesn't have it. The params are a file's
+ * (versioned; serializeCityParams writes them). Throws with the reasons
  * when the words are wrong or no seed in `tries` has them all.
  */
 export function makeCity(words: string[], opts: { seed?: number; tries?: number; config?: CityConfig } = {}): { params: CityParams; city: CityData } {
@@ -292,7 +294,7 @@ export function makeCity(words: string[], opts: { seed?: number; tries?: number;
   const tries = opts.tries ?? 100;
   let last: string[] = [];
   for (let t = 0; t < tries; t++) {
-    const params: CityParams = { seed: from + t, ...overrides };
+    const params: CityParams = { version: PARAMS_VERSION, seed: from + t, ...overrides };
     let city: CityData;
     try {
       city = generateCity(params, opts.config);

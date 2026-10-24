@@ -4,8 +4,9 @@
 // which the shell would take for redirects. Names are
 // counted over the district's structures, landmarks, district props, ground patches, buildings'
 // lots and roles; `ship` / `size` compare the ship type and "WxH". `flat`: no hill, no canals (the
-// physics sims' ground). Forces the district on (the others off). Seeds are i * 7919 + 11.
-import { generateCity } from '../src/world/CityGenerator';
+// physics sims' ground). Forces the district on (the others off). Seeds are i * 7919 + 11. Each hit
+// ends with the `npm run city -- dump` that writes exactly that city as params.
+import { DEFAULT_CITY, generateCity } from '../src/world/CityGenerator';
 import type { DistrictKind } from '../src/world/districts/District';
 import { DISTRICT_DEFS } from '../src/world/districts/index';
 
@@ -18,6 +19,8 @@ export default function ([kind = 'harbor', ...args]: string[]): void {
     return { name: m[1], op: m[2] ?? ':', value: m[3] || '1' };
   });
   const force = Object.fromEntries(DISTRICT_DEFS.map((d) => [d.kind, d.kind === kind]));
+  // the same city through the URL's words: the default grid, this district forced on, the others off
+  const url = [`blocks=${DEFAULT_CITY.blocks}`, ...DISTRICT_DEFS.map((d) => `${d.kind}=${d.kind === kind ? 1 : 0}`)];
   const hits: string[] = [];
   for (let i = 0; i < n; i++) {
     const seed = i * 7919 + 11;
@@ -41,8 +44,8 @@ export default function ([kind = 'harbor', ...args]: string[]): void {
     });
     if (!ok) continue;
     const shown = conds.filter((c) => c.name !== 'ship' && c.name !== 'size').map((c) => `${c.name}=${counts[c.name] ?? 0}`).join(' ');
-    hits.push(`${seed}  ${size}${ship ? ` ${ship}` : ''}${city.terrain.hill ? ' hill' : ''}${city.terrain.canals.length ? ' canals' : ''}  ${shown}`);
+    hits.push(`${seed}  ${size}${ship ? ` ${ship}` : ''}${city.terrain.hill ? ' hill' : ''}${city.terrain.canals.length ? ' canals' : ''}  ${shown}  npm run city -- dump ${seed} ${url.join(' ')}`);
   }
   console.log(hits.length ? hits.join('\n') : 'no seed matched');
-  console.log(`(${hits.length} of ${n} seeds; open with ?seed=N&debug&${kind}=1)`);
+  console.log(`(${hits.length} of ${n} seeds; open with ?seed=N&debug&${url.join('&')})`);
 }

@@ -20,4 +20,4 @@ try {
   code = 1;
 }
 await server.close();
-process.exit(code);
+process.exit(code || process.exitCode || 0);

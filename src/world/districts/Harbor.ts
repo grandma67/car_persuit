@@ -165,7 +165,9 @@ export const HARBOR_DEF: DistrictDef = {
   built: (q, city) => {
     const lots = new Set(city.buildings.filter((b) => b.district === 'harbor' && inRect(q.bounds, b)).map((b) => b.lot));
     const ship = q.dressing.structures.find((s) => s.kind === 'ship')?.data as { type?: string; tug?: unknown } | undefined;
-    return { yards: yardBlocks(q).length, silo: lots.has('silo'), tankFarm: lots.has('tankFarm'), ship: ship?.type ?? '', tug: !!ship?.tug };
+    // the tank farm's lot is gone by now: dress swaps it for the tanks
+    const tanks = q.dressing.structures.some((s) => s.kind === 'tankFarm');
+    return { yards: yardBlocks(q).length, silo: lots.has('silo'), tankFarm: tanks, ship: ship?.type ?? '', tug: !!ship?.tug };
   },
   salt: 0x4a2b0e,
   chance: HARBOR.chance,

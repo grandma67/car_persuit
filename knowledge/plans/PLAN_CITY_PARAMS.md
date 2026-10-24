@@ -200,15 +200,12 @@ committed.
 
 ## Status (branch `city-params`)
 
-Done: **M0–M3**, **M4 in part**. Hash identical for all 120 cities after every step (`npm run hash
--- --out <scratchpad>/base.txt` on main first, then `--vs` it); `generateCity(city.params)` rebuilds
-every city exactly (60 seeds × defaults/all districts, plus `?roadworks`, `?canalramp`, forced pairs).
+Done: **M0–M4**. Hash identical for all 120 cities after every step (`npm run hash
+-- --out <scratchpad>/base.txt` on main first, then `--vs` it); `npm run hash -- --reload` proves every
+one of the 120 dumps reloads as its city (same hash, same dump). **Next: M5** (the game: `dbg.loadCity`
+/ `dbg.dumpCity`).
 
-**M4 still to do:** `scripts/city.ts` (`make`, `dump`, `check`, `show`) and `npm run city`; `find`
-printing the dump hint; the tests (every word × 10 base seeds, split over a few files so the suite
-stays ~20 s; the 60 × 2 `parse(serialize(dump))` round trip; parse/validate error cases). Then M5–M7.
-
-**What exists (M4 so far):**
+**What exists (M4):**
 - `world/CityParamsFile.ts`: `parseCityParams` (version 1, unknown keys and bad shapes are errors),
   `serializeCityParams` (`CITY_KEYS` order, anything ≤ 100 chars on one line), `validateCityParams`
   (static warnings: theme the climate never rolls, weather fixed up by the climate, night-only feature
@@ -218,6 +215,19 @@ stays ~20 s; the 60 × 2 `parse(serialize(dump))` round trip; parse/validate err
   `urlOverrides(search, debug)` through the same table (the M3 flag table passes).
 - `DistrictDef.built(q, city)`: what each district actually has per feature, for the word checks.
 - `Rng.state`: `new Rng(state)` resumes a stream.
+- `scripts/city.ts` (`npm run city`): `make <words…> [seed=N] [--full] [--out f]` (writes the words'
+  params, a few lines; `--full` the complete dump), `dump <seed> [URL words…]` (unknown words are
+  errors; debug-only words without `debug` are ignored with a note, as in the game), `check <file…>`
+  (exit 1 on errors), `show <file | seed [URL words] | words…>` (ASCII map, legend, one-line summary),
+  `words` (the vocabulary with help). `run-ts.mjs` now passes the script's `process.exitCode` on.
+- `npm run find` ends each hit with `npm run city -- dump N blocks=12 <kind>=1 <others>=0`: find
+  builds on the default 12-block grid, not the seed's rolled size, so the old `?seed=N&<kind>=1` hint
+  opened a different city; its footer URL now carries the same words.
+- Tests: `cityWords1–4.test.ts` (every word as used: bare, `!name`, each named value, sample counts;
+  each comes true, an independent check of what it promises, and its params written and read back
+  build the same city), `CityParamsRoundTrip1–2.test.ts`, `CityParamsFile.test.ts` (parse errors,
+  serialize layout, build errors naming the field, warnings, the words' refusals). Shared helpers in
+  `world/paramsTesting.ts` (`cityJson` too).
 
 **Changes from the plan above, as built:**
 - Layout choices are resolved where they are built (see "Where the plan bends"): `rollCityParams`
@@ -240,6 +250,18 @@ stays ~20 s; the 60 × 2 `parse(serialize(dump))` round trip; parse/validate err
   brings its district into the exact list. Bare `night`/`day`/`afternoon`, `rain`/`clear`/`snow`
   (snow also sets the snow climate) and `temperate`/`beach`/`desert` are aliases. Two words that want
   one field differently are an error.
+- **Test budget (M4):** words that pin a field outright (look words, `flat`, `blocks`, `canals`,
+  `hill`, `england`) and `district.feature` aliases of a bare word run on 2 base seeds, not 10; the
+  layout-dependent words (districts, features, ramps, canal ramps, roadworks, canal width) on all 10.
+  The suite's round trip covers 20 seeds × 2 plus the URL flags (`?roadworks`, `?canalramp`, …);
+  the full 60 × 2 is `npm run hash -- --reload`, run with the hash at each milestone. The new files
+  add ~4–8 s to `npm run t` (24.5–29 s without them, 33–35 s with them on this machine; noisy). M6
+  should win some back.
+- **Found by the word tests:** `Harbor.built` read the tank farm from the lots, but `dress` swaps
+  that lot for the tank structure, so `tankFarm` could never be made; the Slums junkyard roll is
+  skipped when no block is spare, which left `features.junkyard` unset (now `false`); `!flat` (any
+  `!word`) was accepted as the bare word; only on/off district features take `!` now (`negatable`).
+  `makeCity` params carry `version`, so they are a file as they stand. Hash unchanged.
 - `startHour` moved to `CityTheme` (with `startMinuteOf`, `startHourAt`); `npm run hash` is
   `scripts/city-hash.ts`.
 

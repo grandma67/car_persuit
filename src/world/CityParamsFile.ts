@@ -126,20 +126,20 @@ export function parseCityParams(input: string | unknown): { params: CityParams |
   return errors.length ? { params: null, errors } : { params: o as unknown as CityParams, errors };
 }
 
-/** Stable key order, short arrays and objects on one line, everything else indented. */
+/** Stable key order, a key per line, short arrays and objects under them on one line, the rest indented. */
 export function serializeCityParams(params: CityParams): string {
   const ordered: Obj = {};
   for (const k of CITY_KEYS) if ((params as unknown as Obj)[k] !== undefined) ordered[k] = (params as unknown as Obj)[k];
-  const out = (v: unknown, indent: string): string => {
+  const out = (v: unknown, indent: string, top = false): string => {
     const flat = JSON.stringify(v);
     if (flat === undefined) return 'null';
-    if (typeof v !== 'object' || v === null || flat.length + indent.length <= 100) return flat;
+    if (typeof v !== 'object' || v === null || (!top && flat.length + indent.length <= 100)) return flat;
     const inner = indent + '  ';
     if (Array.isArray(v)) return `[\n${v.map((x) => inner + out(x, inner)).join(',\n')}\n${indent}]`;
     const entries = Object.entries(v as Obj).filter(([, x]) => x !== undefined);
     return `{\n${entries.map(([k, x]) => `${inner}${JSON.stringify(k)}: ${out(x, inner)}`).join(',\n')}\n${indent}}`;
   };
-  return out(ordered, '') + '\n';
+  return out(ordered, '', true) + '\n';
 }
 
 /**
