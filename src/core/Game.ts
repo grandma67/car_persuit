@@ -11,7 +11,7 @@ import { ChaseCamera } from '../render/ChaseCamera';
 import { DEFAULT_CITY, generateCity, rollCityBlocks, type CityConfig, type CityData, type Rect } from '../world/CityGenerator';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
-import { pickTheme, pickTimeOfDay, type TimeOfDayName } from '../world/CityTheme';
+import { pickTheme, pickTimeOfDay, startHour } from '../world/CityTheme';
 import { applyClimate, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
 import { Sky } from '../render/Sky';
 import { Precipitation } from '../render/Precipitation';
@@ -1205,11 +1205,6 @@ export class Game {
 }
 
 /** Impact = velocity change (or closing speed) in m/s: ~3 is a scrape, 40+ is a full-speed hit. */
-/** The game clock when a run starts: the time of day's hour plus some minutes from the seed. */
-export function startHour(seed: number, time: TimeOfDayName): number {
-  const hour = { day: 10, afternoon: 17, night: 22 }[time];
-  return hour + (((seed * 2654435761) >>> 0) % 60) / 60;
-}
 
 function impactStrength(speed: number): number {
   return THREE.MathUtils.clamp((speed - 1.5) / 20, 0.1, 1);

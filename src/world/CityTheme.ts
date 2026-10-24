@@ -290,4 +290,10 @@ export function pickTimeOfDay(seed: number, override?: string | null): TimeOfDay
   return TIMES[roll < 0.4 ? 'day' : roll < 0.7 ? 'afternoon' : 'night'];
 }
 
+/** The game clock when a run starts: the time of day's hour plus some minutes from the seed. */
+export function startHour(seed: number, time: TimeOfDayName): number {
+  const hour = { day: 10, afternoon: 17, night: 22 }[time];
+  return hour + (((seed * 2654435761) >>> 0) % 60) / 60;
+}
+
 export const ALL_THEMES = THEMES;

@@ -295,6 +295,75 @@ Branch `city-params` from main. Commit per milestone; the full suite (`npm run t
   add each new feature word to `makeCityParams`, use it in Testing), `BROWSER_CHECKS.md` (`--city`, `dbg.loadCity`/`dumpCity`).
 - `npm run find` stays for discovery; its output points at `city dump`.
 
+## M0 audit: every roll that shapes a city
+
+Streams are `new Rng(seed ^ salt)` unless "main" (`new Rng(seed)` in `generateCity`, shared in order).
+Draw order within a stream is top to bottom.
+
+| What | File | Stream | Draws | Params field |
+|---|---|---|---|---|
+| Grid size | `CityGenerator.rollCityBlocks` | `0x512e0b` | 1 int | `blocks` |
+| Drive side | `CityGenerator.rollDriveSide` | `0x1e7f5d` | 1 | `driveSide` |
+| Canal count, first canal axis + line, second canal (cross or parallel), hill (chance, height, radii, axis, centre, yaw), canal widths | `Terrain.planTerrain` | `0x7e44a1` | count 1, first 2, second 1–2 (only with 2), hill 1 (+7 if on), widths 1 per canal | `terrain.hill`, `terrain.canals` |
+| Bridges per canal run (start, spacing) | `Terrain.pickBridges` | `0xb41d6e` | 1 + 1 per bridge, per run | `terrain.canals[].bridges` |
+| Plazas: candidate shuffle | `CityGenerator` | main | 1 per inner candidate edge | `plazas` |
+| Zone noise (5×5 grid) | `makeValueNoise` | main | 25 | `zones` (read-only) |
+| Parks | `CityGenerator` | main | 1 per block | `zones` (lower case, read-only) |
+| Buildings, park trees | `lots.fillBlock`, `scatterTrees` | main | many, per block | (props: out) |
+| Town squares, their centrepieces, street ramps, park centrepieces | `Landmarks.planLandmarks` | `0x1a4d` | squares: up to 50 picks; per square kind (+ ramp spot + re-roll) + yaw; per park 1 (+2) | `landmarks` (ramps pinnable, the rest read-only), `landmarkStream` |
+| Canal ramps (each a fresh roll, then a pick) | `CityGenerator` | `0xca7a1` | 2 per ramp + 1 | `canalRamps` |
+| Plaza planters | `CityGenerator` | main | 1 + 2 per planter, per plaza | (props: out) |
+| Spawn street | `CityGenerator` | main | 1 pick | `spawn` |
+| Roadworks: 20 slots × (chance, road or junction, the site, its layout) | `Roadworks.planRoadworks` | `0x0c0e5` | variable | `roadworks` |
+| Signals, signs, stop lines; bus stops | `TrafficControl` | `0x7aff1c`, `^0xb5570b` | variable | (props: out) |
+| Street props | `StreetProps` | `0x57ee7` | variable | (props: out) |
+| Each district's chance | `place.rollDistricts` | the district's salt | 1 | `districts` (kind set) |
+| District placement order | `apply.applyDistricts` | `DISTRICTS.orderSalt` | 1 per rolled-on district − 1 | (order of `districts`) |
+| District placement: shape, candidate shuffles, main street pick, extra gates | `place.placeDistrict`/`tryPlace` | the district's salt, after its chance | variable | `districts[].rect`, `districts[].stream` |
+| District roles, lots, dressing | the district modules | the district's salt, after placement | variable | `features`, `roles` (read-only) |
+| Climate | `Climate.pickClimate` | `0xc11a` | 1 | `climate` |
+| Weather | `Climate.pickWeather` | `0x3a1d` | 1 | `weather` |
+| Time of day | `CityTheme.pickTimeOfDay` | `0x71de` | 1 | `time` |
+| Theme: base style, then colour jitter | `CityTheme.pickTheme` | `0x7e3e` | 1 pick + jitter | `theme` (name; jitter stays) |
+| Start minute | `startHour` | none: `(seed · 2654435761) mod 60` | 0 | `startMinute` |
+| Destinations | `MissionSystem.pickDestinations` | `0xde57` | 1 pick each | `destinations` |
+| Building geometry and facades | `CityBuilder` | `0x5eed`; facades `seed` | many | (props: out) |
+| Chinatown shop signs | `render/districts/ChinatownShops` | `0x5409` | many | (props: out) |
+| Cops, civilians | `Game` | `0xc095`, `0x7a4f1c` | runtime | (runtime AI: out) |
+
+**District features** (all on the district's own stream, drawn in this order within it):
+
+| District | Feature | Where | Roll |
+|---|---|---|---|
+| Old City | `roundTowers` (wall shape: round or square towers) | `OldCityWalls.wallDressing` | `rng.next() < 0.5` |
+| Chinatown | `square` (pagoda square, a role) | `Chinatown.roles` | `squareChance` (+1 pick when on) |
+| Chinatown | `banquet` | `Chinatown.lots` | `banquetChance` |
+| Chinatown | `temple` | `Chinatown.lots` | `templeChance` |
+| Chinatown | `festival` | `Chinatown.nightExtras` | `festivalChance` |
+| Harbor | `yards` (container-yard blocks, a role) | `Harbor.roles` | `int(HARBOR.yards)` |
+| Harbor | `silo` | `Harbor.lots` | `siloChance` |
+| Harbor | `tankFarm` | `Harbor.lots` | `tankFarmChance` |
+| Harbor | `ship` (`container`/`bulk`/`general`) | `HarborQuay.quay` | `shipOdds` |
+| Harbor | `tug` | `HarborQuay.quay` | `tugChance` |
+| Farm | `steelSilos` | `FarmGate.yardPieces` | `rng.next() < 0.5` |
+| Farm | `waterTower` | `FarmGate.yardPieces` | `waterTowerChance` |
+| Farm | `maze` | `Farm.dress` | `mazeChance` |
+| Farm | `harvest` (night only) | `Farm.dress` | `harvestChance` |
+| Slums | `camp` (a role) | `Slums.roles` | `campChance` |
+| Slums | `junkyard` (a role) | `Slums.roles` | `junkyardChance`, drawn only below 9 blocks (≥ 9: always tried) |
+
+**Dead knobs found:** `SLUMS.trainChance` is read nowhere (no train is rolled or drawn), so the
+Slums have no `train` feature. Old City "ruins" are per-lot shares (`ruinShare`), i.e. props, so
+not a feature either. The Farm's `silo` became `steelSilos`: a farm always has 1–3 silos, the roll
+is their look.
+
+**Where the plan bends to the code:** most rolls depend on the layout built before them (plazas
+on the graph's connectivity, landmarks on blocks and zones, districts on everything). So
+`rollCityParams(seed, overrides)` rolls the up-front choices (blocks, drive side, terrain, look) and
+passes the rest on as pins; each later choice is resolved where it is built, as `pin(params.x,
+roll)`, and `generateCity` returns the complete resolved params as `city.params`. One pass, no
+second build, and `city.params` is what `dump` writes.
+
 ## Risks
 
 - **Seed drift during the refactor.** It's the biggest risk, and the hash script guards it at every
