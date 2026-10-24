@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { DriveInput } from '../core/Input';
-import { RAMP, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
+import { RAMP, rampChassisPoints, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 import { buildCarMesh, setGlow, type CarMesh } from './carMesh';
 import { gearFor } from './gears';
 
@@ -177,8 +177,10 @@ export class Vehicle {
     // Explicit mass properties: lowered centre of mass so the car resists rolling.
     const m = spec.mass;
     const [w, h, d] = [hx * 2, hy * 2, hz * 2];
+    // The ramp truck's chassis is chamfered at the back to sit under its deck (rampChassisPoints).
+    const chassis = spec.body === 'ramptruck' ? RAPIER.ColliderDesc.convexHull(rampChassisPoints(spec))! : RAPIER.ColliderDesc.cuboid(hx, hy, hz);
     this.collider = world.createCollider(
-      RAPIER.ColliderDesc.cuboid(hx, hy, hz)
+      chassis
         .setMassProperties(
           m,
           { x: 0, y: -hy, z: 0 },

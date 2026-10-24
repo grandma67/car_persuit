@@ -282,6 +282,32 @@ export function rampHullPoints(spec: VehicleSpec): Float32Array {
   return new Float32Array(pts);
 }
 
+/** Deck surface height at chassis-local z (the tilted plane from the tail lip to the launch edge). */
+export function rampDeckY(z: number): number {
+  return RAMP.tail.y + ((RAMP.top.y - RAMP.tail.y) * (z - RAMP.tail.z)) / (RAMP.top.z - RAMP.tail.z);
+}
+
+const RAMP_CHASSIS_SINK = 0.05; // how far the chamfered chassis stays under the deck
+
+/**
+ * The ramp truck's chassis box with its top rear edge chamfered to run just under the deck. A
+ * plain box pokes 16 cm up through the deck there: a car coming up off-centre tilts as its outer
+ * wheels drop past the deck's edge, and its nose caught that ledge and wedged.
+ */
+export function rampChassisPoints(spec: VehicleSpec): Float32Array {
+  const { x: hx, y: hy, z: hz } = spec.halfExtents;
+  const rearTop = rampDeckY(-hz) - RAMP_CHASSIS_SINK;
+  // Where the chamfer meets the box's top: the deck is RAMP_CHASSIS_SINK above hy there.
+  const zCut = RAMP.tail.z + ((hy + RAMP_CHASSIS_SINK - RAMP.tail.y) * (RAMP.top.z - RAMP.tail.z)) / (RAMP.top.y - RAMP.tail.y);
+  const pts: number[] = [];
+  for (const x of [-hx, hx]) {
+    pts.push(x, -hy, -hz, x, -hy, hz, x, hy, hz);
+    if (rearTop < hy) pts.push(x, rearTop, -hz, x, hy, zCut);
+    else pts.push(x, hy, -hz);
+  }
+  return new Float32Array(pts);
+}
+
 /**
  * Height of a vehicle's top above a flat road, at rest: the chassis centre stands its wheel
  * radius plus suspension rest length above the road (raised by low-mounted wheels, wheelY), and

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Vehicle } from './Vehicle';
-import { BOX_TRUCK_SPEC, BUS_SPEC, PICKUP_SPEC, PLAYER_SPEC, RAMP, RAMP_TRUCK_SPEC, VAN_SPEC } from './VehicleSpecs';
+import { BOX_TRUCK_SPEC, BUS_SPEC, PICKUP_SPEC, PLAYER_SPEC, RAMP, RAMP_TRUCK_SPEC, VAN_SPEC, rampChassisPoints, rampDeckY } from './VehicleSpecs';
 
 const DT = 1 / 60;
 const IDLE = { throttle: 0, brake: 0, steer: 0, handbrake: false };
@@ -59,5 +59,28 @@ describe('ramp truck', () => {
     // The truck shrugs it off.
     const up = truck.body.rotation();
     expect(Math.abs(up.x) + Math.abs(up.z)).toBeLessThan(0.1);
+  });
+
+  it('keeps its chassis under the deck', () => {
+    const pts = rampChassisPoints(RAMP_TRUCK_SPEC);
+    for (let i = 0; i < pts.length; i += 3) {
+      const [y, z] = [pts[i + 1], pts[i + 2]];
+      if (z < RAMP.top.z) expect(y).toBeLessThan(rampDeckY(z));
+    }
+  });
+
+  // Far enough off-centre that the outer wheels drop past the deck's edge and the car tilts:
+  // it used to nose into the chassis poking up through the deck, take a hit and wedge there.
+  it.each([1.3, 1.6])('a car coming up %s m off-centre takes no hit', (offset) => {
+    const world = flatWorld();
+    const truck = new Vehicle(world, RAMP_TRUCK_SPEC, { x: 0, y: 1.2, z: 0 });
+    step(world, [[truck, IDLE]], 1);
+    const car = new Vehicle(world, PLAYER_SPEC, { x: offset, y: 0.9, z: -14 });
+    car.teleport(offset, 0.75, -14, 0, 6);
+    let hit = 0;
+    step(world, [[truck, { ...IDLE, brake: 1 }], [car, { ...IDLE, throttle: 0.5 }]], 4, () => {
+      if (car.position.z < truck.position.z + RAMP.cab.z0) hit = Math.max(hit, car.consumeImpact());
+    });
+    expect(hit).toBe(0);
   });
 });

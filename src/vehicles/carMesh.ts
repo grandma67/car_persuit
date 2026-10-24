@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { RAMP, TRACTOR_CAB, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
+import { RAMP, TRACTOR_CAB, rampChassisPoints, rampHullPoints, type VehicleSpec } from './VehicleSpecs';
 
 export interface CarMesh {
   root: THREE.Group;
@@ -224,10 +224,9 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   const noseDrop = { sports: 0.85, sedan: 0.7, suv: 0.3, truck: 0, van: 0.35, pickup: 0.3, bus: 0, boxtruck: 0, ramptruck: 0, tractor: 0.2 }[body];
   const tall = body === 'bus' || body === 'boxtruck';
   // The box truck is drawn as a cab plus a cargo box instead (below).
-  if (body !== 'boxtruck') {
-    const bodyGeo = bodyGeometry(hx, hy, hz, noseDrop);
-    root.add(new THREE.Mesh(bodyGeo, body === 'ramptruck' ? trim : paint));
-  }
+  // The ramp truck's is its chassis collider, chamfered under the deck (rampChassisPoints).
+  if (body === 'ramptruck') root.add(new THREE.Mesh(new ConvexGeometry(pointsOf(rampChassisPoints(spec))), trim));
+  else if (body !== 'boxtruck') root.add(new THREE.Mesh(bodyGeometry(hx, hy, hz, noseDrop), paint));
   const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z);
@@ -259,8 +258,9 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
   for (const x of [-0.65, 0.65]) {
     // The sports wedge drops the nose below the body's middle: its lamps sit lower, on the face.
     const lampY = body === 'truck' ? -hy * 0.3 : tall ? -hy * 0.6 : body === 'van' ? -hy * 0.2 : body === 'sports' ? -hy * 0.45 : 0;
-    // Tail lamps low on tall bodies; the ramp truck's sit at the deck's tail lip.
-    const tailY = body === 'ramptruck' ? RAMP.tail.y + 0.1 : tall ? -hy * 0.45 : hy - 0.08;
+    // Tail lamps low on tall bodies; the ramp truck's hang off its tail lip, tops flush with the
+    // deck, so nothing stands up where a car drives on.
+    const tailY = body === 'ramptruck' ? RAMP.tail.y - 0.05 : tall ? -hy * 0.45 : hy - 0.08;
     const tailZ = body === 'ramptruck' ? RAMP.tail.z : -hz;
     const hl = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.08, 0.05), headlight);
     hl.position.set(x * (hx / 0.95), lampY, hz);
@@ -280,18 +280,19 @@ function createCarMesh(spec: VehicleSpec): CarMesh {
     // repeater on the flank behind the front wheel, so a car alongside can see it too.
     const side = indicators[x > 0 ? 'left' : 'right'];
     const ix = Math.sign(x) * (Math.abs(x) * (hx / 0.95) + 0.12);
+    // On the ramp truck the rear ones sit beside the lamps instead, under the deck's surface.
+    const rx = body === 'ramptruck' ? Math.sign(x) * (Math.abs(x) * (hx / 0.95) + 0.4) : ix;
     const front = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.05), side.lamp);
     front.position.set(ix, lampY - 0.1, hz + 0.01);
-    // Below the tail lamp, except on the ramp truck where the deck lip sits under it.
-    const rearY = tailY + (body === 'ramptruck' ? 0.12 : -0.12);
+    const rearY = tailY + (body === 'ramptruck' ? 0 : -0.12);
     const rear = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.05), side.lamp);
-    rear.position.set(ix, rearY, tailZ - 0.01);
+    rear.position.set(rx, rearY, tailZ - 0.01);
     const repeater = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.2), side.lamp);
     repeater.position.set(Math.sign(x) * (hx + 0.02), lampY, hz * 0.55);
     const fg = glow(0xffa02a, 0.9);
     fg.position.set(ix, lampY - 0.1, hz + 0.1);
     const rg = glow(0xffa02a, 0.9);
-    rg.position.set(ix, rearY, tailZ - 0.1);
+    rg.position.set(rx, rearY, tailZ - 0.1);
     side.glows.push(fg, rg);
     root.add(front, rear, repeater, fg, rg);
   }
