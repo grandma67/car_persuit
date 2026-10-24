@@ -15,6 +15,7 @@ destinations, cops, civilian traffic, themed districts.
 | `knowledge/RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
 | `knowledge/TASKS.md` | current district branch, open items | **local, never commit** |
 | `knowledge/plans/PLAN_DISTRICTS.md` | district decisions, dropped ideas | tracked |
+| `knowledge/plans/PLAN_CITY_PARAMS.md` | JSON city parameter files: plan and milestones | tracked |
 | `knowledge/TODO.md` | the user's task list | **local, never commit** |
 | `knowledge/STAGE2_IDEAS.md` | future gameplay ideas | **local, never commit** |
 
