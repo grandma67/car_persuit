@@ -131,7 +131,8 @@ function resourcesOf(o: THREE.Object3D, targets: Map<THREE.Texture, THREE.Render
   for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
     out.push(m);
     if (!m) continue;
-    const values = [...Object.values(m), ...Object.values((m as THREE.ShaderMaterial).uniforms ?? {}).map((u) => u.value)];
+    const uniforms = [...Object.values((m as THREE.ShaderMaterial).uniforms ?? {}), ...Object.values(m.userData.uniforms ?? {})] as THREE.IUniform[];
+    const values = [...Object.values(m), ...uniforms.map((u) => u.value)];
     for (const v of values) if (v instanceof THREE.Texture) out.push(v, targets.get(v));
   }
   return out;

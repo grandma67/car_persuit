@@ -56,7 +56,30 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
 
-## GPU leaks (`?gputrace`, `src/core/gpuTrace.ts`)
+## Restart and leaks
+
+Retry / New city build the next Game in the page (`Game.dispose()`, see `PLAN_GAME.md` Tech).
+**`npm run check:restart`** (`scripts/evals/restart.js`, ~1.5 min) checks it, `ok` + `failures` first:
+fullscreen kept through Retry and New city on the end screen, seed kept/changed and in the URL, splash
+hidden with no animation running on it (`document.getAnimations()`), one canvas/screen/touch layer;
+then 10 same-seed restarts with heap (after `gc()`), geometries, textures and programs per restart
+(must hold), every old Game collected (WeakRefs), and the GPU orphan list. Every district is forced on
+with night and rain, so their resources are in every city. Run it after anything that adds to the
+scene, the page or a listener. Own seed or flags: `npm run check:browser -- --query
+"seed=N&debug&gputrace&restarts=10&shots=1&<flags>" --start 1500 --out-dir <dir> --no-final
+--eval-file scripts/evals/restart.js` (`shots=1`: end screen and menu shots per step).
+
+When it fails, read `orphans` (`gpuTrace`, below): each names the code that created the leak.
+Things `dispose()` can't see on its own:
+- A texture passed in by `onBeforeCompile` (`shader.uniforms`): also put the uniforms in
+  `material.userData.uniforms` (`farmCrops.ts` does), where `disposeScene` and `gpuTrace` look.
+- A render target: dispose the target, not its `.texture` (the PMREM environment leaked that way).
+- Anything not in the scene (module caches, templates): reset it in `dispose()` like `resetCarMeshes()`.
+- A listener on `window`/`document`, a timer or an async callback: remove it in `dispose()` or check
+  `this.disposed` in the callback.
+- An eval that holds an old Game in a variable keeps it alive: restart through a helper like `next()`.
+
+### `?gputrace` (`src/core/gpuTrace.ts`)
 
 `window.gpuTrace` lists what the renderer holds, each as `texture#12 CanvasTexture 512×512 "name"`
 with the game code that created it (`fn file:line < caller`) and the meshes still using it.

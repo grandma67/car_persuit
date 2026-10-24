@@ -126,6 +126,8 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
   parked van scraped, so vans park on the kerb (`vanOnKerb`).
 - A search for buildings "on the street" must allow the lot gap: Chinatown's `streetMask` wants faces
   within 1 m of the sidewalk line, Harbor lots stand 2–4 m back (`frontMask`).
+- A texture given to a shader by `onBeforeCompile` must also sit in `material.userData.uniforms`, or
+  Retry leaks it (`npm run check:restart`, `BROWSER_CHECKS.md` Restart and leaks).
 - Watch: cops snagging clutter near junctions (push `clutterMinOffset` out), the chase camera clipping
   low overhead pieces, crane span tracking sidewalk + road + promenade (~25 m, from `DEFAULT_CITY`), a
   shallow hull poking through the shader swell, cops bogging in soft ground, glow and fill cost on phones.

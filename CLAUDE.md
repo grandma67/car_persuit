@@ -37,6 +37,8 @@ destinations, cops, civilian traffic, themed districts.
   geometry ms on vs off).
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (see `knowledge/RAPIER.md`).
 - Browser: `npm run check:browser …` (see `knowledge/BROWSER_CHECKS.md`).
+- Restart/leaks: `npm run check:restart` (Retry/New city in place: fullscreen, splash, heap, GPU orphans
+  named by creation site via `?gputrace`). Run it after anything that adds to the scene, page or listeners.
 
 ## Working rules (from the user)
 
@@ -81,4 +83,5 @@ destinations, cops, civilian traffic, themed districts.
 - A refactor meant to change nothing: hash `generateCity` for ~60 seeds first (`run-ts.mjs` in the
   scratchpad), compare after.
 - A new prop, look or material: `renderer.info.programs` must not grow (browser run, on vs off).
+- Anything a run adds to the page or scene must be freed by `Game.dispose()`: `npm run check:restart`.
 - District tests and rules: `knowledge/DISTRICTS_DEV.md`.

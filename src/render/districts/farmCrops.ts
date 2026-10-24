@@ -96,6 +96,7 @@ export interface CropUniforms {
  */
 function cropMaterial(map: THREE.Texture, color: number, shared: CropUniforms, opts: { sway: number; cut: number; cutRise: number; height: number; bend: number; thin?: number }): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ map, color, side: THREE.DoubleSide });
+  m.userData.uniforms = shared; // the trample map, where Game.dispose and gpuTrace look for it
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, shared, {
       uSway: { value: opts.sway }, uCut: { value: opts.cut }, uCutRise: { value: opts.cutRise }, uHeight: { value: opts.height }, uBend: { value: opts.bend }, uThin: { value: opts.thin ?? 0 },

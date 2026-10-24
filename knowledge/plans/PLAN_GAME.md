@@ -38,7 +38,8 @@ Generation and gameplay logic are pure data (no Three.js), unit-tested with Vite
 Retry and New city don't reload the page (that would leave fullscreen on phones): `main.ts` disposes
 the Game (`Game.dispose()`: scene GPU resources, Rapier world, DOM, listeners, car mesh templates) and
 builds the next one behind the splash, keeping the renderer and audio (`GameShell`). The seed goes into
-the URL with `history.replaceState`. Anything a run adds to the page must be undone in `dispose()`.
+the URL with `history.replaceState`. Anything a run adds to the page must be undone in `dispose()`;
+`npm run check:restart` checks it (`BROWSER_CHECKS.md` Restart and leaks).
 
 ## World
 

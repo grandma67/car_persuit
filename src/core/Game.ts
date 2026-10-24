@@ -1229,7 +1229,9 @@ function disposeScene(scene: THREE.Scene): void {
   });
   for (const m of materials) {
     for (const value of Object.values(m)) if (value instanceof THREE.Texture) textures.add(value);
-    if (m instanceof THREE.ShaderMaterial) for (const u of Object.values(m.uniforms)) if (u.value instanceof THREE.Texture) textures.add(u.value);
+    // A ShaderMaterial's uniforms, and those an onBeforeCompile adds (kept in userData.uniforms by convention).
+    const uniforms = [...Object.values((m as THREE.ShaderMaterial).uniforms ?? {}), ...Object.values(m.userData.uniforms ?? {})] as THREE.IUniform[];
+    for (const u of uniforms) if (u.value instanceof THREE.Texture) textures.add(u.value);
     m.dispose();
   }
   for (const t of textures) t.dispose();
