@@ -260,10 +260,14 @@ function jitter(hex: number, rng: Rng): number {
 const tint = (hex: number, to: { color: number; amount: number } | null) =>
   to ? new THREE.Color(hex).lerp(new THREE.Color(to.color), to.amount).getHex() : hex;
 
-/** A building style that suits the climate, with the climate's ground cover and dusted paving. */
-export function pickTheme(seed: number, climate: Climate = pickClimate(seed)): CityTheme {
+/**
+ * A building style that suits the climate, with the climate's ground cover and dusted paving.
+ * `name` pins the style (any, suited or not); the seed's pick is still drawn, and its colour nudge kept.
+ */
+export function pickTheme(seed: number, climate: Climate = pickClimate(seed), name?: string): CityTheme {
   const rng = new Rng(seed ^ 0x7e3e);
-  const base = rng.pick(THEMES.filter((t) => climate.styles.includes(t.name)));
+  const rolled = rng.pick(THEMES.filter((t) => climate.styles.includes(t.name)));
+  const base = (name === undefined ? undefined : THEMES.find((t) => t.name === name)) ?? rolled;
   const j = (hex: number) => jitter(hex, rng);
   const buildings = Object.fromEntries(
     Object.entries(base.buildings).map(([d, colors]) => [d, colors.map(j)]),
@@ -290,10 +294,19 @@ export function pickTimeOfDay(seed: number, override?: string | null): TimeOfDay
   return TIMES[roll < 0.4 ? 'day' : roll < 0.7 ? 'afternoon' : 'night'];
 }
 
-/** The game clock when a run starts: the time of day's hour plus some minutes from the seed. */
-export function startHour(seed: number, time: TimeOfDayName): number {
-  const hour = { day: 10, afternoon: 17, night: 22 }[time];
-  return hour + (((seed * 2654435761) >>> 0) % 60) / 60;
+/** The minutes past the hour a run starts at, from the seed. */
+export const startMinuteOf = (seed: number) => ((seed * 2654435761) >>> 0) % 60;
+
+/** The game clock when a run starts: the time of day's hour plus the run's minutes. */
+export function startHourAt(time: TimeOfDayName, minute: number): number {
+  return { day: 10, afternoon: 17, night: 22 }[time] + minute / 60;
 }
 
+/** The game clock when a run starts: the time of day's hour plus some minutes from the seed. */
+export function startHour(seed: number, time: TimeOfDayName): number {
+  return startHourAt(time, startMinuteOf(seed));
+}
+
+export const timeOfDay = (name: TimeOfDayName): TimeOfDay => TIMES[name];
+export const TIME_NAMES = Object.keys(TIMES) as TimeOfDayName[];
 export const ALL_THEMES = THEMES;

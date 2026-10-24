@@ -64,7 +64,7 @@ export const CLIMATES: Record<ClimateName, Climate> = {
 };
 
 export const CLIMATE_NAMES = Object.keys(CLIMATES) as ClimateName[];
-const WEATHER_NAMES: WeatherName[] = ['clear', 'rain', 'snow'];
+export const WEATHER_NAMES: WeatherName[] = ['clear', 'rain', 'snow'];
 const WEATHER_LABEL: Record<WeatherName, string> = { clear: '', rain: 'Rain', snow: 'Snowfall' };
 /** Wet or snowy roads: extra grip loss on top of the climate's. */
 const WEATHER_GRIP: Record<WeatherName, number> = { clear: 1, rain: 0.86, snow: 1 };

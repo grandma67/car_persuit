@@ -4,8 +4,8 @@
 // complete set as `city.params`, which reloads as the identical city. Pure data — no Three.js.
 import { Rng } from '../core/Rng';
 import { DEFAULT_CITY, type CityConfig } from './CityGenerator';
-import type { ClimateName, WeatherName } from './Climate';
-import type { TimeOfDayName } from './CityTheme';
+import { CLIMATES, pickClimate, pickWeather, WEATHER_NAMES, type ClimateName, type WeatherName } from './Climate';
+import { pickTheme, pickTimeOfDay, startMinuteOf, TIME_NAMES, type TimeOfDayName } from './CityTheme';
 import type { DriveSide } from './driveSide';
 import type { BlockRole, DistrictKind } from './districts/District';
 import type { LandmarkKind } from './Landmarks';
@@ -132,14 +132,52 @@ export function rollDriveSide(seed: number, leftHandChance: number): DriveSide {
 }
 
 /**
- * The choices made before the layout: grid size and drive side (the look joins in M3). Overrides
- * win; everything else is passed through as pins for generateCity to resolve.
+ * The choices made before the layout: the run's look, grid size and drive side. Overrides win (a
+ * pinned weather gets the same climate fix-ups as ?weather); everything else is passed through as
+ * pins for generateCity to resolve where it builds them.
  */
 export function rollCityParams(seed: number, overrides: Partial<CityParams> = {}, config: CityConfig = DEFAULT_CITY): CityParams {
+  const climate = pin(overrides.climate, pickClimate(seed).name);
   return {
     ...overrides,
     seed,
+    climate,
+    weather: pickWeather(seed, CLIMATES[climate] ?? CLIMATES.temperate, overrides.weather),
+    time: pin(overrides.time, pickTimeOfDay(seed).name),
+    startMinute: pin(overrides.startMinute, startMinuteOf(seed)),
+    theme: pin(overrides.theme, pickTheme(seed, CLIMATES[climate] ?? CLIMATES.temperate).name),
     blocks: pin(overrides.blocks, rollCityBlocks(seed, config.blocksRange)),
     driveSide: pin(overrides.driveSide, rollDriveSide(seed, config.leftHandChance)),
   };
+}
+
+/**
+ * The URL's city flags as overrides, exactly as the game has always read them: ?time, ?blocks,
+ * ?roadworks, ?canalramp, ?england and ?<district>=0|1 for anyone; ?city, ?weather, ?canals and
+ * ?hill only with ?debug. Unknown values are ignored (the seed rolls them).
+ */
+export function urlOverrides(search: string | URLSearchParams, debug: boolean, kinds: readonly DistrictKind[]): Partial<CityParams> {
+  const q = typeof search === 'string' ? new URLSearchParams(search) : search;
+  const out: Partial<CityParams> = {};
+  const time = q.get('time');
+  if (time && (TIME_NAMES as string[]).includes(time)) out.time = time as TimeOfDayName;
+  const blocks = Number.parseInt(q.get('blocks') ?? '', 10);
+  if (blocks >= 4 && blocks <= 30) out.blocks = blocks;
+  if (q.has('roadworks')) out.roadworks = 'all';
+  if (q.has('canalramp')) out.canalRamps = 'all';
+  if (q.has('england')) out.driveSide = 'left';
+  if (debug) {
+    const city = q.get('city');
+    if (city && city in CLIMATES) out.climate = city as ClimateName;
+    const weather = q.get('weather');
+    if (weather && (WEATHER_NAMES as string[]).includes(weather)) out.weather = weather as WeatherName;
+    const canals = Number.parseInt(q.get('canals') ?? '', 10);
+    const terrain: TerrainParams = {};
+    if (canals >= 0 && canals <= 2) terrain.canals = canals;
+    if (q.has('hill')) terrain.hill = q.get('hill') !== '0';
+    if (Object.keys(terrain).length) out.terrain = terrain;
+  }
+  const force = Object.fromEntries(kinds.filter((k) => q.get(k) === '0' || q.get(k) === '1').map((k) => [k, q.get(k) === '1']));
+  if (Object.keys(force).length) out.force = force;
+  return out;
 }

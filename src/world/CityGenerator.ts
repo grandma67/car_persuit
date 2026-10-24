@@ -13,6 +13,8 @@ import type { District, DistrictDef, DistrictKind } from './districts/District';
 import { applyDistricts, rolesOf } from './districts/apply';
 import type { DistrictForce, DistrictGrid } from './districts/place';
 import { DISTRICT_DEFS } from './districts/index';
+import { districtOfNode } from './districts/runtime';
+import { pickDestinations } from '../gameplay/MissionSystem';
 import {
   CityParamsError, edgeKeyOf, PARAMS_VERSION, rollCityBlocks as rollCityBlocksOf, rollCityParams, rollDriveSide as rollDriveSideOf,
   type CanalParams, type CanalRampParams, type CityParams, type LandmarkParams,
@@ -575,6 +577,11 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     version: PARAMS_VERSION,
     seed,
     ...(p.note === undefined ? {} : { note: p.note }),
+    climate: p.climate,
+    weather: p.weather,
+    time: p.time,
+    startMinute: p.startMinute,
+    theme: p.theme,
     blocks: n,
     driveSide,
     terrain: { hill: shape.hill ? { ...shape.hill } : null, canals: canalsOut },
@@ -606,7 +613,30 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
   city.params.districts = city.districts.map((q) => ({
     kind: q.kind, rect: { i: q.grid.i0, j: q.grid.j0, w: q.grid.w, h: q.grid.h }, roles: rolesOf(q, n), features: { ...q.features },
   }));
+
+  // --- The mission's destinations (own RNG stream), from the junction the run starts at ---
+  const start = graph.nearest(spawn.x, spawn.z);
+  if (p.destinations) {
+    const dist = graph.distancesFrom(start.id);
+    p.destinations.forEach((ij, k) => {
+      const nd = nodeAt(ij);
+      if (!nd || !nd.neighbors.length) errors.push(`destinations[${k}]: ${ij} is no open junction`);
+      else if (nd.id === start.id) errors.push(`destinations[${k}]: ${ij} is where the run starts`);
+      else if (!Number.isFinite(dist[nd.id])) errors.push(`destinations[${k}]: ${ij} can't be reached by road`);
+    });
+    if (!p.destinations.length) errors.push('destinations: at least one');
+    fail();
+  }
+  const destinations = p.destinations?.map((ij) => nodeAt(ij)!) ??
+    pickDestinations(graph, new Rng(seed ^ 0xde57), start.id, undefined, (id) => districtOfNode(city, id));
+  city.params.destinations = destinations.map((nd) => cellOfNode(nd.id));
   return city;
+}
+
+/** The mission's destinations as junctions (from city.params). */
+export function cityDestinations(city: CityData): RoadNode[] {
+  const n = city.config.blocks;
+  return city.params.destinations!.map(([i, j]) => city.graph.nodes[j * (n + 1) + i]);
 }
 
 function shuffle<T>(items: T[], rng: Rng): void {

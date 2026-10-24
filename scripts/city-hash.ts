@@ -5,12 +5,9 @@
 // --out writes one line per city; --vs compares with such a file and names the cities that moved.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { Rng } from '../src/core/Rng';
-import { pickDestinations } from '../src/gameplay/MissionSystem';
-import { generateCity, type CityData } from '../src/world/CityGenerator';
-import { pickTheme, pickTimeOfDay, startHour } from '../src/world/CityTheme';
-import { pickClimate, pickWeather } from '../src/world/Climate';
-import { districtOfNode } from '../src/world/districts/runtime';
+import { cityDestinations, generateCity, type CityData } from '../src/world/CityGenerator';
+import { pickTheme, startHourAt } from '../src/world/CityTheme';
+import { CLIMATES } from '../src/world/Climate';
 import { DISTRICT_DEFS } from '../src/world/districts/index';
 
 /** JSON with Maps and Sets as arrays, the graph as its nodes, and no functions. */
@@ -27,15 +24,12 @@ export function cityJson(city: CityData): string {
 
 export const hashOf = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 16);
 
-/** What the game builds for a seed, as one hash: the city, the run's look and its destinations. */
-export function runHash(seed: number, city: CityData): string {
-  const climate = pickClimate(seed);
-  const weather = pickWeather(seed, climate);
-  const time = pickTimeOfDay(seed).name;
-  const theme = pickTheme(seed, climate);
-  const start = city.graph.nearest(city.spawn.x, city.spawn.z);
-  const dest = pickDestinations(city.graph, new Rng(seed ^ 0xde57), start.id, undefined, (id) => districtOfNode(city, id)).map((n) => n.id);
-  return hashOf(cityJson(city) + JSON.stringify({ climate: climate.name, weather, time, theme, hour: startHour(seed, time), dest }));
+/** What the game builds for a seed, as one hash: the city, the run's look and its destinations (all from city.params). */
+export function runHash(city: CityData): string {
+  const p = city.params;
+  const theme = pickTheme(p.seed, CLIMATES[p.climate!], p.theme);
+  const dest = cityDestinations(city).map((n) => n.id);
+  return hashOf(cityJson(city) + JSON.stringify({ climate: p.climate, weather: p.weather, time: p.time, theme, hour: startHourAt(p.time!, p.startMinute!), dest }));
 }
 
 export default function (args: string[]): void {
@@ -49,8 +43,8 @@ export default function (args: string[]): void {
   const t0 = performance.now();
   for (let i = 0; i < n; i++) {
     const seed = i * 7919 + 11;
-    lines.push(`${seed} default ${runHash(seed, generateCity(seed))}`);
-    lines.push(`${seed} all ${runHash(seed, generateCity(seed, undefined, { force: all }))}`);
+    lines.push(`${seed} default ${runHash(generateCity(seed))}`);
+    lines.push(`${seed} all ${runHash(generateCity(seed, undefined, { force: all }))}`);
   }
   const ms = performance.now() - t0;
   const out = flag('--out');

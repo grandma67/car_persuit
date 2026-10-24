@@ -8,11 +8,12 @@ import { COP_SPECS, PLAYER_SPEC } from '../vehicles/VehicleSpecs';
 import { buildCarMesh, resetCarMeshes, setCarEnvironment, setCarShadow, type CarMesh } from '../vehicles/carMesh';
 import { createEnvironment } from '../render/Environment';
 import { ChaseCamera } from '../render/ChaseCamera';
-import { DEFAULT_CITY, generateCity, rollCityBlocks, type CityConfig, type CityData, type Rect } from '../world/CityGenerator';
+import { cityDestinations, generateCity, type CityData, type Rect } from '../world/CityGenerator';
+import { urlOverrides } from '../world/CityParams';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
-import { pickTheme, pickTimeOfDay, startHour } from '../world/CityTheme';
-import { applyClimate, pickClimate, pickWeather, playerGrip, weatherLabel } from '../world/Climate';
+import { pickTheme, startHourAt, timeOfDay } from '../world/CityTheme';
+import { applyClimate, CLIMATES, playerGrip, weatherLabel } from '../world/Climate';
 import { Sky } from '../render/Sky';
 import { Precipitation } from '../render/Precipitation';
 import { CopDirector, DIRECTOR_TUNING, type Cop } from '../ai/CopDirector';
@@ -52,7 +53,7 @@ import { Airtime, type Takeoff } from '../gameplay/Airtime';
 import { rampShape } from '../world/Landmarks';
 import { RunMap } from '../ui/RunMap';
 import { DISTRICT_DEFS } from '../world/districts/index';
-import { copSpawnSkips, districtOfNode, districtTraffic, joinRunDressing, nightProps, roadblockGates } from '../world/districts/runtime';
+import { copSpawnSkips, districtTraffic, joinRunDressing, nightProps, roadblockGates } from '../world/districts/runtime';
 import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { TiltInput, detectTilt, requestTiltPermission } from './tilt';
@@ -181,14 +182,15 @@ export class Game {
     this.audio = shell?.audio ?? new CarAudio();
     const mobile = isTouchDevice();
 
-    // The seed picks a climate, a weather, a time of day and a building style that suits the climate.
-    // Overrides for testing, only with ?debug: ?city=temperate|snow|beach|desert, ?weather=clear|rain|snow.
-    // a time of day (?time=day|afternoon|night) and a building style that suits the climate.
-    const params = new URLSearchParams(window.location.search);
-    const climate = pickClimate(seed, this.debug ? params.get('city') : null);
-    const weather = pickWeather(seed, climate, this.debug ? params.get('weather') : null);
-    const time = applyClimate(pickTimeOfDay(seed, params.get('time')), climate, weather);
-    const theme = pickTheme(seed, climate);
+    // The city's params: every choice the seed rolls (a climate, a weather, a time of day, a building
+    // style that suits the climate, the layout, the districts, the destinations), the URL's flags
+    // pinning some (see urlOverrides: ?time, ?blocks, ?roadworks …; ?city, ?weather, ?canals, ?hill with ?debug).
+    this.city = generateCity({ seed, ...urlOverrides(window.location.search, this.debug, DISTRICT_DEFS.map((d) => d.kind)) });
+    const p = this.city.params;
+    const climate = CLIMATES[p.climate!];
+    const weather = p.weather!;
+    const time = applyClimate(timeOfDay(p.time!), climate, weather);
+    const theme = pickTheme(seed, climate, p.theme);
     // The sky and sun as reflected by car paint, glass and rims.
     this.environment = createEnvironment(this.renderer, time);
     setCarEnvironment(this.environment.texture);
@@ -213,22 +215,6 @@ export class Game {
     this.scene.add(this.sun, this.sun.target);
 
     this.world.timestep = FIXED_DT;
-    // ?roadworks forces every (rare) roadworks slot, ?canalramp the canal jumps and ?england left-hand traffic, for testing. With ?debug, ?canals=0|1|2 and
-    // ?hill=0|1 force the terrain. The grid size is rolled per seed; ?blocks=N forces it.
-    const config: CityConfig = { ...DEFAULT_CITY };
-    const blocks = Number.parseInt(params.get('blocks') ?? '', 10);
-    config.blocks = blocks >= 4 && blocks <= 30 ? blocks : rollCityBlocks(seed, config);
-    if (params.has('roadworks')) config.roadworksChance = 1;
-    if (params.has('canalramp')) config.canalRampChance = 1;
-    if (params.has('england')) config.leftHandChance = 1;
-    const canals = Number.parseInt(params.get('canals') ?? '', 10);
-    if (this.debug && canals >= 0 && canals <= 2) config.canalOdds = [canals === 0 ? 1 : 0, canals === 1 ? 1 : 0, canals === 2 ? 1 : 0];
-    if (this.debug && params.has('hill')) config.hillChance = params.get('hill') === '0' ? 0 : 1;
-    // ?oldtown=1 forces a district's roll on, =0 off (every registered district, like ?roadworks).
-    const force = Object.fromEntries(
-      DISTRICT_DEFS.filter((d) => params.get(d.kind) === '0' || params.get(d.kind) === '1').map((d) => [d.kind, params.get(d.kind) === '1']),
-    );
-    this.city = generateCity(seed, config, { force });
     // Night-only street props (Chinatown's night market and festival) join the city on a night run.
     const night = time.name === 'night';
     if (night) this.city.streetProps.push(...nightProps(this.city));
@@ -255,7 +241,7 @@ export class Game {
     // The shadow camera looks down -sunDir with world up, as Object3D.lookAt orients it.
     new THREE.Matrix4().lookAt(sunDir, new THREE.Vector3(), new THREE.Object3D().up).extractBasis(this.sunAxes[0], this.sunAxes[1], new THREE.Vector3());
     this.districtViews = buildDistricts(this.city, this.scene, {
-      theme, climate, lampGlow: time.lampGlow, night, ground: this.ground, hour0: startHour(seed, time.name),
+      theme, climate, lampGlow: time.lampGlow, night, ground: this.ground, hour0: startHourAt(p.time!, p.startMinute!),
       bell: (strikes, at) => this.audio.bell(strikes, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.position) / 450, 0, 1)),
       firework: (at, colour) => this.effects.firework(at, colour),
       steam: (at) => this.effects.steamPuff(at),
@@ -289,9 +275,8 @@ export class Game {
     this.scene.add(this.player.mesh.root);
     this.scene.add(this.marker.group, this.sea.mesh);
 
-    // Destinations get their own RNG stream so they're stable per seed.
-    const startNode = this.city.graph.nearest(spawn.x, spawn.z);
-    this.destinations = pickDestinations(this.city.graph, new Rng(seed ^ 0xde57), startNode.id, undefined, (id) => districtOfNode(this.city, id));
+    // Destinations get their own RNG stream so they're stable per seed (or come pinned in the params).
+    this.destinations = cityDestinations(this.city);
     this.mission = new MissionSystem(this.destinations, { ...MISSION, timeLimit: this.difficulty.timeLimit });
 
     this.director = new CopDirector(this.world, this.scene, this.city.graph, staticLineOfSight(this.world, this.ground), new Rng(seed ^ 0xc095), this.player.headlights, DIRECTOR_TUNING, this.ground, keepOf(this.city.driveSide), {
