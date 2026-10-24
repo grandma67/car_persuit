@@ -7,7 +7,7 @@ import { FARM } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type PropKind, type StreetProp } from '../StreetProps';
-import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type Gate, type LotLook } from './District';
+import { emptyDressing, feature, type BlockRole, type District, type DistrictDef, type DistrictDressing, type Gate, type LotLook } from './District';
 import { inDistrict, isJunctionControl, kerbClutter } from './apply';
 import { cattleGrid, fieldFence, ranchGateAt, yardPieces } from './FarmGate';
 import { cornMaze, dressFields, gapLane, gapMouth, put, yardClutter, type FenceGap } from './FarmFields';
@@ -182,6 +182,8 @@ const FARM_STYLE = { lots: [1, 2] as [number, number], height: [5, 10] as [numbe
 export const FARM_DEF: DistrictDef = {
   kind: 'farm',
   label: 'Farm',
+  features: { steelSilos: 'bool', waterTower: 'bool', maze: 'bool', harvest: 'bool' },
+  nightFeatures: ['harvest'],
   salt: 0x5f4a12,
   chance: FARM.chance,
   site: 'edge',
@@ -246,10 +248,10 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
     gaps[f.block] = fence.gaps;
   }
   const lanes = Object.values(gaps).flat().map((g) => gapLane(g));
-  out.landmarks.push(...yardPieces(shrink(yard, sw), near.map((f) => f.rect), buildings, lanes, rng));
+  out.landmarks.push(...yardPieces(shrink(yard, sw), near.map((f) => f.rect), buildings, lanes, rng, q));
   // Sometimes a maze cut through one corn field.
   const corn = fields.filter((f) => f.crop === 'corn');
-  if (rng.next() < FARM.mazeChance) {
+  if (feature(q, 'maze', rng.next() < FARM.mazeChance) && corn.length) {
     const f = rng.pick(corn);
     f.maze = cornMaze(f.rect, gaps[f.block], rng);
   }
@@ -288,7 +290,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   out.props = kept;
   // Joined in by the game on some runs: harvest night (night runs, on a roll) and the desert's irrigator.
   const standing = [...out.solids, ...pieces, ...buildings.map(rectFootprint), ...kept.map((p) => propFootprint(p, 0.3))];
-  const harvest = rng.next() < FARM.harvestChance;
+  const harvest = feature(q, 'harvest', rng.next() < FARM.harvestChance);
   // The jack-o'-lanterns share the glow budget with the timber lamps and the barn's lantern.
   const lamps = [...city.streetProps, ...kept].filter((p) => p.kind === 'woodLamp' && inRect(q.bounds, p)).length;
   const room = Math.max(0, Math.min(FARM.jackOLanterns, FARM.maxGlow - lamps - 1));

@@ -7,7 +7,7 @@ import { SLUMS } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
 import { propFootprint, type StreetProp } from '../StreetProps';
-import { emptyDressing, type TrimKind, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook } from './District';
+import { emptyDressing, feature, type TrimKind, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook } from './District';
 import { isJunctionControl } from './apply';
 import { frontMask, streetSides } from './Harbor';
 import { clearOf } from './HarborYard';
@@ -50,10 +50,10 @@ function roles(q: District, city: CityData, rng: Rng): Map<number, BlockRole> {
   const vacant = Math.min(rng.int(SLUMS.vacant[0], SLUMS.vacant[1]), spare);
   for (const k of pool.slice(0, vacant)) out.set(k, 'vacant');
   // The camp takes one vacant block (all of it, or half).
-  if (rng.next() < SLUMS.campChance) out.set(pool[0], 'camp');
+  if (feature(q, 'camp', rng.next() < SLUMS.campChance)) out.set(pool[0], 'camp');
   // The junkyard: an industrial block where there is one, a block with streets on two opposite sides.
   const big = q.blocks.length >= 9;
-  if (out.size < spare && (big || rng.next() < SLUMS.junkyardChance)) {
+  if (out.size < spare && feature(q, 'junkyard', big || rng.next() < SLUMS.junkyardChance)) {
     const through = (k: number) => { const s = streetSides(k, city); return (s.px && s.nx) || (s.pz && s.nz); };
     const left = pool.slice(vacant).filter(through);
     const yard = left.find((k) => city.blocks[k].zone === 'industrial') ?? left[0];
@@ -124,6 +124,7 @@ const SLUMS_STYLE = { lots: [2, 4] as [number, number], height: [9, 18] as [numb
 export const SLUMS_DEF: DistrictDef = {
   kind: 'slums',
   label: 'Slums',
+  features: { camp: 'bool', junkyard: 'bool' },
   salt: 0x51a3b7,
   chance: SLUMS.chance,
   site: 'inland',

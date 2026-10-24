@@ -16,7 +16,7 @@ import { DISTRICT_DEFS } from '../src/world/districts/index';
 /** JSON with Maps and Sets as arrays, the graph as its nodes, and no functions. */
 export function cityJson(city: CityData): string {
   return JSON.stringify(city, (key, value) => {
-    if (key === 'params' || key === 'warnings') return undefined; // they describe the city, they aren't it
+    if (key === 'params' || key === 'warnings' || key === 'features' || key === 'pins') return undefined; // they describe the city, they aren't it
     if (value instanceof Map) return [...value];
     if (value instanceof Set) return [...value];
     if (typeof value === 'function') return undefined;

@@ -6,8 +6,9 @@ import { DISTRICTS } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { fillBlock, inRect } from '../lots';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../StreetProps';
-import { edgeKey, placeDistrict, rollDistricts, shuffle, type DistrictForce, type DistrictGrid } from './place';
-import type { Gate, District, DistrictDef } from './District';
+import { edgeKey, placeDistrict, rectRules, rollDistricts, shuffle, tryPlace, type DistrictForce, type DistrictGrid } from './place';
+import type { DistrictParams } from '../CityParams';
+import type { BlockRole, Gate, District, DistrictDef } from './District';
 
 /** Signals and stop / priority / speed signs: junction rules and fast stretches come from these, so they are never dropped. */
 export function isJunctionControl(p: StreetProp): boolean {
@@ -19,20 +20,77 @@ export function inDistrict(q: District, p: { x: number; z: number }): boolean {
   return inRect(q.bounds, p) || (!!q.frontage && inRect(q.frontage, p));
 }
 
-export function applyDistricts(city: CityData, grid: DistrictGrid, defs: DistrictDef[], force: DistrictForce = {}): void {
+/**
+ * Place and dress the city's districts. `list` (the params' districts) is the exact set, placed in
+ * its order: a pinned rect is tried when the seed's own placement lands elsewhere, and its features
+ * are pinned. Problems go to `errors` (the build fails) and `warnings`.
+ */
+export function applyDistricts(
+  city: CityData, grid: DistrictGrid, defs: DistrictDef[], force: DistrictForce = {}, list?: DistrictParams[],
+  errors: string[] = [], warnings: string[] = [],
+): void {
   const placed: District[] = [];
+  const n = grid.n;
+  if (list) {
+    if (list.length > DISTRICTS.max) errors.push(`districts: at most ${DISTRICTS.max}`);
+    list.forEach((d, k) => {
+      if (!defs.some((def) => def.kind === d.kind)) errors.push(`districts[${k}].kind: "${d.kind}" is not a district (${defs.map((def) => def.kind).join(', ')})`);
+      if (list.findIndex((o) => o.kind === d.kind) !== k) errors.push(`districts[${k}]: ${d.kind} twice`);
+    });
+    if (errors.length) return;
+  }
   // Placement order is shuffled per seed: a later district keeps clear of the earlier ones and only
-  // shrinks to fit, so a fixed order would always leave the first one the most room.
-  const rolled = rollDistricts(city.seed, defs, force);
+  // shrinks to fit, so a fixed order would always leave the first one the most room. A list keeps its order.
+  const rolled = rollDistricts(city.seed, defs, force, list?.map((d) => d.kind));
   shuffle(rolled, new Rng(city.seed ^ DISTRICTS.orderSalt));
+  if (list) rolled.sort((a, b) => list.findIndex((d) => d.kind === a.def.kind) - list.findIndex((d) => d.kind === b.def.kind));
   for (const { def, rng } of rolled) {
     if (placed.length >= DISTRICTS.max) break;
-    const q = placeDistrict(def, grid, city, rng, placed);
-    if (!q) continue;
+    const k = list?.findIndex((d) => d.kind === def.kind) ?? -1;
+    const pinned = list?.[k];
+    const field = `districts[${k}] (${def.kind})`;
+    let q = placeDistrict(def, grid, city, rng, placed);
+    const want = pinned?.rect;
+    if (want && (!q || q.grid.i0 !== want.i || q.grid.j0 !== want.j || q.grid.w !== want.w || q.grid.h !== want.h)) {
+      const rect = { i0: want.i, j0: want.j, w: want.w, h: want.h };
+      q = null;
+      if (![want.i, want.j, want.w, want.h].every(Number.isInteger) || want.w < 1 || want.h < 1 || want.i < 0 || want.j < 0 || want.i + want.w > n || want.j + want.h > n) {
+        errors.push(`${field}.rect: not inside the ${n}×${n} grid`);
+      } else {
+        const rules = rectRules(def, rect, grid, city);
+        if (rules.site) errors.push(`${field}.rect: ${rules.site}`);
+        for (const z of rules.zones) warnings.push(`${field}.rect: outside its zone rules (${z})`);
+        const tried = rules.site ? null : tryPlace(def, grid, city, rng, placed, rect);
+        if (typeof tried === 'string') errors.push(`${field}.rect: ${tried}`);
+        else q = tried;
+      }
+    }
+    if (!q) {
+      if (pinned && !want) errors.push(`${field}: no room for it on this seed`);
+      continue;
+    }
+    for (const [name, value] of Object.entries(pinned?.features ?? {})) {
+      const kind = def.features[name];
+      const ok = kind === 'bool' ? typeof value === 'boolean' : kind === 'int' ? Number.isInteger(value) : !!kind && (kind as readonly unknown[]).includes(value);
+      if (!kind) errors.push(`${field}.features.${name}: no such feature (${Object.keys(def.features).join(', ')})`);
+      else if (!ok) errors.push(`${field}.features.${name}: ${JSON.stringify(value)} is not ${kind === 'bool' ? 'true or false' : kind === 'int' ? 'a whole number' : (kind as readonly string[]).join(' | ')}`);
+    }
+    if (errors.length) continue;
+    q.pins = pinned?.features;
     overlay(def, q, city, rng);
+    if (pinned?.roles) {
+      const built = rolesOf(q, n);
+      const same = (a: Record<string, string>, b: Record<string, string>) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+      if (!same(pinned.roles, built)) warnings.push(`${field}.roles: the roles built differ from the file's (a stale dump?)`);
+    }
     placed.push(q);
   }
   city.districts = placed;
+}
+
+/** A district's special blocks as "i,j" → role. */
+export function rolesOf(q: District, n: number): Record<string, BlockRole> {
+  return Object.fromEntries([...q.roles].map(([k, role]) => [`${k % n},${Math.floor(k / n)}`, role]));
 }
 
 function overlay(def: DistrictDef, q: District, city: CityData, rng: Rng): void {

@@ -10,7 +10,7 @@ import { clipRect, inCanal, landPieces, onGround, pickBridges, planTerrain, type
 import { fillBlock, scatterTrees } from './lots';
 import { fastStreets } from './TrafficControl';
 import type { District, DistrictDef, DistrictKind } from './districts/District';
-import { applyDistricts } from './districts/apply';
+import { applyDistricts, rolesOf } from './districts/apply';
 import type { DistrictForce, DistrictGrid } from './districts/place';
 import { DISTRICT_DEFS } from './districts/index';
 import {
@@ -600,8 +600,12 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
       works: works.sites.map((w) => ({ node: w.node, edge: w.edge })),
       fast: fastStreets(graph, traffic.props),
     };
-    applyDistricts(city, grid, defs, p.force);
+    applyDistricts(city, grid, defs, p.force, p.districts, errors, warnings);
+    fail();
   }
+  city.params.districts = city.districts.map((q) => ({
+    kind: q.kind, rect: { i: q.grid.i0, j: q.grid.j0, w: q.grid.w, h: q.grid.h }, roles: rolesOf(q, n), features: { ...q.features },
+  }));
   return city;
 }
 

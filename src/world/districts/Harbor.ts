@@ -6,7 +6,7 @@ import { HARBOR } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect } from '../lots';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../StreetProps';
-import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook, type Structure } from './District';
+import { emptyDressing, feature, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook, type Structure } from './District';
 import { capContainers, clearOf, containersOf, yardFence, yardLayout } from './HarborYard';
 import { inDistrict, isJunctionControl, kerbClutter } from './apply';
 import { terminalGate, siloGallery } from './HarborGate';
@@ -66,7 +66,7 @@ export function yardRowsAlongX(k: number, q: District, city: CityData): boolean 
 
 function roles(q: District, city: CityData, rng: Rng): Map<number, BlockRole> {
   const quay = quayRow(q, city);
-  const want = Math.min(rng.int(HARBOR.yards[0], HARBOR.yards[1]), quay.length - 1);
+  const want = Math.min(feature(q, 'yards', rng.int(HARBOR.yards[0], HARBOR.yards[1])), quay.length - 1);
   // A run of neighbouring quay blocks, each with streets on two opposite sides where it can be.
   const through = (k: number) => { const s = streetSides(k, city); return (s.px && s.nx) || (s.pz && s.nz); };
   const starts = Array.from({ length: quay.length - want + 1 }, (_, i) => i);
@@ -114,7 +114,7 @@ function lots(q: District, buildings: Building[], city: CityData, rng: Rng): voi
   clampSize(office, HARBOR.officeSide, HARBOR.officeSide);
   const free = () => buildings.filter((b) => b.lot === 'warehouse' || b.lot === 'transitShed');
   // A grain silo on the quay row where it can (its gallery runs to the quay).
-  if (rng.next() < HARBOR.siloChance) {
+  if (feature(q, 'silo', rng.next() < HARBOR.siloChance)) {
     const pool = free().filter(onQuay);
     const silo = pool.length ? rng.pick(pool) : free().length ? rng.pick(free()) : undefined;
     if (silo) {
@@ -126,7 +126,7 @@ function lots(q: District, buildings: Building[], city: CityData, rng: Rng): voi
     }
   }
   // A tank farm on a big back-row lot.
-  if (rng.next() < HARBOR.tankFarmChance) {
+  if (feature(q, 'tankFarm', rng.next() < HARBOR.tankFarmChance)) {
     const pool = free().filter((b) => !onQuay(b) && Math.min(b.w, b.d) >= 16);
     if (pool.length) rng.pick(pool).lot = 'tankFarm';
   }
@@ -161,6 +161,7 @@ function HARBOR_LOOKS(): Record<Exclude<HarborLot, 'tankFarm'>, LotLook> {
 export const HARBOR_DEF: DistrictDef = {
   kind: 'harbor',
   label: 'Harbor',
+  features: { yards: 'int', silo: 'bool', tankFarm: 'bool', ship: ['container', 'bulk', 'general'], tug: 'bool' },
   salt: 0x4a2b0e,
   chance: HARBOR.chance,
   site: 'coast',

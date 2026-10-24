@@ -20,6 +20,7 @@ const base = {
   copSpawnSkip: 0,
   roadblockGates: false,
   mapColor: 0xffffff,
+  features: {},
 };
 
 /** Old City-like: a walled block cluster in the middle ring. */

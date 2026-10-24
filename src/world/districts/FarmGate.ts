@@ -10,7 +10,7 @@ import { shrink } from '../lots';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type StreetProp } from '../StreetProps';
 import { groundBase, groundHeight } from '../Terrain';
 import { inDistrict, isJunctionControl } from './apply';
-import type { District, Gate, GroundPatch, Overhead, Structure } from './District';
+import { feature, type District, type Gate, type GroundPatch, type Overhead, type Structure } from './District';
 
 /** Made-up farm names for the ranch gate's sign (never a real brand). */
 export const FARM_NAMES = ['Hollow Creek Farm', 'Willow Bend Ranch', 'Cedar Ridge Farm', 'Maple Hollow Farm', 'Two Oaks Ranch', 'Red Gate Acres', 'Sunny Meadow Farm', 'Juniper Flats'];
@@ -91,12 +91,12 @@ const radius = (kind: LandmarkKind) => LANDMARK_RADIUS[kind];
  * and inside the sidewalk line. A piece that won't fit in the yard tries the field corners next to
  * it (fields are open ground). Silos are concrete or blue steel per farm.
  */
-export function yardPieces(yard: Rect, fields: Rect[], buildings: Building[], avoid: Footprint[], rng: Rng): Landmark[] {
+export function yardPieces(yard: Rect, fields: Rect[], buildings: Building[], avoid: Footprint[], rng: Rng, q?: District): Landmark[] {
   const out: Landmark[] = [];
   const taken: Footprint[] = [...buildings.map((b) => rectFootprint({ ...b, w: b.w + FG.pieceGap * 2, d: b.d + FG.pieceGap * 2 })), ...avoid];
   const fits = (fp: Footprint, area: Rect) =>
     Math.abs(fp.x - area.x) + fp.hx <= area.w / 2 && Math.abs(fp.z - area.z) + fp.hz <= area.d / 2 && !taken.some((t) => footprintsOverlap(fp, t));
-  const steel = rng.next() < 0.5 ? 1 : 0;
+  const steel = feature(q, 'steelSilos', rng.next() < 0.5) ? 1 : 0;
   /** A row of `n` pieces (fewer if it won't fit), at random spots in the yard, then the field corners. */
   const row = (kind: LandmarkKind, n: number, min: number) => {
     const r = radius(kind);
@@ -125,7 +125,7 @@ export function yardPieces(yard: Rect, fields: Rect[], buildings: Building[], av
   row('silo', rng.int(FG.silos[0], FG.silos[1]), 1);
   row('grainBin', rng.int(FG.bins[0], FG.bins[1]), 2);
   row('windmill', 1, 1);
-  if (rng.next() < FG.waterTowerChance) row('waterTower', 1, 1);
+  if (feature(q, 'waterTower', rng.next() < FG.waterTowerChance)) row('waterTower', 1, 1);
   return out;
 }
 
