@@ -509,8 +509,8 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
   const len = Math.hypot(dx, dz);
   const spawn = { x: centre.x + (dx / len) * 15, z: centre.z + (dz / len) * 15, yaw: Math.atan2(dx, dz) };
 
-  // Pinned sites: the seed's own roll first (a dump's sites are exactly it, so its layouts come out
-  // the same); otherwise the graph is put back and just those sites are closed.
+  // Pinned sites: just those, each laid out from its recorded stream state when it has one (a dump's
+  // sites then come out exactly as the seed laid them out).
   type Plan = ReturnType<typeof planRoadworks>;
   const roadworksFor = (pinned: CityParams['roadworks'], plan: (chance: number, pins?: { count?: number; sites?: WorksPin[] }) => Plan): Plan => {
     if (!Array.isArray(pinned)) return plan(pinned === 'all' ? 1 : config.roadworksChance, { count: typeof pinned === 'number' ? pinned : undefined });
@@ -518,15 +518,9 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
       const e = w.edge === undefined ? undefined : edgeIndex.get(w.edge);
       if (w.edge !== undefined && !e) errors.push(`roadworks[${k}].edge: ${w.edge} is not a street of a ${n}-block grid`);
       if (w.edge === undefined && !nodeAt(w.node)) errors.push(`roadworks[${k}].node: ${w.node} is not a junction of a ${n}-block grid`);
-      return e ? { edge: [e.a, e.b] } : { node: nodeAt(w.node)?.id };
+      return { ...(e ? { edge: [e.a, e.b] as [number, number] } : { node: nodeAt(w.node)?.id }), stream: w.stream };
     });
     fail();
-    const saved = nodes.map((nd) => [...nd.neighbors]);
-    const natural = plan(config.roadworksChance);
-    const same = natural.sites.length === sites.length &&
-      natural.sites.every((s, k) => (sites[k].edge ? s.edge?.[0] === sites[k].edge![0] && s.edge?.[1] === sites[k].edge![1] : s.node === sites[k].node));
-    if (same) return natural;
-    nodes.forEach((nd, k) => (nd.neighbors = saved[k]));
     const out = plan(config.roadworksChance, { sites });
     for (const k of out.failed) errors.push(`roadworks[${k}]: can't close it (an inner junction or road, clear of the spawn, ramps, bridges and the other sites, that leaves no dead end)`);
     fail();
@@ -589,7 +583,9 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     zones,
     landmarks: landmarksOut,
     canalRamps: canalRampsOut,
-    roadworks: works.sites.map((w) => (w.edge ? { edge: keyOf(edgeOfNodes.get(`${w.edge[0]}>${w.edge[1]}`)!) } : { node: cellOfNode(w.node!) })),
+    roadworks: works.sites.map((w, k) => ({
+      ...(w.edge ? { edge: keyOf(edgeOfNodes.get(`${w.edge[0]}>${w.edge[1]}`)!) } : { node: cellOfNode(w.node!) }), stream: works.streams[k],
+    })),
     spawn: { node: cellOfNode(centre.id), toward: cellOfNode(next.id) },
   };
 

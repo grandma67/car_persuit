@@ -125,6 +125,7 @@ export const SLUMS_DEF: DistrictDef = {
   kind: 'slums',
   label: 'Slums',
   features: { camp: 'bool', junkyard: 'bool' },
+  built: (q) => ({ camp: roleBlocks(q, 'camp').length > 0, junkyard: roleBlocks(q, 'junkyard').length > 0 }),
   salt: 0x51a3b7,
   chance: SLUMS.chance,
   site: 'inland',

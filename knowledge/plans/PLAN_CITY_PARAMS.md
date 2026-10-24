@@ -198,6 +198,51 @@ committed.
   the page starts (no URL flag). `check:restart` runs `city make` for all five districts + `festival
   harvest night rain` into the scratchpad and loads that file, instead of `seed=9&…`.
 
+## Status (branch `city-params`)
+
+Done: **M0–M3**, **M4 in part**. Hash identical for all 120 cities after every step (`npm run hash
+-- --out <scratchpad>/base.txt` on main first, then `--vs` it); `generateCity(city.params)` rebuilds
+every city exactly (60 seeds × defaults/all districts, plus `?roadworks`, `?canalramp`, forced pairs).
+
+**M4 still to do:** `scripts/city.ts` (`make`, `dump`, `check`, `show`) and `npm run city`; `find`
+printing the dump hint; the tests (every word × 10 base seeds, split over a few files so the suite
+stays ~20 s; the 60 × 2 `parse(serialize(dump))` round trip; parse/validate error cases). Then M5–M7.
+
+**What exists (M4 so far):**
+- `world/CityParamsFile.ts`: `parseCityParams` (version 1, unknown keys and bad shapes are errors),
+  `serializeCityParams` (`CITY_KEYS` order, anything ≤ 100 chars on one line), `validateCityParams`
+  (static warnings: theme the climate never rolls, weather fixed up by the climate, night-only feature
+  by day; then a build: `CityParamsError` reasons are the errors, `city.warnings` join the warnings).
+- `world/makeCityParams.ts`: `WORDS` (the vocabulary), `parseWords`, `makeCity(words, {seed, tries})`
+  → `{params, city}` (seeds `seed, seed+1, …`, 100 tries by default), `makeCityParams` (params only),
+  `urlOverrides(search, debug)` through the same table (the M3 flag table passes).
+- `DistrictDef.built(q, city)`: what each district actually has per feature, for the word checks.
+- `Rng.state`: `new Rng(state)` resumes a stream.
+
+**Changes from the plan above, as built:**
+- Layout choices are resolved where they are built (see "Where the plan bends"): `rollCityParams`
+  rolls the look, grid size and drive side; `generateCity(params)` resolves the rest through `pin()`
+  and returns them all as `city.params` (plus `city.warnings`). `generateCity(seed, config, opts)`
+  still works and builds exactly what it did.
+- **Hill in metres** (`{x, z, height, rx, rz, yaw}`, from the island's centre), not grid units: a
+  grid → metre conversion moved the rolled hill by a float ulp and broke "no seed moves".
+- **No `landmarkStream` and no district `stream`.** Pinned street ramps replace the rolled ones after
+  the squares roll as usual, so the landmark stream's draws never change. A district list places in
+  its own order and first tries the seed's own placement; a dump's rects are exactly that, so it
+  reloads the same; only a hand-pinned rect that differs is tried with `tryPlace` from there on.
+- **Roadworks `stream` per site** instead: a dump's site records the stream state when the seed
+  picked it, and a reload lays it out from there (needed for `?roadworks` dumps).
+- `canalRamps` and `roadworks` also take `'all'` (the URL flags) and a count; `ramps` is a count.
+  `force` is a params field (the URL's `<district>=0|1`); `districts` is the exact list.
+- Features as declared (M0 table): no Slums `train` (dead knob), Old City `roundTowers` only, Farm
+  `steelSilos` instead of `silo`, Harbor `yards` is a count.
+- **Words:** a feature word (`festival`, `!harvest`, `ship=bulk`, `harbor.silo` when names clash)
+  brings its district into the exact list. Bare `night`/`day`/`afternoon`, `rain`/`clear`/`snow`
+  (snow also sets the snow climate) and `temperate`/`beach`/`desert` are aliases. Two words that want
+  one field differently are an error.
+- `startHour` moved to `CityTheme` (with `startMinuteOf`, `startHourAt`); `npm run hash` is
+  `scripts/city-hash.ts`.
+
 ## Milestones
 
 Branch `city-params` from main. Commit per milestone; the full suite (`npm run t`) and `npx tsc

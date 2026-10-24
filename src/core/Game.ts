@@ -9,7 +9,7 @@ import { buildCarMesh, resetCarMeshes, setCarEnvironment, setCarShadow, type Car
 import { createEnvironment } from '../render/Environment';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { cityDestinations, generateCity, type CityData, type Rect } from '../world/CityGenerator';
-import { urlOverrides } from '../world/CityParams';
+import { urlOverrides } from '../world/makeCityParams';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, startHourAt, timeOfDay } from '../world/CityTheme';
@@ -185,7 +185,7 @@ export class Game {
     // The city's params: every choice the seed rolls (a climate, a weather, a time of day, a building
     // style that suits the climate, the layout, the districts, the destinations), the URL's flags
     // pinning some (see urlOverrides: ?time, ?blocks, ?roadworks …; ?city, ?weather, ?canals, ?hill with ?debug).
-    this.city = generateCity({ seed, ...urlOverrides(window.location.search, this.debug, DISTRICT_DEFS.map((d) => d.kind)) });
+    this.city = generateCity({ seed, ...urlOverrides(window.location.search, this.debug) });
     const p = this.city.params;
     const climate = CLIMATES[p.climate!];
     const weather = p.weather!;

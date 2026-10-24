@@ -178,5 +178,7 @@ export interface DistrictDef {
   features: Record<string, FeatureKind>;
   /** Features only shown on a night run (a warning when pinned on by day). */
   nightFeatures?: string[];
+  /** What it actually has, per feature (a pinned one may find no room); left out: as recorded. */
+  built?(q: District, city: CityData): Record<string, FeatureValue>;
   dress(q: District, city: CityData, rng: Rng): DistrictDressing;
 }

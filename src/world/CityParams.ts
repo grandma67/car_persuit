@@ -4,8 +4,8 @@
 // complete set as `city.params`, which reloads as the identical city. Pure data — no Three.js.
 import { Rng } from '../core/Rng';
 import { DEFAULT_CITY, type CityConfig } from './CityGenerator';
-import { CLIMATES, pickClimate, pickWeather, WEATHER_NAMES, type ClimateName, type WeatherName } from './Climate';
-import { pickTheme, pickTimeOfDay, startMinuteOf, TIME_NAMES, type TimeOfDayName } from './CityTheme';
+import { CLIMATES, pickClimate, pickWeather, type ClimateName, type WeatherName } from './Climate';
+import { pickTheme, pickTimeOfDay, startMinuteOf, type TimeOfDayName } from './CityTheme';
 import type { DriveSide } from './driveSide';
 import type { BlockRole, DistrictKind } from './districts/District';
 import type { LandmarkKind } from './Landmarks';
@@ -57,6 +57,7 @@ export interface CanalRampParams {
 export interface WorksParams {
   node?: [number, number];
   edge?: string;
+  stream?: number; // dumps only: the stream's state as the seed picked it (its layout comes out the same)
 }
 
 export type FeatureValue = boolean | number | string;
@@ -100,6 +101,12 @@ export interface CityParams {
   /** URL style: a district's roll forced on (true) or off, the others rolled. */
   force?: Partial<Record<DistrictKind, boolean>>;
 }
+
+/** Every key a params file may have, in the order a file writes them. */
+export const CITY_KEYS = [
+  'version', 'seed', 'note', 'climate', 'weather', 'time', 'startMinute', 'theme', 'blocks', 'driveSide', 'terrain', 'plazas',
+  'zones', 'landmarks', 'ramps', 'canalRamps', 'roadworks', 'spawn', 'destinations', 'districts', 'force',
+] as const satisfies readonly (keyof CityParams)[];
 
 /** Draw, then override: the roll is always made (so later draws stay put), the pinned value wins. */
 export function pin<T>(pinned: T | undefined, rolled: T): T {
@@ -151,33 +158,3 @@ export function rollCityParams(seed: number, overrides: Partial<CityParams> = {}
   };
 }
 
-/**
- * The URL's city flags as overrides, exactly as the game has always read them: ?time, ?blocks,
- * ?roadworks, ?canalramp, ?england and ?<district>=0|1 for anyone; ?city, ?weather, ?canals and
- * ?hill only with ?debug. Unknown values are ignored (the seed rolls them).
- */
-export function urlOverrides(search: string | URLSearchParams, debug: boolean, kinds: readonly DistrictKind[]): Partial<CityParams> {
-  const q = typeof search === 'string' ? new URLSearchParams(search) : search;
-  const out: Partial<CityParams> = {};
-  const time = q.get('time');
-  if (time && (TIME_NAMES as string[]).includes(time)) out.time = time as TimeOfDayName;
-  const blocks = Number.parseInt(q.get('blocks') ?? '', 10);
-  if (blocks >= 4 && blocks <= 30) out.blocks = blocks;
-  if (q.has('roadworks')) out.roadworks = 'all';
-  if (q.has('canalramp')) out.canalRamps = 'all';
-  if (q.has('england')) out.driveSide = 'left';
-  if (debug) {
-    const city = q.get('city');
-    if (city && city in CLIMATES) out.climate = city as ClimateName;
-    const weather = q.get('weather');
-    if (weather && (WEATHER_NAMES as string[]).includes(weather)) out.weather = weather as WeatherName;
-    const canals = Number.parseInt(q.get('canals') ?? '', 10);
-    const terrain: TerrainParams = {};
-    if (canals >= 0 && canals <= 2) terrain.canals = canals;
-    if (q.has('hill')) terrain.hill = q.get('hill') !== '0';
-    if (Object.keys(terrain).length) out.terrain = terrain;
-  }
-  const force = Object.fromEntries(kinds.filter((k) => q.get(k) === '0' || q.get(k) === '1').map((k) => [k, q.get(k) === '1']));
-  if (Object.keys(force).length) out.force = force;
-  return out;
-}

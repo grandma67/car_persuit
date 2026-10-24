@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Rng } from '../core/Rng';
 import { pickDestinations } from '../gameplay/MissionSystem';
 import { cityDestinations, DEFAULT_CITY, generateCity, rollCityBlocks, type CityConfig, type CityData } from './CityGenerator';
-import { urlOverrides } from './CityParams';
+import { urlOverrides } from './makeCityParams';
 import { pickTheme, pickTimeOfDay, startHour, startHourAt } from './CityTheme';
 import { CLIMATES, pickClimate, pickWeather } from './Climate';
 import { districtOfNode } from './districts/runtime';
@@ -50,7 +50,7 @@ function before(seed: number, search: string) {
 
 function after(seed: number, search: string) {
   const debug = new URLSearchParams(search).has('debug');
-  const city = generateCity({ seed, ...urlOverrides(search, debug, KINDS) });
+  const city = generateCity({ seed, ...urlOverrides(search, debug) });
   const p = city.params;
   return {
     city: json(city), climate: p.climate, weather: p.weather, time: p.time, theme: pickTheme(seed, CLIMATES[p.climate!], p.theme),
@@ -71,8 +71,8 @@ describe('URL flags → city params', () => {
   });
 
   it('ignores the debug-only flags without ?debug', () => {
-    expect(urlOverrides('city=snow&weather=rain&canals=2&hill=0', false, KINDS)).toEqual({});
-    expect(urlOverrides('debug&city=snow&weather=rain&canals=2&hill=0', true, KINDS)).toEqual({
+    expect(urlOverrides('city=snow&weather=rain&canals=2&hill=0', false)).toEqual({});
+    expect(urlOverrides('debug&city=snow&weather=rain&canals=2&hill=0', true)).toEqual({
       climate: 'snow', weather: 'rain', terrain: { canals: 2, hill: false },
     });
   });

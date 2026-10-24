@@ -112,6 +112,10 @@ export const CHINATOWN_DEF: DistrictDef = {
   label: 'Chinatown',
   features: { square: 'bool', banquet: 'bool', temple: 'bool', festival: 'bool' },
   nightFeatures: ['festival'],
+  built: (q, city) => {
+    const lots = new Set(city.buildings.filter((b) => b.district === 'chinatown' && inRect(q.bounds, b)).map((b) => b.lot));
+    return { square: squareBlock(q) !== undefined, banquet: lots.has('banquetHall'), temple: lots.has('temple'), festival: !!chinatownExtra(q)?.festival };
+  },
   salt: 0xc417a7,
   chance: CHINATOWN.chance,
   site: 'inland',

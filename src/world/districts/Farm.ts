@@ -184,6 +184,15 @@ export const FARM_DEF: DistrictDef = {
   label: 'Farm',
   features: { steelSilos: 'bool', waterTower: 'bool', maze: 'bool', harvest: 'bool' },
   nightFeatures: ['harvest'],
+  built: (q) => {
+    const silos = q.dressing.landmarks.filter((l) => l.kind === 'silo');
+    return {
+      steelSilos: silos.length > 0 && silos.every((l) => l.variant === 1),
+      waterTower: q.dressing.landmarks.some((l) => l.kind === 'waterTower'),
+      maze: farmFields(q).some((f) => !!f.maze),
+      harvest: !!q.dressing.extra?.harvest,
+    };
+  },
   salt: 0x5f4a12,
   chance: FARM.chance,
   site: 'edge',
