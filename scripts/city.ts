@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseEdgeKey, type CityParams } from '../src/world/CityParams';
 import { generateCity, type CityData } from '../src/world/CityGenerator';
-import { parseCityParams, serializeCityParams, validateCityParams } from '../src/world/CityParamsFile';
+import { parseCityParams, readCityParams, serializeCityParams } from '../src/world/CityParamsFile';
 import { makeCity, urlOverrides, WORDS } from '../src/world/makeCityParams';
 
 const USAGE = `usage: npm run city -- make <words…> [seed=N] [--full] [--out f.json]
@@ -176,8 +176,7 @@ export default function (argv: string[]): void {
       if (!args.length) throw new Error('check: which files?');
       let bad = 0;
       for (const file of args) {
-        const { params, errors } = parseCityParams(readFileSync(file, 'utf8'));
-        const v = params ? validateCityParams(params) : { errors, warnings: [], city: null };
+        const v = readCityParams(readFileSync(file, 'utf8'));
         bad += v.errors.length ? 1 : 0;
         console.log(`${file}: ${v.errors.length ? `${v.errors.length} error(s)` : 'ok'}${v.warnings.length ? `, ${v.warnings.length} warning(s)` : ''}`);
         v.errors.forEach((e) => console.log(`  error: ${e}`));

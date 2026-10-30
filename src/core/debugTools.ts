@@ -6,6 +6,7 @@ import type { District, DistrictKind } from '../world/districts/District';
 import { inRect } from '../world/lots';
 import type { Game } from './Game';
 import { createStudio, type StudioShot } from './debugStudio';
+import { readCityParams, serializeCityParams } from '../world/CityParamsFile';
 
 type P = { x: number; z: number };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -257,6 +258,33 @@ export function debugTools(game: Game) {
       // for the rest of the run. Measure before any aerial().
       const warn = aerialUsed ? 'aerial() ran: fog was off, programs not comparable' : undefined;
       return { programs: g.renderer.info.programs?.length ?? 0, calls, triangles, staticTris: Math.round(staticTris), ...(warn ? { warn } : {}) };
+    },
+    /**
+     * This run's complete params as a file (what `npm run city -- dump` writes for its seed and URL
+     * flags): downloaded as city-<seed>.json unless `download` is false, and returned as text.
+     */
+    dumpCity(download = true) {
+      const text = serializeCityParams(city().params);
+      if (download) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+        a.download = `city-${city().seed}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+      return text;
+    },
+    /**
+     * Restart in place with a params file (text or object): checked as `npm run city -- check` does,
+     * errors thrown (nothing restarts), warnings logged. Resolves once the new city is up; Retry
+     * keeps the params, New city goes back to a seed. `window.game` and `window.dbg` are then new.
+     */
+    async loadCity(file: string | object) {
+      const { params, errors, warnings } = readCityParams(file);
+      if (!params) throw new Error(`loadCity: the file has errors:\n  ${errors.join('\n  ')}`);
+      for (const w of warnings) console.warn(`loadCity: ${w}`);
+      await game.loadCity(params);
+      return { seed: params.seed, warnings };
     },
     /** The car's position and speed. */
     car: () => ({ x: Math.round(g.player.position.x), z: Math.round(g.player.position.z), speed: +g.player.speed.toFixed(1) }),

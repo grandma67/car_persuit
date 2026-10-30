@@ -200,10 +200,26 @@ committed.
 
 ## Status (branch `city-params`)
 
-Done: **M0–M4**. Hash identical for all 120 cities after every step (now `npm run hash -- --vs
+Done: **M0–M5**. Hash identical for all 120 cities after every step (now `npm run hash -- --vs
 HEAD` before each commit; main predates city params, so compare with the branch's commits); `npm run hash -- --reload` proves every
-one of the 120 dumps reloads as its city (same hash, same dump). **Next: M5** (the game: `dbg.loadCity`
-/ `dbg.dumpCity`).
+one of the 120 dumps reloads as its city (same hash, same dump). **Next: M6** (tests move off seeds).
+
+**What exists (M5):**
+- `Game` takes a seed or `CityParams`; loaded params are built as they stand (the URL's flags don't
+  apply to them) and kept in `game.loaded`. `retry()` (Retry, Enter, the pause menu's restart)
+  rebuilds from them; New city restarts on a seed and drops them. `GameShell.restart(seed | params)`
+  returns a promise; the URL keeps only the seed.
+- `dbg.dumpCity(download = true)` → the text of `city.params` (downloads `city-<seed>.json`);
+  `dbg.loadCity(text | object)` → `readCityParams` (parse, then build: what `city check` does),
+  throws on errors without restarting, logs warnings, resolves when the new city is up.
+- `readCityParams` in `CityParamsFile.ts`, shared by `npm run city -- check`.
+- `check:browser --city <file>` loads the file through `dbg.loadCity` once the page is up (exit 1 on
+  a bad file). `scripts/evals/city-reload.js`: dump → load is the same city (layout fingerprint,
+  dump text, programs, settled draw calls, static triangles, an aerial shot pair), Retry keeps the
+  params, New city drops them, a bad file restarts nothing. Passes on `seed=9` with every district,
+  night and rain. `restart.js`'s quick restarts go through `retry()`; `check:restart` passes, also
+  started from a `--city` file. Draw calls read a few high for a frame or two after any restart
+  (seen with plain seeds too), so the eval compares the lowest of 4 samples.
 
 **What exists (M4):**
 - `world/CityParamsFile.ts`: `parseCityParams` (version 1, unknown keys and bad shapes are errors),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CityParams } from './CityParams';
 import { generateCity } from './CityGenerator';
-import { parseCityParams, serializeCityParams, validateCityParams } from './CityParamsFile';
+import { parseCityParams, readCityParams, serializeCityParams, validateCityParams } from './CityParamsFile';
 import { makeCity, parseWords } from './makeCityParams';
 
 const parseErrors = (json: unknown) => parseCityParams(typeof json === 'string' ? json : JSON.stringify(json)).errors;
@@ -85,6 +85,27 @@ describe('validateCityParams', () => {
 
   it('passes every dump without a word', () => {
     expect(validateCityParams(generateCity(7930).params)).toMatchObject({ errors: [], warnings: [] });
+  });
+});
+
+describe('readCityParams (city check, dbg.loadCity)', () => {
+  it('gives back the params of a dump, which build its city', () => {
+    const city = generateCity(7930);
+    const { params, errors, warnings } = readCityParams(serializeCityParams(city.params));
+    expect({ errors, warnings }).toEqual({ errors: [], warnings: [] });
+    expect(serializeCityParams(generateCity(params!).params)).toBe(serializeCityParams(city.params));
+  });
+
+  it('gives no params for a bad shape or a city that cannot be built, and says why', () => {
+    expect(readCityParams('{"version": 1}')).toEqual({ params: null, errors: ['seed: missing'], warnings: [] });
+    expect(readCityParams('{"version": 1, "seed": 3, "blocks": 40}').errors[0]).toMatch(/^blocks: 40 is not a grid size/);
+    expect(readCityParams('{"version": 1, "seed": 3, "blocks": 40}').params).toBeNull();
+  });
+
+  it('keeps the warnings of a city that builds', () => {
+    const r = readCityParams({ version: 1, seed: 3, time: 'day', districts: [{ kind: 'farm', features: { harvest: true } }] });
+    expect(r.params).not.toBeNull();
+    expect(r.warnings.join('\n')).toMatch(/features\.harvest: only shows on a night run/);
   });
 });
 

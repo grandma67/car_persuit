@@ -10,7 +10,7 @@
 // city are clicked on the end screen (time's up via debug Y), each new mission started with Enter.
 // After each: still fullscreen, the seed kept (Retry) or changed (New city) and in the URL, the splash
 // hidden with no animation left running on it, one WebGL canvas, one .screen, at most one .touch, menu state.
-// (2) `restarts` quick same-seed restarts: per restart heap MB after gc(), geometries, textures,
+// (2) `restarts` quick same-city restarts (Retry: a loaded params city stays loaded): per restart heap MB after gc(), geometries, textures,
 // programs. Same seed, so GPU counts must hold (±2 geometries: props) and heap must not climb
 // (> 1.5 MB per restart from the 2nd on fails). Every old Game must be collected (an eval holding one
 // in a loop variable keeps it alive: restart only through `next`). With ?gputrace, `orphans` names what the
@@ -109,7 +109,7 @@
   // (2) Quick same-seed restarts, for leaks.
   const rows = [];
   for (let i = 0; i < quick; i++) {
-    if (!(await next((old) => old.restart(old.city.seed)))) {
+    if (!(await next((old) => old.retry()))) {
       fail(`quick restart ${i}: next city never came up`);
       break;
     }

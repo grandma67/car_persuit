@@ -55,6 +55,7 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)` | model studio, HUD hidden |
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
+| `dumpCity(download?)`, `loadCity(file)` | this run's params as text (downloads `city-<seed>.json`); restart in place with a params file (errors throw, nothing restarts; Retry keeps it). `check:browser --city <file>` does the load; `scripts/evals/city-reload.js` checks dump → load is the same city |
 
 ## Restart and leaks
 

@@ -169,3 +169,11 @@ export function validateCityParams(params: CityParams): { errors: string[]; warn
     throw e;
   }
 }
+
+/** A file's text (or parsed JSON) read as `npm run city -- check` and dbg.loadCity read it: its shape, then the build. */
+export function readCityParams(input: string | unknown): { params: CityParams | null; errors: string[]; warnings: string[] } {
+  const parsed = parseCityParams(input);
+  if (!parsed.params) return { params: null, errors: parsed.errors, warnings: [] };
+  const { errors, warnings } = validateCityParams(parsed.params);
+  return { params: errors.length ? null : parsed.params, errors, warnings };
+}

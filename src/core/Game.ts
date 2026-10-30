@@ -10,6 +10,7 @@ import { createEnvironment } from '../render/Environment';
 import { ChaseCamera } from '../render/ChaseCamera';
 import { cityDestinations, generateCity, type CityData, type Rect } from '../world/CityGenerator';
 import { urlOverrides } from '../world/makeCityParams';
+import type { CityParams } from '../world/CityParams';
 import { groundHeight, type GroundHeight } from '../world/Terrain';
 import { buildCity } from '../world/CityBuilder';
 import { pickTheme, startHourAt, timeOfDay } from '../world/CityTheme';
@@ -84,8 +85,8 @@ type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
 export interface GameShell {
   renderer: THREE.WebGLRenderer;
   audio: CarAudio;
-  /** Build the next city in place of this one (main.ts disposes this Game first). */
-  restart: (seed: number) => void;
+  /** Build the next city (a seed, or debug params) in place of this one (main.ts disposes this Game first). */
+  restart: (next: number | CityParams) => Promise<void>;
 }
 
 /** The renderer every Game draws with. Created once, its canvas added to `container`. */
@@ -175,9 +176,13 @@ export class Game {
   private staging: THREE.Scene | null = null; // prewarmShaders' cars, kept so their shaders stay compiled
   private unlisten: (() => void)[] = [];
   private environment: THREE.WebGLRenderTarget;
+  /** The params this run was built from when loaded with dbg.loadCity (Retry keeps them), else null. */
+  private loaded: CityParams | null;
 
-  constructor(container: HTMLElement, hudRoot: HTMLElement, seed: number, shell: GameShell | null = null) {
+  constructor(container: HTMLElement, hudRoot: HTMLElement, source: number | CityParams, shell: GameShell | null = null) {
     this.shell = shell;
+    this.loaded = typeof source === 'number' ? null : source;
+    const seed = typeof source === 'number' ? source : source.seed;
     this.renderer = shell?.renderer ?? createRenderer(container);
     this.audio = shell?.audio ?? new CarAudio();
     const mobile = isTouchDevice();
@@ -185,7 +190,8 @@ export class Game {
     // The city's params: every choice the seed rolls (a climate, a weather, a time of day, a building
     // style that suits the climate, the layout, the districts, the destinations), the URL's flags
     // pinning some (see urlOverrides: ?time, ?blocks, ?roadworks …; ?city, ?weather, ?canals, ?hill with ?debug).
-    this.city = generateCity({ seed, ...urlOverrides(window.location.search, this.debug) });
+    // Params loaded with dbg.loadCity are the city as they stand: the URL's flags don't apply to them.
+    this.city = generateCity(this.loaded ?? { seed, ...urlOverrides(window.location.search, this.debug) });
     const p = this.city.params;
     const climate = CLIMATES[p.climate!];
     const weather = p.weather!;
@@ -504,7 +510,7 @@ export class Game {
         onMute: () => this.toggleMute(),
         steering: this.steerChoice(),
       };
-      this.screens.pause(this.city.seed, () => this.setPaused(false), () => this.restart(this.city.seed), touchExtras);
+      this.screens.pause(this.city.seed, () => this.setPaused(false), () => this.retry(), touchExtras);
     } else if (!paused && this.state === 'paused') {
       this.state = 'playing';
       this.screens.hide();
@@ -517,12 +523,24 @@ export class Game {
   /** The next run on a seed: built in this page by the shell (keeps fullscreen), else a reload. */
   private restart(seed: number): void {
     if (this.shell) {
-      this.shell.restart(seed);
+      void this.shell.restart(seed);
       return;
     }
     const url = new URL(window.location.href);
     url.searchParams.set('seed', String(seed));
     window.location.href = url.toString();
+  }
+
+  /** The same city again: its seed, or the params it was loaded from. */
+  private retry(): void {
+    if (this.loaded && this.shell) void this.shell.restart(this.loaded);
+    else this.restart(this.city.seed);
+  }
+
+  /** Debug (dbg.loadCity): the next run is built from these params, in this page. */
+  loadCity(params: CityParams): Promise<void> {
+    if (!this.shell) throw new Error('loadCity: needs the in-page shell (main.ts)');
+    return this.shell.restart(params);
   }
 
   private handleKeys(): void {
@@ -551,7 +569,7 @@ export class Game {
       case 'Enter':
       case 'NumpadEnter':
         if (this.state === 'menu') this.startMission();
-        else if (over || this.state === 'paused') this.restart(this.city.seed);
+        else if (over || this.state === 'paused') this.retry();
         break;
       case 'ArrowLeft':
       case 'ArrowRight': {
@@ -1094,7 +1112,7 @@ export class Game {
           image: map.image(won ? `BEAT IT IN ${time}` : title, `City #${this.city.seed} · ${won ? this.difficulty.label : reached} · ${run.stats}`, won),
         },
       },
-      () => this.restart(this.city.seed),
+      () => this.retry(),
       () => this.restart(Math.floor(Math.random() * 1_000_000)),
     );
   }
