@@ -198,12 +198,12 @@ committed.
   the page starts (no URL flag). `check:restart` runs `city make` for all five districts + `festival
   harvest night rain` into the scratchpad and loads that file, instead of `seed=9&…`.
 
-## Status (branch `city-params`)
+## Status (merged from `city-params`)
 
 Done: **M0–M7**. Hash identical for all 120 cities after every step (now `npm run hash -- --vs
 HEAD` before each commit; main predates city params, so compare with the branch's commits); `npm run hash -- --reload` proves every
-one of the 120 dumps reloads as its city (same hash, same dump). **Next:** the user's approval,
-then merge to main. M7 put the commands and rules in `CLAUDE.md`, `PLAN_GAME.md` (debug tools),
+one of the 120 dumps reloads as its city (same hash, same dump). Merged to main
+(2026-10-30). M7 put the commands and rules in `CLAUDE.md`, `PLAN_GAME.md` (debug tools),
 `DISTRICTS_DEV.md` (features, `feature()`, words in tests) and `BROWSER_CHECKS.md` (`--city`, `--make`,
 `dbg.loadCity`/`dumpCity`, the words-made `check:restart`). Suite timing saved after M6 (`--times save`).
 
