@@ -35,44 +35,58 @@ export type DistrictForce = Partial<Record<DistrictKind, boolean>>;
  * changes which districts older seeds get. Returns the rolled-on definitions with their streams,
  * in registry order; the stream carries on into placement and dressing.
  */
-export function rollDistricts(seed: number, defs: DistrictDef[], force: DistrictForce = {}): { def: DistrictDef; rng: Rng }[] {
+export function rollDistricts(seed: number, defs: DistrictDef[], force: DistrictForce = {}, kinds?: DistrictKind[]): { def: DistrictDef; rng: Rng }[] {
   const out: { def: DistrictDef; rng: Rng }[] = [];
   for (const def of defs) {
     const rng = new Rng(seed ^ def.salt);
     const rolled = rng.next() < def.chance;
-    if (force[def.kind] ?? rolled) out.push({ def, rng });
+    if (kinds ? kinds.includes(def.kind) : force[def.kind] ?? rolled) out.push({ def, rng });
   }
   return out;
+}
+
+export type GridRect = { i0: number; j0: number; w: number; h: number };
+
+/**
+ * Why a rectangle doesn't suit a definition: `site` (inland, edge, coast: placement can't work
+ * without it) and the zone rules (rings, shares: it would only look off).
+ */
+export function rectRules(def: DistrictDef, { i0, j0, w, h }: GridRect, grid: DistrictGrid, city: CityData): { site?: string; zones: string[] } {
+  const { n } = grid;
+  const ring = DISTRICTS.outerRing;
+  const touches = i0 === 0 || j0 === 0 || i0 + w === n || j0 + h === n;
+  let site: string | undefined;
+  if (def.site === 'inland' && (i0 < ring || j0 < ring || i0 + w > n - ring || j0 + h > n - ring)) site = `inland: keeps ${ring} blocks clear of the island's edge`;
+  if (def.site === 'edge' && !touches) site = "edge: touches the island's edge";
+  if (def.site === 'coast') {
+    // The long side lies on the grid's outer row or column.
+    const onRow = j0 === 0 || j0 + h === n;
+    const onCol = i0 === 0 || i0 + w === n;
+    if (w > h ? !onRow : h > w ? !onCol : !(onRow || onCol)) site = "coast: its long side on the island's outer row or column";
+  }
+  const zones: Zone[] = [];
+  for (let j = j0; j < j0 + h; j++) for (let i = i0; i < i0 + w; i++) zones.push(city.blocks[j * n + i].zone);
+  const out: string[] = [];
+  if (!zones.every((d) => def.rings.includes(d))) out.push(`its blocks sit only in ${def.rings.join(', ')}`);
+  // A share's key is a zone or zones joined by '+' (their blocks counted together).
+  const share = Object.entries(def.minShare ?? {}) as [string, number][];
+  for (const [d, min] of share) if (zones.filter((x) => d.split('+').includes(x)).length < min * zones.length) out.push(`at least ${min * 100}% ${d}`);
+  if (def.minCore && zones.filter((x) => x === 'downtown' || x === 'midtown').length < def.minCore * zones.length) out.push(`at least ${def.minCore * 100}% downtown + midtown`);
+  return { site, zones: out };
 }
 
 export const edgeKey = (a: number, b: number) => `${a}>${b}`;
 
 /** Grid rectangles of one shape (both ways round) whose blocks suit the definition. */
-function candidates(def: DistrictDef, [a, b]: [number, number], grid: DistrictGrid, city: CityData): { i0: number; j0: number; w: number; h: number }[] {
+function candidates(def: DistrictDef, [a, b]: [number, number], grid: DistrictGrid, city: CityData): GridRect[] {
   const { n } = grid;
-  const ring = DISTRICTS.outerRing;
-  const out: { i0: number; j0: number; w: number; h: number }[] = [];
+  const out: GridRect[] = [];
   const sizes = new Map<string, [number, number]>([[`${a}x${b}`, [a, b]], [`${b}x${a}`, [b, a]]]);
   for (const [w, h] of sizes.values()) {
     for (let j0 = 0; j0 + h <= n; j0++) {
       for (let i0 = 0; i0 + w <= n; i0++) {
-        const touches = i0 === 0 || j0 === 0 || i0 + w === n || j0 + h === n;
-        if (def.site === 'inland' && (i0 < ring || j0 < ring || i0 + w > n - ring || j0 + h > n - ring)) continue;
-        if (def.site === 'edge' && !touches) continue;
-        if (def.site === 'coast') {
-          // The long side lies on the grid's outer row or column.
-          const onRow = j0 === 0 || j0 + h === n;
-          const onCol = i0 === 0 || i0 + w === n;
-          if (w > h ? !onRow : h > w ? !onCol : !(onRow || onCol)) continue;
-        }
-        const zones: Zone[] = [];
-        for (let j = j0; j < j0 + h; j++) for (let i = i0; i < i0 + w; i++) zones.push(city.blocks[j * n + i].zone);
-        if (!zones.every((d) => def.rings.includes(d))) continue;
-        // A share's key is a zone or zones joined by '+' (their blocks counted together).
-        const share = Object.entries(def.minShare ?? {}) as [string, number][];
-        if (share.some(([d, min]) => zones.filter((x) => d.split('+').includes(x)).length < min * zones.length)) continue;
-        if (def.minCore && zones.filter((x) => x === 'downtown' || x === 'midtown').length < def.minCore * zones.length) continue;
-        out.push({ i0, j0, w, h });
+        const rules = rectRules(def, { i0, j0, w, h }, grid, city);
+        if (!rules.site && !rules.zones.length) out.push({ i0, j0, w, h });
       }
     }
   }
@@ -103,22 +117,23 @@ export function placeDistrict(def: DistrictDef, grid: DistrictGrid, city: CityDa
     shuffle(list, rng);
     for (const c of list) {
       const q = tryPlace(def, grid, city, rng, earlier, c);
-      if (q) return q;
+      if (typeof q !== 'string') return q;
     }
   }
   return null;
 }
 
-function tryPlace(
+/** The district on this rectangle, or why it can't go there (every check placement makes). */
+export function tryPlace(
   def: DistrictDef, grid: DistrictGrid, city: CityData, rng: Rng, earlier: District[],
-  { i0, j0, w, h }: { i0: number; j0: number; w: number; h: number },
-): District | null {
+  { i0, j0, w, h }: GridRect,
+): District | string {
   const { n, line, nodeId } = grid;
   const { roadWidth: rw, sidewalk } = city.config;
   // Within one block of an earlier district.
   for (const o of earlier) {
     const g = o.grid;
-    if (i0 - 1 < g.i0 + g.w && g.i0 < i0 + w + 1 && j0 - 1 < g.j0 + g.h && g.j0 < j0 + h + 1) return null;
+    if (i0 - 1 < g.i0 + g.w && g.i0 < i0 + w + 1 && j0 - 1 < g.j0 + g.h && g.j0 < j0 + h + 1) return `within a block of the ${o.kind}`;
   }
   const nodes = new Set<number>();
   const perimeter: number[] = [];
@@ -132,15 +147,15 @@ function tryPlace(
   }
   // Canals, quays and bridges anywhere; ramp run-ups and landings inside (a ramp on its perimeter
   // streets is ruled out below). The spawn may be inside: the run then starts in the district.
-  for (const id of nodes) if (grid.canalNodes.has(id)) return null;
-  for (const id of interior) if (grid.blockedNodes.has(id)) return null;
+  for (const id of nodes) if (grid.canalNodes.has(id)) return 'over a canal, quay or bridge';
+  for (const id of interior) if (grid.blockedNodes.has(id)) return "a ramp's run-up or landing inside";
   // Roadworks may be anywhere: a street they close stays a district street (paved, walls open
   // round it) but is no way in, so it counts for neither the connection, the gates nor the main street.
   const closedNodes = new Set(grid.works.flatMap((w) => (w.node === null ? [] : [w.node])));
   const closedEdges = new Set(grid.works.flatMap((w) => (w.edge ? [edgeKey(w.edge[0], w.edge[1]), edgeKey(w.edge[1], w.edge[0])] : [])));
   const open = (e: GridEdge) => !closedNodes.has(e.a) && !closedNodes.has(e.b) && !closedEdges.has(edgeKey(e.a, e.b));
   const edges = grid.edges.filter((e) => nodes.has(e.a) && nodes.has(e.b));
-  if (edges.some((e) => e.kind === 'canal' || e.kind === 'quay')) return null;
+  if (edges.some((e) => e.kind === 'canal' || e.kind === 'quay')) return 'over a canal or quay';
   const blocks: number[] = [];
   for (let j = j0; j < j0 + h; j++) for (let i = i0; i < i0 + w; i++) blocks.push(j * n + i);
   // A town square inside is taken over (its centrepiece goes with the block's old contents); a
@@ -152,7 +167,7 @@ function tryPlace(
   const bounds: Rect = { x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0 };
   // Ramps on the perimeter streets count too.
   const reach: Rect = { ...bounds, w: bounds.w + rw * 2, d: bounds.d + rw * 2 };
-  if (city.landmarks.some((l) => l.kind === 'ramp' && overlaps(reach, { x: l.x, z: l.z, w: 0, d: 0 }))) return null;
+  if (city.landmarks.some((l) => l.kind === 'ramp' && overlaps(reach, { x: l.x, z: l.z, w: 0, d: 0 }))) return 'a ramp inside or on its perimeter streets';
 
   // Coast: the frontage is the ring road beside the long side, the promenade and a strip of sea.
   let frontage: Rect | undefined;
@@ -179,7 +194,7 @@ function tryPlace(
     const mouth = city.terrain.canals.some((cn) =>
       cn.axis === 'x' ? Math.abs(cn.at - f.z) < f.d / 2 + cn.half : Math.abs(cn.at - f.x) < f.w / 2 + cn.half,
     );
-    if (mouth || city.terrain.bridges.some((b) => overlaps(f, b))) return null;
+    if (mouth || city.terrain.bridges.some((b) => overlaps(f, b))) return 'a canal mouth or ring-road bridge in its frontage';
   }
 
   // Interior streets: edges with district blocks on both sides. Plaza edges stay paved shortcuts.
@@ -187,8 +202,8 @@ function tryPlace(
     e.horizontal ? e.i >= i0 && e.i < i0 + w && e.j > j0 && e.j < j0 + h : e.j >= j0 && e.j < j0 + h && e.i > i0 && e.i < i0 + w;
   const streetEdges = edges.filter((e) => isInterior(e) && e.kind === 'road');
   const inner = streetEdges.filter(open);
-  if (!inner.length) return null;
-  if (inner.some((e) => grid.fast.has(edgeKey(e.a, e.b)) || grid.fast.has(edgeKey(e.b, e.a)))) return null;
+  if (!inner.length) return 'no open interior street';
+  if (inner.some((e) => grid.fast.has(edgeKey(e.a, e.b)) || grid.fast.has(edgeKey(e.b, e.a)))) return 'a fast street (speed 90) inside';
   // Connected.
   const parent = new Map<number, number>();
   const find = (x: number): number => {
@@ -197,11 +212,11 @@ function tryPlace(
   };
   for (const e of inner) for (const id of [e.a, e.b]) if (!parent.has(id)) parent.set(id, id);
   for (const e of inner) parent.set(find(e.a), find(e.b));
-  if (new Set([...parent.keys()].map(find)).size > 1) return null;
+  if (new Set([...parent.keys()].map(find)).size > 1) return 'its interior streets are not connected';
   // Gates: interior road edges with one end on the perimeter.
   const onPerimeter = new Set(perimeter);
   const gateEdges = inner.filter((e) => onPerimeter.has(e.a) !== onPerimeter.has(e.b));
-  if (gateEdges.length < 2) return null;
+  if (gateEdges.length < 2) return 'fewer than two ways in';
 
   // Main street: the longest straight run of interior road edges.
   const runs: GridEdge[][] = [];
@@ -223,12 +238,12 @@ function tryPlace(
     }
   }
   const longest = Math.max(...runs.map((r) => r.length));
-  if (longest < (def.minMainStreet ?? 1)) return null;
+  if (longest < (def.minMainStreet ?? 1)) return `no main street of ${def.minMainStreet ?? 1} blocks`;
   // A gated main street must reach the perimeter at both ends (roadworks or a plaza may cut it short).
   const ends = (r: GridEdge[]) => [r[0], r[r.length - 1]].filter((e) => onPerimeter.has(e.a) !== onPerimeter.has(e.b)).length;
   const best = runs.filter((r) => r.length === longest);
   const through = best.filter((r) => ends(r) === 2);
-  if (def.gates === 'mainStreet' && !through.length) return null;
+  if (def.gates === 'mainStreet' && !through.length) return 'no main street through from side to side';
   const main = rng.pick(through.length ? through : best);
   const mainStreet = main.map((e) => edgeKey(e.a, e.b));
 
@@ -251,7 +266,7 @@ function tryPlace(
     shuffle(rest, rng);
     const extra = Math.max(rng.int(0, def.extraGates ?? 0), 2 - chosen.length);
     chosen.push(...rest.slice(0, extra));
-    if (chosen.length < 2) return null;
+    if (chosen.length < 2) return 'fewer than two gates';
   }
 
   const streets = new Set<string>();
@@ -270,5 +285,6 @@ function tryPlace(
     mainStreet,
     gates: chosen.map(gateOf),
     dressing: emptyDressing(),
+    features: {},
   };
 }

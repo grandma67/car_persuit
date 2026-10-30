@@ -8,6 +8,7 @@ import type { Landmark } from '../Landmarks';
 import type { LotStyle } from '../lots';
 import type { Footprint, PropKind, StreetProp } from '../StreetProps';
 import type { FacadeStyle } from '../../render/Facades';
+import { pin, type FeatureValue } from '../CityParams';
 
 export type { LotStyle } from '../lots';
 
@@ -113,6 +114,21 @@ export interface District {
   mainStreet: string[]; // longest straight interior run, "a>b" in order along it
   gates: Gate[];
   dressing: DistrictDressing;
+  /** Its named rolls as they came out (or were pinned): what a dump writes. */
+  features: Record<string, FeatureValue>;
+  /** Features pinned by the city's params. */
+  pins?: Record<string, FeatureValue>;
+}
+
+/** A feature's type: on/off, a count, or one of some names. */
+export type FeatureKind = 'bool' | 'int' | readonly string[];
+
+/** A district's named roll, pinned or as rolled (the roll is drawn either way), and recorded on it. */
+export function feature<T extends FeatureValue>(q: District | undefined, name: string, rolled: T): T {
+  if (!q) return rolled;
+  const value = pin(q.pins?.[name] as T | undefined, rolled);
+  q.features[name] = value;
+  return value;
 }
 
 /** Vehicle limits inside a district. */
@@ -158,5 +174,11 @@ export interface DistrictDef {
   roadblockGates: boolean; // 4★+ roadblocks prefer a gate edge
   mapColor: number;
   label: string; // its display name, e.g. "Old City"
+  /** Its named rolls (feature()), for the city's params, `npm run city` and the words. */
+  features: Record<string, FeatureKind>;
+  /** Features only shown on a night run (a warning when pinned on by day). */
+  nightFeatures?: string[];
+  /** What it actually has, per feature (a pinned one may find no room); left out: as recorded. */
+  built?(q: District, city: CityData): Record<string, FeatureValue>;
   dress(q: District, city: CityData, rng: Rng): DistrictDressing;
 }

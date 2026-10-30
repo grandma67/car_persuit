@@ -7,5 +7,5 @@ import { passVans } from './trafficSim';
 describe('Chinatown traffic', () => {
   beforeAll(() => RAPIER.init());
 
-  it('civilians keep the main-street cap, never jam and get past the parked vans (beside the Old City)', () => passVans({ chinatown: true, oldtown: true }), 180_000);
+  it('civilians keep the main-street cap, never jam and get past the parked vans (beside the Old City)', () => passVans(['chinatown=1', 'oldtown=1']), 180_000);
 });

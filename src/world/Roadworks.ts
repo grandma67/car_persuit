@@ -5,7 +5,7 @@
 // to go in), a light tower or a portable toilet, all set down at odd angles wherever they fit, and
 // each approach closed by a line of cones (a few knocked askew) or a row of barrier boards.
 // Pure data — RoadworksSite builds the meshes.
-import type { Rng } from '../core/Rng';
+import { Rng } from '../core/Rng';
 import type { RoadGraph } from './RoadGraph';
 import type { StreetProp } from './StreetProps';
 
@@ -54,10 +54,20 @@ const FOOTPRINT: Record<Exclude<WorksItemKind, 'patch'>, { hw: number; hl: numbe
 const MACHINES: WorksItemKind[] = ['mixer', 'backhoe', 'tipper'];
 const EXTRAS: WorksItemKind[] = ['dig', 'mound', 'pipes', 'pipes', 'tower', 'toilet'];
 
+/** A site pinned by the city's params: a junction or a road (its two junctions, lower id first). */
+export interface WorksPin {
+  node?: number;
+  edge?: [number, number];
+  stream?: number; // the stream's state when the seed picked it: its layout comes out the same
+}
+
 /**
  * Maybe close some junctions and roads: each of MAX_SITES slots rolls `chance`. `avoid`: node ids
  * that must stay open (around the spawn). Returns the sites (often none) and their cones, and
  * unlinks the closed roads. Sites are kept apart: nothing within two roads of another site.
+ * `pins.count`: a slot comes up while fewer sites stand (its roll still drawn). `pins.sites`: just
+ * these, each laid out from the stream (or from its own `stream` state); a site that can't close is
+ * named in `failed`. `streams`: each site's stream state as it was picked, for a dump.
  */
 export function planRoadworks(
   graph: RoadGraph,
@@ -66,26 +76,43 @@ export function planRoadworks(
   avoid: Set<number>,
   chance: number,
   rng: Rng,
-): { sites: Roadworks[]; cones: StreetProp[] } {
+  pins: { count?: number; sites?: WorksPin[] } = {},
+): { sites: Roadworks[]; cones: StreetProp[]; failed: number[]; streams: number[] } {
   const sites: Roadworks[] = [];
   const cones: StreetProp[] = [];
   const keepOpen = new Set(avoid);
-  for (let slot = 0; slot < MAX_SITES; slot++) {
-    if (rng.next() >= chance) continue;
-    const road = rng.next() < ROAD_SITE_CHANCE;
-    const closed = (road ? closeRoad : closeJunction)(graph, roadWidth, size, keepOpen, rng) ?? (road ? closeJunction : closeRoad)(graph, roadWidth, size, keepOpen, rng);
-    if (!closed) break; // nowhere left to put one
+  const streams: number[] = [];
+  const add = (closed: Closed) => {
     sites.push(closed.site);
+    streams.push(closed.stream);
     cones.push(...closed.cones);
     for (const id of closed.near) {
       keepOpen.add(id);
       for (const far of graph.nodes[id].neighbors) keepOpen.add(far);
     }
+  };
+  if (pins.sites) {
+    const failed: number[] = [];
+    pins.sites.forEach((pin, k) => {
+      const own = pin.stream === undefined ? rng : new Rng(pin.stream);
+      const closed = pin.edge ? closeRoad(graph, roadWidth, size, keepOpen, own, pin.edge) : closeJunction(graph, roadWidth, size, keepOpen, own, pin.node);
+      if (closed) add(closed);
+      else failed.push(k);
+    });
+    return { sites, cones, failed, streams };
   }
-  return { sites, cones };
+  for (let slot = 0; slot < MAX_SITES; slot++) {
+    const roll = rng.next();
+    if (pins.count !== undefined ? sites.length >= pins.count : roll >= chance) continue;
+    const road = rng.next() < ROAD_SITE_CHANCE;
+    const closed = (road ? closeRoad : closeJunction)(graph, roadWidth, size, keepOpen, rng) ?? (road ? closeJunction : closeRoad)(graph, roadWidth, size, keepOpen, rng);
+    if (!closed) break; // nowhere left to put one
+    add(closed);
+  }
+  return { sites, cones, failed: [], streams };
 }
 
-type Closed = { site: Roadworks; cones: StreetProp[]; near: number[] };
+type Closed = { site: Roadworks; cones: StreetProp[]; near: number[]; stream: number };
 
 /** Every open junction still reachable from any other, and none left a dead end. */
 function networkOk(graph: RoadGraph, from: number): boolean {
@@ -98,11 +125,12 @@ const unlink = (graph: RoadGraph, a: number, b: number) => {
   list.splice(list.indexOf(b), 1);
 };
 
-/** Close one inner junction that keeps the network connected with no dead ends, or null. */
-function closeJunction(graph: RoadGraph, roadWidth: number, size: number, avoid: Set<number>, rng: Rng): Closed | null {
+/** Close one inner junction (`only`: that one) that keeps the network connected with no dead ends, or null. */
+function closeJunction(graph: RoadGraph, roadWidth: number, size: number, avoid: Set<number>, rng: Rng, only?: number): Closed | null {
   const inner = size / 2 - roadWidth * 2;
   const candidates = graph.nodes.filter(
     (n) =>
+      (only === undefined || n.id === only) &&
       !avoid.has(n.id) &&
       Math.abs(n.x) < inner &&
       Math.abs(n.z) < inner &&
@@ -110,6 +138,7 @@ function closeJunction(graph: RoadGraph, roadWidth: number, size: number, avoid:
       n.neighbors.every((id) => graph.nodes[id].neighbors.length >= 3),
   );
   while (candidates.length) {
+    const stream = rng.state;
     const node = candidates.splice(rng.int(0, candidates.length - 1), 1)[0];
     const neighbors = [...node.neighbors];
     for (const id of neighbors) unlink(graph, id, node.id);
@@ -149,7 +178,7 @@ function closeJunction(graph: RoadGraph, roadWidth: number, size: number, avoid:
         }
       }
       const site: Roadworks = { kind: 'junction', x: node.x, z: node.z, node: node.id, edge: null, items };
-      return { site, cones, near: neighbors };
+      return { site, cones, near: neighbors, stream };
     }
     node.neighbors = neighbors;
     for (const id of neighbors) graph.nodes[id].neighbors.push(node.id);
@@ -157,17 +186,19 @@ function closeJunction(graph: RoadGraph, roadWidth: number, size: number, avoid:
   return null;
 }
 
-/** Close one block of road between two junctions, keeping the network connected, or null. */
-function closeRoad(graph: RoadGraph, roadWidth: number, size: number, avoid: Set<number>, rng: Rng): Closed | null {
+/** Close one block of road between two junctions (`only`: that one), keeping the network connected, or null. */
+function closeRoad(graph: RoadGraph, roadWidth: number, size: number, avoid: Set<number>, rng: Rng, only?: [number, number]): Closed | null {
   const inner = size / 2 - roadWidth * 2;
   const edges: [number, number][] = [];
   for (const a of graph.nodes) {
     for (const b of a.neighbors) {
       const ok = (n: typeof a) => !avoid.has(n.id) && n.neighbors.length >= 3 && Math.abs(n.x) < inner + roadWidth && Math.abs(n.z) < inner + roadWidth;
+      if (only && (a.id !== only[0] || b !== only[1])) continue;
       if (a.id < b && ok(a) && ok(graph.nodes[b]) && Math.abs((a.x + graph.nodes[b].x) / 2) < inner && Math.abs((a.z + graph.nodes[b].z) / 2) < inner) edges.push([a.id, b]);
     }
   }
   while (edges.length) {
+    const stream = rng.state;
     const [ia, ib] = edges.splice(rng.int(0, edges.length - 1), 1)[0];
     unlink(graph, ia, ib);
     unlink(graph, ib, ia);
@@ -191,7 +222,7 @@ function closeRoad(graph: RoadGraph, roadWidth: number, size: number, avoid: Set
         closeApproach(end.x, end.z, -s * frame.ax, -s * frame.az, half + END_LINE, half, rng, cones, items);
       }
       const site: Roadworks = { kind: 'road', x: frame.x, z: frame.z, node: null, edge: [ia, ib], items };
-      return { site, cones, near: [ia, ib] };
+      return { site, cones, near: [ia, ib], stream };
     }
     graph.nodes[ia].neighbors.push(ib);
     graph.nodes[ib].neighbors.push(ia);

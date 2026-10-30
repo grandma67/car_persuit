@@ -198,6 +198,119 @@ committed.
   the page starts (no URL flag). `check:restart` runs `city make` for all five districts + `festival
   harvest night rain` into the scratchpad and loads that file, instead of `seed=9&…`.
 
+## Status (branch `city-params`)
+
+Done: **M0–M7**. Hash identical for all 120 cities after every step (now `npm run hash -- --vs
+HEAD` before each commit; main predates city params, so compare with the branch's commits); `npm run hash -- --reload` proves every
+one of the 120 dumps reloads as its city (same hash, same dump). **Next:** the user's approval,
+then merge to main. M7 put the commands and rules in `CLAUDE.md`, `PLAN_GAME.md` (debug tools),
+`DISTRICTS_DEV.md` (features, `feature()`, words in tests) and `BROWSER_CHECKS.md` (`--city`, `--make`,
+`dbg.loadCity`/`dumpCity`, the words-made `check:restart`). Suite timing saved after M6 (`--times save`).
+
+**What exists (M6):**
+- `trafficSim.flatCities(kind, words, count, keep?)` replaces `flatSeeds`: `makeCity(['flat',
+  'blocks=12', ...words])` from seed 11, each next city from the seed after the last one used. The
+  five traffic suites ask for `['harbor']`, `['farm']`, `['slums']` (alone), `['oldtown=1']` and
+  `['chinatown=1', 'oldtown=0|1']` (the old force sets, as words).
+- Moved to words: `Landmarks` (`ramps=2 canalramps=0`, `canals=1 canalramps=1`), `Roadworks`
+  (`roadworks`), `CopSpawn` (`roadworks=0`), `Terrain` (`blocks=12 roadworks=0 [canalwidth=W]`),
+  `CityGenerator` `sized()` (`blocks=N [roadworks=0]`), `MissionSystem` (`blocks=4 canals=1`),
+  `TrafficControl` (`canals=0`, `england`; the right-hand twin is the same params with
+  `driveSide: 'right'`).
+- Features pinned on and off (two seeds each): Farm `maze`/`!maze`, `harvest night desert` (the
+  irrigator and the pyramid's solids), `!harvest`; Chinatown `square`/`!square`,
+  `festival night`/`!festival`; Slums `camp junkyard`/`!camp !junkyard`. The per-seed sweeps that
+  check a feature "when there is one" also run on the pinned cities, so they never pass empty.
+- `CityParamsPinned.test.ts`: hand-pinned positions land where asked (canal line, width and
+  bridges; hill; plazas; spawn and its heading; destinations; roadworks junction and street; a
+  district rect, or the build's reason why not).
+- `check:browser --make "words…"` makes a file in the temp dir and loads it as `--city`.
+  `check:restart` = `--make "oldtown chinatown harbor farm slums festival harvest square banquet
+  temple maze junkyard camp silo tankFarm tug night rain seed=9"` (seed 17 after tries): every
+  district with every feature that has a look. `restart.js` dumps the loaded params first and its
+  quick restarts start by reloading them (New city in part 1 drops them). Passes.
+- Stay on seeds, as planned: invariant sweeps, roll and frequency tests (`how many ramps depends
+  on the seed`, `the maze roll comes up on some seeds`, district chances, theme colours), `[1, 42,
+  1234]`-style variety lists.
+- Suite CPU 243 s (saved M4 run 250 s, 256 s just before M6); hash unchanged.
+
+**What exists (M5):**
+- `Game` takes a seed or `CityParams`; loaded params are built as they stand (the URL's flags don't
+  apply to them) and kept in `game.loaded`. `retry()` (Retry, Enter, the pause menu's restart)
+  rebuilds from them; New city restarts on a seed and drops them. `GameShell.restart(seed | params)`
+  returns a promise; the URL keeps only the seed.
+- `dbg.dumpCity(download = true)` → the text of `city.params` (downloads `city-<seed>.json`);
+  `dbg.loadCity(text | object)` → `readCityParams` (parse, then build: what `city check` does),
+  throws on errors without restarting, logs warnings, resolves when the new city is up.
+- `readCityParams` in `CityParamsFile.ts`, shared by `npm run city -- check`.
+- `check:browser --city <file>` loads the file through `dbg.loadCity` once the page is up (exit 1 on
+  a bad file). `scripts/evals/city-reload.js`: dump → load is the same city (layout fingerprint,
+  dump text, programs, settled draw calls, static triangles, an aerial shot pair), Retry keeps the
+  params, New city drops them, a bad file restarts nothing. Passes on `seed=9` with every district,
+  night and rain. `restart.js`'s quick restarts go through `retry()`; `check:restart` passes, also
+  started from a `--city` file. Draw calls read a few high for a frame or two after any restart
+  (seen with plain seeds too), so the eval compares the lowest of 4 samples.
+
+**What exists (M4):**
+- `world/CityParamsFile.ts`: `parseCityParams` (version 1, unknown keys and bad shapes are errors),
+  `serializeCityParams` (`CITY_KEYS` order, anything ≤ 100 chars on one line), `validateCityParams`
+  (static warnings: theme the climate never rolls, weather fixed up by the climate, night-only feature
+  by day; then a build: `CityParamsError` reasons are the errors, `city.warnings` join the warnings).
+- `world/makeCityParams.ts`: `WORDS` (the vocabulary), `parseWords`, `makeCity(words, {seed, tries})`
+  → `{params, city}` (seeds `seed, seed+1, …`, 100 tries by default), `makeCityParams` (params only),
+  `urlOverrides(search, debug)` through the same table (the M3 flag table passes).
+- `DistrictDef.built(q, city)`: what each district actually has per feature, for the word checks.
+- `Rng.state`: `new Rng(state)` resumes a stream.
+- `scripts/city.ts` (`npm run city`): `make <words…> [seed=N] [--full] [--out f]` (writes the words'
+  params, a few lines; `--full` the complete dump), `dump <seed> [URL words…]` (unknown words are
+  errors; debug-only words without `debug` are ignored with a note, as in the game), `check <file…>`
+  (exit 1 on errors), `show <file | seed [URL words] | words…>` (ASCII map, legend, one-line summary),
+  `words` (the vocabulary with help). `run-ts.mjs` now passes the script's `process.exitCode` on.
+- `npm run find` ends each hit with `npm run city -- dump N blocks=12 <kind>=1 <others>=0`: find
+  builds on the default 12-block grid, not the seed's rolled size, so the old `?seed=N&<kind>=1` hint
+  opened a different city; its footer URL now carries the same words.
+- Tests: `cityWords1–4.test.ts` (every word as used: bare, `!name`, each named value, sample counts;
+  each comes true, an independent check of what it promises, and its params written and read back
+  build the same city), `CityParamsRoundTrip1–2.test.ts`, `CityParamsFile.test.ts` (parse errors,
+  serialize layout, build errors naming the field, warnings, the words' refusals). Shared helpers in
+  `world/paramsTesting.ts` (`cityJson` too).
+
+**Changes from the plan above, as built:**
+- Layout choices are resolved where they are built (see "Where the plan bends"): `rollCityParams`
+  rolls the look, grid size and drive side; `generateCity(params)` resolves the rest through `pin()`
+  and returns them all as `city.params` (plus `city.warnings`). `generateCity(seed, config, opts)`
+  still works and builds exactly what it did.
+- **Hill in metres** (`{x, z, height, rx, rz, yaw}`, from the island's centre), not grid units: a
+  grid → metre conversion moved the rolled hill by a float ulp and broke "no seed moves".
+- **No `landmarkStream` and no district `stream`.** Pinned street ramps replace the rolled ones after
+  the squares roll as usual, so the landmark stream's draws never change. A district list places in
+  its own order and first tries the seed's own placement; a dump's rects are exactly that, so it
+  reloads the same; only a hand-pinned rect that differs is tried with `tryPlace` from there on.
+- **Roadworks `stream` per site** instead: a dump's site records the stream state when the seed
+  picked it, and a reload lays it out from there (needed for `?roadworks` dumps).
+- `canalRamps` and `roadworks` also take `'all'` (the URL flags) and a count; `ramps` is a count.
+  `force` is a params field (the URL's `<district>=0|1`); `districts` is the exact list.
+- Features as declared (M0 table): no Slums `train` (dead knob), Old City `roundTowers` only, Farm
+  `steelSilos` instead of `silo`, Harbor `yards` is a count.
+- **Words:** a feature word (`festival`, `!harvest`, `ship=bulk`, `harbor.silo` when names clash)
+  brings its district into the exact list. Bare `night`/`day`/`afternoon`, `rain`/`clear`/`snow`
+  (snow also sets the snow climate) and `temperate`/`beach`/`desert` are aliases. Two words that want
+  one field differently are an error.
+- **Test budget (M4):** words that pin a field outright (look words, `flat`, `blocks`, `canals`,
+  `hill`, `england`) and `district.feature` aliases of a bare word run on 2 base seeds, not 10; the
+  layout-dependent words (districts, features, ramps, canal ramps, roadworks, canal width) on all 10.
+  The suite's round trip covers 20 seeds × 2 plus the URL flags (`?roadworks`, `?canalramp`, …);
+  the full 60 × 2 is `npm run hash -- --reload`, run with the hash at each milestone. The new files
+  add ~4–8 s wall to `npm run t` (noisy; the saved `--times` run is the reference: CPU 250 s). M6
+  should win some back.
+- **Found by the word tests:** `Harbor.built` read the tank farm from the lots, but `dress` swaps
+  that lot for the tank structure, so `tankFarm` could never be made; the Slums junkyard roll is
+  skipped when no block is spare, which left `features.junkyard` unset (now `false`); `!flat` (any
+  `!word`) was accepted as the bare word; only on/off district features take `!` now (`negatable`).
+  `makeCity` params carry `version`, so they are a file as they stand. Hash unchanged.
+- `startHour` moved to `CityTheme` (with `startMinuteOf`, `startHourAt`); `npm run hash` is
+  `scripts/city-hash.ts`.
+
 ## Milestones
 
 Branch `city-params` from main. Commit per milestone; the full suite (`npm run t`) and `npx tsc
@@ -284,8 +397,9 @@ Branch `city-params` from main. Commit per milestone; the full suite (`npm run t
 - New generator tests: each pinned field ends up in the built city (canal where asked, the district at
   its rect, the festival on), invalid params fail with the right reason, warnings come back for
   night-only features on a day run.
-- Per test file, compare the time before and after; the suite must stay within today's ~20 s.
-  Pinned scenarios should make some files faster (no seed hunting).
+- Per test file, compare the time before and after (`npm run t -- --times`, against the run saved
+  after M4: CPU 250 s, wall ~26 s); the suite's CPU must not grow. Pinned scenarios should make some
+  files faster (no seed hunting).
 
 **M7: docs.**
 - `CLAUDE.md`: the `npm run city` commands, "a test that needs a feature builds its params with
@@ -294,6 +408,75 @@ Branch `city-params` from main. Commit per milestone; the full suite (`npm run t
 - `PLAN_GAME.md` (debug tools, no URL change), `DISTRICTS_DEV.md` (declare `features`, use `pin()`,
   add each new feature word to `makeCityParams`, use it in Testing), `BROWSER_CHECKS.md` (`--city`, `dbg.loadCity`/`dumpCity`).
 - `npm run find` stays for discovery; its output points at `city dump`.
+
+## M0 audit: every roll that shapes a city
+
+Streams are `new Rng(seed ^ salt)` unless "main" (`new Rng(seed)` in `generateCity`, shared in order).
+Draw order within a stream is top to bottom.
+
+| What | File | Stream | Draws | Params field |
+|---|---|---|---|---|
+| Grid size | `CityGenerator.rollCityBlocks` | `0x512e0b` | 1 int | `blocks` |
+| Drive side | `CityGenerator.rollDriveSide` | `0x1e7f5d` | 1 | `driveSide` |
+| Canal count, first canal axis + line, second canal (cross or parallel), hill (chance, height, radii, axis, centre, yaw), canal widths | `Terrain.planTerrain` | `0x7e44a1` | count 1, first 2, second 1–2 (only with 2), hill 1 (+7 if on), widths 1 per canal | `terrain.hill`, `terrain.canals` |
+| Bridges per canal run (start, spacing) | `Terrain.pickBridges` | `0xb41d6e` | 1 + 1 per bridge, per run | `terrain.canals[].bridges` |
+| Plazas: candidate shuffle | `CityGenerator` | main | 1 per inner candidate edge | `plazas` |
+| Zone noise (5×5 grid) | `makeValueNoise` | main | 25 | `zones` (read-only) |
+| Parks | `CityGenerator` | main | 1 per block | `zones` (lower case, read-only) |
+| Buildings, park trees | `lots.fillBlock`, `scatterTrees` | main | many, per block | (props: out) |
+| Town squares, their centrepieces, street ramps, park centrepieces | `Landmarks.planLandmarks` | `0x1a4d` | squares: up to 50 picks; per square kind (+ ramp spot + re-roll) + yaw; per park 1 (+2) | `landmarks` (ramps pinnable, the rest read-only), `landmarkStream` |
+| Canal ramps (each a fresh roll, then a pick) | `CityGenerator` | `0xca7a1` | 2 per ramp + 1 | `canalRamps` |
+| Plaza planters | `CityGenerator` | main | 1 + 2 per planter, per plaza | (props: out) |
+| Spawn street | `CityGenerator` | main | 1 pick | `spawn` |
+| Roadworks: 20 slots × (chance, road or junction, the site, its layout) | `Roadworks.planRoadworks` | `0x0c0e5` | variable | `roadworks` |
+| Signals, signs, stop lines; bus stops | `TrafficControl` | `0x7aff1c`, `^0xb5570b` | variable | (props: out) |
+| Street props | `StreetProps` | `0x57ee7` | variable | (props: out) |
+| Each district's chance | `place.rollDistricts` | the district's salt | 1 | `districts` (kind set) |
+| District placement order | `apply.applyDistricts` | `DISTRICTS.orderSalt` | 1 per rolled-on district − 1 | (order of `districts`) |
+| District placement: shape, candidate shuffles, main street pick, extra gates | `place.placeDistrict`/`tryPlace` | the district's salt, after its chance | variable | `districts[].rect`, `districts[].stream` |
+| District roles, lots, dressing | the district modules | the district's salt, after placement | variable | `features`, `roles` (read-only) |
+| Climate | `Climate.pickClimate` | `0xc11a` | 1 | `climate` |
+| Weather | `Climate.pickWeather` | `0x3a1d` | 1 | `weather` |
+| Time of day | `CityTheme.pickTimeOfDay` | `0x71de` | 1 | `time` |
+| Theme: base style, then colour jitter | `CityTheme.pickTheme` | `0x7e3e` | 1 pick + jitter | `theme` (name; jitter stays) |
+| Start minute | `startHour` | none: `(seed · 2654435761) mod 60` | 0 | `startMinute` |
+| Destinations | `MissionSystem.pickDestinations` | `0xde57` | 1 pick each | `destinations` |
+| Building geometry and facades | `CityBuilder` | `0x5eed`; facades `seed` | many | (props: out) |
+| Chinatown shop signs | `render/districts/ChinatownShops` | `0x5409` | many | (props: out) |
+| Cops, civilians | `Game` | `0xc095`, `0x7a4f1c` | runtime | (runtime AI: out) |
+
+**District features** (all on the district's own stream, drawn in this order within it):
+
+| District | Feature | Where | Roll |
+|---|---|---|---|
+| Old City | `roundTowers` (wall shape: round or square towers) | `OldCityWalls.wallDressing` | `rng.next() < 0.5` |
+| Chinatown | `square` (pagoda square, a role) | `Chinatown.roles` | `squareChance` (+1 pick when on) |
+| Chinatown | `banquet` | `Chinatown.lots` | `banquetChance` |
+| Chinatown | `temple` | `Chinatown.lots` | `templeChance` |
+| Chinatown | `festival` | `Chinatown.nightExtras` | `festivalChance` |
+| Harbor | `yards` (container-yard blocks, a role) | `Harbor.roles` | `int(HARBOR.yards)` |
+| Harbor | `silo` | `Harbor.lots` | `siloChance` |
+| Harbor | `tankFarm` | `Harbor.lots` | `tankFarmChance` |
+| Harbor | `ship` (`container`/`bulk`/`general`) | `HarborQuay.quay` | `shipOdds` |
+| Harbor | `tug` | `HarborQuay.quay` | `tugChance` |
+| Farm | `steelSilos` | `FarmGate.yardPieces` | `rng.next() < 0.5` |
+| Farm | `waterTower` | `FarmGate.yardPieces` | `waterTowerChance` |
+| Farm | `maze` | `Farm.dress` | `mazeChance` |
+| Farm | `harvest` (night only) | `Farm.dress` | `harvestChance` |
+| Slums | `camp` (a role) | `Slums.roles` | `campChance` |
+| Slums | `junkyard` (a role) | `Slums.roles` | `junkyardChance`, drawn only below 9 blocks (≥ 9: always tried) |
+
+**Dead knobs found:** `SLUMS.trainChance` is read nowhere (no train is rolled or drawn), so the
+Slums have no `train` feature. Old City "ruins" are per-lot shares (`ruinShare`), i.e. props, so
+not a feature either. The Farm's `silo` became `steelSilos`: a farm always has 1–3 silos, the roll
+is their look.
+
+**Where the plan bends to the code:** most rolls depend on the layout built before them (plazas
+on the graph's connectivity, landmarks on blocks and zones, districts on everything). So
+`rollCityParams(seed, overrides)` rolls the up-front choices (blocks, drive side, terrain, look) and
+passes the rest on as pins; each later choice is resolved where it is built, as `pin(params.x,
+roll)`, and `generateCity` returns the complete resolved params as `city.params`. One pass, no
+second build, and `city.params` is what `dump` writes.
 
 ## Risks
 

@@ -10,12 +10,15 @@
     "preview": "vite preview",
     "test": "vitest run",
     "check:browser": "node scripts/browser-check.mjs",
-    "check:restart": "node scripts/browser-check.mjs --query \"seed=9&debug&gputrace&restarts=10&oldtown=1&chinatown=1&harbor=1&farm=1&slums=1&time=night&weather=rain\" --start 1500 --no-final --eval-file scripts/evals/restart.js",
+    "check:restart": "node scripts/browser-check.mjs --query \"debug&gputrace&restarts=10\" --make \"oldtown chinatown harbor farm slums festival harvest square banquet temple maze junkyard camp silo tankFarm tug night rain seed=9\" --start 1500 --no-final --eval-file scripts/evals/restart.js",
+    "check:reload": "node scripts/browser-check.mjs --query \"seed=9&debug&oldtown=1&chinatown=1&harbor=1&farm=1&slums=1&time=night&weather=rain\" --out-dir node_modules/.cache/check-reload --no-final --eval-file scripts/evals/city-reload.js",
     "t": "node scripts/test.mjs",
     "stats": "node scripts/run-ts.mjs scripts/district-stats.ts",
     "find": "node scripts/run-ts.mjs scripts/district-find.ts",
     "budget": "node scripts/run-ts.mjs scripts/district-budget.ts",
-    "cops": "node scripts/cop-bench.mjs"
+    "cops": "node scripts/cop-bench.mjs",
+    "hash": "node scripts/run-ts.mjs scripts/city-hash.ts",
+    "city": "node scripts/run-ts.mjs scripts/city.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.18.2",

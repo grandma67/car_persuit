@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CITY, generateCity, rollCityBlocks, type Rect } from './CityGenerator';
+import { makeCity } from './makeCityParams';
 import { RoadGraph, type RoadNode } from './RoadGraph';
 
 const overlaps = (a: Rect, b: Rect) =>
@@ -13,7 +14,7 @@ const CASES: [number, number][] = [
   [42, MIN_BLOCKS],
   [1234, MAX_BLOCKS],
 ];
-const sized = (seed: number, blocks: number, extra = {}) => generateCity(seed, { ...DEFAULT_CITY, blocks, ...extra });
+const sized = (seed: number, blocks: number, words: string[] = []) => makeCity([`blocks=${blocks}`, ...words], { seed }).city;
 
 describe('generateCity', () => {
   it('is deterministic for a seed', () => {
@@ -34,7 +35,7 @@ describe('generateCity', () => {
 
   it.each(CASES)('seed %i, %i blocks: road network is connected with no dead ends', (seed, blocks) => {
     // Before any roadworks close junctions (Roadworks.test checks the network around those).
-    const city = sized(seed, blocks, { roadworksChance: 0 });
+    const city = sized(seed, blocks, ['roadworks=0']);
     // Junctions in a canal's line are open water unless a bridge carries a road through them.
     const open = city.graph.nodes.filter((n) => n.neighbors.length);
     const { canals, bridges } = city.terrain;

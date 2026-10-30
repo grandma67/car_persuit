@@ -12,7 +12,7 @@ import { footprintsOverlap, propFootprint } from '../StreetProps';
 import { copSpawnSkips, districtTraffic, roadblockGates } from './runtime';
 import type { District } from './District';
 import { inDistrict } from './apply';
-import { addBox, carFootprint, cityWorld, DT, flatSeeds, simulate } from './trafficSim';
+import { addBox, carFootprint, cityWorld, DT, flatCities, simulate } from './trafficSim';
 import { vacantLots } from './Slums';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
@@ -45,7 +45,7 @@ describe('Slums traffic', () => {
   beforeAll(() => RAPIER.init());
 
   it('civilians come in and pass the kerb wrecks without jamming or touching a solid', () => {
-    const report = flatSeeds('slums', 2, ALONE).map(([seed, city, q]) => wreckSim(seed, city, q));
+    const report = flatCities('slums', ['slums'], 2).map(([seed, city, q]) => wreckSim(seed, city, q));
     expect(report.length).toBeGreaterThan(0);
     for (const r of report) {
       expect(r.wrecks, JSON.stringify(r)).toBeGreaterThan(0);

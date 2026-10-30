@@ -10,9 +10,17 @@ import { clipRect, inCanal, landPieces, onGround, pickBridges, planTerrain, type
 import { fillBlock, scatterTrees } from './lots';
 import { fastStreets } from './TrafficControl';
 import type { District, DistrictDef, DistrictKind } from './districts/District';
-import { applyDistricts } from './districts/apply';
+import { applyDistricts, rolesOf } from './districts/apply';
 import type { DistrictForce, DistrictGrid } from './districts/place';
 import { DISTRICT_DEFS } from './districts/index';
+import { districtOfNode } from './districts/runtime';
+import { pickDestinations } from '../gameplay/MissionSystem';
+import {
+  CityParamsError, edgeKeyOf, PARAMS_VERSION, rollCityBlocks as rollCityBlocksOf, rollCityParams, rollDriveSide as rollDriveSideOf,
+  type CanalParams, type CanalRampParams, type CityParams, type LandmarkParams,
+} from './CityParams';
+import type { RampPins } from './Landmarks';
+import type { WorksPin } from './Roadworks';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
@@ -106,6 +114,8 @@ export interface CityData {
   driveSide: DriveSide; // which side of the road traffic keeps to, for the whole game
   spawn: { x: number; z: number; yaw: number };
   districts: District[]; // themed districts laid over the grid (often none)
+  params: CityParams; // every choice that made it: reloads as this city
+  warnings: string[]; // pinned choices that hold but may not show, or a stale dump's read-only parts
 }
 
 /** Which district definitions a city may get, and URL overrides (?oldtown=1 forces the roll on, 0 off). */
@@ -126,15 +136,36 @@ interface Edge {
 
 /** Rarely the city is English and drives on the left: its own RNG stream, decided by the seed. */
 export function rollDriveSide(seed: number, config: CityConfig = DEFAULT_CITY): DriveSide {
-  return new Rng(seed ^ 0x1e7f5d).next() < config.leftHandChance ? 'left' : 'right';
+  return rollDriveSideOf(seed, config.leftHandChance);
 }
 
 /** Blocks per side for a run, from its own stream so nothing else in the seed moves. */
 export function rollCityBlocks(seed: number, config: CityConfig = DEFAULT_CITY): number {
-  return new Rng(seed ^ 0x512e0b).int(...config.blocksRange);
+  return rollCityBlocksOf(seed, config.blocksRange);
 }
 
-export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, districtOpts: DistrictOptions = {}): CityData {
+const ZONE_CHAR: Record<Zone, string> = { downtown: 'D', midtown: 'M', residential: 'R', industrial: 'I' };
+
+/**
+ * Seed or params → city. A seed (with a config) builds what it always has: the config's grid size,
+ * `districtOpts.force` as the URL's district flags. Params pin choices; each is resolved where it is
+ * built (`pin()`: the roll still drawn), and `city.params` holds them all. A pinned choice that
+ * can't be built throws a CityParamsError naming the field; it is never rolled differently.
+ */
+export function generateCity(input: number | CityParams, config: CityConfig = DEFAULT_CITY, districtOpts: DistrictOptions = {}): CityData {
+  const asked: CityParams = typeof input === 'number'
+    ? { seed: input, blocks: config.blocks, ...(districtOpts.force ? { force: districtOpts.force } : {}) }
+    : input;
+  const p = rollCityParams(asked.seed, asked, config);
+  const seed = p.seed;
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const fail = () => {
+    if (errors.length) throw new CityParamsError(errors);
+  };
+  if (!Number.isInteger(p.blocks) || p.blocks! < 4 || p.blocks! > 30) errors.push(`blocks: ${p.blocks} is not a grid size from 4 to 30`);
+  fail();
+  if (p.blocks !== config.blocks) config = { ...config, blocks: p.blocks! };
   const rng = new Rng(seed);
   const { blocks: n, blockSize, roadWidth } = config;
   const pitch = blockSize + roadWidth;
@@ -166,7 +197,11 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
     }
   };
   edges.forEach((e) => link(e, true));
-  const edgeIndex = new Map(edges.map((e) => [`${e.horizontal ? 'h' : 'v'}${e.i},${e.j}`, e]));
+  const keyOf = (e: Edge) => edgeKeyOf(e.horizontal, e.i, e.j);
+  const edgeIndex = new Map(edges.map((e) => [keyOf(e), e]));
+  const cellOfNode = (id: number): [number, number] => [id % (n + 1), Math.floor(id / (n + 1))];
+  const nodeAt = (ij: [number, number] | undefined) =>
+    ij && Number.isInteger(ij[0]) && Number.isInteger(ij[1]) && ij[0] >= 0 && ij[0] <= n && ij[1] >= 0 && ij[1] <= n ? nodes[nodeId(ij[0], ij[1])] : undefined;
   /** The edge `steps` along from e in its own line (undefined off the grid). */
   const inLine = (e: Edge, steps: number) => edgeIndex.get(e.horizontal ? `h${e.i + steps},${e.j}` : `v${e.i},${e.j + steps}`);
   const isRoad = (e: Edge | undefined) => !!e && !e.removed && !e.canal;
@@ -178,7 +213,23 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
   // road crosses it on a bridge; the others end at the quay in a small paved square. Where two
   // canals cross, that junction is lost to the water altogether. ---
   const islandSize = size + config.promenade * 2;
-  const shape = planTerrain(new Rng(seed ^ 0x7e44a1), config, n, line, islandSize / 2);
+  const terrainPins = p.terrain ?? {};
+  if (Array.isArray(terrainPins.canals)) {
+    const listed = terrainPins.canals;
+    if (listed.length > 2) errors.push('terrain.canals: at most two canals');
+    listed.forEach((c, k) => {
+      if (c.axis !== 'x' && c.axis !== 'z') errors.push(`terrain.canals[${k}].axis: "${c.axis}" is not x or z`);
+      if (!Number.isInteger(c.line) || c.line < 2 || c.line > n - 2) errors.push(`terrain.canals[${k}].line: ${c.line} is not an inner road line (2 to ${n - 2}; never the ring road or the line next to it)`);
+      if (c.width !== undefined && !(c.width > 0)) errors.push(`terrain.canals[${k}].width: ${c.width} is not a width`);
+    });
+    if (listed.length === 2 && listed[0].axis === listed[1].axis && Math.abs(listed[0].line - listed[1].line) < 3) {
+      errors.push('terrain.canals: two parallel canals must be at least three blocks apart');
+    }
+  } else if (terrainPins.canals !== undefined && ![0, 1, 2].includes(terrainPins.canals)) {
+    errors.push(`terrain.canals: ${terrainPins.canals} is not 0, 1 or 2 canals`);
+  }
+  fail();
+  const shape = planTerrain(new Rng(seed ^ 0x7e44a1), config, n, line, islandSize / 2, terrainPins);
   const canalLines = (axis: 'x' | 'z') => new Set(shape.canals.filter((c) => c.axis === axis).map((c) => c.line));
   const alongX = canalLines('x');
   const alongZ = canalLines('z');
@@ -192,14 +243,24 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
   const bridges: Rect[] = [];
   const canalNodes = new Set<number>();
   const quaySquares: Edge[] = [];
-  for (const c of shape.canals) {
+  const canalsOut: CanalParams[] = [];
+  for (const [ci, c] of shape.canals.entries()) {
     const crossing = c.axis === 'x' ? alongZ : alongX;
     const runs: number[][] = [[]];
     for (let k = 0; k <= n; k++) {
       if (crossing.has(k)) runs.push([]); // the canals' crossing: open water
       else runs[runs.length - 1].push(k);
     }
-    const bridged = new Set(pickBridges(bridgeRng, runs, config.bridgeSpacing));
+    const rolled = pickBridges(bridgeRng, runs, config.bridgeSpacing);
+    const pinned = Array.isArray(terrainPins.canals) ? terrainPins.canals[ci].bridges : undefined;
+    if (pinned) {
+      for (const k of pinned) if (!runs.flat().includes(k)) errors.push(`terrain.canals[${ci}].bridges: ${k} is not a road line crossing the canal`);
+      for (const run of runs) {
+        if (run.length && !run.some((k) => pinned.includes(k))) errors.push(`terrain.canals[${ci}].bridges: no bridge on lines ${run[0]} to ${run[run.length - 1]} (the island would split)`);
+      }
+    }
+    const bridged = new Set(pinned ?? rolled);
+    canalsOut.push({ axis: c.axis, line: c.line, width: c.half * 2, bridges: [...bridged].sort((a, b) => a - b) });
     for (const k of runs.flat()) {
       const [i, j] = c.axis === 'x' ? [k, c.line] : [c.line, k];
       canalNodes.add(nodeId(i, j));
@@ -221,6 +282,7 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
       bridges.push(c.axis === 'x' ? { x: centre, z: c.at, w: across, d: c.half * 2 } : { x: c.at, z: centre, w: c.half * 2, d: across });
     }
   }
+  fail();
   const terrain: Terrain = { ...shape, bridges, land: landPieces(islandSize / 2, shape.canals) };
   const openNodes = nodes.filter((nd) => nd.neighbors.length).length;
 
@@ -229,16 +291,32 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
   const isBorder = (e: Edge) => (e.horizontal ? e.j === 0 || e.j === n : e.i === 0 || e.i === n);
   const candidates = edges.filter((e) => !isBorder(e) && !e.canal && !e.removed);
   shuffle(candidates, rng);
-  let toRemove = Math.round(candidates.length * config.removeRoadFraction);
-  for (const e of candidates) {
-    if (toRemove === 0) break;
-    if (nodes[e.a].neighbors.length <= 2 || nodes[e.b].neighbors.length <= 2) continue;
+  const plazaKeys: string[] = [];
+  const pave = (e: Edge) => {
+    if (nodes[e.a].neighbors.length <= 2 || nodes[e.b].neighbors.length <= 2) return false;
     link(e, false);
     if (graph.reachable(e.a).size === openNodes) {
       e.removed = true;
-      toRemove--;
-    } else {
-      link(e, true);
+      plazaKeys.push(keyOf(e));
+      return true;
+    }
+    link(e, true);
+    return false;
+  };
+  if (p.plazas) {
+    for (const key of p.plazas) {
+      const e = edgeIndex.get(key);
+      if (!e) errors.push(`plazas: ${key} is not a street of a ${n}-block grid`);
+      else if (isBorder(e)) errors.push(`plazas: ${key} is on the ring road`);
+      else if (e.canal || e.removed) errors.push(`plazas: ${key} is under a canal or ends at a quay`);
+      else if (!pave(e)) errors.push(`plazas: paving ${key} over leaves a dead end or cuts the network`);
+    }
+    fail();
+  } else {
+    let toRemove = Math.round(candidates.length * config.removeRoadFraction);
+    for (const e of candidates) {
+      if (toRemove === 0) break;
+      if (pave(e)) toRemove--;
     }
   }
 
@@ -262,6 +340,10 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
       blocksOut.push({ rect, zone, park: zone !== 'downtown' && rng.next() < config.parkChance });
     }
   }
+  // Read-only in the params: shown by a dump, and a file whose map differs is stale.
+  const zones = Array.from({ length: n }, (_, j) =>
+    blocksOut.slice(j * n, (j + 1) * n).map((b) => (b.park ? ZONE_CHAR[b.zone].toLowerCase() : ZONE_CHAR[b.zone])).join(''));
+  if (p.zones && p.zones.join() !== zones.join()) warnings.push('zones: the zone map built differs from the file\'s (a stale dump?)');
 
   // --- Buildings and trees ---
   let buildings: Building[] = [];
@@ -286,9 +368,36 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
     const r = edgeRect(e);
     return [1, -1].map((dir) => ({ x: r.x, z: r.z, yaw: yawAlong(e, dir) }));
   });
-  const planned = planLandmarks(blocksOut, buildings, trees, config, new Rng(seed ^ 0x1a4d), rampSpots);
+  // Pinned street ramps replace the rolled ones (the squares still roll, so nothing else moves).
+  let rampPins: RampPins | undefined;
+  if (p.landmarks || p.ramps !== undefined) {
+    rampPins = { fill: new Rng(seed ^ 0x1a4d ^ 0x6a3b), count: p.ramps };
+    if (p.landmarks) {
+      rampPins.street = p.landmarks.flatMap((l, k) => {
+        if (l.edge === undefined) return [];
+        const e = edgeIndex.get(l.edge);
+        if (!e || !rampStreets.includes(e)) {
+          errors.push(`landmarks[${k}]: ${l.edge} is no ramp street (a paved-over street, a road straight on at both ends, off the canals)`);
+          return [];
+        }
+        const r = edgeRect(e);
+        return [{ x: r.x, z: r.z, yaw: yawAlong(e, l.dir ?? 1) }];
+      });
+    }
+    fail();
+  }
+  const planned = planLandmarks(blocksOut, buildings, trees, config, new Rng(seed ^ 0x1a4d), rampSpots, rampPins);
   ({ buildings, trees } = planned);
   const landmarks = planned.landmarks;
+  const blockAt = (x: number, z: number): [number, number] => [Math.round((x - line(0) - pitch / 2) / pitch), Math.round((z - line(0) - pitch / 2) / pitch)];
+  const landmarksOut: LandmarkParams[] = landmarks.map((l) => {
+    const e = l.kind === 'ramp' ? rampStreets.find((s) => edgeRect(s).x === l.x && edgeRect(s).z === l.z) : undefined;
+    return e ? { kind: 'ramp', edge: keyOf(e), dir: yawAlong(e, 1) === l.yaw ? 1 : -1 } : { kind: l.kind, block: blockAt(l.x, l.z) };
+  });
+  if (p.landmarks) {
+    const fixed = (list: LandmarkParams[]) => list.filter((l) => l.edge === undefined).map((l) => `${l.kind}@${l.block}`).join();
+    if (fixed(p.landmarks) !== fixed(landmarksOut)) warnings.push('landmarks: the squares and park centrepieces built differ from the file\'s (a stale dump?)');
+  }
   const rampStreetSet = new Set(rampStreets.filter((e) => {
     const r = edgeRect(e);
     return landmarks.some((l) => l.kind === 'ramp' && r.x === l.x && r.z === l.z);
@@ -300,7 +409,9 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
   // a street that ends at the quay with a road behind it for the run-up and the street's other
   // half across the water to land on. Sized to the canal; never two at one crossing, nor close. ---
   const canalRng = new Rng(seed ^ 0xca7a1);
-  if (shape.canals.length) {
+  const canalRampsOut: CanalRampParams[] = [];
+  const pinnedCanalRamps = p.canalRamps;
+  if (shape.canals.length || Array.isArray(pinnedCanalRamps)) {
     const spots = quaySquares.flatMap((e) => {
       const aWet = canalNodes.has(e.a);
       if (aWet === canalNodes.has(e.b)) return [];
@@ -325,17 +436,34 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
         } satisfies Landmark,
         nodes: [aWet ? e.b : e.a, dir > 0 ? runUp!.a : runUp!.b, far],
         wet,
+        key: keyOf(e),
+        dir: dir as 1 | -1,
       }];
     });
-    const chosen: typeof spots = [];
-    while (chosen.length < config.maxCanalRamps && canalRng.next() < config.canalRampChance) {
-      const free = spots.filter((s) => chosen.every((c) => Math.hypot(c.wet.x - s.wet.x, c.wet.z - s.wet.z) > pitch * 1.5));
-      if (!free.length) break;
-      chosen.push(canalRng.pick(free));
+    let chosen: typeof spots = [];
+    if (Array.isArray(pinnedCanalRamps)) {
+      chosen = pinnedCanalRamps.flatMap((c, k) => {
+        const spot = spots.find((s) => s.key === c.edge && s.dir === c.dir);
+        if (!spot) errors.push(`canalRamps[${k}]: ${c.edge} (dir ${c.dir}) is no quay street with two blocks of run-up and the street across the water`);
+        return spot ? [spot] : [];
+      });
+      fail();
+    } else {
+      // 'all' comes up on every roll (as ?canalramp); a count takes that many, each roll still drawn.
+      const most = typeof pinnedCanalRamps === 'number' ? pinnedCanalRamps : config.maxCanalRamps;
+      const chance = pinnedCanalRamps === 'all' ? 1 : config.canalRampChance;
+      while (chosen.length < most) {
+        const roll = canalRng.next();
+        if (typeof pinnedCanalRamps !== 'number' && roll >= chance) break;
+        const free = spots.filter((s) => chosen.every((c) => Math.hypot(c.wet.x - s.wet.x, c.wet.z - s.wet.z) > pitch * 1.5));
+        if (!free.length) break;
+        chosen.push(canalRng.pick(free));
+      }
     }
     for (const pick of chosen) {
       landmarks.push(pick.landmark);
       rampNodes.push(...pick.nodes);
+      canalRampsOut.push({ edge: pick.key, dir: pick.dir });
     }
   }
 
@@ -365,18 +493,44 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
   }
 
   // --- Spawn: on a road segment next to the centre, facing along it ---
-  const centre = graph.nearest(0, 0);
-  const next = nodes[rng.pick(centre.neighbors)];
+  let centre = graph.nearest(0, 0);
+  let next = nodes[rng.pick(centre.neighbors)];
+  if (p.spawn) {
+    const at = nodeAt(p.spawn.node);
+    const toward = nodeAt(p.spawn.toward);
+    if (!at || !at.neighbors.length) errors.push(`spawn.node: ${p.spawn.node} is no open junction`);
+    else if (!toward || !at.neighbors.includes(toward.id)) errors.push(`spawn.toward: ${p.spawn.toward} is not a junction one road on from ${p.spawn.node}`);
+    fail();
+    centre = at!;
+    next = toward!;
+  }
   const dx = next.x - centre.x;
   const dz = next.z - centre.z;
   const len = Math.hypot(dx, dz);
   const spawn = { x: centre.x + (dx / len) * 15, z: centre.z + (dz / len) * 15, yaw: Math.atan2(dx, dz) };
 
+  // Pinned sites: just those, each laid out from its recorded stream state when it has one (a dump's
+  // sites then come out exactly as the seed laid them out).
+  type Plan = ReturnType<typeof planRoadworks>;
+  const roadworksFor = (pinned: CityParams['roadworks'], plan: (chance: number, pins?: { count?: number; sites?: WorksPin[] }) => Plan): Plan => {
+    if (!Array.isArray(pinned)) return plan(pinned === 'all' ? 1 : config.roadworksChance, { count: typeof pinned === 'number' ? pinned : undefined });
+    const sites: WorksPin[] = pinned.map((w, k) => {
+      const e = w.edge === undefined ? undefined : edgeIndex.get(w.edge);
+      if (w.edge !== undefined && !e) errors.push(`roadworks[${k}].edge: ${w.edge} is not a street of a ${n}-block grid`);
+      if (w.edge === undefined && !nodeAt(w.node)) errors.push(`roadworks[${k}].node: ${w.node} is not a junction of a ${n}-block grid`);
+      return { ...(e ? { edge: [e.a, e.b] as [number, number] } : { node: nodeAt(w.node)?.id }), stream: w.stream };
+    });
+    fail();
+    const out = plan(config.roadworksChance, { sites });
+    for (const k of out.failed) errors.push(`roadworks[${k}]: can't close it (an inner junction or road, clear of the spawn, ramps, bridges and the other sites, that leaves no dead end)`);
+    fail();
+    return out;
+  };
   // Roadworks close junctions away from the spawn (and off the bridges), before signs and signals go up.
   const keepOpen = new Set([centre.id, ...centre.neighbors, ...centre.neighbors.flatMap((id) => nodes[id].neighbors), ...canalNodes, ...rampNodes]);
-  const works = planRoadworks(graph, roadWidth, size, keepOpen, config.roadworksChance, new Rng(seed ^ 0x0c0e5));
+  const works = roadworksFor(p.roadworks, (chance, pins) => planRoadworks(graph, roadWidth, size, keepOpen, chance, new Rng(seed ^ 0x0c0e5), pins));
   // Signals, signs and stop lines go up on the side traffic keeps to.
-  const driveSide = rollDriveSide(seed, config);
+  const driveSide = p.driveSide!;
   // Own RNG stream so adding furniture never reshuffles the layout of existing seeds.
   const traffic = generateTrafficControl(graph, roads.map((r) => r.rect), blocksOut, config, size, new Rng(seed ^ 0x7aff1c), keepOf(driveSide));
   // Furniture is laid out for the full grid; drop whatever would stand in a canal or on a tree
@@ -409,6 +563,30 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
     roadMarks: traffic.marks.filter((m) => dry(m.x, m.z, 0)),
     roadworks: works.sites, terrain, spawn, driveSide,
     districts: [],
+    params: p,
+    warnings,
+  };
+  const edgeOfNodes = new Map(edges.map((e) => [`${e.a}>${e.b}`, e]));
+  city.params = {
+    version: PARAMS_VERSION,
+    seed,
+    ...(p.note === undefined ? {} : { note: p.note }),
+    climate: p.climate,
+    weather: p.weather,
+    time: p.time,
+    startMinute: p.startMinute,
+    theme: p.theme,
+    blocks: n,
+    driveSide,
+    terrain: { hill: shape.hill ? { ...shape.hill } : null, canals: canalsOut },
+    plazas: plazaKeys,
+    zones,
+    landmarks: landmarksOut,
+    canalRamps: canalRampsOut,
+    roadworks: works.sites.map((w, k) => ({
+      ...(w.edge ? { edge: keyOf(edgeOfNodes.get(`${w.edge[0]}>${w.edge[1]}`)!) } : { node: cellOfNode(w.node!) }), stream: works.streams[k],
+    })),
+    spawn: { node: cellOfNode(centre.id), toward: cellOfNode(next.id) },
   };
 
   // --- Districts: laid over the finished city, each from its own RNG stream, so everything
@@ -425,9 +603,36 @@ export function generateCity(seed: number, config: CityConfig = DEFAULT_CITY, di
       works: works.sites.map((w) => ({ node: w.node, edge: w.edge })),
       fast: fastStreets(graph, traffic.props),
     };
-    applyDistricts(city, grid, defs, districtOpts.force);
+    applyDistricts(city, grid, defs, p.force, p.districts, errors, warnings);
+    fail();
   }
+  city.params.districts = city.districts.map((q) => ({
+    kind: q.kind, rect: { i: q.grid.i0, j: q.grid.j0, w: q.grid.w, h: q.grid.h }, roles: rolesOf(q, n), features: { ...q.features },
+  }));
+
+  // --- The mission's destinations (own RNG stream), from the junction the run starts at ---
+  const start = graph.nearest(spawn.x, spawn.z);
+  if (p.destinations) {
+    const dist = graph.distancesFrom(start.id);
+    p.destinations.forEach((ij, k) => {
+      const nd = nodeAt(ij);
+      if (!nd || !nd.neighbors.length) errors.push(`destinations[${k}]: ${ij} is no open junction`);
+      else if (nd.id === start.id) errors.push(`destinations[${k}]: ${ij} is where the run starts`);
+      else if (!Number.isFinite(dist[nd.id])) errors.push(`destinations[${k}]: ${ij} can't be reached by road`);
+    });
+    if (!p.destinations.length) errors.push('destinations: at least one');
+    fail();
+  }
+  const destinations = p.destinations?.map((ij) => nodeAt(ij)!) ??
+    pickDestinations(graph, new Rng(seed ^ 0xde57), start.id, undefined, (id) => districtOfNode(city, id));
+  city.params.destinations = destinations.map((nd) => cellOfNode(nd.id));
   return city;
+}
+
+/** The mission's destinations as junctions (from city.params). */
+export function cityDestinations(city: CityData): RoadNode[] {
+  const n = city.config.blocks;
+  return city.params.destinations!.map(([i, j]) => city.graph.nodes[j * (n + 1) + i]);
 }
 
 function shuffle<T>(items: T[], rng: Rng): void {

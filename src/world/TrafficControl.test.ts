@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CITY, generateCity, rollDriveSide } from './CityGenerator';
+import { generateCity, rollDriveSide } from './CityGenerator';
+import { makeCity } from './makeCityParams';
 import { signalState, SIGNAL_CYCLE } from './TrafficControl';
 
 const inside = (m: { x: number; z: number; w: number; d: number }, r: { x: number; z: number; w: number; d: number }) =>
@@ -57,7 +58,7 @@ describe('generateTrafficControl', () => {
 
   it.each([1, 42, 1234])('seed %i: signals downtown, stop signs elsewhere, speed signs', (seed) => {
     // Without canals: a canal through downtown turns its four-way junctions into T-junctions.
-    const city = generateCity(seed, { ...DEFAULT_CITY, canalOdds: [1, 0, 0] });
+    const { city } = makeCity(['canals=0'], { seed });
     const kinds = (k: string, v?: string) => city.streetProps.filter((p) => p.kind === k && (v === undefined || p.variant === v)).length;
     expect(kinds('signal')).toBeGreaterThan(40);
     expect(kinds('sign', 'stop')).toBeGreaterThan(100);
@@ -164,7 +165,7 @@ describe('fastStreets', () => {
 });
 
 describe('left-hand traffic (England)', () => {
-  const english = (seed: number) => generateCity(seed, { ...DEFAULT_CITY, leftHandChance: 1 });
+  const english = (seed: number) => makeCity(['england'], { seed }).city;
   const facing = (p: { yaw: number }) => ({ fx: Math.sin(p.yaw), fz: Math.cos(p.yaw) });
 
   it('is rare, and decided by the seed', () => {
@@ -205,7 +206,7 @@ describe('left-hand traffic (England)', () => {
 
   it('stop lines cover the left half of each approach', () => {
     const city = english(42);
-    const right = generateCity(42, { ...DEFAULT_CITY, leftHandChance: 0 });
+    const right = generateCity({ ...city.params, driveSide: 'right' }); // the same city on the right
     const lines = (c: typeof city) => c.roadMarks.filter((m) => m.kind === 'stopline');
     expect(lines(city).length).toBe(lines(right).length);
     // Same junctions, each line mirrored across its road's centre line: no line in the same place.

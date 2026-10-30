@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from '../CityGenerator';
+import { districtCities } from '../paramsTesting';
 import { inRect } from '../lots';
 import { CHINATOWN, CHINATOWN_GATES, DISTRICTS } from '../../gameplay/balance';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
@@ -16,6 +17,8 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'chinatown');
   return q ? [[seed, c, q] as const] : [];
 });
+const squared = districtCities('chinatown', ['square']);
+const festive = districtCities('chinatown', ['festival', 'night']);
 
 // Shared rules (solids off the paving, junction controls, prop spacing, kerb offset, overhead
 // clearance, stable per seed, a block apart) are in DistrictRules.test.ts.
@@ -232,7 +235,15 @@ describe('Chinatown shops, props and vans', () => {
     expect(placed.filter(([, , q]) => q.dressing.props.some((p) => p.kind === 'parkedVan')).length).toBeGreaterThan(placed.length * 0.7);
   });
 
-  it.each(placed)('seed %i: a pagoda of 3–5 tiers on the square, when there is one', (_seed, _c, q) => {
+  it('the pagoda square pinned on is there; pinned off, it is not', () => {
+    for (const [, , q] of squared) expect(squareBlock(q)).toBeDefined();
+    for (const [, , q] of districtCities('chinatown', ['!square'])) {
+      expect(squareBlock(q)).toBeUndefined();
+      expect(q.dressing.landmarks.filter((l) => l.kind === 'pagoda')).toEqual([]);
+    }
+  });
+
+  it.each([...placed, ...squared])('seed %i: a pagoda of 3–5 tiers on the square, when there is one', (_seed, _c, q) => {
     for (const l of q.dressing.landmarks.filter((l) => l.kind === 'pagoda')) {
       expect(l.tiers).toBeGreaterThanOrEqual(3);
       expect(l.tiers).toBeLessThanOrEqual(5);
@@ -265,7 +276,19 @@ describe('Chinatown at night', () => {
     expect(festive).toBeLessThan(placed.length * 0.45);
   });
 
-  it.each(placed)('seed %i: lanterns and bulbs stay within maxGlow; festival strings only on a festival seed, clear of the road', (_seed, c, q) => {
+  it('the festival pinned on strings its lanterns; pinned off, no strings and no floats', () => {
+    for (const [, , q] of festive) {
+      expect(extra(q).festival).toBe(true);
+      expect(extra(q).festivalStrings.length).toBeGreaterThan(0);
+    }
+    for (const [, , q] of districtCities('chinatown', ['!festival', 'night'])) {
+      expect(extra(q).festival).toBe(false);
+      expect(extra(q).festivalStrings).toEqual([]);
+      expect(extra(q).nightProps.filter((p) => p.kind === 'dragonFloat' || p.kind === 'lionDance')).toEqual([]);
+    }
+  });
+
+  it.each([...placed, ...festive])('seed %i: lanterns and bulbs stay within maxGlow; festival strings only on a festival seed, clear of the road', (_seed, c, q) => {
     const e = extra(q);
     const glow = lanternCount(q.dressing.overhead.filter((o) => o.kind === 'lanterns')) + lanternCount(e.festivalStrings) + e.bulbs.reduce((n, b) => n + b.n, 0);
     expect(glow).toBeLessThanOrEqual(CHINATOWN.maxGlow);
@@ -297,7 +320,7 @@ describe('Chinatown at night', () => {
     for (const [, , q] of placed) expect(extra(q).nightProps.length).toBeGreaterThan(0);
   });
 
-  it.each(placed)('seed %i: night props keep the kerb rules, off buildings, solids and every other prop; never in the day\'s props', (_seed, c, q) => {
+  it.each([...placed, ...festive])('seed %i: night props keep the kerb rules, off buildings, solids and every other prop; never in the day\'s props', (_seed, c, q) => {
     const night = extra(q).nightProps;
     const day = c.streetProps.filter((p) => inRect(q.bounds, p, 2));
     expect(night.filter((p) => day.includes(p))).toEqual([]);

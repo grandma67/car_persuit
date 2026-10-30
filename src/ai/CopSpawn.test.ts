@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Rng } from '../core/Rng';
 import { WANTED } from '../gameplay/balance';
-import { DEFAULT_CITY, generateCity } from '../world/CityGenerator';
+import { makeCity } from '../world/makeCityParams';
 import { CopDirector, DIRECTOR_TUNING } from './CopDirector';
 
 // Stand-in for building occlusion on the street grid: you can see straight down your own street.
@@ -13,7 +13,7 @@ describe('cop spawning', () => {
   beforeAll(() => RAPIER.init());
 
   it.each([1, 42, 1234])('seed %i: cops start hidden around corners, already moving, away from the destination', (seed) => {
-    const city = generateCity(seed, { ...DEFAULT_CITY, roadworksChance: 0 });
+    const { city } = makeCity(['roadworks=0'], { seed });
     const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
     const director = new CopDirector(world, new THREE.Scene(), city.graph, sameStreet, new Rng(seed), 0, { ...DIRECTOR_TUNING, firstSpawnDelay: 0 });
     const start = city.graph.nearest(city.spawn.x, city.spawn.z);

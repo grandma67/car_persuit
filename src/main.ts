@@ -3,6 +3,7 @@ import { CarAudio } from './audio/CarAudio';
 import { Game, createRenderer, type GameShell } from './core/Game';
 import { debugTools } from './core/debugTools';
 import { seedFromUrl } from './core/Rng';
+import type { CityParams } from './world/CityParams';
 import { isTouchDevice } from './ui/TouchControls';
 
 // Backstop for the CSS: some Android browsers still start a selection or open a menu on long-press.
@@ -92,19 +93,22 @@ let restarting = false;
 const shell: GameShell = {
   renderer: createRenderer(app),
   audio: new CarAudio(),
-  restart: (seed) => {
+  // A seed, or params loaded with dbg.loadCity: the URL then carries their seed (the share link
+  // shares the seed only) and Retry gets the params from the Game.
+  restart: async (next) => {
     if (restarting) return;
     restarting = true;
+    const seed = typeof next === 'number' ? next : next.seed;
     const url = new URL(window.location.href);
     url.searchParams.set('seed', String(seed));
     history.replaceState(history.state, '', url); // share links and a reload keep this city
     game?.dispose();
     game = null;
     showSplash();
-    build(seed)
-      .then((next) => {
-        game = next;
-        next.audioUnlocked(); // the tap on Retry was the gesture: the menu loop plays as on first start
+    await build(next)
+      .then((built) => {
+        game = built;
+        built.audioUnlocked(); // the tap on Retry was the gesture: the menu loop plays as on first start
         hideSplash();
       })
       .catch(failed)
@@ -112,9 +116,9 @@ const shell: GameShell = {
   },
 };
 
-async function build(seed: number): Promise<Game> {
-  await stage(`Building city #${seed}`, 55);
-  const next = new Game(app, hud, seed, shell);
+async function build(source: number | CityParams): Promise<Game> {
+  await stage(`Building city #${typeof source === 'number' ? source : source.seed}`, 55);
+  const next = new Game(app, hud, source, shell);
   // For browser checks: the game's renderer and city, and helpers to frame and measure (debugTools).
   if (new URLSearchParams(window.location.search).has('debug')) Object.assign(window, { game: next, dbg: debugTools(next) });
   await stage('Placing street furniture', 90);

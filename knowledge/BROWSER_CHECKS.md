@@ -1,7 +1,9 @@
 # Browser checks
 
 `npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-dir <dir> --no-final --eval-file <file.js>`
-(`scripts/browser-check.mjs`): headless Chrome, always **muted**. It reuses a Vite server on the port:
+(`scripts/browser-check.mjs`). A city with a feature: `--make "flat chinatown festival night"` (runs
+`npm run city -- make` into a temp file) or `--city <file>` (a dump or a made file), loaded with
+`dbg.loadCity` once the page is up, before `--start`; needs `debug` in the query. The tool: headless Chrome, always **muted**. It reuses a Vite server on the port:
 start `npx vite --port 5199` once per session in the background (~10 s per run). Output JSON: `val`,
 `shots`, console errors/warnings (Rapier deprecation filtered). Phone perf: `--size 390x844`.
 
@@ -55,6 +57,7 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)` | model studio, HUD hidden |
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
+| `dumpCity(download?)`, `loadCity(file)` | this run's params as text (downloads `city-<seed>.json`); restart in place with a params file (errors throw, nothing restarts; Retry keeps it). `check:browser --city <file>` does the load; `npm run check:reload` (`scripts/evals/city-reload.js`) checks dump → load is the same city |
 
 ## Restart and leaks
 
@@ -62,15 +65,16 @@ Retry / New city build the next Game in the page (`Game.dispose()`, see `PLAN_GA
 **`npm run check:restart`** (`scripts/evals/restart.js`, ~1.5 min) checks it, `ok` + `failures` first:
 fullscreen kept through Retry and New city on the end screen, seed kept/changed and in the URL, splash
 hidden with no animation running on it (`document.getAnimations()`), one canvas/screen/touch layer;
-then 10 same-seed restarts with heap (after `gc()`), geometries, textures and programs per restart
-(must hold), every old Game collected (WeakRefs), and the GPU orphan list. Every district is forced on
-with night and rain, so their resources are in every city; seed 9 also rolls Chinatown's festival and
-the Farm's harvest night (no flag forces those: if the rolls move, find a seed with both again). The
-first two runs drive a 5★ chase first (`busy=ms`), so mid-run objects (cops, scratches, broken props,
-fireworks) are in the Game being disposed. Run it after anything that adds to the
-scene, the page or a listener. Own seed or flags: `npm run check:browser -- --query
-"seed=N&debug&gputrace&restarts=10&shots=1&<flags>" --start 1500 --out-dir <dir> --no-final
---eval-file scripts/evals/restart.js` (`shots=1`: end screen and menu shots per step).
+then 10 same-city restarts with heap (after `gc()`), geometries, textures and programs per restart
+(must hold), every old Game collected (WeakRefs), and the GPU orphan list. Its city is made from words
+(`--make` in `package.json`): every district with every feature that has a look, night and rain, so
+their resources are in the city disposed; the quick restarts reload it. A new feature with a look
+joins those words. The first two runs drive a 5★ chase first (`busy=ms`), so mid-run objects (cops,
+scratches, broken props, fireworks) are in the Game being disposed. Run it after anything that adds
+to the scene, the page or a listener. Own city: `npm run check:browser -- --query
+"debug&gputrace&restarts=10&shots=1" --make "<words>" --start 1500 --out-dir <dir> --no-final
+--eval-file scripts/evals/restart.js` (`shots=1`: end screen and menu shots per step; or
+`--query "seed=N&…&<flags>"` without `--make`).
 
 When it fails, read `orphans` (`gpuTrace`, below): each names the code that created the leak.
 Things `dispose()` can't see on its own:
@@ -100,6 +104,9 @@ feel to the user.
 
 ## Pitfalls
 
+- Draw calls read a few high for a frame or two after any restart (Retry, New city, `loadCity`), with
+  plain seeds too: compare the lowest of a few samples ~700 ms apart (`city-reload.js` does).
+- `--make` words without `seed=` start from a random seed: a check that must repeat passes one.
 - Measure `dbg.stats()` **before** any `aerial()` (the overview turns fog off and every material
   recompiles: 35 read as 58; `stats()` warns) and before a drive breaks props (a first break can add one).
 - Stray triangles or holes near an aerial camera are near-plane clipping (`aerial()` sets near = 1 m):

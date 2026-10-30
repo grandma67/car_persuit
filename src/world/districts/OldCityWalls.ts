@@ -8,7 +8,7 @@ import type { Building, CityData, Rect } from '../CityGenerator';
 import type { Footprint } from '../StreetProps';
 import { groundHeight } from '../Terrain';
 import { perimeterWall, type WallSegment } from './apply';
-import type { District, GroundPatch, Overhead, Structure } from './District';
+import { feature, type District, type GroundPatch, type Overhead, type Structure } from './District';
 
 /** One wall stretch on one footing: from (ax, az) to (bx, bz) along the wall line. */
 export interface WallPiece {
@@ -188,7 +188,7 @@ export function clearOfWalls(buildings: Building[], solids: Footprint[], margin 
 export function wallDressing(q: District, city: CityData, plan: WallPlan, rng: Rng): { structures: Structure[]; overhead: Overhead[]; ground: GroundPatch[] } {
   const ground = (x: number, z: number) => groundHeight(city.terrain, x, z);
   const { roadWidth: rw } = city.config;
-  const round = rng.next() < 0.5;
+  const round = feature(q, 'roundTowers', rng.next() < 0.5);
   const structures: Structure[] = [];
   const overhead: Overhead[] = [];
   const patches: GroundPatch[] = [];

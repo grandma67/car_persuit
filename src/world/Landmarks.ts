@@ -202,9 +202,18 @@ export function makeSquare(
   return { buildings, trees };
 }
 
+/** The city's params for the ramps: the street ramps' spots, or how many ramps; `fill` draws the extras. */
+export interface RampPins {
+  street?: { x: number; z: number; yaw: number }[];
+  count?: number;
+  fill: Rng;
+}
+
 /**
  * Turn a few busy blocks into town squares (removing their buildings) and give some parks a
- * centrepiece. Mutates blocks (square flag), buildings and trees; returns the landmarks.
+ * centrepiece. Mutates blocks (square flag), buildings and trees; returns the landmarks. With
+ * `pins` the squares roll as ever, then the street ramps are the pinned ones (or as many ramps as
+ * the count: street ramps dropped or added on free spots, square ramps turned monuments).
  */
 export function planLandmarks(
   blocks: Block[],
@@ -213,6 +222,7 @@ export function planLandmarks(
   config: CityConfig,
   rng: Rng,
   rampSpots: { x: number; z: number; yaw: number }[] = [],
+  pins?: RampPins,
 ): { landmarks: Landmark[]; buildings: Building[]; trees: { x: number; z: number }[] } {
   const landmarks: Landmark[] = [];
 
@@ -242,6 +252,21 @@ export function planLandmarks(
       }
     }
     landmarks.push({ kind, x: b.rect.x, z: b.rect.z, yaw: rng.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]), radius: LANDMARK_RADIUS[kind] });
+  }
+  if (pins?.street) streetRamps.splice(0, streetRamps.length, ...pins.street.map((p) => ({ kind: 'ramp' as const, ...p, radius: LANDMARK_RADIUS.ramp })));
+  if (pins?.count !== undefined) {
+    const ramps = () => streetRamps.length + landmarks.filter((l) => l.kind === 'ramp').length;
+    for (const l of landmarks) {
+      if (ramps() <= pins.count || l.kind !== 'ramp') continue;
+      l.kind = pins.fill.pick(MONUMENT_KINDS);
+      l.radius = LANDMARK_RADIUS[l.kind];
+    }
+    while (ramps() > pins.count) streetRamps.pop();
+    while (ramps() < pins.count) {
+      const free = rampSpots.filter((p) => streetRamps.every((r) => Math.hypot(r.x - p.x, r.z - p.z) > pitch * 2));
+      if (!free.length) break;
+      streetRamps.push({ kind: 'ramp', ...pins.fill.pick(free), radius: LANDMARK_RADIUS.ramp });
+    }
   }
   squares.forEach((s, i) => ({ buildings, trees } = makeSquare(s, landmarks[i], buildings, trees, config)));
 

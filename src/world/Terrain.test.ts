@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { DEFAULT_CITY, generateCity, type CityData, type Rect } from './CityGenerator';
+import { makeCity } from './makeCityParams';
 import { addGround } from './CityBuilder';
 import { groundHeight, inCanal, landPieces, onGround, type Canal, type Terrain } from './Terrain';
 import { staticLineOfSight } from '../ai/lineOfSight';
@@ -18,8 +19,7 @@ const CASES: [number, number | null][] = [
 const cities = new Map<string, CityData>();
 const cityFor = (seed: number, width: number | null = null) => {
   const key = `${seed}:${width}`;
-  const canalWidth: [number, number] = width === null ? DEFAULT_CITY.canalWidth : [width, width];
-  if (!cities.has(key)) cities.set(key, generateCity(seed, { ...DEFAULT_CITY, roadworksChance: 0, canalWidth }));
+  if (!cities.has(key)) cities.set(key, makeCity(['blocks=12', 'roadworks=0', ...(width === null ? [] : [`canalwidth=${width}`])], { seed }).city);
   return cities.get(key)!;
 };
 const contains = (r: Rect, x: number, z: number) => Math.abs(x - r.x) <= r.w / 2 + 1e-6 && Math.abs(z - r.z) <= r.d / 2 + 1e-6;

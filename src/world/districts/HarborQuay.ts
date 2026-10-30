@@ -9,7 +9,7 @@ import { LANDMARK_RADIUS, type Landmark } from '../Landmarks';
 import { footprintsOverlap, propFootprint, type Footprint } from '../StreetProps';
 import { groundHeight } from '../Terrain';
 import { inDistrict, isJunctionControl } from './apply';
-import type { District, GroundPatch, Overhead, Structure } from './District';
+import { feature, type District, type GroundPatch, type Overhead, type Structure } from './District';
 import { LINE_COLOURS } from './HarborYard';
 
 /**
@@ -127,7 +127,7 @@ export function quay(q: District, city: CityData, quayBlocks: number[], containe
   // The ship: a type, a length fitted to the berth, moored off the quay face.
   const roll = rng.next();
   const odds = QY.shipOdds;
-  const type: ShipType = roll < odds.container ? 'container' : roll < odds.container + odds.bulk ? 'bulk' : 'general';
+  const type = feature<ShipType>(q, 'ship', roll < odds.container ? 'container' : roll < odds.container + odds.bulk ? 'bulk' : 'general');
   const dims = SHIP_DIMS[type];
   const room = berth[1] - berth[0];
   const length = Math.min(rng.range(QY.shipLength[0], QY.shipLength[1]), room);
@@ -166,7 +166,7 @@ export function quay(q: District, city: CityData, quayBlocks: number[], containe
   const sc = toWorld(f, su, sv);
   const hull: Footprint = { ...sc, hx: Math.abs(f.ax) * (length / 2) + Math.abs(f.nx) * (beam / 2), hz: Math.abs(f.az) * (length / 2) + Math.abs(f.nz) * (beam / 2), yaw: 0 };
   const shipFps = [hull];
-  if (rng.next() < QY.tugChance) {
+  if (feature(q, 'tug', rng.next() < QY.tugChance)) {
     // A tug off the ship's outer side, near the bow.
     const tl = 24;
     ship.tug = { x: bow * (length / 2 - tl / 2 - 6), z: beam / 2 + 1.5 + 4, length: tl };

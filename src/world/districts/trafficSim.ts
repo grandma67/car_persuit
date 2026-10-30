@@ -1,5 +1,5 @@
-// Test helpers for the district traffic tests (not used by the game): flat seeds with a district
-// forced on, a physics world of the city, and a civilian traffic sim that hands every car to the
+// Test helpers for the district traffic tests (not used by the game): flat cities with a district,
+// made from words, a physics world of the city, and a civilian traffic sim that hands every car to the
 // test on every step. A test only says what it counts and what it expects.
 import { expect } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
@@ -8,27 +8,31 @@ import { Rng } from '../../core/Rng';
 import { CHINATOWN } from '../../gameplay/balance';
 import { CivilianTraffic, TRAFFIC, type Civilian } from '../../ai/CivilianTraffic';
 import type { Vehicle } from '../../vehicles/Vehicle';
-import { generateCity, type CityData } from '../CityGenerator';
+import type { CityData } from '../CityGenerator';
+import { makeCity } from '../makeCityParams';
 import { inRect } from '../lots';
 import { footprintsOverlap, propFootprint } from '../StreetProps';
 import { approachControls, busStops, fastStreets } from '../TrafficControl';
 import { keepOf } from '../driveSide';
 import { districtTraffic, type DistrictTrafficRules } from './runtime';
 import type { District, DistrictKind } from './District';
-import type { DistrictForce } from './place';
 
 export const DT = 1 / 60;
 
 type Box = { x: number; z: number; hx: number; hz: number; yaw: number };
 
-/** Seeds whose forced `kind` sits on flat ground with no canals (the sim's ground is a plane) and passes `keep`. */
-export function flatSeeds(kind: DistrictKind, count: number, force: DistrictForce, keep: (q: District) => boolean = () => true): [number, CityData, District][] {
+/**
+ * `count` flat cities (no hill or canals: the sim's ground is a plane) on the default 12-block grid
+ * where `kind` is placed by `words` (`['harbor']` alone, `['oldtown=1']` the rest rolled) and passes
+ * `keep`: makeCity from seed 11, each next one from the seed after the last one's.
+ */
+export function flatCities(kind: DistrictKind, words: string[], count: number, keep: (q: District) => boolean = () => true): [number, CityData, District][] {
   const out: [number, CityData, District][] = [];
-  for (let i = 0; out.length < count && i < 300; i++) {
-    const seed = i * 7919 + 11;
-    const city = generateCity(seed, undefined, { force });
+  for (let seed = 11, t = 0; out.length < count && t < 50; t++) {
+    const { params, city } = makeCity(['flat', 'blocks=12', ...words], { seed });
+    seed = params.seed + 1;
     const q = city.districts.find((d) => d.kind === kind);
-    if (q && !city.terrain.hill && !city.terrain.canals.length && keep(q)) out.push([seed, city, q]);
+    if (q && keep(q)) out.push([params.seed, city, q]);
   }
   return out;
 }
@@ -141,9 +145,9 @@ function vanSim(seed: number, city: CityData, q: District, cap: number) {
   return stats;
 }
 
-/** Chinatown with `force`, two flat seeds with a parked van: civilians keep the main-street cap, never jam, get past the vans and never touch them. */
-export function passVans(force: DistrictForce): void {
-  const report = flatSeeds('chinatown', 2, force, (q) => q.dressing.props.some((p) => p.kind === 'parkedVan')).map(([seed, city, q]) => vanSim(seed, city, q, CHINATOWN.speed));
+/** Chinatown with `words`, two flat cities with a parked van: civilians keep the main-street cap, never jam, get past the vans and never touch them. */
+export function passVans(words: string[]): void {
+  const report = flatCities('chinatown', words, 2, (q) => q.dressing.props.some((p) => p.kind === 'parkedVan')).map(([seed, city, q]) => vanSim(seed, city, q, CHINATOWN.speed));
   expect(report.length).toBeGreaterThan(0);
   expect(report.some((r) => r.passedVans > 0), JSON.stringify(report)).toBe(true);
   for (const r of report) {

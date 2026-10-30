@@ -2,6 +2,7 @@
 // shore to shore, crossed by bridges every few blocks. Pure data and maths — no Three.js.
 import { Rng } from '../core/Rng';
 import type { Rect } from './CityGenerator';
+import { pin, type TerrainParams } from './CityParams';
 
 /** Ground height lookup handed to systems that place things in the world. */
 export type GroundHeight = (x: number, z: number) => number;
@@ -44,7 +45,8 @@ export interface TerrainConfig {
 /**
  * Seed → hill and canals. Canals follow inner road lines (never the ring road or the line next to
  * it); two canals either cross or run parallel at least three blocks apart. The hill sits wholly
- * inside the island so the shore, quay and sea wall stay at sea level.
+ * inside the island so the shore, quay and sea wall stay at sea level. `pins` (the city's params)
+ * replace rolls after they are drawn: a canal count or the canals, the hill (or none), a width.
  */
 export function planTerrain(
   rng: Rng,
@@ -52,10 +54,13 @@ export function planTerrain(
   blocks: number,
   line: (i: number) => number,
   islandHalf: number,
+  pins: TerrainParams = {},
 ): Pick<Terrain, 'hill' | 'canals'> {
+  const listed = Array.isArray(pins.canals) ? pins.canals : undefined;
   const roll = rng.next() * (config.canalOdds[0] + config.canalOdds[1] + config.canalOdds[2]);
-  const count = roll < config.canalOdds[0] ? 0 : roll < config.canalOdds[0] + config.canalOdds[1] ? 1 : 2;
-  const canals: Canal[] = [];
+  const rolledCount = roll < config.canalOdds[0] ? 0 : roll < config.canalOdds[0] + config.canalOdds[1] ? 1 : 2;
+  const count = listed ? listed.length : pin(typeof pins.canals === 'number' ? pins.canals : undefined, rolledCount);
+  let canals: Canal[] = [];
   const make = (axis: 'x' | 'z', index: number): Canal => ({ axis, line: index, at: line(index), half: 0 });
   const first = make(rng.next() < 0.5 ? 'x' : 'z', rng.int(2, blocks - 2));
   if (count >= 1) canals.push(first);
@@ -68,9 +73,10 @@ export function planTerrain(
       if (options.length) canals.push(make(first.axis, rng.pick(options)));
     }
   }
+  if (listed) canals = listed.map((c) => make(c.axis, c.line));
 
   let hill: Hill | null = null;
-  if (rng.next() < config.hillChance) {
+  if (pin(pins.hill === undefined ? undefined : !!pins.hill, rng.next() < config.hillChance)) {
     // The cosine profile's steepest grade is (π/2)·height/radius: size the hill to stay drivable.
     const height = rng.range(config.hillHeight[0], config.hillHeight[1]);
     const minRadius = Math.max(200, ((Math.PI / 2) * height) / config.maxGrade);
@@ -86,9 +92,13 @@ export function planTerrain(
       rz: along ? rMinor : rMajor,
       yaw: rng.range(-0.5, 0.5),
     };
+    if (typeof pins.hill === 'object' && pins.hill) hill = { ...pins.hill };
   }
   // Widths are drawn last so a seed's hill doesn't depend on them.
-  for (const c of canals) c.half = Math.round(rng.range(config.canalWidth[0], config.canalWidth[1])) / 2;
+  canals.forEach((c, k) => {
+    const rolled = Math.round(rng.range(config.canalWidth[0], config.canalWidth[1]));
+    c.half = pin(listed?.[k].width, pin(pins.canalWidth, rolled)) / 2;
+  });
   return { hill, canals };
 }
 

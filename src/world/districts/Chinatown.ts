@@ -11,7 +11,7 @@ import { keepOf } from '../driveSide';
 import { footprintsOverlap, propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../StreetProps';
 import { inDistrict, isJunctionControl, kerbClutter } from './apply';
 import { lanternStrings, paifangs, type LanternData } from './ChinatownGates';
-import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook, type Overhead, type Structure } from './District';
+import { emptyDressing, feature, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook, type Overhead, type Structure } from './District';
 import { groundHeight } from '../Terrain';
 
 export type ChinatownLot = 'shophouse' | 'restaurant' | 'banquetHall' | 'teaHouse' | 'bubbleTea' | 'herbalShop' | 'bakery' | 'temple';
@@ -23,7 +23,7 @@ export function squareBlock(q: District): number | undefined {
 }
 
 function roles(q: District, _city: CityData, rng: Rng): Map<number, BlockRole> {
-  if (rng.next() >= CHINATOWN.squareChance) return new Map();
+  if (!feature(q, 'square', rng.next() < CHINATOWN.squareChance)) return new Map();
   return new Map([[rng.pick(q.blocks), 'square']]);
 }
 
@@ -82,13 +82,13 @@ function lots(q: District, buildings: Building[], city: CityData, rng: Rng): voi
   const free = () => fronting.filter((f) => f.b.lot === 'shophouse');
   for (const f of free().slice(0, rng.int(CHINATOWN.restaurants[0], CHINATOWN.restaurants[1]))) f.b.lot = 'restaurant';
   // At most one banquet hall: the biggest lot left on the main street (or anywhere on a street).
-  if (rng.next() < CHINATOWN.banquetChance) {
+  if (feature(q, 'banquet', rng.next() < CHINATOWN.banquetChance)) {
     const left = free();
     const pool = left.some((f) => f.main) ? left.filter((f) => f.main) : left;
     if (pool.length) pool.reduce((u, v) => (v.b.w * v.b.d > u.b.w * u.b.d ? v : u)).b.lot = 'banquetHall';
   }
   // At most one temple, off the main street where it can be.
-  if (rng.next() < CHINATOWN.templeChance) {
+  if (feature(q, 'temple', rng.next() < CHINATOWN.templeChance)) {
     const left = free();
     const pool = left.some((f) => !f.main) ? left.filter((f) => !f.main) : left;
     if (pool.length) {
@@ -110,6 +110,12 @@ const drop = (p: StreetProp) => p.kind === 'bench' || p.kind === 'umbrella' || (
 export const CHINATOWN_DEF: DistrictDef = {
   kind: 'chinatown',
   label: 'Chinatown',
+  features: { square: 'bool', banquet: 'bool', temple: 'bool', festival: 'bool' },
+  nightFeatures: ['festival'],
+  built: (q, city) => {
+    const lots = new Set(city.buildings.filter((b) => b.district === 'chinatown' && inRect(q.bounds, b)).map((b) => b.lot));
+    return { square: squareBlock(q) !== undefined, banquet: lots.has('banquetHall'), temple: lots.has('temple'), festival: !!chinatownExtra(q)?.festival };
+  },
   salt: 0xc417a7,
   chance: CHINATOWN.chance,
   site: 'inland',
@@ -264,7 +270,7 @@ const NIGHT_STALLS: PropKind[] = ['produceStall', 'produceStall', 'dimSumCart', 
  */
 function nightExtras(q: District, city: CityData, built: Building[], paifang: Structure[], out: DistrictDressing, solid: Footprint[], rng: Rng): ChinatownExtra {
   const { roadWidth: rw, sidewalk: s } = city.config;
-  const festival = rng.next() < CHINATOWN.festivalChance;
+  const festival = feature(q, 'festival', rng.next() < CHINATOWN.festivalChance);
   let glow = lanternCount(out.overhead.filter((o) => o.kind === 'lanterns'));
   const festivalStrings: Overhead[] = [];
   const nightProps: StreetProp[] = [];

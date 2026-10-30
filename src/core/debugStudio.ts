@@ -15,7 +15,7 @@ import {
   BOX_TRUCK_SPEC, BUS_SPEC, COP_SPECS, PICKUP_SPEC, PLAYER_SPEC, RAMP_TRUCK_SPEC, TRACTOR_SPEC, VAN_SPEC, type VehicleSpec,
 } from '../vehicles/VehicleSpecs';
 import { pickTheme } from '../world/CityTheme';
-import { pickClimate } from '../world/Climate';
+import { CLIMATES, type Climate } from '../world/Climate';
 import { DISTRICT_DEFS } from '../world/districts/index';
 import { LANDMARK_RADIUS, type LandmarkKind } from '../world/Landmarks';
 import type { Terrain } from '../world/Terrain';
@@ -122,7 +122,7 @@ function landmarkGroup(kind: LandmarkKind, n: number | undefined, snowy: boolean
 }
 
 /** Walls (one mesh per facade style, textured as in game) and roofs of buildings on flat ground. */
-function buildingGroup(city: CityData, b: Building, theme: ReturnType<typeof pickTheme>, climate: ReturnType<typeof pickClimate>): THREE.Group {
+function buildingGroup(city: CityData, b: Building, theme: ReturnType<typeof pickTheme>, climate: Climate): THREE.Group {
   const flat: CityData = { ...city, terrain: FLAT, buildings: [b] };
   const { walls, roofs } = buildingGeometry(flat, theme, climate, new Rng(city.seed));
   const group = new THREE.Group();
@@ -151,9 +151,9 @@ function makeItems(names: string[], city: CityData): Item[] {
   const models = buildModels({ leaves: 0x3d7a3f, trunk: 0x4a3426, snowy: false });
   const keys = Object.keys(models);
   const propMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.2 });
-  const params = new URLSearchParams(location.search);
-  const climate = pickClimate(city.seed, params.get('city'));
-  const theme = pickTheme(city.seed, climate);
+  // The run's own look (its params carry ?city with ?debug).
+  const climate = CLIMATES[city.params.climate!];
+  const theme = pickTheme(city.seed, climate, city.params.theme);
   const out: Item[] = [];
   const add = (name: string, object: THREE.Object3D) => {
     const box = new THREE.Box3().setFromObject(object);

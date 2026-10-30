@@ -88,6 +88,7 @@ const drop = (p: StreetProp) =>
 export const OLD_CITY_DEF: DistrictDef = {
   kind: 'oldtown',
   label: 'Old City',
+  features: { roundTowers: 'bool' },
   salt: 0x01dc17,
   chance: OLD_CITY.chance,
   site: 'inland',
