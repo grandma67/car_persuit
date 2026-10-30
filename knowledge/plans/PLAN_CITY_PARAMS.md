@@ -200,9 +200,36 @@ committed.
 
 ## Status (branch `city-params`)
 
-Done: **M0–M5**. Hash identical for all 120 cities after every step (now `npm run hash -- --vs
+Done: **M0–M6**. Hash identical for all 120 cities after every step (now `npm run hash -- --vs
 HEAD` before each commit; main predates city params, so compare with the branch's commits); `npm run hash -- --reload` proves every
-one of the 120 dumps reloads as its city (same hash, same dump). **Next: M6** (tests move off seeds).
+one of the 120 dumps reloads as its city (same hash, same dump). **Next: M7** (docs).
+
+**What exists (M6):**
+- `trafficSim.flatCities(kind, words, count, keep?)` replaces `flatSeeds`: `makeCity(['flat',
+  'blocks=12', ...words])` from seed 11, each next city from the seed after the last one used. The
+  five traffic suites ask for `['harbor']`, `['farm']`, `['slums']` (alone), `['oldtown=1']` and
+  `['chinatown=1', 'oldtown=0|1']` (the old force sets, as words).
+- Moved to words: `Landmarks` (`ramps=2 canalramps=0`, `canals=1 canalramps=1`), `Roadworks`
+  (`roadworks`), `CopSpawn` (`roadworks=0`), `Terrain` (`blocks=12 roadworks=0 [canalwidth=W]`),
+  `CityGenerator` `sized()` (`blocks=N [roadworks=0]`), `MissionSystem` (`blocks=4 canals=1`),
+  `TrafficControl` (`canals=0`, `england`; the right-hand twin is the same params with
+  `driveSide: 'right'`).
+- Features pinned on and off (two seeds each): Farm `maze`/`!maze`, `harvest night desert` (the
+  irrigator and the pyramid's solids), `!harvest`; Chinatown `square`/`!square`,
+  `festival night`/`!festival`; Slums `camp junkyard`/`!camp !junkyard`. The per-seed sweeps that
+  check a feature "when there is one" also run on the pinned cities, so they never pass empty.
+- `CityParamsPinned.test.ts`: hand-pinned positions land where asked (canal line, width and
+  bridges; hill; plazas; spawn and its heading; destinations; roadworks junction and street; a
+  district rect, or the build's reason why not).
+- `check:browser --make "words…"` makes a file in the temp dir and loads it as `--city`.
+  `check:restart` = `--make "oldtown chinatown harbor farm slums festival harvest square banquet
+  temple maze junkyard camp silo tankFarm tug night rain seed=9"` (seed 17 after tries): every
+  district with every feature that has a look. `restart.js` dumps the loaded params first and its
+  quick restarts start by reloading them (New city in part 1 drops them). Passes.
+- Stay on seeds, as planned: invariant sweeps, roll and frequency tests (`how many ramps depends
+  on the seed`, `the maze roll comes up on some seeds`, district chances, theme colours), `[1, 42,
+  1234]`-style variety lists.
+- Suite CPU 243 s (saved M4 run 250 s, 256 s just before M6); hash unchanged.
 
 **What exists (M5):**
 - `Game` takes a seed or `CityParams`; loaded params are built as they stand (the URL's flags don't

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CITY, generateCity, type CityData } from './CityGenerator';
+import { generateCity, type CityData } from './CityGenerator';
+import { makeCity } from './makeCityParams';
 import { MAX_SITES, overlaps, type WorksItem } from './Roadworks';
 
 const SEEDS = [1, 42, 1234, 99999];
-const withWorks = { ...DEFAULT_CITY, roadworksChance: 1 };
+/** Every roadworks slot rolls a site (the URL's ?roadworks). */
+const withWorks = (seed: number) => makeCity(['roadworks'], { seed }).city;
 
 const corners = (it: WorksItem) => {
   const fx = Math.sin(it.yaw);
@@ -19,7 +21,7 @@ function onRoad(city: CityData, x: number, z: number): boolean {
 
 describe('roadworks', () => {
   it.each(SEEDS)('seed %i: closes junctions and roads, keeps the rest of the network connected', (seed) => {
-    const city = generateCity(seed, withWorks);
+    const city = withWorks(seed);
     const { graph, roadworks } = city;
     expect(roadworks.length).toBeGreaterThan(1);
     expect(roadworks.length).toBeLessThanOrEqual(MAX_SITES);
@@ -40,7 +42,7 @@ describe('roadworks', () => {
   });
 
   it.each(SEEDS)('seed %i: everything sits on the road, solid kit never overlaps, sites are spread out', (seed) => {
-    const city = generateCity(seed, withWorks);
+    const city = withWorks(seed);
     const { roadworks } = city;
     for (const works of roadworks) {
       const solid = works.items.filter((i) => i.kind !== 'patch');
@@ -57,7 +59,7 @@ describe('roadworks', () => {
   });
 
   it.each(SEEDS)('seed %i: every closed approach is blocked by cones or barrier boards', (seed) => {
-    const city = generateCity(seed, withWorks);
+    const city = withWorks(seed);
     const cones = city.streetProps.filter((p) => p.kind === 'cone');
     const half = city.config.roadWidth / 2;
     for (const works of city.roadworks) {
@@ -82,7 +84,7 @@ describe('roadworks', () => {
   });
 
   it('lays every site out differently: a mix of junctions and roads, kit and closures', () => {
-    const sites = SEEDS.flatMap((seed) => generateCity(seed, withWorks).roadworks);
+    const sites = SEEDS.flatMap((seed) => withWorks(seed).roadworks);
     expect(new Set(sites.map((s) => s.kind)).size).toBe(2);
     const kits = new Set(sites.map((s) => s.items.filter((i) => i.kind !== 'patch').map((i) => i.kind).sort().join(',')));
     expect(kits.size).toBeGreaterThan(sites.length / 2);

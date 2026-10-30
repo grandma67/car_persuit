@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DISTRICTS, SLUMS } from '../../gameplay/balance';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 import { generateCity, type Rect } from '../CityGenerator';
+import { makeCity } from '../makeCityParams';
 import { inRect } from '../lots';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
 import type { District } from './District';
@@ -17,6 +18,14 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'slums');
   return q ? [[seed, c, q] as const] : [];
 });
+/** The Slums alone with `words` pinned, from two seeds. */
+const pinned = (words: string[]) =>
+  [11, 7930].map((seed) => {
+    const { params, city: c } = makeCity(words, { seed });
+    return [params.seed, c, c.districts.find((d) => d.kind === 'slums')!] as const;
+  });
+const withBoth = pinned(['camp', 'junkyard']);
+const withNeither = pinned(['slums', '!camp', '!junkyard']);
 const inside = (outer: Rect, r: Rect) =>
   Math.abs(r.x - outer.x) + r.w / 2 <= outer.w / 2 + 1e-6 && Math.abs(r.z - outer.z) + r.d / 2 <= outer.d / 2 + 1e-6;
 const shrunk = (r: Rect) => rectFootprint({ ...r, w: r.w - 0.02, d: r.d - 0.02 });
@@ -113,7 +122,21 @@ describe('Slums set pieces', () => {
     expect(q.dressing.structures.filter((s) => s.kind === 'overpass').length).toBe(1);
   });
 
-  it.each(placed)('seed %i: junkyard corridors are wide, clear of solids, and join two streets', (_seed, c, q) => {
+  it('camp and junkyard pinned on are both there; pinned off, neither is', () => {
+    for (const [, , q] of withBoth) {
+      expect(roleBlocks(q, 'camp')).toHaveLength(1);
+      expect(roleBlocks(q, 'junkyard')).toHaveLength(1);
+      expect(q.dressing.structures.some((st) => st.kind === 'camp')).toBe(true);
+      expect(q.dressing.structures.some((st) => st.kind === 'wreckStack')).toBe(true);
+    }
+    for (const [, , q] of withNeither) {
+      expect(roleBlocks(q, 'camp')).toEqual([]);
+      expect(roleBlocks(q, 'junkyard')).toEqual([]);
+      expect(q.dressing.structures.filter((st) => st.kind === 'camp' || st.kind === 'wreckStack')).toEqual([]);
+    }
+  });
+
+  it.each([...placed, ...withBoth])('seed %i: junkyard corridors are wide, clear of solids, and join two streets', (_seed, c, q) => {
     const corridors = q.dressing.drivable.filter((d) => !vacantLots(q).some((v) => v.rect === d));
     if (!roleBlocks(q, 'junkyard').length) return expect(corridors).toEqual([]);
     const streets = new Set<number>();
@@ -129,7 +152,7 @@ describe('Slums set pieces', () => {
     expect(streets.size).toBeGreaterThanOrEqual(2);
   });
 
-  it.each(placed)('seed %i: camp solids are never in a drivable rect', (_seed, _c, q) => {
+  it.each([...placed, ...withBoth])('seed %i: camp solids are never in a drivable rect', (_seed, _c, q) => {
     for (const s of q.dressing.structures.filter((st) => st.kind === 'camp')) {
       expect(s.footprints.filter((fp) => q.dressing.drivable.some((d) => footprintsOverlap(fp, shrunk(d)))).map(at)).toEqual([]);
     }

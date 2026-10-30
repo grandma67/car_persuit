@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { DEFAULT_CITY, generateCity } from './CityGenerator';
+import { makeCity } from './makeCityParams';
 import { canalRampShape, inRampLane, rampDeckHulls, rampFrame, rampShape, type Landmark } from './Landmarks';
 import { groundHeight, inCanal } from './Terrain';
 import { Vehicle } from '../vehicles/Vehicle';
@@ -10,8 +11,9 @@ const inside = (r: { x: number; z: number; w: number; d: number }, p: { x: numbe
   Math.abs(p.x - r.x) <= r.w / 2 && Math.abs(p.z - r.z) <= r.d / 2;
 
 describe('jump ramp monument', () => {
-  it.each([1, 42, 1234, 99999])('seed %i: each on a paved street in line with the roads (or in a square), with a clear run', (seed) => {
-    const city = generateCity(seed, { ...DEFAULT_CITY, canalRampChance: 0 });
+  it.each([1, 42, 1234, 99999])('from seed %i: each on a paved street in line with the roads (or in a square), with a clear run', (seed) => {
+    const { city } = makeCity(['ramps=2', 'canalramps=0'], { seed });
+    expect(city.landmarks.filter((l) => l.kind === 'ramp')).toHaveLength(2);
     const pitch = city.config.blockSize + city.config.roadWidth;
     const half = city.config.blockSize / 2;
     for (const ramp of city.landmarks.filter((l) => l.kind === 'ramp')) {
@@ -64,8 +66,6 @@ describe('ramps and bridges', () => {
 });
 
 describe('canal ramp', () => {
-  const withCanals = { ...DEFAULT_CITY, canalOdds: [0, 1, 0] as [number, number, number], canalRampChance: 1 };
-
   it('is common, with how many decided by the seed', () => {
     const counts = new Set<number>();
     let cities = 0;
@@ -85,8 +85,8 @@ describe('canal ramp', () => {
     expect(counts.size).toBeGreaterThan(2); // none, one, several
   });
 
-  it.each([3, 8, 21, 77])('seed %i: lip at the quay, facing straight across the canal', (seed) => {
-    const city = generateCity(seed, withCanals);
+  it.each([3, 8, 21, 77])('from seed %i: lip at the quay, facing straight across the canal', (seed) => {
+    const { city } = makeCity(['canals=1', 'canalramps=1'], { seed });
     const ramp = city.landmarks.find((l) => l.crossing !== undefined);
     expect(ramp).toBeDefined();
     const canal = city.terrain.canals.find((c) => c.at === ramp!.crossing)!;

@@ -12,7 +12,7 @@ describe('Chinatown traffic', () => {
   beforeAll(() => RAPIER.init());
 
   // Beside the Old City: ChinatownTrafficOldCity.test.ts (its own file, so the two sims run in parallel).
-  it('civilians keep the main-street cap, never jam and get past the parked vans (alone)', () => passVans({ chinatown: true, oldtown: false }), 180_000);
+  it('civilians keep the main-street cap, never jam and get past the parked vans (alone)', () => passVans(['chinatown=1', 'oldtown=0']), 180_000);
 });
 
 describe('Chinatown runtime rules', () => {

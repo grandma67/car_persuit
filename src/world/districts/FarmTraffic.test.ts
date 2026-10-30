@@ -11,15 +11,14 @@ import { footprintsOverlap, propFootprint } from '../StreetProps';
 import { copSpawnSkips, districtTraffic, roadblockGates } from './runtime';
 import type { DistrictTraffic } from './District';
 import { farmFields, fenceGaps, ranchGate } from './Farm';
-import { cityWorld, DT, flatSeeds, simulate } from './trafficSim';
+import { cityWorld, DT, flatCities, simulate } from './trafficSim';
 
-const ALONE = { farm: true, oldtown: false, chinatown: false, harbor: false, slums: false };
 
 describe('Farm traffic', () => {
   beforeAll(() => RAPIER.init());
 
   it('the hooks carry the Farm\'s values', () => {
-    for (const [, city, q] of flatSeeds('farm', 3, ALONE)) {
+    for (const [, city, q] of flatCities('farm', ['farm'], 3)) {
       const rules = districtTraffic(city);
       for (const id of q.interior) {
         const t = rules.nodes.get(id)!;
@@ -40,7 +39,7 @@ describe('Farm traffic', () => {
 
   it('tractors spawn only in the Farm and round it, and nobody jams behind them', () => {
     const report: Record<string, number>[] = [];
-    for (const [seed, city, q] of flatSeeds('farm', 2, ALONE)) {
+    for (const [seed, city, q] of flatCities('farm', ['farm'], 2)) {
       // Tractors made common, so there is always one in somebody's lane.
       const rules = districtTraffic(city);
       const more = (t: DistrictTraffic): DistrictTraffic => ({ ...t, weights: { ...t.weights, Tractor: 12 } });
@@ -77,7 +76,7 @@ describe('Farm traffic', () => {
 });
 
 describe('Farm off-road routes', () => {
-  const placed = flatSeeds('farm', 8, ALONE);
+  const placed = flatCities('farm', ['farm'], 8);
   const onPath = (path: { x: number; z: number }[], r: { x: number; z: number; w: number; d: number }) => path.some((p) => inRect(r, p));
   /** Points along a path every half metre. */
   const dense = (path: { x: number; z: number }[]) => path.flatMap((p, i) => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity, type Rect } from '../CityGenerator';
+import { makeCity } from '../makeCityParams';
 import { inRect } from '../lots';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type Footprint, type StreetProp } from '../StreetProps';
 import type { District } from './District';
@@ -18,6 +19,12 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'farm');
   return q ? [[seed, c, q] as const] : [];
 });
+/** The Farm alone with `words` pinned, from two seeds. */
+const pinned = (words: string[]) =>
+  [11, 7930].map((seed) => {
+    const { params, city: c } = makeCity(['farm', ...words], { seed });
+    return [params.seed, c, c.districts.find((d) => d.kind === 'farm')!] as const;
+  });
 const inside = (outer: Rect, r: Rect) =>
   Math.abs(r.x - outer.x) + r.w / 2 <= outer.w / 2 + 1e-6 && Math.abs(r.z - outer.z) + r.d / 2 <= outer.d / 2 + 1e-6;
 /** Fence-gap lanes: the way through each gap, kept clear. */
@@ -205,9 +212,13 @@ describe('Farm crops, equipment and props', () => {
     }
   });
 
-  it.each(mazes.length ? mazes : placed.slice(0, 1))('seed %i: a corn maze joins at least two fence gaps', (_seed, _c, q) => {
-    const f = farmFields(q).find((x) => x.maze);
-    if (!f) return;
+  it('the maze pinned off: no field has one', () => {
+    for (const [, , q] of pinned(['!maze'])) expect(farmFields(q).filter((f) => f.maze)).toEqual([]);
+  });
+
+  it.each(pinned(['maze']))('seed %i, maze pinned: a corn maze joins at least two fence gaps', (_seed, _c, q) => {
+    const f = farmFields(q).find((x) => x.maze)!;
+    expect(f).toBeDefined();
     expect(f.crop).toBe('corn');
     const paths = f.maze!;
     for (const r of paths) expect(Math.min(r.w, r.d)).toBeGreaterThanOrEqual(FARM_FIELDS.mazePath - 1e-6);
@@ -256,15 +267,26 @@ describe('Farm runs: harvest night, climate, glow', () => {
     expect(run.structures[0].kind).toBe('pivot');
   });
 
+  it('harvest pinned off: no jack-o\'-lanterns or pyramid even on a night run', () => {
+    for (const [, c, q] of pinned(['!harvest', 'night'])) {
+      expect(extraOf(q).harvest).toBe(false);
+      joinRunDressing(c, { night: true, climate: 'temperate' });
+      expect(c.streetProps.some((p) => p.kind === 'jackOLantern')).toBe(false);
+      expect(q.dressing.structures.some((st) => st.kind === 'balePyramid')).toBe(false);
+    }
+  });
+
   it('joining a desert night run adds the irrigator and the pyramid; snow takes the pumpkins', () => {
-    const [seed] = placed.find(([, , q]) => extraOf(q).harvest && extraOf(q).byClimate.desert.structures.length) ?? placed[0];
-    const desert = city(seed);
+    const { params } = makeCity(['farm', 'harvest', 'night', 'desert'], { seed: 11 });
+    const desert = generateCity(params);
     const q = desert.districts.find((d) => d.kind === 'farm')!;
+    expect(extraOf(q).harvest).toBe(true);
+    expect(extraOf(q).byClimate.desert.structures.length).toBeGreaterThan(0);
     const before = q.dressing.solids.length;
     joinRunDressing(desert, { night: true, climate: 'desert' });
-    expect(q.dressing.structures.some((st) => st.kind === 'pivot')).toBe(extraOf(q).byClimate.desert.structures.length > 0);
+    expect(q.dressing.structures.some((st) => st.kind === 'pivot')).toBe(true);
     expect(q.dressing.solids.length).toBe(before + (extraOf(q).night?.solids.length ?? 0) + extraOf(q).byClimate.desert.solids.length);
-    const snow = city(seed);
+    const snow = generateCity(params);
     joinRunDressing(snow, { night: false, climate: 'snow' });
     const sq = snow.districts.find((d) => d.kind === 'farm')!;
     expect(snow.streetProps.some((p) => p.kind === 'pumpkin' && inRect(sq.bounds, p))).toBe(false);

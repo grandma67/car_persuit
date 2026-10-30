@@ -11,7 +11,7 @@ import { footprintsOverlap } from '../StreetProps';
 import { copSpawnSkips, districtTraffic, roadblockGates } from './runtime';
 import type { District } from './District';
 import { inDistrict } from './apply';
-import { carFootprint, cityWorld, DT, flatSeeds, simulate } from './trafficSim';
+import { carFootprint, cityWorld, DT, flatCities, simulate } from './trafficSim';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const ALONE = { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false };
@@ -41,7 +41,7 @@ describe('Harbor traffic', () => {
   beforeAll(() => RAPIER.init());
 
   it('civilians come in, heavies too, and never jam or touch a crane leg, stack or truck', () => {
-    const report = flatSeeds('harbor', 2, ALONE).map(([seed, city, q]) => solidSim(seed, city, q));
+    const report = flatCities('harbor', ['harbor'], 2).map(([seed, city, q]) => solidSim(seed, city, q));
     expect(report.length).toBeGreaterThan(0);
     for (const r of report) {
       expect(r.cars, JSON.stringify(r)).toBeGreaterThan(5);

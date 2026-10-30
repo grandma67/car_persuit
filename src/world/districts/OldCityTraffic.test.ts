@@ -12,17 +12,16 @@ import { inRect } from '../lots';
 import { footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
 import { keepOf } from '../driveSide';
 import { copSpawnSkips, roadblockGates } from './runtime';
-import { carFootprint, cityWorld, DT, flatSeeds, simulate } from './trafficSim';
+import { carFootprint, cityWorld, DT, flatCities, simulate } from './trafficSim';
 
 const HEAVY = new Set(['bus', 'boxtruck', 'truck', 'ramptruck']);
-const FORCE = { oldtown: true };
 
 describe('Old City traffic', () => {
   beforeAll(() => RAPIER.init());
 
   it('civilians keep the cap, keep heavies out, never touch the clutter and do not jam inside', () => {
     const report: Record<string, number>[] = [];
-    for (const [seed, city, q] of flatSeeds('oldtown', 2, FORCE)) {
+    for (const [seed, city, q] of flatCities('oldtown', ['oldtown=1'], 2)) {
       // The "player" circles off to one side, so traffic spawns all round the district.
       const clutter = q.dressing.props.map((p) => propFootprint(p));
       const inner: typeof q.bounds = { ...q.bounds, w: q.bounds.w - 30, d: q.bounds.d - 30 }; // past the cap's easing-in
@@ -53,7 +52,7 @@ describe('Old City traffic', () => {
   }, 120_000);
 
   it('kerb clutter leaves every lane clear: nothing within clutterMinOffset of a centre line', () => {
-    for (const [, city, q] of flatSeeds('oldtown', 6, FORCE)) {
+    for (const [, city, q] of flatCities('oldtown', ['oldtown=1'], 6)) {
       for (const p of q.dressing.props) {
         const fp = propFootprint(p);
         const reach = Math.hypot(fp.hx, fp.hz);
@@ -72,7 +71,7 @@ describe('Old City police', () => {
   it('cop spawns inside the walls are rarer than without the skip', () => {
     const inside = { skip: 0, none: 0 };
     let total = 0;
-    for (const [seed, city, q] of flatSeeds('oldtown', 4, FORCE)) {
+    for (const [seed, city, q] of flatCities('oldtown', ['oldtown=1'], 4)) {
       // The player waits at junctions 150–230 m from the district, so its streets are in spawn range.
       const d = (n: { x: number; z: number }) => Math.hypot(n.x - q.bounds.x, n.z - q.bounds.z);
       const targets = city.graph.nodes.filter((n) => n.neighbors.length && d(n) > 150 && d(n) < 230).slice(0, 16);

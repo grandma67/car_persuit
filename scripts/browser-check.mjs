@@ -22,11 +22,12 @@
 //   --eval-file  read the expression from a file instead (no shell quoting)
 //   --no-final   skip the screenshot after the expression (when it took its own shots)
 //   --city   a params file (npm run city -- make/dump): loaded with dbg.loadCity once the page is up
+//   --make   "words…": npm run city -- make <words> into a temp file, loaded as --city
 //   --start  press Enter to start the mission, then wait this many ms        default off
 //   --size   viewport WxH (390x844 for a phone)                               default 1280x800
 //   --port   Vite port                                                        default 5199
 // A Vite server already listening on --port is reused (start one with `npx vite --port 5199`).
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -39,6 +40,11 @@ const vitePort = Number(args.port ?? 5199);
 const debugPort = vitePort + 1000;
 const [w, h] = (args.size ?? '1280x800').split('x').map(Number);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+if (args.make) {
+  args.city = join(mkdtempSync(join(tmpdir(), 'cp-city-')), 'city.json');
+  const made = execFileSync('node', ['scripts/run-ts.mjs', 'scripts/city.ts', 'make', ...args.make.split(/\s+/), '--out', args.city], { encoding: 'utf8' });
+  process.stderr.write(made);
+}
 
 const children = [];
 const cleanup = () => children.forEach((c) => c.kill());
