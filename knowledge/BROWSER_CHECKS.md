@@ -57,7 +57,7 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)` | model studio, HUD hidden |
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
-| `dumpCity(download?)`, `loadCity(file)` | this run's params as text (downloads `city-<seed>.json`); restart in place with a params file (errors throw, nothing restarts; Retry keeps it). `check:browser --city <file>` does the load; `scripts/evals/city-reload.js` checks dump → load is the same city |
+| `dumpCity(download?)`, `loadCity(file)` | this run's params as text (downloads `city-<seed>.json`); restart in place with a params file (errors throw, nothing restarts; Retry keeps it). `check:browser --city <file>` does the load; `npm run check:reload` (`scripts/evals/city-reload.js`) checks dump → load is the same city |
 
 ## Restart and leaks
 
@@ -104,6 +104,9 @@ feel to the user.
 
 ## Pitfalls
 
+- Draw calls read a few high for a frame or two after any restart (Retry, New city, `loadCity`), with
+  plain seeds too: compare the lowest of a few samples ~700 ms apart (`city-reload.js` does).
+- `--make` words without `seed=` start from a random seed: a check that must repeat passes one.
 - Measure `dbg.stats()` **before** any `aerial()` (the overview turns fog off and every material
   recompiles: 35 read as 58; `stats()` warns) and before a drive breaks props (a first break can add one).
 - Stray triangles or holes near an aerial camera are near-plane clipping (`aerial()` sets near = 1 m):

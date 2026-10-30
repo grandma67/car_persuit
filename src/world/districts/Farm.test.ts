@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity, type Rect } from '../CityGenerator';
 import { makeCity } from '../makeCityParams';
+import { districtCities } from '../paramsTesting';
 import { inRect } from '../lots';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type Footprint, type StreetProp } from '../StreetProps';
 import type { District } from './District';
@@ -19,12 +20,6 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'farm');
   return q ? [[seed, c, q] as const] : [];
 });
-/** The Farm alone with `words` pinned, from two seeds. */
-const pinned = (words: string[]) =>
-  [11, 7930].map((seed) => {
-    const { params, city: c } = makeCity(['farm', ...words], { seed });
-    return [params.seed, c, c.districts.find((d) => d.kind === 'farm')!] as const;
-  });
 const inside = (outer: Rect, r: Rect) =>
   Math.abs(r.x - outer.x) + r.w / 2 <= outer.w / 2 + 1e-6 && Math.abs(r.z - outer.z) + r.d / 2 <= outer.d / 2 + 1e-6;
 /** Fence-gap lanes: the way through each gap, kept clear. */
@@ -213,10 +208,10 @@ describe('Farm crops, equipment and props', () => {
   });
 
   it('the maze pinned off: no field has one', () => {
-    for (const [, , q] of pinned(['!maze'])) expect(farmFields(q).filter((f) => f.maze)).toEqual([]);
+    for (const [, , q] of districtCities('farm', ['!maze'])) expect(farmFields(q).filter((f) => f.maze)).toEqual([]);
   });
 
-  it.each(pinned(['maze']))('seed %i, maze pinned: a corn maze joins at least two fence gaps', (_seed, _c, q) => {
+  it.each(districtCities('farm', ['maze']))('seed %i, maze pinned: a corn maze joins at least two fence gaps', (_seed, _c, q) => {
     const f = farmFields(q).find((x) => x.maze)!;
     expect(f).toBeDefined();
     expect(f.crop).toBe('corn');
@@ -268,7 +263,7 @@ describe('Farm runs: harvest night, climate, glow', () => {
   });
 
   it('harvest pinned off: no jack-o\'-lanterns or pyramid even on a night run', () => {
-    for (const [, c, q] of pinned(['!harvest', 'night'])) {
+    for (const [, c, q] of districtCities('farm', ['!harvest', 'night'])) {
       expect(extraOf(q).harvest).toBe(false);
       joinRunDressing(c, { night: true, climate: 'temperate' });
       expect(c.streetProps.some((p) => p.kind === 'jackOLantern')).toBe(false);

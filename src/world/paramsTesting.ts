@@ -7,6 +7,7 @@ import { TIME_NAMES } from './CityTheme';
 import { CLIMATES, WEATHER_NAMES } from './Climate';
 import { parseCityParams, serializeCityParams } from './CityParamsFile';
 import { DISTRICT_DEFS } from './districts/index';
+import type { District, DistrictKind } from './districts/District';
 import { makeCity, urlOverrides, WORDS, type Word } from './makeCityParams';
 
 /**
@@ -23,6 +24,18 @@ export const cityJson = (city: CityData) =>
     if (key === 'graph') return value.nodes;
     return value;
   });
+
+/**
+ * A district's cities with `words` pinned (its kind added: it alone, unless the words name others),
+ * one per start seed: [the seed makeCity used, the city, the district]. For a feature test, on and off:
+ * `districtCities('farm', ['maze'])`, `districtCities('farm', ['!maze'])`.
+ */
+export function districtCities(kind: DistrictKind, words: string[], seeds = [11, 7930]): [number, CityData, District][] {
+  return seeds.map((seed) => {
+    const { params, city } = makeCity([kind, ...words], { seed });
+    return [params.seed, city, city.districts.find((d) => d.kind === kind)!];
+  });
+}
 
 /** Values for the words that take a number. */
 const NUMBERS: Record<string, string[]> = {

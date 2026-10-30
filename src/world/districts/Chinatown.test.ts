@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from '../CityGenerator';
-import { makeCity } from '../makeCityParams';
+import { districtCities } from '../paramsTesting';
 import { inRect } from '../lots';
 import { CHINATOWN, CHINATOWN_GATES, DISTRICTS } from '../../gameplay/balance';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
@@ -17,14 +17,8 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'chinatown');
   return q ? [[seed, c, q] as const] : [];
 });
-/** Chinatown alone with `words` pinned, from two seeds. */
-const pinned = (words: string[]) =>
-  [11, 7930].map((seed) => {
-    const { params, city: c } = makeCity(['chinatown', ...words], { seed });
-    return [params.seed, c, c.districts.find((d) => d.kind === 'chinatown')!] as const;
-  });
-const squared = pinned(['square']);
-const festive = pinned(['festival', 'night']);
+const squared = districtCities('chinatown', ['square']);
+const festive = districtCities('chinatown', ['festival', 'night']);
 
 // Shared rules (solids off the paving, junction controls, prop spacing, kerb offset, overhead
 // clearance, stable per seed, a block apart) are in DistrictRules.test.ts.
@@ -243,7 +237,7 @@ describe('Chinatown shops, props and vans', () => {
 
   it('the pagoda square pinned on is there; pinned off, it is not', () => {
     for (const [, , q] of squared) expect(squareBlock(q)).toBeDefined();
-    for (const [, , q] of pinned(['!square'])) {
+    for (const [, , q] of districtCities('chinatown', ['!square'])) {
       expect(squareBlock(q)).toBeUndefined();
       expect(q.dressing.landmarks.filter((l) => l.kind === 'pagoda')).toEqual([]);
     }
@@ -287,7 +281,7 @@ describe('Chinatown at night', () => {
       expect(extra(q).festival).toBe(true);
       expect(extra(q).festivalStrings.length).toBeGreaterThan(0);
     }
-    for (const [, , q] of pinned(['!festival', 'night'])) {
+    for (const [, , q] of districtCities('chinatown', ['!festival', 'night'])) {
       expect(extra(q).festival).toBe(false);
       expect(extra(q).festivalStrings).toEqual([]);
       expect(extra(q).nightProps.filter((p) => p.kind === 'dragonFloat' || p.kind === 'lionDance')).toEqual([]);

@@ -1,5 +1,6 @@
 // A dumped city loads back as the same city (dbg.dumpCity → dbg.loadCity), Retry keeps the params,
 // New city drops them:
+//   npm run check:reload   (seed 9, every district forced, night, rain; shots in node_modules/.cache/check-reload)
 //   npm run check:browser -- --query "seed=N&debug[&<URL flags>]" --out-dir <dir> --no-final \
 //     --eval-file scripts/evals/city-reload.js
 // Shots `seed` and `file` are the same aerial of the same city (compare them); stats are taken before

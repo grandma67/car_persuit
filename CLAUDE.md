@@ -37,7 +37,8 @@ destinations, cops, civilian traffic, themed districts.
   avg lots/landmarks/props/structures, gen ms on vs off).
 - City params: `npm run city -- make <words…> [seed=N] [--full] [--out f]` (a city with the words
   come true, e.g. `flat night chinatown festival`, `canals=2 canalramps=1 england`; may move to a later
-  seed and says which), `dump <seed> [URL words]` (what `?seed=N&…` builds, complete), `check <file…>`,
+  seed and says which; without `seed=` it starts from a random one, so a check or test always passes
+  `seed=`), `dump <seed> [URL words]` (what `?seed=N&…` builds, complete), `check <file…>`,
   `show <file | seed | words…>` (ASCII map), `words` (the vocabulary). In the game with `?debug`:
   `dbg.dumpCity()` / `dbg.loadCity(json)`; `check:browser --city f` / `--make "words"`.
 - Seeds to look at: `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`
@@ -53,6 +54,10 @@ destinations, cops, civilian traffic, themed districts.
 - Restart/leaks: `npm run check:restart` (Retry/New city in place on a city made with every district and
   feature: fullscreen, splash, heap, GPU orphans named by creation site via `?gputrace`). Run it after
   anything that adds to the scene, page or listeners.
+- Params reload: `npm run check:reload` (a dumped city loads back as the same city, Retry keeps it, New
+  city drops it). Run it after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or `city.params`.
+- Browser runs take 1–2 min each: settle their inputs (seed, words) before the first one, and run them
+  in the background while editing the next thing.
 
 ## Working rules (from the user)
 
@@ -105,6 +110,10 @@ destinations, cops, civilian traffic, themed districts.
   to have it, a config chance set to 0 or 1, or a committed JSON. Pin it off too (`!festival`).
   Seeds stay only where the seed is the subject: invariant sweeps over ~40 seeds, roll and frequency
   tests, `[1, 42, 1234]` variety lists. A new pinnable thing gets a word in `WORDS` (and its test).
+  A district feature on and off: `districtCities('farm', ['maze'])` / `['!maze']` (`paramsTesting.ts`).
+- **Grid size:** `generateCity(seed)` builds on the config's fixed 12-block grid; `generateCity({ seed })`
+  and words roll it (8–15) like the game. Moving a test from a seed to words changes its grid unless
+  it adds `blocks=12` (as `flatCities` does).
 - `BuildingGeometry.test.ts` snapshots no-district geometry per theme: a failure is a bug unless intended
   (then `npx vitest run -u` and explain in the commit).
 - A refactor meant to change nothing: `npm run hash -- --vs HEAD` (120 cities) before committing.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DISTRICTS, SLUMS } from '../../gameplay/balance';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 import { generateCity, type Rect } from '../CityGenerator';
-import { makeCity } from '../makeCityParams';
+import { districtCities } from '../paramsTesting';
 import { inRect } from '../lots';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
 import type { District } from './District';
@@ -18,14 +18,8 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'slums');
   return q ? [[seed, c, q] as const] : [];
 });
-/** The Slums alone with `words` pinned, from two seeds. */
-const pinned = (words: string[]) =>
-  [11, 7930].map((seed) => {
-    const { params, city: c } = makeCity(words, { seed });
-    return [params.seed, c, c.districts.find((d) => d.kind === 'slums')!] as const;
-  });
-const withBoth = pinned(['camp', 'junkyard']);
-const withNeither = pinned(['slums', '!camp', '!junkyard']);
+const withBoth = districtCities('slums', ['camp', 'junkyard']);
+const withNeither = districtCities('slums', ['!camp', '!junkyard']);
 const inside = (outer: Rect, r: Rect) =>
   Math.abs(r.x - outer.x) + r.w / 2 <= outer.w / 2 + 1e-6 && Math.abs(r.z - outer.z) + r.d / 2 <= outer.d / 2 + 1e-6;
 const shrunk = (r: Rect) => rectFootprint({ ...r, w: r.w - 0.02, d: r.d - 0.02 });
