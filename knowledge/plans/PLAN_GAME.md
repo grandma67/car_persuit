@@ -1,8 +1,8 @@
 # Car Pursuit: design notes
 
 A browser 3D car-chase game (GTA-style wanted stars) on a seeded island city, deployed to GitHub Pages
-as an installable PWA. Milestones M0–M7 are done; work now is polish and features. Districts:
-[DISTRICTS.md](../DISTRICTS.md). Physics engine version: [RAPIER.md](../RAPIER.md).
+as an installable PWA. Work now is polish and features. Districts: [DISTRICTS.md](../DISTRICTS.md);
+city params: [CITY_PARAMS.md](../CITY_PARAMS.md); physics version: [RAPIER.md](../RAPIER.md).
 
 ## Rules
 
@@ -16,44 +16,44 @@ as an installable PWA. Milestones M0–M7 are done; work now is polish and featu
 ## Tech
 
 TypeScript + Vite, Three.js, Rapier (`@dimforge/rapier3d-compat` 0.18.2, ray-cast vehicles), HTML/CSS
-HUD, procedural Web Audio. No server: records and prefs live in localStorage (and IndexedDB for prefs)
-under the game's own keys; the github.io origin is shared.
+HUD, procedural Web Audio, Node ≥ 24. No server: records and prefs live in localStorage (prefs also in
+IndexedDB) under the game's own keys; the github.io origin is shared.
 
 ```
 src/
-  core/      Game (fixed 60 Hz physics, state machine), Input, seeded Rng, storage, debugTools
-  world/     CityGenerator, RoadGraph, Terrain, Climate, CityTheme, TrafficControl, Landmarks,
-             Roadworks, StreetProps/PropSystem, CityBuilder (meshes + colliders), districts/
+  core/      Game (fixed 60 Hz physics, state machine), Input, seeded Rng, storage, debugTools, gpuTrace
+  world/     CityParams, makeCityParams, CityGenerator, RoadGraph, Terrain, Climate, CityTheme,
+             TrafficControl, Landmarks, Roadworks, StreetProps/PropSystem, CityBuilder, districts/
   vehicles/  Vehicle, VehicleSpecs, carMesh, gears
-  ai/        CopController, CopDirector, NavGrid, pursuit, lineOfSight, CivilianTraffic/Controller, junctions
+  ai/        CopController, CopDirector, NavGrid, pursuit, lineOfSight, CivilianTraffic/Controller, junctions, horn
   gameplay/  Mission, Wanted, Health, CopContact, Records, RunLog, Prefs, difficulty, balance.ts
   render/    camera, sky, sea/canals, weather, skid marks, smoke, crash marks, scratches, glows, districts/
   audio/     engine, effects, menu music
   ui/        Hud, Minimap, RunMap, Screens, TouchControls, fullscreen
 ```
 
-Generation and gameplay logic are pure data (no Three.js), unit-tested with Vitest. Tuning lives in
-`gameplay/balance.ts`.
+Generation and gameplay logic are pure data (no Three.js), unit-tested with Vitest.
 
-Retry and New city don't reload the page (that would leave fullscreen on phones): `main.ts` disposes
-the Game (`Game.dispose()`: scene GPU resources, Rapier world, DOM, listeners, car mesh templates) and
-builds the next one behind the splash, keeping the renderer and audio (`GameShell`). The seed goes into
-the URL with `history.replaceState`. Anything a run adds to the page must be undone in `dispose()`;
-`npm run check:restart` checks it (`BROWSER_CHECKS.md` Restart and leaks).
+**Restart in place:** Retry and New city don't reload the page (that would leave fullscreen on phones).
+`main.ts` disposes the Game (`Game.dispose()`: scene GPU resources, Rapier world, DOM, listeners, car
+mesh templates) and builds the next one behind the splash, keeping the renderer and audio (`GameShell`).
+The seed goes into the URL with `history.replaceState`. Anything a run adds to the page must be undone
+in `dispose()` (`npm run check:restart`, [BROWSER_CHECKS.md](../BROWSER_CHECKS.md)).
 
 ## World
 
-- 8x8 to 15×15 grid (rolled per seed, own RNG stream) of 60 m blocks, 12 m roads, on a seeded hill,
-  ringed by a 10 m promenade (lamps, benches facing the sea), a quay and an animated sea; 0–2 canals
+- 8×8 to 15×15 grid (rolled per seed, own stream) of 60 m blocks, 12 m roads, on a seeded hill, ringed
+  by a 10 m promenade (lamps, benches facing the sea), a quay and an animated sea; 0–2 canals
   (12–100 m wide) with bridges every few blocks.
-- Zones by distance, scaling with the grid: at 12×12 downtown towers (~12 blocks), a thin midtown ring (~32), residential/industrial
-  outside by noise (the two outer rows always). Parks, drivable plazas (shortcuts cops don't path
-  through), town squares with fountains and statues, jump ramps ("The Leap", canal ramps).
+- Zones by distance, scaling with the grid (at 12×12: ~12 downtown tower blocks, a thin midtown ring of
+  ~32, residential/industrial outside by noise, the two outer rows always). Parks, drivable plazas
+  (shortcuts cops don't path through), town squares with fountains and statues, jump ramps ("The Leap",
+  canal ramps).
 - The seed picks style, time of day, climate (temperate, snow, beach, desert), weather (rain/snow) and,
   rarely, left-hand traffic.
 - Traffic lights, priority junctions with stop signs, crossings, bus stops, 90 km/h main streets,
   roadworks; lamps, hydrants, signs, fences, trees and more are breakable.
-- Districts (Old City, Chinatown, Harbor, Farm, Slums) overlay themed blocks: [DISTRICTS.md](../DISTRICTS.md).
+- Districts (Old City, Chinatown, Harbor, Farm, Slums) overlay themed blocks.
 
 ## Police
 
@@ -65,60 +65,55 @@ the URL with `history.replaceState`. Anything a run adds to the page must be und
 | 4 | 5:00 | 8 | SUV rammers + roadblocks (every 35 s, 140–260 m ahead on the route) |
 | 5 | 7:00 | 10 | Armored trucks |
 
-- The director spawns cops hidden round corners 120–260 m away, 60% ahead on the player's route, never
-  within 60 m of the destination; cops > 260 m away or flipped for 3 s are moved back into play.
-- Cops follow turn- and speed-aware road routes (a turn costs the time lost braking for it: 60 m of
-  road per 90°, 220 m to turn round) aimed up to 2 s ahead of the suspect, switch to lead pursuit with
-  line of sight, ram, back off when pinned, and steer off-road (`NavGrid`, never a U-turn on the spot
-  while moving) round obstacles. Feelers reach as far as stopping takes: they follow a car ahead at its
-  pace, swerve when closing, brake when boxed in, and check behind before reversing. Ideas for losing them: `STAGE2_IDEAS.md`.
+The director spawns cops hidden round corners 120–260 m away, 60% ahead on the player's route, never
+within 60 m of the destination; cops > 260 m away or flipped for 3 s are moved back into play. Cops take
+turn-aware road routes aimed ahead of the suspect, lead-pursue and ram in sight, and go off-road on a
+NavGrid. How the brain works: [COPS_DEV.md](../COPS_DEV.md). Ideas for losing them: `STAGE2_IDEAS.md`.
 
 ## Civilians
 
 Cars, vans, pickups, buses, box trucks, tractors (Farm) and a rare ramp truck. They keep lane, obey
-lights and priority, signal, queue, react to brake lights, stop at bus stops and drive on after
-crashes. Checked by headless junction and real-city traffic sims.
+lights and priority, signal, queue, react to brake lights, stop at bus stops, drive on after crashes,
+and honk (a blast when bumped, beeps when the player or a crashed car blocks them, never at a queue).
+Checked by headless junction and real-city traffic sims.
 
 ## Presentation
 
 Damage (smoke, fire, explosion, scratches/dents, delta-V crash damage), skid marks and tyre smoke, body
-dive/squat, lights and indicators, sea and canal sounds, pass-by whoosh, civilian horns (a blast when bumped, beeps when
-the player or a crashed car blocks them, never at a queue), minimap, end-screen run map
-(route by speed plus incidents, shareable as an image), splash scene, local leaderboard, touch controls
-(optional tilt steering), fullscreen.
+dive/squat, lights and indicators, sea and canal sounds, pass-by whoosh, horns (H for the player), look
+back (B), minimap, end-screen run map (route by speed plus incidents, shareable as an image), splash
+scene, local leaderboard, touch controls (optional tilt steering), fullscreen.
 
 ## URL flags
 
 - Anyone: `?seed=`, `?time=day|afternoon|night`, `?<district>=0|1` (`oldtown`, `chinatown`, `harbor`,
-  `farm`, `slums`), `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?blocks=N` (grid size), `?touch`.
+  `farm`, `slums`), `?roadworks`, `?canalramp`, `?england`, `?blocks=N`, `?touch`.
 - `?debug`: FPS counter; keys C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`,
-  `?weather=`, `?hill=0|1`; `window.game` and `window.dbg` in the console (see `BROWSER_CHECKS.md`).
-  `dbg.dumpCity()` downloads the run's city params (JSON); `dbg.loadCity(json)` restarts in place with a
-  params file (from it, `npm run city -- make/dump`): Retry keeps it, New city goes back to a seed. No
-  URL flag loads a file, and the share link carries only the seed.
-- All city flags go through `urlOverrides` (`world/makeCityParams.ts`), the words' table: `npm run city
-  -- dump <seed> <flags as words>` writes what a link builds.
+  `?weather=`, `?canals=N`, `?hill=0|1`; `window.game` and `window.dbg` (`BROWSER_CHECKS.md`), including
+  `dbg.dumpCity()` / `dbg.loadCity(json)` (`CITY_PARAMS.md`).
 - `?gputrace`: `window.gpuTrace` names every GPU resource with its creation site (leak hunting).
+- City flags are words: `urlOverrides` in `world/makeCityParams.ts`; `npm run city -- dump <seed> <flags>`
+  shows what a link builds.
 
 ## Versions
 
-No git tags; versions are grouped by day of work.
+No git tags; grouped by day of work.
 
-- **v0.1 (2026-10-10):** M0–M7: scaffold, drivable car, seeded city, 5-destination mission, cops with
-  wanted stars and roadblocks, civilian traffic, lights and signs, breakable props, minimap, health and
+- **v0.1 (2026-10-10):** scaffold, drivable car, seeded city, 5-destination mission, cops with wanted
+  stars and roadblocks, civilian traffic, lights and signs, breakable props, minimap, health and
   explosions, touch controls, difficulty, leaderboard.
-- **v0.2 (10-11):** buses, trucks, ramp truck; climates and rain; roadworks; "The Leap"; cops spawn
-  hidden round corners; share link; repairs at destinations.
-- **v0.3 (10-12):** offline PWA; hill, canals, bridges, canal ramps; drowning ends the run; handbrake
-  drifts; turn signals; scratches and dents; body dive/squat and gears.
-- **v0.4 (10-13):** No Police mode; left-hand traffic; junction priority, bus stops, 90 km/h main
-  streets, smarter civilians; cops chase off-road; exhaust; splash scene; shareable run map; mute and
-  difficulty remembered.
+- **v0.2 (10-11):** buses, trucks, ramp truck; climates and rain; roadworks; "The Leap"; hidden cop
+  spawns; share link; repairs at destinations.
+- **v0.3 (10-12):** offline PWA; hill, canals, bridges, canal ramps; drowning; handbrake drifts; turn
+  signals; scratches and dents; body dive/squat and gears.
+- **v0.4 (10-13):** No Police; left-hand traffic; junction priority, bus stops, 90 km/h streets, smarter
+  civilians; off-road cops; exhaust; splash scene; shareable run map; mute and difficulty remembered.
 - **v0.5 (10-14):** performance (long runs, spawns, shader warm-up, phone shadows), Node 24, turn-aware
   cop routing, FPS counter, wanted-level sound, fullscreen with landscape lock.
 - **v0.6 (10-15):** districts framework; the Old City; sea waves, safer jump landings, pass-by whoosh,
   crash kinematics and delta-V damage.
 - **v0.7 (10-16):** districts 2×2 to 4×4 in more places; Chinatown.
-- **v0.8 (10-22):** the Harbor.
-- **v0.9 (10-22):** the Farm.
-- **v0.10 (10-23):** the Slums.
+- **v0.8–v0.10 (10-22, 10-23):** the Harbor, the Farm, the Slums.
+- **v0.11 (10-23, 10-24):** grid size per seed (8–15); cops brake for what's ahead, costlier turns,
+  head the suspect off; look back (B); civilian horns and the player's (H); Retry/New city in place.
+- **v0.12 (10-30):** city params: every city choice as JSON, built from feature words.

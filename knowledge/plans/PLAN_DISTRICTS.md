@@ -2,9 +2,9 @@
 
 What each district is: `DISTRICTS.md`. How they are built: `DISTRICTS_DEV.md`. Open work: `TASKS.md`.
 
-**Status:** Q0, Old City, Chinatown, Harbor and Farm built and merged (their ambience audio skipped).
-Slums built on `districts/slums`, waiting for approval to merge. Effort: Q0 ~5–6 h, Old City ~9–11 h,
-Chinatown ~12–14 h, Harbor, Farm, Slums ~12–15 h each.
+**Status:** Q0 (framework), Old City, Chinatown, Harbor, Farm and Slums built and merged; their
+ambience audio skipped. Effort: Q0 ~5–6 h, Old City ~9–11 h, Chinatown ~12–14 h, Harbor, Farm, Slums
+~12–15 h each.
 
 ## Design intent worth keeping (beyond what the code shows)
 
@@ -27,6 +27,9 @@ Chinatown ~12–14 h, Harbor, Farm, Slums ~12–15 h each.
 - **Chinatown glyphs (2026-10-15):** canvas text from system fonts into an atlas at load, generic
   serif/sans fallback.
 - **Ambience audio (all districts): skipped** so far (see `TASKS.md`).
+- **Slums tuning left for the user's feel:** `rubbleGrip` 0.8, `rubbleDrag` 1.5, `potholeKick` 0.35.
+- **Slums night:** one working lamp per junction + one `flicker` lamp per street (bulb colour only);
+  lit windows don't flicker (they are baked into the facade texture).
 
 ## Dropped ideas
 
@@ -41,4 +44,4 @@ Chinatown ~12–14 h, Harbor, Farm, Slums ~12–15 h each.
 - A drivable or breakable Slums camp (see Respect in `DISTRICTS.md`).
 - Buildings that collapse when hit (colliders are the lot box); the ruin is already down.
 - A ramp off the ruin's leaning slab (ramps are placed before the overlay); maybe later.
-- Slums freight train over the overpass (optional, skipped).
+- Slums freight train over the overpass (optional, skipped; `SLUMS.trainChance` is a dead knob).

@@ -14,10 +14,18 @@ block keeps its zone).
   `perimeterWall`, `isJunctionControl`, `inDistrict` (squares: `makeSquare` in `world/Landmarks.ts`).
 - `runtime.ts`: `districtTraffic` (speed caps with ease-in, `heavy: false` keeps buses/trucks out,
   `density`, spawn `weights`), `copSpawnSkips` (`skipAt(x, z)` on the spawn spot), `roadblockGates`,
-  `districtOfNode`, `nightProps` (`dressing.extra.nightProps`, joined to `city.streetProps` by `Game` on
-  night runs only; generation never depends on time).
-- `index.ts`: `DISTRICT_DEFS`. `rules.ts`: checks every district keeps. Renderers:
-  `render/districts/index.ts` (`DISTRICT_RENDERERS[kind]`: structures, overhead, ground patches).
+  `districtOfNode`, `joinRunDressing` (`Game` joins `extra.nightProps` on night runs and
+  `extra.byClimate[climate]` (props, ground, tint) per run; generation never depends on time or climate).
+- `index.ts`: `DISTRICT_DEFS`. `rules.ts`: checks every district keeps. `trims.ts`: shared trims.
+  Renderers: `render/districts/index.ts` (`DISTRICT_RENDERERS[kind]`: structures, overhead, ground).
+
+| District | Data (`world/districts/`) | Render (`render/districts/`) |
+|---|---|---|
+| Old City | `OldCity`, `OldCityWalls` | `OldCity` |
+| Chinatown | `Chinatown`, `ChinatownGates` | `Chinatown`, `ChinatownShops`, `glyphs` |
+| Harbor | `Harbor`, `HarborGate`, `HarborQuay`, `HarborYard` | `Harbor`, `HarborGate`, `HarborQuay`, `containers`, `harborLights`, `harborSigns` |
+| Farm | `Farm`, `FarmFields`, `FarmGate`, `FarmNight` | `Farm`, `farmCrops`, `farmSigns` |
+| Slums | `Slums`, `SlumsSet` (ruins, overpass, junkyard, camp), `SlumsStreet` (street dressing, last on the stream; `climateDressing`) | `Slums`, `slumsGraffiti`, `slumsSigns` |
 
 **Placement:** roll a shape, try every rectangle of it (both orientations) in `rings` meeting
 `minShare`/`minCore`, shuffled; else other shapes largest first; else drop (a district only shrinks).
@@ -48,8 +56,9 @@ ground; `softGround` → `Vehicle.softGround.at` returns a `SoftPatch` (grip, dr
 
 ## City facts districts depend on
 
-- Grid 12×12 blocks of 60 m, 12 m roads, 10 m promenade, then sea. Midtown is a thin ring; canals and
-  town squares take many blocks, so harmless-sounding rules can kill placement.
+- Grid 8–15 blocks a side (rolled per seed; 12 in `generateCity(seed)` and the tools' default) of 60 m,
+  12 m roads, 10 m promenade, then sea. Midtown is a thin ring; canals and town squares take many
+  blocks, so harmless-sounding rules can kill placement.
 - Sidewalk 3 m inside each block; lane centre 3 m from the centre line (`LANE_OFFSET`); widest body
   (armoured, bus) half width 1.25 m → edge ~4.25 m; civilian dodge 3.5 m (`DODGE_OFFSET`).
 - Junction rules come from props: signals and `stop`/`priority` → `approachControls`, `speed90` →
@@ -114,8 +123,8 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
    `feature(q, 'festival', rng.next() < CHINATOWN.festivalChance)` (the draw is made even when pinned),
    declare it in the def's `features` (`'bool'`, `'int'` or a list of names; night-only ones in
    `nightFeatures`), and add `built(q, city)` if a pinned one can find no room. That gives it a word
-   (`festival`, `!festival`, `<kind>.name` on a clash) in `npm run city` and the tests, a field in
-   dumps, and a check in `cityWords*.test.ts` (extend `paramsTesting.ts` if its promise needs more).
+   (`festival`, `!festival`, `<kind>.name` on a clash), a field in dumps, and a check in
+   `cityWords*.test.ts` ([CITY_PARAMS.md](CITY_PARAMS.md)).
 3. Looks: facade styles in `Facades.ts` (+ `CAPS`), roofs in `addRoof`, trims in `addTrims`.
 4. Renderer `render/districts/<Name>.ts` in `DISTRICT_RENDERERS`.
 5. Docs: `DISTRICTS.md` (table row + section, odds line), `plans/PLAN_GAME.md` version line, README mention.
@@ -134,6 +143,8 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
   within 1 m of the sidewalk line, Harbor lots stand 2–4 m back (`frontMask`).
 - A texture given to a shader by `onBeforeCompile` must also sit in `material.userData.uniforms`, or
   Retry leaks it (`npm run check:restart`, `BROWSER_CHECKS.md` Restart and leaks).
+- Props that must not budge (Slums wrecks on bricks or flipped) are props with `breakSpeed` ∞
+  (`SOLID_WRECKS`), not solids. A wreck at a corridor mouth cost a third of the speed (hence the 3 m rule).
 - Watch: cops snagging clutter near junctions (push `clutterMinOffset` out), the chase camera clipping
   low overhead pieces, crane span tracking sidewalk + road + promenade (~25 m, from `DEFAULT_CITY`), a
   shallow hull poking through the shader swell, cops bogging in soft ground, glow and fill cost on phones.
@@ -145,14 +156,15 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
   `world/districts`, `CityGenerator`, `lots.ts`.
 - Real district: `<Name>.test.ts` beside it, `generateCity(seed, undefined, { force: { oldtown: true } })`
   over ~40 seeds (`i * 7919 + 11`) for the invariants. A test about one feature pins it with words,
-  on and off: `makeCity(['chinatown', 'festival', 'night'], { seed })`, `['slums', '!camp']` (never a
-  seed that happens to roll it); a "when there is one" sweep also runs on the pinned cities. Assert plan items as logic: geometry vs road rects
+  on and off: `districtCities('farm', ['maze'])` / `['!maze']`, `makeCity(['chinatown', 'festival',
+  'night'], { seed })`; a "when there is one" sweep also runs on the pinned cities. Assert plan items as logic: geometry vs road rects
   (`footprintsOverlap`, `rectFootprint`, `city.roads`, `city.intersections`), heights vs clearance,
   lot/role counts, junction controls unchanged. Prefer all-seed properties. Checks return the list of
   breaks: `expect(breaks).toEqual([])`, never `expect` inside a loop over props × roads (that cost 40 s).
 - Traffic/cops on a real city: `districts/trafficSim.ts` (`flatCities(kind, words, n)`: flat 12-block
-  cities from words, `cityWorld`, `simulate` hands each car per step; see `SlumsTraffic.test.ts`). Don't extend the synthetic junction sims (`ai/junctionSim.ts`,
-  `IntersectionSim`, `CivilianTurns`): they can't hold a district. A sim over ~8 s gets its own file
+  cities from words, `cityWorld`, `simulate` hands each car per step; see `SlumsTraffic.test.ts`).
+  Don't extend the synthetic junction sims (`ai/junctionSim.ts`, `IntersectionSim`, `CivilianTurns`):
+  they can't hold a district. A sim over ~8 s gets its own file
   (files run in parallel, tests in a file don't).
 - `StreetProps.test` / `BuildingGeometry.test` use the default registry or `defs: []`; new districts
   appear on their seeds, so exempt district dressing where it may differ.

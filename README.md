@@ -8,7 +8,7 @@ A low-poly 3D car-chase game for the browser. Reach 5 destinations across a rand
 npm install && npm run dev
 ```
 
-Add `?seed=1234` to replay a city, `?time=day|afternoon|night` to force the time of day. Installable as an offline PWA.
+Add `?seed=1234` to replay a city, `?time=day|afternoon|night` to force the time of day, `?blocks=N` for the grid size. Installable as an offline PWA.
 
 | | Keyboard | Touch |
 |---|---|---|
@@ -16,6 +16,7 @@ Add `?seed=1234` to replay a city, `?time=day|afternoon|night` to force the time
 | Steer | A / D | ◀ ▶ |
 | Handbrake (drift) | Space | HB |
 | Reset car | R | ⟲ |
+| Horn / look back | H / B | |
 | Pause / mute / fullscreen | P or Esc / M / F | pause menu |
 
 ## Features
@@ -31,8 +32,8 @@ Add `?seed=1234` to replay a city, `?time=day|afternoon|night` to force the time
 
 ```bash
 npm run dev     # dev server
-npm test        # unit tests (Vitest)
+npm run t       # unit tests (Vitest; failures + summary only)
 npm run build   # type-check + build into dist/
 ```
 
-Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`. Design notes and URL flags: [PLAN_GAME.md](knowledge/plans/PLAN_GAME.md); districts: [DISTRICTS.md](knowledge/DISTRICTS.md).
+Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`. Design notes and URL flags: [PLAN_GAME.md](knowledge/plans/PLAN_GAME.md); districts: [DISTRICTS.md](knowledge/DISTRICTS.md); developer docs: [CLAUDE.md](CLAUDE.md).

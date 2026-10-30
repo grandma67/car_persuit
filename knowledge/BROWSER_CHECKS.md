@@ -57,11 +57,11 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)` | model studio, HUD hidden |
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
-| `dumpCity(download?)`, `loadCity(file)` | this run's params as text (downloads `city-<seed>.json`); restart in place with a params file (errors throw, nothing restarts; Retry keeps it). `check:browser --city <file>` does the load; `npm run check:reload` (`scripts/evals/city-reload.js`) checks dump → load is the same city |
+| `dumpCity(download?)`, `loadCity(file)` | this run's params as text; restart in place with a params file (`CITY_PARAMS.md`). `npm run check:reload` (`scripts/evals/city-reload.js`): dump → load is the same city, Retry keeps it, New city drops it |
 
 ## Restart and leaks
 
-Retry / New city build the next Game in the page (`Game.dispose()`, see `PLAN_GAME.md` Tech).
+Retry / New city build the next Game in the page (`Game.dispose()`, `PLAN_GAME.md` Tech).
 **`npm run check:restart`** (`scripts/evals/restart.js`, ~1.5 min) checks it, `ok` + `failures` first:
 fullscreen kept through Retry and New city on the end screen, seed kept/changed and in the URL, splash
 hidden with no animation running on it (`document.getAnimations()`), one canvas/screen/touch layer;
