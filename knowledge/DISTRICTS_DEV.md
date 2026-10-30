@@ -110,6 +110,12 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
    register in `index.ts`. Playable via `?<kind>=1`.
 2. `roles`/`lots`/`dress` are **pure data** using only the given `rng`. Solids in `dressing.solids`,
    off-road ground in `drivable`, overhead pieces with `bottom` ≥ clearance.
+   Each named roll (a special block, a signature piece, an on/off look) is a **feature**: roll it as
+   `feature(q, 'festival', rng.next() < CHINATOWN.festivalChance)` (the draw is made even when pinned),
+   declare it in the def's `features` (`'bool'`, `'int'` or a list of names; night-only ones in
+   `nightFeatures`), and add `built(q, city)` if a pinned one can find no room. That gives it a word
+   (`festival`, `!festival`, `<kind>.name` on a clash) in `npm run city` and the tests, a field in
+   dumps, and a check in `cityWords*.test.ts` (extend `paramsTesting.ts` if its promise needs more).
 3. Looks: facade styles in `Facades.ts` (+ `CAPS`), roofs in `addRoof`, trims in `addTrims`.
 4. Renderer `render/districts/<Name>.ts` in `DISTRICT_RENDERERS`.
 5. Docs: `DISTRICTS.md` (table row + section, odds line), `plans/PLAN_GAME.md` version line, README mention.
@@ -138,14 +144,17 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
   gates, main street, wall loop, lots, clutter offsets, runtime rules. Run after any change in
   `world/districts`, `CityGenerator`, `lots.ts`.
 - Real district: `<Name>.test.ts` beside it, `generateCity(seed, undefined, { force: { oldtown: true } })`
-  over ~40 seeds (`i * 7919 + 11`). Assert plan items as logic: geometry vs road rects
+  over ~40 seeds (`i * 7919 + 11`) for the invariants. A test about one feature pins it with words,
+  on and off: `makeCity(['chinatown', 'festival', 'night'], { seed })`, `['slums', '!camp']` (never a
+  seed that happens to roll it); a "when there is one" sweep also runs on the pinned cities. Assert plan items as logic: geometry vs road rects
   (`footprintsOverlap`, `rectFootprint`, `city.roads`, `city.intersections`), heights vs clearance,
   lot/role counts, junction controls unchanged. Prefer all-seed properties. Checks return the list of
   breaks: `expect(breaks).toEqual([])`, never `expect` inside a loop over props × roads (that cost 40 s).
-- Traffic/cops on a real city: `districts/trafficSim.ts` (`flatSeeds`, `cityWorld`, `simulate` hands each
-  car per step; see `SlumsTraffic.test.ts`). Don't extend the synthetic junction sims (`ai/junctionSim.ts`,
+- Traffic/cops on a real city: `districts/trafficSim.ts` (`flatCities(kind, words, n)`: flat 12-block
+  cities from words, `cityWorld`, `simulate` hands each car per step; see `SlumsTraffic.test.ts`). Don't extend the synthetic junction sims (`ai/junctionSim.ts`,
   `IntersectionSim`, `CivilianTurns`): they can't hold a district. A sim over ~8 s gets its own file
   (files run in parallel, tests in a file don't).
 - `StreetProps.test` / `BuildingGeometry.test` use the default registry or `defs: []`; new districts
   appear on their seeds, so exempt district dressing where it may differ.
-- Browser checks per milestone: [BROWSER_CHECKS.md](BROWSER_CHECKS.md).
+- Browser checks per milestone: [BROWSER_CHECKS.md](BROWSER_CHECKS.md); `--make "<kind> <feature>
+  night"` opens a city that has it.

@@ -93,6 +93,11 @@ the player or a crashed car blocks them, never at a queue), minimap, end-screen 
   `farm`, `slums`), `?roadworks`, `?canalramp`, `?england`, `?canals=N`, `?blocks=N` (grid size), `?touch`.
 - `?debug`: FPS counter; keys C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`,
   `?weather=`, `?hill=0|1`; `window.game` and `window.dbg` in the console (see `BROWSER_CHECKS.md`).
+  `dbg.dumpCity()` downloads the run's city params (JSON); `dbg.loadCity(json)` restarts in place with a
+  params file (from it, `npm run city -- make/dump`): Retry keeps it, New city goes back to a seed. No
+  URL flag loads a file, and the share link carries only the seed.
+- All city flags go through `urlOverrides` (`world/makeCityParams.ts`), the words' table: `npm run city
+  -- dump <seed> <flags as words>` writes what a link builds.
 - `?gputrace`: `window.gpuTrace` names every GPU resource with its creation site (leak hunting).
 
 ## Versions

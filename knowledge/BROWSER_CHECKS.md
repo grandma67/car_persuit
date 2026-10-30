@@ -1,7 +1,9 @@
 # Browser checks
 
 `npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-dir <dir> --no-final --eval-file <file.js>`
-(`scripts/browser-check.mjs`): headless Chrome, always **muted**. It reuses a Vite server on the port:
+(`scripts/browser-check.mjs`). A city with a feature: `--make "flat chinatown festival night"` (runs
+`npm run city -- make` into a temp file) or `--city <file>` (a dump or a made file), loaded with
+`dbg.loadCity` once the page is up, before `--start`; needs `debug` in the query. The tool: headless Chrome, always **muted**. It reuses a Vite server on the port:
 start `npx vite --port 5199` once per session in the background (~10 s per run). Output JSON: `val`,
 `shots`, console errors/warnings (Rapier deprecation filtered). Phone perf: `--size 390x844`.
 
@@ -63,15 +65,16 @@ Retry / New city build the next Game in the page (`Game.dispose()`, see `PLAN_GA
 **`npm run check:restart`** (`scripts/evals/restart.js`, ~1.5 min) checks it, `ok` + `failures` first:
 fullscreen kept through Retry and New city on the end screen, seed kept/changed and in the URL, splash
 hidden with no animation running on it (`document.getAnimations()`), one canvas/screen/touch layer;
-then 10 same-seed restarts with heap (after `gc()`), geometries, textures and programs per restart
-(must hold), every old Game collected (WeakRefs), and the GPU orphan list. Every district is forced on
-with night and rain, so their resources are in every city; seed 9 also rolls Chinatown's festival and
-the Farm's harvest night (no flag forces those: if the rolls move, find a seed with both again). The
-first two runs drive a 5★ chase first (`busy=ms`), so mid-run objects (cops, scratches, broken props,
-fireworks) are in the Game being disposed. Run it after anything that adds to the
-scene, the page or a listener. Own seed or flags: `npm run check:browser -- --query
-"seed=N&debug&gputrace&restarts=10&shots=1&<flags>" --start 1500 --out-dir <dir> --no-final
---eval-file scripts/evals/restart.js` (`shots=1`: end screen and menu shots per step).
+then 10 same-city restarts with heap (after `gc()`), geometries, textures and programs per restart
+(must hold), every old Game collected (WeakRefs), and the GPU orphan list. Its city is made from words
+(`--make` in `package.json`): every district with every feature that has a look, night and rain, so
+their resources are in the city disposed; the quick restarts reload it. A new feature with a look
+joins those words. The first two runs drive a 5★ chase first (`busy=ms`), so mid-run objects (cops,
+scratches, broken props, fireworks) are in the Game being disposed. Run it after anything that adds
+to the scene, the page or a listener. Own city: `npm run check:browser -- --query
+"debug&gputrace&restarts=10&shots=1" --make "<words>" --start 1500 --out-dir <dir> --no-final
+--eval-file scripts/evals/restart.js` (`shots=1`: end screen and menu shots per step; or
+`--query "seed=N&…&<flags>"` without `--make`).
 
 When it fails, read `orphans` (`gpuTrace`, below): each names the code that created the leak.
 Things `dispose()` can't see on its own:
