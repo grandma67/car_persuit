@@ -13,6 +13,8 @@ destinations, cops, civilian traffic, themed districts.
 | `knowledge/DISTRICTS_DEV.md` | **read before district work**: framework, files, rules, budgets, pitfalls, tests | tracked |
 | `knowledge/COPS_DEV.md` | **read before cop AI work**: brain, tuning and why, pitfalls, `npm run cops` metrics | tracked |
 | `knowledge/BROWSER_CHECKS.md` | **read before a browser run**: `check:browser`, evals, `window.dbg`, leaks, pitfalls | tracked |
+| `knowledge/OPTIMIZATIONS.md` | **read before perf work**: techniques, measured costs, ranked fixes, `perf-profile.js` | tracked |
+| `knowledge/OPTIMIZATION_TASKS.md` | perf tasks step by step: baseline, milestones M1–M4, checks per task | tracked |
 | `knowledge/RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
 | `knowledge/plans/PLAN_DISTRICTS.md` | district decisions, dropped ideas | tracked |
 | `knowledge/plans/PLAN_CITY_PARAMS.md` | city params decisions, what changed from the plan | tracked |
