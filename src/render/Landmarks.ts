@@ -487,11 +487,13 @@ export class Landmarks {
           : RAPIER.ColliderDesc.cuboid(l.radius * 0.8, 3, l.radius * 0.8).setTranslation(l.x, y + 3, l.z);
       this.colliders.add(world.createCollider(desc).handle);
     }
-    // One instanced mesh per district piece kind (lions, cannons …), snow-capped in a snowy city.
+    // One instanced mesh per district piece kind (lions, cannons …), snow-capped in a snowy city. Their
+    // own copy of `solid`: one material on instanced and plain meshes rebuilds its program key every frame.
+    const solidInstanced = plain.size ? solid.clone() : solid;
     for (const [kind, matrices] of plain) {
       const model = modelOf(kind);
       const cap = this.snowy ? SNOW_CAPS[kind as keyof typeof SNOW_CAPS]?.() : undefined;
-      const mesh = new THREE.InstancedMesh(cap ? mergeGeometries([model, cap]) : model, solid, matrices.length);
+      const mesh = new THREE.InstancedMesh(cap ? mergeGeometries([model, cap]) : model, solidInstanced, matrices.length);
       matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
       mesh.computeBoundingSphere();
       mesh.castShadow = mesh.receiveShadow = true;

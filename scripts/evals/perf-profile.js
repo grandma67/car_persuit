@@ -113,11 +113,15 @@
 
   const out = {};
   out.stats = dbg.stats();
+  out.mixedMaterials = dbg.mixedMaterials?.(); // expected empty (OPTIMIZATION_TASKS 1.1)
   out.idle = await sample(3000);
   dbg.police(false);
   const drive = dbg.hold('KeyW', 7000);
   await sleep(1500);
   out.cruise = await sample(5000);
+  // Garbage budget while cruising (OPTIMIZATION_TASKS M1: 30 → 16 MB/s on seed 9, + ~30%). Most of
+  // what's left is three's WebGL uniform calls (per draw) and Rapier's getters (per car per step).
+  out.budget = { allocMBperSec: out.cruise.allocMBperSec <= 21, mixedMaterials: !out.mixedMaterials?.length };
   await drive;
   dbg.police(true);
   await dbg.stars(5);

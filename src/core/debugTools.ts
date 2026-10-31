@@ -7,6 +7,8 @@ import { inRect } from '../world/lots';
 import type { Game } from './Game';
 import { createStudio, type StudioShot } from './debugStudio';
 import { readCityParams, serializeCityParams } from '../world/CityParamsFile';
+import { mixedMaterials } from '../render/mixedMaterials';
+import type * as THREE from 'three';
 
 type P = { x: number; z: number };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -258,6 +260,10 @@ export function debugTools(game: Game) {
       // for the rest of the run. Measure before any aerial().
       const warn = aerialUsed ? 'aerial() ran: fog was off, programs not comparable' : undefined;
       return { programs: g.renderer.info.programs?.length ?? 0, calls, triangles, staticTris: Math.round(staticTris), ...(warn ? { warn } : {}) };
+    },
+    /** Materials shared by an instanced and a plain mesh (each costs garbage every frame): expected empty. */
+    mixedMaterials() {
+      return mixedMaterials(g.scene as unknown as THREE.Object3D);
     },
     /**
      * This run's complete params as a file (what `npm run city -- dump` writes for its seed and URL

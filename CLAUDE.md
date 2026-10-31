@@ -90,6 +90,12 @@ destinations, cops, civilian traffic, themed districts.
 - Tuning → `gameplay/balance.ts`; generation config → `DEFAULT_CITY`; URL city flags → `urlOverrides`
   (`world/makeCityParams.ts`; `Game` never reads the URL for city choices).
 - Buildings: one merged mesh per facade style, one shared roof mesh; never give a lot its own mesh or material.
+- A material is drawn by one kind of mesh only: plain, instanced, or instanced with `instanceColor`
+  (give every instanced user colours, or each kind a `.clone()`); otherwise three switches programs every
+  draw. `dbg.mixedMaterials()` must stay `[]` (shadow pass included: `separateInstancedShadows`).
+- A vehicle's state: read `vehicle.position`/`quaternion`/`vel`/`spin` (as of the last step), not the
+  Rapier getters (each allocates); change its velocity from outside the step with `push`/`setVelocity`
+  (never `body.applyImpulse`/`setLinvel`), or `vel` goes stale.
 - New hooks: optional constructor params defaulting to "no district", so tests and seeds don't move.
 - Anything a run adds to the page or scene must be freed by `Game.dispose()` (Retry/New city restart in place).
 - Big files (`CityBuilder`, `CivilianController`, `CopDirector`, `PropSystem`, `Game`): `grep -n`, read slices.

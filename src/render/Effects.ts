@@ -205,8 +205,7 @@ export class Effects {
     const skid = player.skid;
 
     // Skid marks + smoke from rear wheels while sliding.
-    const v = player.body.linvel();
-    this.tmpVel.set(v.x, v.y, v.z);
+    this.tmpVel.copy(player.vel);
     // Scaled by speed so a car that has slowed down stops piling smoke on itself.
     const speedFactor = THREE.MathUtils.clamp(Math.abs(player.speed) / 15, 0, 1);
     this.smokeBudget += skid > 0.15 ? SMOKE_PER_SECOND * skid * speedFactor * dt : 0;
@@ -303,7 +302,7 @@ export class Effects {
         // Blown out backwards, harder the more throttle, then left hanging in the air.
         const exit = EXHAUST_EXIT[0] + (EXHAUST_EXIT[1] - EXHAUST_EXIT[0]) * throttle;
         const back = player.forward(this.tmpContact).multiplyScalar(-exit);
-        const v = player.body.linvel();
+        const v = player.vel;
         // emit() keeps EXHAUST_CARRY of this: the car's speed (its wake) plus the exit speed.
         this.tmpVel.set(v.x + back.x / EXHAUST_CARRY, 0, v.z + back.z / EXHAUST_CARRY);
         const emit = (smoke: TireSmoke, count: number) => {

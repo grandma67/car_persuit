@@ -243,7 +243,7 @@ export class CopController {
 
     // Pinned (close and no longer closing in: stopped against the suspect, or shoving them
     // along): don't just push — back off and hit them again.
-    const lv = v.body.linvel();
+    const lv = v.vel;
     const closing = Math.hypot(lv.x - target.velocity.x, lv.z - target.velocity.z);
     if (this.state === 'ram' && this.runUpFor === 0 && dist < t.pinRange && closing < 2) this.pinnedFor += dt;
     else this.pinnedFor = 0;

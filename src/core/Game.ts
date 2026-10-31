@@ -39,7 +39,7 @@ import { PassBy } from '../audio/passBy';
 import { keepOf } from '../world/driveSide';
 import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
-import { Minimap } from '../ui/Minimap';
+import { Minimap, type MinimapTarget } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
 import { DestinationMarker } from '../render/DestinationMarker';
 import { MissionSystem, pickDestinations, routeAim, type Route } from '../gameplay/MissionSystem';
@@ -59,8 +59,9 @@ import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { TiltInput, detectTilt, requestTiltPermission } from './tilt';
 import { getPref, setPref } from './idbPrefs';
-import { COP_RAM, DAMAGE, SLUMS } from '../gameplay/balance';
+import { COP_RAM, DAMAGE, SLUMS, type StarLevel } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
+import { separateInstancedShadows } from '../render/instancedShadows';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 3; // more only snowballs on a slow phone: each catch-up step makes the frame slower still
@@ -69,6 +70,9 @@ const CIVILIAN_PROP_RANGE = 90; // metres: civilians nearer the player than this
 const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
 const SINK_DEPTH = 3; // metres under the surface a car in the water comes to rest
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+const UP = new THREE.Vector3(0, 1, 0);
+const tmpA = new THREE.Vector3(); // scratch for the frame
+const tmpB = new THREE.Vector3();
 const STEER_PREF = 'steering'; // IndexedDB key: 'buttons' | 'tilt'
 const SHADOW_HALF = 125; // metres: half the width of the sun's shadow map
 const SHADOW_LEAD = 60; // metres ahead of the car to centre the shadow map, towards what the camera sees
@@ -163,6 +167,11 @@ export class Game {
   private sirens: Sirens;
   private glows: GlowBatch;
   private glowCars: CarMesh[] = []; // reused each frame
+  // Also reused each frame: the player and cops for the traffic, the director's level, the minimap's cops and target.
+  private otherVehicles: Vehicle[] = [];
+  private levelArg: StarLevel | null = null;
+  private copDots: THREE.Vector3[] = [];
+  private mapTarget: MinimapTarget = { x: 0, z: 0, final: false };
   private mission: MissionSystem;
   private route: Route | null = null;
   private routeTimer = 0;
@@ -254,6 +263,7 @@ export class Game {
       movers: () => [this.player, ...this.director.cops.map((c) => c.vehicle)],
     });
     this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
+    separateInstancedShadows(this.scene);
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
@@ -646,7 +656,7 @@ export class Game {
     let ramDamage = 0;
     let crashSound = 0; // loudest car-on-car/wall crash heard this frame, 0..1 (strength × distance)
     const breaks: PropBreak[] = [];
-    const lv = this.player.body.linvel();
+    const lv = this.player.vel;
     this.chaseTarget.position.copy(this.player.position);
     this.chaseTarget.velocity.set(lv.x, 0, lv.z);
     const copsChase = this.state === 'playing';
@@ -679,7 +689,7 @@ export class Game {
           // Measured along the truck's own up axis, so it still holds parked on a slope.
           const onRamp =
             car.vehicle.spec.body === 'ramptruck' &&
-            this.player.position.clone().sub(car.vehicle.position).dot(new THREE.Vector3(0, 1, 0).applyQuaternion(car.vehicle.quaternion)) > -0.5;
+            tmpA.copy(this.player.position).sub(car.vehicle.position).dot(tmpB.copy(UP).applyQuaternion(car.vehicle.quaternion)) > -0.5;
           car.controller.hit(!onRamp);
           if (this.state === 'playing' && !onRamp && car.vehicle.position.distanceTo(this.player.position) < 8) {
             this.logIncident('civilian', `Crashed into a ${car.vehicle.spec.name.toLowerCase()}`);
@@ -690,15 +700,15 @@ export class Game {
       const smashed = this.scratchOnProps(this.player, this.props.checkVehicle(this.player, FIXED_DT));
       // A firecracker crate goes off under the car: a hop and a shove back, no damage.
       if (smashed.some((b) => b.kind === 'firecrackerCrate')) {
-        const v = this.player.body.linvel();
+        const v = this.player.vel;
         const m = this.player.body.mass();
-        this.player.body.applyImpulse({ x: -v.x * m * 0.12, y: m * 2.2, z: -v.z * m * 0.12 }, true);
+        this.player.push({ x: -v.x * m * 0.12, y: m * 2.2, z: -v.z * m * 0.12 });
       }
       if (this.state === 'playing') this.runLog.propsSmashed += smashed.length;
-      breaks.push(...smashed);
+      for (const b of smashed) breaks.push(b);
       for (const cop of this.director.cops) {
         cop.vehicle.snapshot();
-        breaks.push(...this.scratchOnProps(cop.vehicle, this.props.checkVehicle(cop.vehicle, FIXED_DT)));
+        for (const b of this.scratchOnProps(cop.vehicle, this.props.checkVehicle(cop.vehicle, FIXED_DT))) breaks.push(b);
         if (copsChase && cop.wreckedFor === null) {
           const contact = this.copContactDamage(cop, FIXED_DT);
           ramDamage += contact.damage;
@@ -725,7 +735,11 @@ export class Game {
     for (const car of this.traffic.cars) car.vehicle.syncMesh(alpha);
     if (this.carShadowCull) this.cullCarShadows();
     this.checkWater();
-    this.traffic.update(this.player.position, [this.player, ...this.director.cops.map((c) => c.vehicle)]);
+    const others = this.otherVehicles;
+    others.length = 0;
+    others.push(this.player);
+    for (const cop of this.director.cops) others.push(cop.vehicle);
+    this.traffic.update(this.player.position, others);
     if (this.state === 'playing' && this.police) {
       this.raiseStars(this.wanted.update(frameDt));
       const level = this.wanted.level;
@@ -733,7 +747,7 @@ export class Game {
         frameDt,
         this.chaseTarget,
         this.player.forward(),
-        { ...level, maxCops: scaledCopCap(level.maxCops, this.difficulty) },
+        this.levelFor(level),
         this.route?.path ?? null,
         this.mission.current,
       );
@@ -780,8 +794,8 @@ export class Game {
       carPos.z,
       Math.atan2(fwd.x, fwd.z),
       target ? (this.route?.path ?? null) : null,
-      target ? { x: target.x, z: target.z, final: this.mission.index === this.mission.total - 1 } : null,
-      this.director.activeCops.map((c) => c.vehicle.position),
+      target ? this.mapTargetAt(target) : null,
+      this.copDotsNow(),
       this.rampTruckOnMap(),
     );
 
@@ -900,8 +914,7 @@ export class Game {
     for (const v of [this.player, ...this.director.cops.map((c) => c.vehicle)]) {
       if (!this.sunk.has(v) || v.position.y > SEA_LEVEL - SINK_DEPTH) continue;
       v.body.setGravityScale(0, true);
-      v.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      v.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      v.setVelocity({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     }
   }
 
@@ -909,7 +922,7 @@ export class Game {
   private waterBlast(vehicle: Vehicle, size: number): void {
     this.sunk.add(vehicle);
     const body = vehicle.body;
-    const v = body.linvel();
+    const v = vehicle.vel;
     const at = vehicle.position.clone().setY(SEA_LEVEL);
     this.effects.splash(at, new THREE.Vector3(v.x, 0, v.z));
     this.effects.explode(at.setY(SEA_LEVEL + 0.8), { fireball: 90 * size, smoke: 60 * size, fire: 0, flash: 4000 * size });
@@ -932,10 +945,11 @@ export class Game {
 
   /** Wrecked: the car blows up — fireball, flash, smoke, a jolt into the air — then the lose screen. */
   private explode(): void {
-    const body = this.player.body;
     const m = this.player.spec.mass;
-    body.applyImpulse({ x: (Math.random() - 0.5) * m * 2, y: m * 7, z: (Math.random() - 0.5) * m * 2 }, true);
-    body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m * 3, y: (Math.random() - 0.5) * m, z: (Math.random() - 0.5) * m * 3 }, true);
+    this.player.push(
+      { x: (Math.random() - 0.5) * m * 2, y: m * 7, z: (Math.random() - 0.5) * m * 2 },
+      { x: (Math.random() - 0.5) * m * 3, y: (Math.random() - 0.5) * m, z: (Math.random() - 0.5) * m * 3 },
+    );
 
     this.player.mesh.paint.color.multiplyScalar(0.15);
     this.player.lightsOff = true;
@@ -951,6 +965,31 @@ export class Game {
   }
 
   /** The ramp truck for the minimap: where it is and which way it launches you. */
+  /** The wanted level with the cop cap scaled for the difficulty (one object, refilled). */
+  private levelFor(level: StarLevel): StarLevel {
+    const arg = (this.levelArg ??= { ...level });
+    Object.assign(arg, level);
+    arg.maxCops = scaledCopCap(level.maxCops, this.difficulty);
+    return arg;
+  }
+
+  /** The mission target for the minimap (one object, refilled). */
+  private mapTargetAt(target: { x: number; z: number }): MinimapTarget {
+    const t = this.mapTarget;
+    t.x = target.x;
+    t.z = target.z;
+    t.final = this.mission.index === this.mission.total - 1;
+    return t;
+  }
+
+  /** Active cops' positions for the minimap (one array, refilled). */
+  private copDotsNow(): THREE.Vector3[] {
+    const dots = this.copDots;
+    dots.length = 0;
+    for (const c of this.director.activeCops) dots.push(c.vehicle.position);
+    return dots;
+  }
+
   private rampTruckOnMap(): { x: number; z: number; yaw: number } | null {
     const truck = this.traffic.rampTruck?.vehicle;
     if (!truck) return null;
@@ -966,7 +1005,7 @@ export class Game {
   /** Smashing through street furniture scuffs the front (or whichever way the car was going). */
   private scratchOnProps(vehicle: Vehicle, hits: readonly PropBreak[]): readonly PropBreak[] {
     if (hits.length) {
-      const v = vehicle.body.linvel();
+      const v = vehicle.vel;
       scratchCar(vehicle, new THREE.Vector3(v.x, 0, v.z), 0.15 * hits.length);
     }
     return hits;
@@ -1047,8 +1086,7 @@ export class Game {
     if (this.state === 'playing') this.raiseStars(this.wanted.copWrecked());
     const v = cop.vehicle;
     const m = v.spec.mass;
-    v.body.applyImpulse({ x: 0, y: m * 5, z: 0 }, true);
-    v.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m * 3, y: 0, z: (Math.random() - 0.5) * m * 3 }, true);
+    v.push({ x: 0, y: m * 5, z: 0 }, { x: (Math.random() - 0.5) * m * 3, y: 0, z: (Math.random() - 0.5) * m * 3 });
     v.mesh.paint.color.multiplyScalar(0.15);
     const at = v.position.clone().setY(v.position.y + 0.8);
     this.effects.explode(at, { fireball: 60, smoke: 40, fire: 0, flash: 3000 });
@@ -1176,7 +1214,7 @@ export class Game {
   /** Civilians leaning on the horn (see horn.ts): fading with distance, panned to where they are. */
   private honks(): void {
     const p = this.player.position;
-    const right = this.player.forward(new THREE.Vector3()).cross(new THREE.Vector3(0, 1, 0)); // forward × up
+    const right = this.player.forward(tmpA).cross(UP); // forward × up
     for (const car of this.traffic.cars) {
       const honk = car.controller.honk();
       if (!honk || this.state !== 'playing') continue;
@@ -1194,16 +1232,18 @@ export class Game {
   /** A whoosh for each car the player flashes past close (or that flashes past them). */
   private whooshes(): void {
     const p = this.player.position;
-    const pv = this.player.body.linvel();
-    const right = this.player.forward(new THREE.Vector3()).cross(new THREE.Vector3(0, 1, 0)); // forward × up
-    for (const v of [...this.traffic.cars.map((c) => c.vehicle), ...this.director.cops.map((c) => c.vehicle)]) {
+    const pv = this.player.vel;
+    const right = this.player.forward(tmpA).cross(UP); // forward × up
+    const pass = (v: Vehicle) => {
       const rx = v.position.x - p.x;
       const rz = v.position.z - p.z;
-      if (rx * rx + rz * rz > 50 * 50) continue;
-      const ov = v.body.linvel();
+      if (rx * rx + rz * rz > 50 * 50) return;
+      const ov = v.vel;
       const w = this.passBy.check(v, rx, rz, ov.x - pv.x, ov.z - pv.z, right.x, right.z, v.spec.mass);
       if (w) this.audio.whoosh(w.strength, w.pan, w.heavy, w.speed);
-    }
+    };
+    for (const car of this.traffic.cars) pass(car.vehicle);
+    for (const cop of this.director.cops) pass(cop.vehicle);
   }
 }
 
@@ -1221,6 +1261,7 @@ function disposeScene(scene: THREE.Scene): void {
     if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points || o instanceof THREE.Sprite) {
       o.geometry.dispose();
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
+      if (o.customDepthMaterial) materials.add(o.customDepthMaterial);
     }
     if (o instanceof THREE.InstancedMesh) o.dispose();
     if (o instanceof THREE.Light) o.dispose();

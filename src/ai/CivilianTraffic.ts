@@ -122,69 +122,87 @@ export function civilianSpecVariants(): VehicleSpec[] {
  * straight off the bonnet at the cars waiting at the cross street's stop line.
  */
 let sensorRay: RAPIER.Ray | null = null; // reused: three new rays per car per look was GC churn
+const RAY_SIDES = [0, -1, 1] as const; // centre, then the left and right corners of the bumper
+const tmpFwd = new THREE.Vector3();
 
 export function forwardObstacle(world: RAPIER.World, vehicle: Vehicle, range: number, corridor?: readonly { x: number; z: number }[]): Obstacle | null {
+  // Runs for every car every few steps: plain numbers and a reused ray, no objects until something is seen.
   const p = vehicle.position;
-  const f = vehicle.forward();
+  const f = vehicle.forward(tmpFwd);
   const start = vehicle.spec.halfExtents.z + 0.3;
   const reach = vehicle.spec.halfExtents.x - 0.1;
   // Bumper height, not the body centre: from a tall bus the centre-height ray passed over cars.
   const y = p.y - vehicle.spec.halfExtents.y + 0.3;
-  let best: Obstacle | null = null;
+  let bestDistance = Infinity;
+  let bestSide = 0;
   let blocker: RAPIER.Collider | null = null;
-  let legDir = { x: f.x, z: f.z };
+  let legX = f.x;
+  let legZ = f.z;
   // Legs: bumper → each corridor point in turn; without a corridor, one leg straight ahead.
-  let from = { x: p.x + f.x * start, z: p.z + f.z * start };
+  let fromX = p.x + f.x * start;
+  let fromZ = p.z + f.z * start;
   let travelled = 0;
   // Lane points the bumper has already passed would send the first leg backwards.
   let first = 0;
-  while (corridor && first < corridor.length - 1 && (corridor[first].x - from.x) * f.x + (corridor[first].z - from.z) * f.z < 1) first++;
-  const legs = corridor?.length ? corridor.slice(first) : [{ x: from.x + f.x * range, z: from.z + f.z * range }];
-  for (let i = 0; i < legs.length && travelled < range && !best; i++) {
-    const to = i === legs.length - 1 && corridor ? extend(from, legs[i], range - travelled) : legs[i];
-    const len = Math.hypot(to.x - from.x, to.z - from.z);
+  while (corridor && first < corridor.length - 1 && (corridor[first].x - fromX) * f.x + (corridor[first].z - fromZ) * f.z < 1) first++;
+  const legs = corridor?.length ? corridor.length - first : 1;
+  const ray = (sensorRay ??= new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }));
+  for (let i = 0; i < legs && travelled < range && !blocker; i++) {
+    // The last corridor leg runs on to the end of the range.
+    let toX = corridor?.length ? corridor[first + i].x : fromX + f.x * range;
+    let toZ = corridor?.length ? corridor[first + i].z : fromZ + f.z * range;
+    if (i === legs - 1 && corridor) {
+      const k = Math.max(1, (range - travelled) / (Math.hypot(toX - fromX, toZ - fromZ) || 1));
+      toX = fromX + (toX - fromX) * k;
+      toZ = fromZ + (toZ - fromZ) * k;
+    }
+    const len = Math.hypot(toX - fromX, toZ - fromZ);
     if (len < 0.1) continue;
-    const dx = (to.x - from.x) / len;
-    const dz = (to.z - from.z) / len;
+    const dx = (toX - fromX) / len;
+    const dz = (toZ - fromZ) / len;
     // The first leg rises and falls with the car's pitch, so on a hill it still sees the car ahead up (or down) the slope.
     const dy = i === 0 ? f.y : 0;
     const legLen = Math.min(len, range - travelled);
-    for (const side of [0, -1, 1]) {
+    for (let s = 0; s < RAY_SIDES.length; s++) {
+      const side = RAY_SIDES[s];
       // Right of the leg is (-dz, dx).
-      const ray = (sensorRay ??= new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }));
-      ray.origin = { x: from.x - dz * reach * side, y, z: from.z + dx * reach * side };
-      ray.dir = { x: dx, y: dy, z: dz };
-      const limit = best ? best.distance - travelled : legLen;
+      ray.origin.x = fromX - dz * reach * side;
+      ray.origin.y = y;
+      ray.origin.z = fromZ + dx * reach * side;
+      ray.dir.x = dx;
+      ray.dir.y = dy;
+      ray.dir.z = dz;
+      const limit = blocker ? bestDistance - travelled : legLen;
       const hit = world.castRay(ray, limit, true, RAPIER.QueryFilterFlags.EXCLUDE_FIXED, CAR_GROUPS, vehicle.collider, vehicle.body);
       if (!hit) continue;
-      best = { distance: travelled + hit.timeOfImpact, aligned: true, moving: false, side };
+      bestDistance = travelled + hit.timeOfImpact;
+      bestSide = side;
       blocker = hit.collider;
-      legDir = { x: dx, z: dz };
+      legX = dx;
+      legZ = dz;
     }
     travelled += legLen;
-    from = to;
+    fromX = toX;
+    fromZ = toZ;
   }
-  const body = blocker?.parent();
-  if (best && body) {
-    const q = body.rotation();
+  if (!blocker) return null;
+  const best: Obstacle = { distance: bestDistance, aligned: true, moving: false, side: bestSide };
+  const body = blocker.parent();
+  if (body) {
+    // A car's state as of the last step, without the allocating Rapier getters; other bodies read live.
+    const car = body.userData instanceof Vehicle ? body.userData : null;
+    const q = car ? car.quaternion : body.rotation();
     // Blocker's heading (+Z rotated by its quaternion), dotted with the lane where we saw it.
     const bx = 2 * (q.x * q.z + q.w * q.y);
     const bz = 1 - 2 * (q.x * q.x + q.y * q.y);
-    best.aligned = bx * legDir.x + bz * legDir.z > ALIGNED;
-    const v = body.linvel();
+    best.aligned = bx * legX + bz * legZ > ALIGNED;
+    const v = car ? car.vel : body.linvel();
     best.moving = Math.hypot(v.x, v.z) > 1;
     best.handle = body.handle;
-    best.speed = v.x * legDir.x + v.z * legDir.z;
-    best.braking = (body.userData as { brakeLit?: boolean } | undefined)?.brakeLit === true;
+    best.speed = v.x * legX + v.z * legZ;
+    best.braking = car?.brakeLit === true;
   }
   return best;
-}
-
-/** The point `by` metres on from `to`, carrying on in the direction from → to. */
-function extend(from: { x: number; z: number }, to: { x: number; z: number }, by: number) {
-  const len = Math.hypot(to.x - from.x, to.z - from.z) || 1;
-  const k = Math.max(1, by / len);
-  return { x: from.x + (to.x - from.x) * k, z: from.z + (to.z - from.z) * k };
 }
 
 export interface Civilian {
@@ -199,6 +217,7 @@ export class CivilianTraffic {
   private sense: ForwardSensor;
   private awareness: Awareness;
   private moverList: Mover[] = [];
+  private moverPool: Mover[] = [];
   private handles = new Set<number>(); // our cars' bodies
   private junctions = new Junctions();
   private spawnFrom = -1; // junction nearest the player when spawnNodes was worked out
@@ -235,22 +254,30 @@ export class CivilianTraffic {
    * `others` (the player, cops). Only vehicles, not every body in the world — smashed props keep
    * their bodies for good, so that list grows all game.
    */
-  private sampleMovers(others: Vehicle[]): void {
-    const list: Mover[] = [];
-    const add = (vehicle: Vehicle, civilian: boolean) => {
-      const b = vehicle.body;
-      const v = b.linvel();
-      if (v.x * v.x + v.z * v.z < 4) return;
-      const t = b.translation();
-      list.push({ handle: b.handle, x: t.x, z: t.z, vx: v.x, vz: v.z, civilian });
-    };
+  private sampleMovers(others: readonly Vehicle[]): void {
+    // Runs every frame: the list and its entries are reused (readers only look within the frame).
+    const list = this.moverList;
+    list.length = 0;
     this.handles.clear();
     for (const car of this.cars) {
-      add(car.vehicle, true);
+      this.addMover(list, car.vehicle, true);
       this.handles.add(car.vehicle.body.handle);
     }
-    for (const vehicle of others) add(vehicle, false);
-    this.moverList = list;
+    for (const vehicle of others) this.addMover(list, vehicle, false);
+  }
+
+  private addMover(list: Mover[], vehicle: Vehicle, civilian: boolean): void {
+    const v = vehicle.vel;
+    if (v.x * v.x + v.z * v.z < 4) return;
+    const p = vehicle.position;
+    const m = (this.moverPool[list.length] ??= { handle: 0, x: 0, z: 0, vx: 0, vz: 0, civilian: false });
+    m.handle = vehicle.body.handle;
+    m.x = p.x;
+    m.z = p.z;
+    m.vx = v.x;
+    m.vz = v.z;
+    m.civilian = civilian;
+    list.push(m);
   }
 
   /** The rare ramp truck, if one is on the road (shown on the minimap). */
@@ -261,14 +288,15 @@ export class CivilianTraffic {
   /** Fill to the target count around the player, recycle far/stuck cars. Once per frame. */
   update(playerPos: THREE.Vector3, others: Vehicle[] = []): void {
     this.sampleMovers(others);
-    for (const car of [...this.cars]) {
+    for (let i = 0; i < this.cars.length; i++) {
+      const car = this.cars[i];
       const p = car.vehicle.position;
       const far = Math.hypot(p.x - playerPos.x, p.z - playerPos.z) > TRAFFIC.despawnDistance;
       const up = tmpUp.copy(UP).applyQuaternion(car.vehicle.quaternion).y;
       const sunk = p.y < SUNK_BELOW;
       if (far || sunk || car.controller.stuckFor > TRAFFIC.stuckLimit || up < 0.2) {
         car.vehicle.dispose();
-        this.cars.splice(this.cars.indexOf(car), 1);
+        this.cars.splice(i--, 1);
       }
     }
     // Spawn at most one car per frame to spread the cost.

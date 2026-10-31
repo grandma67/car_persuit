@@ -1291,6 +1291,9 @@ export class PropSystem {
       if (!counts[key] && (key.endsWith('-old') || DISTRICT_KEYS.has(key))) continue;
       const mesh = new THREE.InstancedMesh(models[key], material, Math.max(1, counts[key]));
       mesh.count = counts[key];
+      // Every model gets instance colours (white: untinted), tinted or not: one material drawn with and
+      // without them switches program variants at every draw (see mixedMaterials.ts).
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, counts[key]) * 3).fill(1), 3);
       mesh.castShadow = key !== 'fence' && key !== 'fence-rail'; // thousands of fence pickets aren't worth the shadow pass
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
@@ -1580,14 +1583,15 @@ export class PropSystem {
       const p = this.props[i];
       if (p.broken) continue;
       const lit = signalState(p.def.axis ?? 'x', time + (p.def.phase ?? 0));
-      SIGNAL_LIGHTS.forEach(([light, , on, off], k) => {
-        const hex = light === lit ? on : off;
+      for (let k = 0; k < SIGNAL_LIGHTS.length; k++) {
+        const light = SIGNAL_LIGHTS[k];
+        const hex = light[0] === lit ? light[2] : light[3];
         this.lenses.getColorAt(p.lenses! + k, this.color);
         if (this.color.getHex() !== hex) {
           this.lenses.setColorAt(p.lenses! + k, this.color.setHex(hex));
           changed = true;
         }
-      });
+      }
     }
     if (changed) this.lenses.instanceColor!.needsUpdate = true;
   }
@@ -1597,7 +1601,7 @@ export class PropSystem {
    * about to hit fast enough, and takes a little speed off the vehicle.
    */
   checkVehicle(vehicle: Vehicle, dt: number): readonly PropBreak[] {
-    const lv = vehicle.body.linvel();
+    const lv = vehicle.vel;
     const speed = Math.hypot(lv.x, lv.z);
     if (speed < 2) return NO_BREAKS;
 
@@ -1639,7 +1643,7 @@ export class PropSystem {
     addDebrisColliders(this.world, body, p.def);
 
     // Thrown ahead of the car, slightly up, tumbling over the axis across the car's path.
-    const lv = vehicle.body.linvel();
+    const lv = vehicle.vel;
     const dx = lv.x / speed;
     const dz = lv.z / speed;
     const lift = 1.5 + Math.random() * 2;
@@ -1649,7 +1653,7 @@ export class PropSystem {
     body.setAngvel({ x: dz * spin, y: (Math.random() - 0.5) * 4, z: -dx * spin }, true);
 
     const keep = 1 - spec.slowdown;
-    vehicle.body.setLinvel({ x: lv.x * keep, y: lv.y, z: lv.z * keep }, true);
+    vehicle.setVelocity({ x: lv.x * keep, y: lv.y, z: lv.z * keep });
 
     // Lights go out.
     if (LIGHTS.has(p.def.kind)) {

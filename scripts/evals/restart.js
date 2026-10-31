@@ -61,6 +61,9 @@
   };
 
   const file = game.loaded ? dbg.dumpCity(false) : null; // the params the run was started from, as text
+  // A material on both an instanced and a plain mesh rebuilds its program key every frame (garbage).
+  const mixed = () => { for (const m of dbg.mixedMaterials()) fail(`mixed material: ${m}`); };
+  mixed();
   const fsError = await document.documentElement.requestFullscreen().then(() => null, (e) => String(e));
   if (fsError) fail(`could not enter fullscreen: ${fsError}`);
   await sleep(300);
@@ -77,6 +80,7 @@
       await dbg.hold('KeyW', busy);
       const busyRun = { cops: game.director.cops.length, speed: Math.round(dbg.car().speed), wanted: game.wanted.stars };
       busyRuns.push(busyRun);
+      if (busyRuns.length === 1) mixed();
       if (!busyRun.cops) fail(`busy run ${busyRuns.length}: no cops spawned`);
     }
     key('KeyY'); // debug: 3 s left on the clock

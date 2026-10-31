@@ -138,6 +138,13 @@ export class CivilianController {
   private fwd = new THREE.Vector3();
   /** The junction control on the leg we're driving, looked up once per leg rather than every step. */
   private next3: RoadNode[] = []; // nextNodes' result, reused
+  // Per step per car, so reused: the drive input, the sensor's view of us, the turn ahead, the lane ahead.
+  private input: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  private self: Self = { handle: 0, x: 0, z: 0, vx: 0, vz: 0, fx: 0, fz: 0, halfWidth: 0, halfLength: 0, turning: false, nearTurn: null };
+  private turn = { x: 0, z: 0, ux: 0, uz: 0 };
+  private corridorPts: THREE.Vector3[] = [];
+  private legKey = '';
+  private nextLegKey = '';
   private leg: { from: number; to: number; control: ApproachControl | undefined } = { from: -1, to: -1, control: undefined };
   private style: DrivingStyle;
   private senseIn = 0; // steps until the next look around
@@ -184,6 +191,7 @@ export class CivilianController {
     this.style = drivingStyle(vehicle.spec);
     this.extend();
     this.rebuild();
+    this.legKeys();
   }
 
   /** Bump from a collision: stop and collect yourself for a moment, then carry on. `honk`: lean on the horn too. */
@@ -202,7 +210,10 @@ export class CivilianController {
     const v = this.vehicle;
     const pos = v.position;
     const speed = v.speed;
-    const input: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+    // Runs per car per step: the input is reused (the vehicle reads it within the step).
+    const input = this.input;
+    input.throttle = input.brake = input.steer = 0;
+    input.handbrake = false;
 
     // Backing away from a crash.
     const backing = this.recovery.override(dt);
@@ -216,11 +227,13 @@ export class CivilianController {
     // Advance the route once we're past the next junction.
     const next = this.graph.nodes[this.route[1]];
     const after = this.graph.nodes[this.route[2]];
-    const leaving = { x: next.x + (after.x - next.x) * 0.15, z: next.z + (after.z - next.z) * 0.15 };
-    if (Math.hypot(leaving.x - pos.x, leaving.z - pos.z) < 6) {
+    const leavingX = next.x + (after.x - next.x) * 0.15;
+    const leavingZ = next.z + (after.z - next.z) * 0.15;
+    if (Math.hypot(leavingX - pos.x, leavingZ - pos.z) < 6) {
       this.route.shift();
       this.extend();
       this.rebuild();
+      this.legKeys();
       this.stoppedAt = null;
       this.servedStop = null;
       this.dwell = 0;
@@ -288,14 +301,25 @@ export class CivilianController {
       this.senseIn = SENSE_EVERY;
       const range = Math.max(30, (speed * speed) / (2 * decel) + GAP + GAP_TIME * Math.abs(speed) + 10);
       // Along the lane ahead, so through a turn the sensor looks where we're going.
-      const corridor = dodging ? undefined : this.path.slice(this.segment + 1, this.segment + 1 + CORRIDOR_POINTS);
+      const corridor = dodging ? undefined : this.corridor();
       this.ahead = this.awareness?.obstacle(v, range, corridor) ?? null;
       this.free = this.awareness ? (this.ahead?.distance ?? Infinity) : this.sense(v, range);
       // Yield to anything on a collision course: cross traffic, a light-runner, the player head-on.
       this.hazardLimit = Infinity;
       if (this.awareness) {
-        const lv = v.body.linvel();
-        const self: Self = { handle: v.body.handle, x: pos.x, z: pos.z, vx: lv.x, vz: lv.z, fx: fwd.x, fz: fwd.z, halfWidth: v.spec.halfExtents.x, halfLength: v.spec.halfExtents.z, turning: Math.abs(input.steer) > 0.3, nearTurn: this.nearTurn(pos) };
+        const lv = v.vel;
+        const self = this.self;
+        self.handle = v.body.handle;
+        self.x = pos.x;
+        self.z = pos.z;
+        self.vx = lv.x;
+        self.vz = lv.z;
+        self.fx = fwd.x;
+        self.fz = fwd.z;
+        self.halfWidth = v.spec.halfExtents.x;
+        self.halfLength = v.spec.halfExtents.z;
+        self.turning = Math.abs(input.steer) > 0.3;
+        self.nearTurn = this.nearTurn(pos);
         this.hazardLimit = hazardSpeedLimit(self, this.awareness.movers(), speed, this.keep, !this.junctions);
       }
       if (this.junctions) this.mayEnter = this.takeTurn(time, toStop, mustStop, redLight, speed, control);
@@ -352,15 +376,17 @@ export class CivilianController {
    */
   private busStop(dt: number, pos: P, fwd: P, speed: number, decel: number): number {
     const front = { x: pos.x + fwd.x * this.vehicle.spec.halfExtents.z, z: pos.z + fwd.z * this.vehicle.spec.halfExtents.z };
-    const [a, b, c] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
-    let key = `${a.id}>${b.id}`;
+    const nodes = this.nextNodes();
+    const a = nodes[0];
+    const b = nodes[1];
+    let key = this.legKey;
     let toStop: number;
     const here = this.stops.get(key);
     if (here !== undefined) {
       const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
       toStop = here + BUS_STOP_PAST - ((front.x - a.x) * (b.x - a.x) + (front.z - a.z) * (b.z - a.z)) / len;
     } else {
-      key = `${b.id}>${c.id}`;
+      key = this.nextLegKey;
       const next = this.stops.get(key);
       if (next === undefined) return Infinity;
       toStop = Math.hypot(b.x - front.x, b.z - front.z) + next + BUS_STOP_PAST;
@@ -395,11 +421,10 @@ export class CivilianController {
   private districtLimit(pos: P, decel: number): number {
     const limits = this.districts?.limits;
     if (!limits?.size) return Infinity;
-    const [prev, next, after] = this.route;
-    let cap = limits.get(`${prev}>${next}`) ?? Infinity;
-    const ahead = limits.get(`${next}>${after}`);
+    let cap = limits.get(this.legKey) ?? Infinity;
+    const ahead = limits.get(this.nextLegKey);
     if (ahead !== undefined && ahead < cap) {
-      const n = this.graph.nodes[next];
+      const n = this.graph.nodes[this.route[1]];
       const toNext = Math.hypot(n.x - pos.x, n.z - pos.z);
       cap = Math.min(cap, Math.sqrt(ahead * ahead + 2 * decel * Math.max(0, toNext - STOP_LINE)));
     }
@@ -407,17 +432,21 @@ export class CivilianController {
   }
 
   private cruiseFor(pos: P, decel: number): number {
-    const [prev, next, after] = this.route;
-    if (!this.fast.has(`${prev}>${next}`)) return this.cruise;
+    if (!this.fast.has(this.legKey)) return this.cruise;
+    const prev = this.route[0];
+    const next = this.route[1];
+    const after = this.route[2];
     const n = this.graph.nodes[next];
     const toNext = Math.hypot(n.x - pos.x, n.z - pos.z);
     let limit = this.fastCruise;
-    if (!this.fast.has(`${next}>${after}`)) limit = Math.min(limit, Math.sqrt(this.cruise * this.cruise + 2 * decel * Math.max(0, toNext - STOP_LINE)));
+    if (!this.fast.has(this.nextLegKey)) limit = Math.min(limit, Math.sqrt(this.cruise * this.cruise + 2 * decel * Math.max(0, toNext - STOP_LINE)));
     // The first junction ahead (past a bend), and how far to its stop line.
-    const [junction, from, toLine] =
-      n.neighbors.length >= 3 ? [next, prev, toNext - STOP_LINE] : [after, next, toNext + Math.hypot(this.graph.nodes[after].x - n.x, this.graph.nodes[after].z - n.z) - STOP_LINE];
+    const bend = n.neighbors.length < 3;
+    const junction = bend ? after : next;
+    const from = bend ? next : prev;
+    const toLine = bend ? toNext + Math.hypot(this.graph.nodes[after].x - n.x, this.graph.nodes[after].z - n.z) - STOP_LINE : toNext - STOP_LINE;
     const ours = this.claim?.committed && this.claimNode === junction; // on our way through already
-    const busy = !ours && toLine > 0 && this.junctions?.list(junction).some((c) => c.committed && c.entry !== from && c.owner !== this.vehicle.body.handle);
+    const busy = !ours && toLine > 0 && !!this.junctions?.committedAcross(junction, from, this.vehicle.body.handle);
     if (busy) limit = Math.min(limit, Math.max(this.cruise, Math.sqrt(2 * decel * Math.max(0, toLine - STOP_MARGIN))));
     return limit;
   }
@@ -470,8 +499,8 @@ export class CivilianController {
     const near = toStop < Math.max(ASK_DISTANCE, Math.abs(speed) * ASK_TIME, (speed * speed) / (2 * this.style.decel) + Math.abs(speed));
     // Waiting for a gap (never second thoughts once pulling away): at a stop sign, in the traffic
     // crossing ours; turning across the oncoming lane of a fast stretch, in its traffic.
-    const [a0, b0, c0] = this.route.slice(0, 3).map((id) => this.graph.nodes[id]);
-    const turnsAcross = turnAngle(a0, b0, c0) * this.keep < -0.5;
+    const nodes = this.nextNodes();
+    const turnsAcross = turnAngle(nodes[0], nodes[1], nodes[2]) * this.keep < -0.5;
     const atSign = control?.kind === 'stop' && toStop < STOP_MARGIN + 3 && Math.abs(speed) < 1;
     const noGap = !this.claim?.committed && toStop > -1 && ((atSign && this.trafficDue(node, 'crossing')) || (turnsAcross && toStop > 0 && this.trafficDue(node, 'oncoming')));
     if (!past && (held || noGap || !near || !firstInLine || !exitClear)) {
@@ -520,13 +549,17 @@ export class CivilianController {
     const n = this.graph.nodes[node];
     const from = this.graph.nodes[this.route[0]];
     const len = Math.hypot(n.x - from.x, n.z - from.z) || 1;
-    const [ux, uz] = [(n.x - from.x) / len, (n.z - from.z) / len]; // our way in
+    const ux = (n.x - from.x) / len; // our way in
+    const uz = (n.z - from.z) / len;
     const gap = this.style.heavy ? HEAVY_PULL_OUT_TIME : PULL_OUT_TIME;
-    for (const m of this.awareness.movers()) {
+    const movers = this.awareness.movers();
+    for (let i = 0; i < movers.length; i++) {
+      const m = movers[i];
       if (m.handle === this.vehicle.body.handle) continue;
       const speed = Math.hypot(m.vx, m.vz);
       if (speed < 3) continue;
-      const [hx, hz] = [m.vx / speed, m.vz / speed];
+      const hx = m.vx / speed;
+      const hz = m.vz / speed;
       const along = hx * ux + hz * uz;
       if (kind === 'crossing' ? Math.abs(along) > 0.7 : along > -0.7) continue;
       const dx = n.x - m.x;
@@ -638,7 +671,28 @@ export class CivilianController {
     if (turnAngle(a, b, c) * this.keep <= 0.5 || Math.abs(turnAngle(a, b, c)) > 2.8) return null;
     if (Math.hypot(b.x - pos.x, b.z - pos.z) > SIGNAL_DISTANCE) return null;
     const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-    return { x: b.x, z: b.z, ux: (b.x - a.x) / len, uz: (b.z - a.z) / len };
+    const out = this.turn;
+    out.x = b.x;
+    out.z = b.z;
+    out.ux = (b.x - a.x) / len;
+    out.uz = (b.z - a.z) / len;
+    return out;
+  }
+
+  /** The lane points ahead the forward sensor follows. Reused: read it at once. */
+  private corridor(): THREE.Vector3[] {
+    const out = this.corridorPts;
+    out.length = 0;
+    const end = Math.min(this.path.length, this.segment + 1 + CORRIDOR_POINTS);
+    for (let i = this.segment + 1; i < end; i++) out.push(this.path[i]);
+    return out;
+  }
+
+  /** Street keys (`from>to`) of the leg we're on and the next one, for the per-street rule lookups. */
+  private legKeys(): void {
+    const r = this.route;
+    this.legKey = `${r[0]}>${r[1]}`;
+    this.nextLegKey = `${r[1]}>${r[2]}`;
   }
 
   /** Shift the aim point sideways off the lane (+ = right), along the current path segment. */

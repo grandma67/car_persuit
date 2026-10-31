@@ -26,6 +26,9 @@
 //   --start  press Enter to start the mission, then wait this many ms        default off
 //   --size   viewport WxH (390x844 for a phone)                               default 1280x800
 //   --port   Vite port                                                        default 5199
+//   --throttle  CPU slowdown during the expression (4 stands in for a mid-range phone)  default off
+//   --profile   file.json: CPU and heap sampling profiles around the expression; prints the top
+//               self time and self bytes per `function url:line` (`profile` in the output)
 // A Vite server already listening on --port is reused (start one with `npx vite --port 5199`).
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -155,7 +158,38 @@ if (args.start) {
   await sleep(Number(args.start) || 5000);
 }
 const expression = args['eval-file'] ? readFileSync(args['eval-file'], 'utf8') : args.eval;
-const val = expression ? await evaluate(expression) : undefined;
+if (args.throttle) await send('Emulation.setCPUThrottlingRate', { rate: Number(args.throttle) });
+if (args.profile) {
+  await send('Profiler.enable');
+  await send('Profiler.setSamplingInterval', { interval: 200 });
+  await send('Profiler.start');
+  await send('HeapProfiler.enable');
+  await send('HeapProfiler.startSampling', { samplingInterval: 4096, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
+}
+let val;
+if (expression) {
+  const r = (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true })).result;
+  val = r?.result?.value;
+  const ex = r?.exceptionDetails;
+  if (ex) logs.push(`eval threw: ${ex.exception?.description ?? ex.text}`);
+}
+let profile;
+if (args.profile) {
+  const cpu = (await send('Profiler.stop')).result.profile;
+  const heap = (await send('HeapProfiler.stopSampling')).result.profile;
+  const site = (f) => `${f.functionName || '(anon)'} ${f.url.replace(/^.*\/(src|node_modules)\//, '$1/').replace(/\?.*$/, '')}:${f.lineNumber + 1}`;
+  const top = (m, n, scale, unit) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `${(v * scale).toFixed(1)}${unit} ${k}`);
+  const self = new Map();
+  const hits = cpu.nodes.reduce((t, n) => t + (n.hitCount ?? 0), 0) || 1;
+  for (const n of cpu.nodes) self.set(site(n.callFrame), (self.get(site(n.callFrame)) ?? 0) + (n.hitCount ?? 0));
+  const bytes = new Map();
+  const walk = (n) => (bytes.set(site(n.callFrame), (bytes.get(site(n.callFrame)) ?? 0) + n.selfSize), n.children.forEach(walk));
+  walk(heap.head);
+  const totalMB = [...bytes.values()].reduce((a, b) => a + b, 0) / 1e6;
+  profile = { file: args.profile, cpuSelfPct: top(self, 30, 100 / hits, '%'), heapTotalMB: +totalMB.toFixed(1), heapSelfMB: top(bytes, 30, 1e-6, 'MB') };
+  writeFileSync(args.profile, JSON.stringify({ cpu, heap }));
+}
+if (args.throttle) await send('Emulation.setCPUThrottlingRate', { rate: 1 });
 if (!args['no-final']) {
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(out, Buffer.from(shot.result.data, 'base64'));
@@ -163,7 +197,7 @@ if (!args['no-final']) {
 }
 // The deprecated-parameters warning from Rapier's init is always there: leave it out.
 const quiet = logs.filter((l) => !l.includes('deprecated parameters for the initialization function'));
-console.log(JSON.stringify({ url, shots, val, logs: quiet }, null, 2));
+console.log(JSON.stringify({ url, shots, val, logs: quiet, ...(profile ? { profile } : {}) }, null, 2));
 ws.close();
 cleanup();
 process.exit(0);

@@ -5,7 +5,10 @@
 `npm run city -- make` into a temp file) or `--city <file>` (a dump or a made file), loaded with
 `dbg.loadCity` once the page is up, before `--start`; needs `debug` in the query. The tool: headless Chrome, always **muted**. It reuses a Vite server on the port:
 start `npx vite --port 5199` once per session in the background (~10 s per run). Output JSON: `val`,
-`shots`, console errors/warnings (Rapier deprecation filtered). Phone perf: `--size 390x844`.
+`shots`, console errors/warnings (Rapier deprecation filtered), and `eval threw: …` if the expression
+threw. Phone perf: `--size 390x844`; `--throttle 4` slows the CPU 4× during the expression (a mid-range
+phone's CPU); `--profile <file.json>` records CPU and heap sampling profiles around it and prints the
+top self time and self bytes per function (`profile` in the output; line = the function's first line).
 
 Compare with main: `git worktree add <scratchpad>/mainwt main`, symlink `node_modules`, `--port 5299`.
 
@@ -27,6 +30,12 @@ Compare with main: `git worktree add <scratchpad>/mainwt main`, symlink `node_mo
   four, the seed picks the theme); `low=1` adds an eye-level shot, `city=` the climate's looks). Use it
   for every new prop, vehicle or look before placing it. It compiles its own programs: take
   `dbg.stats()` in another run.
+
+- **Frame profile** `perf-profile.js` (run it **after anything in the frame loop**, `OPTIMIZATIONS.md`):
+  ms per system per frame, GPU ms, heap churn (`allocMBperSec`, `gcPerSec`), calls, triangles and
+  memory over idle, a police-off cruise and a 5★ chase. `budget` must be all true: cruise garbage under
+  its limit and `mixedMaterials` empty. Seed 9 with `oldtown=1&chinatown=1&harbor=1` is the reference;
+  compare against a baseline run of `main` (worktree, `--port 5299`).
 
 Write a custom eval (in the scratchpad) only for drives and chases:
 
@@ -56,6 +65,7 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `aerial(point,{dist,height,from,look})` / `aerial(false)` | overview camera aimed `look` m above a point's ground (loop `from` to orbit) |
 | `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)` | model studio, HUD hidden |
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
+| `mixedMaterials()` | materials drawn by more than one kind of mesh (plain, instanced, instanced with colours), shadow pass included: each switches program variants every draw (garbage). Expected `[]`; `perf-profile.js` and `check:restart` check it |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
 | `dumpCity(download?)`, `loadCity(file)` | this run's params as text; restart in place with a params file (`CITY_PARAMS.md`). `npm run check:reload` (`scripts/evals/city-reload.js`): dump → load is the same city, Retry keeps it, New city drops it |
 
@@ -65,7 +75,7 @@ Retry / New city build the next Game in the page (`Game.dispose()`, `PLAN_GAME.m
 **`npm run check:restart`** (`scripts/evals/restart.js`, ~1.5 min) checks it, `ok` + `failures` first:
 fullscreen kept through Retry and New city on the end screen, seed kept/changed and in the URL, splash
 hidden with no animation running on it (`document.getAnimations()`), one canvas/screen/touch layer;
-then 10 same-city restarts with heap (after `gc()`), geometries, textures and programs per restart
+materials shared across mesh kinds (`dbg.mixedMaterials()`, before and after the first chase); then 10 same-city restarts with heap (after `gc()`), geometries, textures and programs per restart
 (must hold), every old Game collected (WeakRefs), and the GPU orphan list. Its city is made from words
 (`--make` in `package.json`): every district with every feature that has a look, night and rain, so
 their resources are in the city disposed; the quick restarts reload it. A new feature with a look
