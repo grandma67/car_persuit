@@ -73,11 +73,12 @@ The city has 30 civilian cars, 5★ brings 6 cops, and there is precipitation. T
 police-off cruise and 5★ chase, each 3–7 s.
 
 **Tools:**
-- `scripts/evals/perf-profile.js` (committed): CPU ms per subsystem, GPU ms, heap churn, draw
-  calls, triangles, memory.
-- A scratch copy of `browser-check.mjs` that adds the CDP sampling CPU profiler, the sampling heap
-  profiler and `Emulation.setCPUThrottlingRate`.
-- Small scratch evals for triangles per pass, prop visibility, shared materials and textures.
+- `scripts/evals/perf-profile.js`: CPU ms per subsystem, GPU ms, heap churn, draw calls, triangles,
+  memory.
+- `check:browser` `--profile` (CDP sampling CPU and heap profilers) and `--throttle` (CPU slowdown);
+  at research time these were a scratch copy of the tool, now built in.
+- `scripts/evals/tri-breakdown.js` (triangles and calls per pass), `dbg.mixedMaterials()` (shared
+  materials); prop visibility and textures were scratch evals.
 
 "Phone" below means 390×844 with a 4× CPU throttle, which stands in for a mid-range phone's CPU
 (not its GPU).

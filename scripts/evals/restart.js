@@ -1,20 +1,21 @@
-// In-place restart check (Retry / New city build the next Game in the page, see PLAN_GAME.md Tech):
-//   npm run check:restart   (10 quick restarts, GPU trace on, on a city made from words with every
-//                            district, Chinatown's festival, the Farm's harvest, night and rain:
-//                            `--make "…"` loads it with dbg.loadCity, and the quick restarts reload it)
-//   npm run check:browser -- --query "seed=N&debug&gputrace&restarts=10&shots=1" [--city f | --make "words"] \
+// In-place restart check (Retry / New city build the next Game in the page; knowledge/LEAKS.md):
+//   npm run check:restart   (the city from `--make` in package.json, 10 quick restarts, GPU trace on)
+//   npm run check:browser -- --query "[seed=N&]debug&gputrace&restarts=10&shots=1" [--city f | --make "words"] \
 //     --start 1500 --out-dir <dir> --no-final --eval-file scripts/evals/restart.js
-// Needs ?debug (window.game, dbg); ?gputrace adds the leak list. Returns `ok` and `failures` first.
-// (1) Fullscreen is entered once (`busy` ms of 5★ chase, default 8000, before the first two end screens) (the eval runs as a user gesture), then Retry, New city, Retry, New
-// city are clicked on the end screen (time's up via debug Y), each new mission started with Enter.
-// After each: still fullscreen, the seed kept (Retry) or changed (New city) and in the URL, the splash
-// hidden with no animation left running on it, one WebGL canvas, one .screen, at most one .touch, menu state.
-// (2) `restarts` quick same-city restarts: the loaded params again if the run started from a file
-// (New city in (1) dropped them), then Retry. Per restart heap MB after gc(), geometries, textures,
-// programs. Same city, so GPU counts must hold (±2 geometries: props) and heap must not climb
-// (> 1.5 MB per restart from the 2nd on fails). Every old Game must be collected (an eval holding one
-// in a loop variable keeps it alive: restart only through `next`). With ?gputrace, `orphans` names what the
-// renderer holds that nothing draws: only MeshDepthMaterial and DFG_LUT (three's own) belong there.
+// Query: `restarts` quick restarts (default 10), `busy` ms of 5★ chase (default 8000, 0 skips), `shots`
+// end screen and menu shots per step, `gputrace` the orphan list. Returns `ok` and `failures` first.
+// (1) Enters fullscreen (the eval is a user gesture), then clicks Retry, New city, Retry, New city on
+// the end screen (time's up via debug Y), the first two after a busy 5★ chase so cops, scratches and
+// broken props are in the Game disposed. After each: still fullscreen, seed kept (Retry) or changed
+// (New city) and in the URL, splash hidden with no animation left on it, one canvas, one .screen, at
+// most one .touch, state menu, and Enter starts the mission. dbg.mixedMaterials() at the start and
+// after the first chase.
+// (2) Quick same-city restarts (the loaded file's city first, if the run started from one): heap MB
+// after gc(), geometries, textures, programs per restart. From the 2nd on, heap must not climb > 1.5 MB
+// per restart, geometries hold within ±2 (props), textures and programs exactly. Every old Game must be
+// collected (an eval holding one in a variable keeps it alive: restart only through `next`). With
+// gputrace, `orphans` lists what the renderer holds that nothing draws: only MeshDepthMaterial and
+// DFG_LUT (three's own) may be there.
 (async () => {
   const params = new URLSearchParams(location.search);
   const quick = Number(params.get('restarts') ?? 10);

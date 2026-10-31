@@ -339,7 +339,7 @@ take ~5.6% of phone CPU.
 1. Keep a static buffer of start positions and phases (one attribute).
 2. **The shader:** use `onBeforeCompile` on `PointsMaterial`/`LineBasicMaterial`, adding uniforms
    `uTime` and `uCenter` and doing the fall, sway and `mod()` wrap around the centre, as `update`
-   does today. Put the uniforms in `material.userData.uniforms` (`BROWSER_CHECKS.md`: `dispose` and
+   does today. Put the uniforms in `material.userData.uniforms` (`LEAKS.md`: `dispose` and
    `gpuTrace` look there).
 3. **Rain streaks:** the line pairs need both ends. Give each vertex an `aEnd` flag (0 or 1) and offset
    the tail in the shader.

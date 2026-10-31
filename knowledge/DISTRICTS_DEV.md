@@ -142,7 +142,7 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
 - A search for buildings "on the street" must allow the lot gap: Chinatown's `streetMask` wants faces
   within 1 m of the sidewalk line, Harbor lots stand 2–4 m back (`frontMask`).
 - A texture given to a shader by `onBeforeCompile` must also sit in `material.userData.uniforms`, or
-  Retry leaks it (`npm run check:restart`, `BROWSER_CHECKS.md` Restart and leaks).
+  Retry leaks it (`npm run check:restart`, `LEAKS.md`).
 - Props that must not budge (Slums wrecks on bricks or flipped) are props with `breakSpeed` ∞
   (`SOLID_WRECKS`), not solids. A wreck at a corridor mouth cost a third of the speed (hence the 3 m rule).
 - Watch: cops snagging clutter near junctions (push `clutterMinOffset` out), the chase camera clipping

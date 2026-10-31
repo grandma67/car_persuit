@@ -1,7 +1,8 @@
-// District numbers over many seeds, without writing a throwaway test:
-//   npm run stats -- oldtown [seeds=100]
-// Placement rate forced on and natural, sizes, what a placed district holds on average, and the
-// generation time with it forced on and off. Seeds are i * 7919 + 11, as in the tests.
+// District numbers over many seeds (instead of a throwaway test):
+//   npm run stats -- <kind> [seeds=100]
+// Placement rate forced on and natural, shapes, gates, the first seeds that place it, what a placed
+// district holds on average, and generation ms with it forced on vs off. Seeds i * 7919 + 11 (the
+// fixed 12-block grid). One line per key.
 import { generateCity, type CityData } from '../src/world/CityGenerator';
 import type { DistrictKind } from '../src/world/districts/District';
 import { inDistrict } from '../src/world/districts/apply';
@@ -56,5 +57,8 @@ export default function ([kind = DISTRICT_DEFS[0]?.kind, arg = '100']: string[])
     },
     generateMs: { on: +(tOn / seeds.length).toFixed(1), off: +(tOff / seeds.length).toFixed(1) },
   };
-  console.log(JSON.stringify(out, null, 2));
+  for (const [key, v] of Object.entries(out)) {
+    if (key !== 'perDistrict') console.log(`${key}: ${JSON.stringify(v)}`);
+    else for (const [k, x] of Object.entries(v)) console.log(`${k}: ${JSON.stringify(x)}`);
+  }
 }

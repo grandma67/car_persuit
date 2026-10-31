@@ -1,40 +1,32 @@
 #!/usr/bin/env node
-// Headless browser check: starts the Vite dev server (unless --url is given), opens the game in
-// headless Chrome with audio muted, waits for the splash to finish, optionally presses Start, runs
-// a JS expression in the page, saves a screenshot, and prints JSON: the expression's value plus any
-// console errors/warnings and uncaught exceptions. Needs Google Chrome; no npm dependencies.
-//
-//   node scripts/browser-check.mjs --query "seed=42&debug" --out /tmp/shot.png \
-//     --eval "JSON.stringify({programs: game.renderer.info.programs.length, calls: game.renderer.info.render.calls})"
-//
-// Several views in one run: the expression can `await shot('name')` to save <out-dir>/name.png at
-// that moment (with ?debug, `dbg` frames things for it: see src/core/debugTools.ts):
+// Headless browser check (knowledge/BROWSER_CHECKS.md): starts Vite on --port unless one is up or
+// --url is given, opens the game in headless Chrome (muted, gc() exposed), waits for the splash,
+// optionally loads a city and presses Start, runs an expression in the page as a user gesture, and
+// prints JSON: `url`, `shots`, the expression's `val`, console errors/warnings and exceptions (`logs`).
+// The expression may `await shot('name')` any number of times (saves <out-dir>/name.png).
 //
 //   node scripts/browser-check.mjs --query "seed=11&debug&oldtown=1" --start 2000 --out-dir /tmp/s \
-//     --eval "(async () => { await dbg.gate(0); await shot('gate'); await dbg.view(dbg.find('well')); await shot('square'); return dbg.stats(); })()"
+//     --no-final --eval "(async () => { await dbg.gate(0); await shot('gate'); return dbg.stats(); })()"
 //
-// Options:
-//   --query    URL query string (add `debug` so `window.game` and `window.dbg` exist)  default "debug"
-//   --url      full URL of an already-running server (skips starting Vite)
-//   --out      final screenshot path                                    default ./browser-check.png
-//   --out-dir  where shot('name') saves                                default the --out file's folder
-//   --eval     JS expression (may return a promise), result printed as `val`  default none
-//   --eval-file  read the expression from a file instead (no shell quoting)
-//   --no-final   skip the screenshot after the expression (when it took its own shots)
-//   --city   a params file (npm run city -- make/dump): loaded with dbg.loadCity once the page is up
-//   --make   "words…": npm run city -- make <words> into a temp file, loaded as --city
-//   --start  press Enter to start the mission, then wait this many ms        default off
-//   --size   viewport WxH (390x844 for a phone)                               default 1280x800
-//   --port   Vite port                                                        default 5199
-//   --throttle  CPU slowdown during the expression (4 stands in for a mid-range phone)  default off
-//   --vs     a git ref: the same run on that ref first (a worktree in the temp dir, kept for next time,
-//            its own Vite on --port + 100), then on the working tree; prints { vs, base, current }.
-//            Shots go to <out-dir>/base and <out-dir>/current. Runs one after the other, never at once
-//            (they'd share the CPU). Remove old worktrees with `git worktree prune` after deleting them.
-//   --root   the folder to start Vite in (default: here; --vs passes the worktree)
-//   --profile   file.json: CPU and heap sampling profiles around the expression; prints the top
-//               self time and self bytes per `function url:line` (`profile` in the output)
-// A Vite server already listening on --port is reused (start one with `npx vite --port 5199`).
+//   --query      URL query (`debug` gives window.game and window.dbg)               default "debug"
+//   --url        full URL of a running server (skips Vite)
+//   --root       folder to start Vite in (--vs passes its worktree)                 default here
+//   --port       Vite port (Chrome's debugger: port + 1000)                         default 5199
+//   --eval       JS expression (may return a promise); --eval-file reads it from a file
+//   --out        final screenshot                                                   default ./browser-check.png
+//   --out-dir    where shot('name') saves                                           default --out's folder
+//   --no-final   no screenshot after the expression
+//   --city f     a params file (npm run city -- make/dump), loaded with dbg.loadCity before --start
+//   --make "w…"  npm run city -- make <words> into a temp file, loaded as --city
+//   --start ms   press Enter to start the mission, then wait ms                     default off
+//   --size WxH   viewport (390x844: a phone)                                        default 1280x800
+//   --throttle N CPU slowdown during the expression (4: a mid-range phone's CPU)
+//   --profile f  CPU + heap sampling profiles around the expression, saved to f; prints the top self
+//                time and self bytes per `function url:line` (`profile`)
+//   --vs ref     the same run on that ref first (worktree in the temp dir, kept for next time; its own
+//                Vite on port + 100), then here, one after the other; prints { vs, sha, base, current },
+//                shots in <out-dir>/base and /current, --profile per side. Delete old worktrees with
+//                `git worktree remove`.
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -48,6 +40,11 @@ const vitePort = Number(args.port ?? 5199);
 const debugPort = vitePort + 1000;
 const [w, h] = (args.size ?? '1280x800').split('x').map(Number);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** JSON with objects broken into lines `depth` levels down and anything deeper on one line (fewer lines to read). */
+const print = (v, depth, pad = '') =>
+  depth && v && typeof v === 'object' && !Array.isArray(v)
+    ? `{\n${Object.entries(v).map(([k, x]) => `${pad}  ${JSON.stringify(k)}: ${print(x, depth - 1, `${pad}  `)}`).join(',\n')}\n${pad}}`
+    : JSON.stringify(v);
 if (args.make) {
   args.city = join(mkdtempSync(join(tmpdir(), 'cp-city-')), 'city.json');
   const made = execFileSync('node', ['scripts/run-ts.mjs', 'scripts/city.ts', 'make', ...args.make.split(/\s+/), '--out', args.city], { encoding: 'utf8' });
@@ -80,7 +77,7 @@ if (args.vs) {
   };
   const base = run('base', ['--port', String(basePort), '--root', tree]);
   const current = run('current', ['--port', String(vitePort)]);
-  console.log(JSON.stringify({ vs: args.vs, sha, base, current }, null, 2));
+  console.log(print({ vs: args.vs, sha, base, current }, 3));
   process.exit(0);
 }
 
@@ -232,7 +229,7 @@ if (!args['no-final']) {
 }
 // The deprecated-parameters warning from Rapier's init is always there: leave it out.
 const quiet = logs.filter((l) => !l.includes('deprecated parameters for the initialization function'));
-console.log(JSON.stringify({ url, shots, val, logs: quiet, ...(profile ? { profile } : {}) }, null, 2));
+console.log(print({ url, shots, val, logs: quiet, ...(profile ? { profile } : {}) }, 2));
 ws.close();
 cleanup();
 process.exit(0);

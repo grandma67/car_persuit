@@ -38,7 +38,7 @@ Generation and gameplay logic are pure data (no Three.js), unit-tested with Vite
 `main.ts` disposes the Game (`Game.dispose()`: scene GPU resources, Rapier world, DOM, listeners, car
 mesh templates) and builds the next one behind the splash, keeping the renderer and audio (`GameShell`).
 The seed goes into the URL with `history.replaceState`. Anything a run adds to the page must be undone
-in `dispose()` (`npm run check:restart`, [BROWSER_CHECKS.md](../BROWSER_CHECKS.md)).
+in `dispose()` (`npm run check:restart`, [LEAKS.md](../LEAKS.md)).
 
 ## World
 

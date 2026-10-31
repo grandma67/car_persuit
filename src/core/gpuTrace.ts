@@ -1,6 +1,6 @@
 // GPU leak hunting (?gputrace): which textures, geometries, materials and render targets the
 // renderer still holds, each named by its three.js id and the game code that created it, with the
-// meshes still pointing at it. Exposed as `window.gpuTrace`; see knowledge/BROWSER_CHECKS.md.
+// meshes still pointing at it. Exposed as `window.gpuTrace`; see knowledge/LEAKS.md.
 //
 // How: three.js registers a 'dispose' listener on a resource exactly when it uploads it to the GPU
 // and drops it when the resource is disposed, so those listeners are the live set. The creation

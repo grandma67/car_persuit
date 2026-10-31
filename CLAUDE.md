@@ -12,7 +12,8 @@ destinations, cops, civilian traffic, themed districts.
 | `knowledge/DISTRICTS.md` | what each district is (table + descriptions) | tracked |
 | `knowledge/DISTRICTS_DEV.md` | **read before district work**: framework, files, rules, budgets, pitfalls, tests | tracked |
 | `knowledge/COPS_DEV.md` | **read before cop AI work**: brain, tuning and why, pitfalls, `npm run cops` metrics | tracked |
-| `knowledge/BROWSER_CHECKS.md` | **read before a browser run**: `check:browser`, evals, `window.dbg`, leaks, pitfalls | tracked |
+| `knowledge/BROWSER_CHECKS.md` | **read before a browser run**: `check:browser`, evals, `window.dbg`, pitfalls | tracked |
+| `knowledge/LEAKS.md` | **read before touching `dispose()` or anything Retry rebuilds**: `check:restart`, `gpuTrace`, leak causes | tracked |
 | `knowledge/OPTIMIZATIONS.md` | **read before perf work**: techniques, measured costs, ranked fixes, `perf-profile.js` | tracked |
 | `knowledge/OPTIMIZATION_TASKS.md` | perf tasks step by step: baseline, milestones M1–M4, checks per task | tracked |
 | `knowledge/RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
@@ -24,19 +25,20 @@ destinations, cops, civilian traffic, themed districts.
 
 ## Commands
 
-- Type check: `npx tsc --noEmit`. Build: `npm run build`.
-- Tests: `npm run t` (~26–35 s wall, ~250 s CPU; prints only failures + summary, killed after 300 s,
-  `T_LIMIT=`). Area: `npm run t -- src/world/districts`, `-t "name"`. Never pipe vitest through
-  `grep`/`tail` without a limit.
-- Suite time: `npm run t -- --times` (CPU s, wall s, slowest files, Δ% vs the saved run; `--times save`
-  stores this run). Wall time swings by a third with load: judge by CPU; don't rerun the suite to time it.
-- One-off TS script: `node scripts/run-ts.mjs <file.ts> [args]` (default export gets args). Use it for
-  numbers instead of scratch tests (vitest swallows `console.log`). A script in the scratchpad needs
-  absolute `src/` imports and `node_modules` symlinked next to it.
-- City from words: `npm run city -- make <words…> seed=N` (e.g. `flat night chinatown festival`;
-  may move to a later seed and says which; without `seed=` it starts from a random one, so checks and
-  tests always pass it), `dump <seed> [URL words]`, `check <file…>`, `show <file | seed | words…>` (ASCII
-  map), `words`. Details: `CITY_PARAMS.md`.
+Each script's header lists its options; the doc named here says when to use it.
+
+- Type check `npx tsc --noEmit`; build `npm run build`.
+- Tests: `npm run t` (failures + summary only; ~26–35 s wall, ~250 s CPU; killed after 300 s, `T_LIMIT=`).
+  Area: `npm run t -- src/world/districts`, `-t "name"`. Never pipe vitest through `grep`/`tail` without
+  a limit. Suite time: `npm run t -- --times [save]` (CPU and wall s, slowest files, Δ% vs the saved run):
+  judge by CPU (wall swings by a third with load); don't rerun the suite to time it.
+- One-off TS: `node scripts/run-ts.mjs <file.ts> [args]` (default export gets args), for numbers instead
+  of scratch tests (vitest swallows `console.log`). In the scratchpad it needs absolute `src/` imports
+  and `node_modules` symlinked next to it.
+- City from words: `npm run city -- make <words…> seed=N` (e.g. `flat night chinatown festival`; may
+  move to a later seed and says which; without `seed=` it starts from a random one, so checks and tests
+  always pass it), `dump <seed> [URL words]`, `check <file…>`, `show <file | seed | words…>` (ASCII map),
+  `words`. `CITY_PARAMS.md`.
 - Seeds to look at: `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`
   (`name:N` at least, `name=N` exactly; counts structures, landmarks, props, ground patches, lots,
   roles; `flat` = no hill/canals). Never write a search script for this.
@@ -44,14 +46,14 @@ destinations, cops, civilian traffic, themed districts.
   worktree, names those that moved; `--out f` / `--vs f` for a file; `--reload` also proves every dump
   reloads as its city). Older refs need a file baseline.
 - District numbers: `npm run stats -- <kind> [seeds=100]` (placement rate, shapes, gates, counts, gen ms
-  on vs off). Building budget: `npm run budget -- <kind> [seeds=20]`.
-- Cop driving: `npm run cops -- --vs main` (~2 min; `--diag hits|uturns|recovers`). Never write a chase
-  sim for this.
-- Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>`.
-- Browser (1–2 min each; settle seed and words before the first, run in the background while editing):
-  `npm run check:browser …`; `npm run check:restart` after anything that adds to the scene, page or
-  listeners; `npm run check:reload` after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or
-  `city.params`. See `BROWSER_CHECKS.md`.
+  on vs off). Building budget: `npm run budget -- <kind> [seeds=20]`. `DISTRICTS_DEV.md`.
+- Cop driving: `npm run cops -- --vs main` (~2 min; `--diag hits|uturns|recovers`; `COPS_DEV.md`).
+  Never write a chase sim for this.
+- Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (`RAPIER.md`).
+- Browser (`BROWSER_CHECKS.md`; ~10 s plus the eval with Vite already on 5199, `check:restart` ~1.5 min;
+  settle seed and words before the first, run in the background while editing): `npm run check:browser …`;
+  `npm run check:restart` after anything that adds to the scene, page or listeners (`LEAKS.md`);
+  `npm run check:reload` after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or `city.params`.
 - Before/after in the browser: `npm run check:browser -- --vs <ref> …` (that ref in its own worktree and
   server, then here; never a baseline from the server you're editing against). Shots:
   `node scripts/png-diff.mjs a.png b.png`. Perf: `--throttle 4`, `--profile f.json`, evals
