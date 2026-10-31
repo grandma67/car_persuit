@@ -141,6 +141,14 @@ export class Junctions {
     this.at.get(node)?.delete(owner);
   }
 
+  /** Whether a claim through `node` other than `owner`'s, from a road other than `entry`, is committed. */
+  committedAcross(node: number, entry: number, owner: number): boolean {
+    const m = this.at.get(node);
+    if (!m) return false;
+    for (const c of m.values()) if (c.committed && c.entry !== entry && c.owner !== owner) return true;
+    return false;
+  }
+
   /** Everyone's claims at a junction (for tests). */
   list(node: number): JunctionClaim[] {
     return [...(this.at.get(node)?.values() ?? [])];

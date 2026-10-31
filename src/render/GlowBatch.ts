@@ -23,12 +23,13 @@ export class GlowBatch {
     scene.add(this.mesh);
   }
 
+  /** After the scene's matrices are updated for this frame. */
   update(cars: CarMesh[], camera: THREE.Camera): void {
     camera.getWorldQuaternion(this.quat);
     let n = 0;
     for (const car of cars) {
-      if (!car.root.parent || !car.root.visible) continue;
-      car.root.updateMatrixWorld();
+      // Matrices are this frame's (Game updates the scene first); a held car is out of view.
+      if (!car.root.parent || !car.root.visible || !car.root.matrixAutoUpdate) continue;
       for (const glow of car.glows) {
         const opacity = (glow.material as THREE.SpriteMaterial).opacity;
         if (!glow.visible || opacity <= 0) continue;

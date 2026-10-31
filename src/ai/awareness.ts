@@ -92,7 +92,8 @@ export function hazardSpeedLimit(me: Self, movers: Mover[], speed: number, keep:
   const sideClear = me.halfWidth + OTHER_HALF_WIDTH + HAZARD_MARGIN;
   const alongClear = me.halfLength + OTHER_HALF_LENGTH;
   let limit = Infinity;
-  for (const m of movers) {
+  for (let i = 0; i < movers.length; i++) {
+    const m = movers[i];
     if (m.handle === me.handle) continue;
     const rx = m.x - me.x;
     const rz = m.z - me.z;

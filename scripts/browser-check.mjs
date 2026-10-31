@@ -1,36 +1,40 @@
 #!/usr/bin/env node
-// Headless browser check: starts the Vite dev server (unless --url is given), opens the game in
-// headless Chrome with audio muted, waits for the splash to finish, optionally presses Start, runs
-// a JS expression in the page, saves a screenshot, and prints JSON: the expression's value plus any
-// console errors/warnings and uncaught exceptions. Needs Google Chrome; no npm dependencies.
-//
-//   node scripts/browser-check.mjs --query "seed=42&debug" --out /tmp/shot.png \
-//     --eval "JSON.stringify({programs: game.renderer.info.programs.length, calls: game.renderer.info.render.calls})"
-//
-// Several views in one run: the expression can `await shot('name')` to save <out-dir>/name.png at
-// that moment (with ?debug, `dbg` frames things for it: see src/core/debugTools.ts):
+// Headless browser check (knowledge/BROWSER_CHECKS.md): starts Vite on --port unless one is up or
+// --url is given, opens the game in headless Chrome (muted, gc() exposed), waits for the splash,
+// optionally loads a city and presses Start, runs an expression in the page as a user gesture, and
+// prints JSON: `url`, `shots`, the expression's `val`, console errors/warnings and exceptions (`logs`).
+// The expression may `await shot('name')` any number of times (saves <out-dir>/name.png).
 //
 //   node scripts/browser-check.mjs --query "seed=11&debug&oldtown=1" --start 2000 --out-dir /tmp/s \
-//     --eval "(async () => { await dbg.gate(0); await shot('gate'); await dbg.view(dbg.find('well')); await shot('square'); return dbg.stats(); })()"
+//     --no-final --eval "(async () => { await dbg.gate(0); await shot('gate'); return dbg.stats(); })()"
 //
-// Options:
-//   --query    URL query string (add `debug` so `window.game` and `window.dbg` exist)  default "debug"
-//   --url      full URL of an already-running server (skips starting Vite)
-//   --out      final screenshot path                                    default ./browser-check.png
-//   --out-dir  where shot('name') saves                                default the --out file's folder
-//   --eval     JS expression (may return a promise), result printed as `val`  default none
-//   --eval-file  read the expression from a file instead (no shell quoting)
-//   --no-final   skip the screenshot after the expression (when it took its own shots)
-//   --city   a params file (npm run city -- make/dump): loaded with dbg.loadCity once the page is up
-//   --make   "words…": npm run city -- make <words> into a temp file, loaded as --city
-//   --start  press Enter to start the mission, then wait this many ms        default off
-//   --size   viewport WxH (390x844 for a phone)                               default 1280x800
-//   --port   Vite port                                                        default 5199
-// A Vite server already listening on --port is reused (start one with `npx vite --port 5199`).
+//   --query      URL query (`debug` gives window.game and window.dbg)               default "debug"
+//   --url        full URL of a running server (skips Vite)
+//   --root       folder to start Vite in (--vs passes its worktree)                 default here
+//   --port       Vite port (Chrome's debugger: port + 1000)                         default 5199
+//   --eval       JS expression (may return a promise); --eval-file reads it from a file
+//   --out        final screenshot                                                   default ./browser-check.png
+//   --out-dir    where shot('name') saves                                           default --out's folder
+//   --no-final   no screenshot after the expression
+//   --city f     a params file (npm run city -- make/dump), loaded with dbg.loadCity before --start
+//   --make "w…"  npm run city -- make <words> into a temp file, loaded as --city
+//   --start ms   press Enter to start the mission, then wait ms                     default off
+//   --size WxH   viewport (390x844: a phone)                                        default 1280x800
+//   --throttle N CPU slowdown during the expression (4: a mid-range phone's CPU)
+//   --profile f  CPU + heap sampling profiles around the expression, saved to f; prints the top self
+//                time and self bytes per `function url:line` (`profile`)
+//   --table      a perf-profile.js result as a compact table (with --vs: both sides, Δ%) instead of
+//                the JSON, which goes to --json (default <out-dir>/result.json); other evals print JSON
+//   --json f     also save the full output JSON to f
+//   --vs ref     the same run on that ref first (worktree in the temp dir, kept for next time; its own
+//                Vite on port + 100), then here, one after the other; prints { vs, sha, base, current },
+//                shots in <out-dir>/base and /current, --profile per side. Delete old worktrees with
+//                `git worktree remove`.
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { perfReport } from './perf-table.mjs';
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((pairs, a, i, all) => (a.startsWith('--') ? [...pairs, [a.slice(2), all[i + 1] === undefined || all[i + 1].startsWith('--') ? 'true' : all[i + 1]]] : pairs), []),
@@ -40,10 +44,58 @@ const vitePort = Number(args.port ?? 5199);
 const debugPort = vitePort + 1000;
 const [w, h] = (args.size ?? '1280x800').split('x').map(Number);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** JSON with objects broken into lines `depth` levels down and anything deeper on one line (fewer lines to read). */
+const print = (v, depth, pad = '') =>
+  depth && v && typeof v === 'object' && !Array.isArray(v)
+    ? `{\n${Object.entries(v).map(([k, x]) => `${pad}  ${JSON.stringify(k)}: ${print(x, depth - 1, `${pad}  `)}`).join(',\n')}\n${pad}}`
+    : JSON.stringify(v);
 if (args.make) {
   args.city = join(mkdtempSync(join(tmpdir(), 'cp-city-')), 'city.json');
   const made = execFileSync('node', ['scripts/run-ts.mjs', 'scripts/city.ts', 'make', ...args.make.split(/\s+/), '--out', args.city], { encoding: 'utf8' });
   process.stderr.write(made);
+}
+
+// --vs: run this same check on a ref (in a worktree, its own Vite), then here, and print both.
+if (args.vs) {
+  const sha = execFileSync('git', ['rev-parse', '--short', args.vs], { encoding: 'utf8' }).trim();
+  const tree = join(tmpdir(), `cp-vs-${sha}`);
+  if (!existsSync(tree)) {
+    execFileSync('git', ['worktree', 'add', '--detach', tree, sha], { stdio: 'ignore' });
+    symlinkSync(resolve('node_modules'), join(tree, 'node_modules'));
+  }
+  const basePort = vitePort + 100;
+  try {
+    await fetch(`http://localhost:${basePort}/`);
+    console.error(`--vs: port ${basePort} is taken (a server from another tree?): stop it first`);
+    process.exit(1);
+  } catch {}
+  const outDir = args['out-dir'] ?? dirname(args.out ?? 'browser-check.png');
+  const pass = Object.entries(args).flatMap(([k, v]) =>
+    ['vs', 'make', 'port', 'out', 'out-dir', 'root', 'profile', 'table', 'json'].includes(k) ? [] : [`--${k}`, ...(v === 'true' ? [] : [k === 'eval-file' || k === 'city' ? resolve(v) : v])],
+  );
+  const run = (side, extra) => {
+    const dir = join(outDir, side);
+    const profile = args.profile ? ['--profile', resolve(args.profile).replace(/(\.json)?$/, `.${side}.json`)] : [];
+    const text = execFileSync('node', [process.argv[1], ...pass, ...profile, '--out-dir', dir, '--out', join(dir, 'final.png'), ...extra], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 28 });
+    return JSON.parse(text);
+  };
+  const base = run('base', ['--port', String(basePort), '--root', tree]);
+  const current = run('current', ['--port', String(vitePort)]);
+  finish({ vs: args.vs, sha, base, current }, 3, outDir);
+  process.exit(0);
+}
+
+/** Print the result: JSON, or with --table a perf-profile table (the JSON saved beside it). */
+function finish(result, depth, outDir) {
+  const json = print(result, depth);
+  const file = args.json ?? (args.table ? join(outDir, 'result.json') : null);
+  if (file) {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, json);
+  }
+  const report = args.table ? perfReport(result) : null;
+  if (args.table && !report) process.stderr.write('--table: not a perf-profile.js result, printing the JSON\n');
+  console.log(report ? `${report}\nfull result: ${file}` : json);
 }
 
 const children = [];
@@ -60,7 +112,7 @@ const up = async () => {
 let url = args.url;
 if (!url && (await up())) url = `http://localhost:${vitePort}/?${args.query ?? 'debug'}`; // reuse a running server
 if (!url) {
-  const vite = spawn('npx', ['vite', '--port', String(vitePort), '--strictPort'], { stdio: 'ignore' });
+  const vite = spawn('npx', ['vite', '--port', String(vitePort), '--strictPort'], { stdio: 'ignore', cwd: args.root ?? process.cwd() });
   children.push(vite);
   for (let i = 0; i < 60; i++) {
     await sleep(250);
@@ -140,8 +192,17 @@ for (let i = 0; i < 150; i++) {
 }
 await sleep(1000);
 // --city: the page built its URL seed first; the file's city replaces it in place (no URL flag).
+// Timed until the next Game has drawn two frames: `cityLoadMs` (the first load of a look in a fresh
+// page compiles its shaders cold; a reload of it in the same page is warm, see cold-load.js).
+let cityLoadMs;
 if (args.city) {
-  const loaded = await send('Runtime.evaluate', { expression: `dbg.loadCity(${JSON.stringify(readFileSync(args.city, 'utf8'))})`, awaitPromise: true, returnByValue: true });
+  const t0 = Date.now();
+  const loaded = await send('Runtime.evaluate', {
+    expression: `(async () => { await dbg.loadCity(${JSON.stringify(readFileSync(args.city, 'utf8'))}); const r = window.game.renderer.info.render, f = r.frame; while (window.game.renderer.info.render.frame < f + 2) await new Promise((d) => setTimeout(d, 5)); })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  cityLoadMs = Date.now() - t0;
   if (loaded.result?.exceptionDetails) {
     console.error(`--city ${args.city}: ${loaded.result.exceptionDetails.exception?.description ?? loaded.result.exceptionDetails.text}`);
     ws.close();
@@ -155,7 +216,38 @@ if (args.start) {
   await sleep(Number(args.start) || 5000);
 }
 const expression = args['eval-file'] ? readFileSync(args['eval-file'], 'utf8') : args.eval;
-const val = expression ? await evaluate(expression) : undefined;
+if (args.throttle) await send('Emulation.setCPUThrottlingRate', { rate: Number(args.throttle) });
+if (args.profile) {
+  await send('Profiler.enable');
+  await send('Profiler.setSamplingInterval', { interval: 200 });
+  await send('Profiler.start');
+  await send('HeapProfiler.enable');
+  await send('HeapProfiler.startSampling', { samplingInterval: 4096, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
+}
+let val;
+if (expression) {
+  const r = (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true })).result;
+  val = r?.result?.value;
+  const ex = r?.exceptionDetails;
+  if (ex) logs.push(`eval threw: ${ex.exception?.description ?? ex.text}`);
+}
+let profile;
+if (args.profile) {
+  const cpu = (await send('Profiler.stop')).result.profile;
+  const heap = (await send('HeapProfiler.stopSampling')).result.profile;
+  const site = (f) => `${f.functionName || '(anon)'} ${f.url.replace(/^.*\/(src|node_modules)\//, '$1/').replace(/\?.*$/, '')}:${f.lineNumber + 1}`;
+  const top = (m, n, scale, unit) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `${(v * scale).toFixed(1)}${unit} ${k}`);
+  const self = new Map();
+  const hits = cpu.nodes.reduce((t, n) => t + (n.hitCount ?? 0), 0) || 1;
+  for (const n of cpu.nodes) self.set(site(n.callFrame), (self.get(site(n.callFrame)) ?? 0) + (n.hitCount ?? 0));
+  const bytes = new Map();
+  const walk = (n) => (bytes.set(site(n.callFrame), (bytes.get(site(n.callFrame)) ?? 0) + n.selfSize), n.children.forEach(walk));
+  walk(heap.head);
+  const totalMB = [...bytes.values()].reduce((a, b) => a + b, 0) / 1e6;
+  profile = { file: args.profile, cpuSelfPct: top(self, 30, 100 / hits, '%'), heapTotalMB: +totalMB.toFixed(1), heapSelfMB: top(bytes, 30, 1e-6, 'MB') };
+  writeFileSync(args.profile, JSON.stringify({ cpu, heap }));
+}
+if (args.throttle) await send('Emulation.setCPUThrottlingRate', { rate: 1 });
 if (!args['no-final']) {
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(out, Buffer.from(shot.result.data, 'base64'));
@@ -163,7 +255,7 @@ if (!args['no-final']) {
 }
 // The deprecated-parameters warning from Rapier's init is always there: leave it out.
 const quiet = logs.filter((l) => !l.includes('deprecated parameters for the initialization function'));
-console.log(JSON.stringify({ url, shots, val, logs: quiet }, null, 2));
+finish({ url, shots, val, logs: quiet, ...(cityLoadMs !== undefined ? { cityLoadMs } : {}), ...(profile ? { profile } : {}) }, 2, args['out-dir'] ?? dirname(out));
 ws.close();
 cleanup();
 process.exit(0);

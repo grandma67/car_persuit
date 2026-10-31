@@ -18,6 +18,8 @@ export class DestinationMarker {
         void main() {
           vHeight = uv.y;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          // Seen from beyond the camera's far plane (the fog end) too: held just inside it.
+          gl_Position.z = min(gl_Position.z, gl_Position.w * 0.9999);
         }
       `,
       fragmentShader: /* glsl */ `

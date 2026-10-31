@@ -316,10 +316,12 @@ function clock(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRen
     ].map((g) => g.applyMatrix4(m));
     stone.push(...dial);
   }
-  // Hands: instanced (four faces each), pivoting at the dial's centre and pointing up at 12.
+  // Hands: instanced (four faces each), pivoting at the dial's centre and pointing up at 12. Their own
+  // copy of `metal`: one material on instanced and plain meshes rebuilds its program key every frame.
+  const handMetal = metal.clone();
   const hand = (length: number, width: number) => {
     const g = part(new THREE.BoxGeometry(width, length, 0.04).translate(0, length / 2 - 0.15, 0.03), 0x1c1c20);
-    const mesh = new THREE.InstancedMesh(g, metal, 4);
+    const mesh = new THREE.InstancedMesh(g, handMetal, 4);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(mesh);
     return mesh;

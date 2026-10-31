@@ -10,6 +10,11 @@ const RIGHT = new THREE.Vector3(-1, 0, 0);
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpQuat = new THREE.Quaternion();
 const tmpVec = new THREE.Vector3();
+const vec = { x: 0, y: 0, z: 0 }; // argument for Rapier setters (they copy it)
+const SIDES = ['left', 'right'] as const;
+const glowAll = (glows: readonly THREE.Sprite[], opacity: number) => {
+  for (let i = 0; i < glows.length; i++) setGlow(glows[i], opacity);
+};
 const BRAKE_LIGHT_HOLD = 0.4; // seconds
 const INDICATOR_HZ = 1.5; // turn-signal flashes per second
 // Footbrake balance: weight shifts forward under braking, so real cars put ~65% of it on the front.
@@ -91,6 +96,7 @@ export class Vehicle {
    */
   tractionAssist = 0;
   private brakeLightTimer = 0; // seconds the brake lights stay lit after the last brake input
+  private meshShown = false; // synced at least once (holdMesh)
   /** Road-lighting spotlight; cops use glowing lamps only. */
   beamEnabled = true;
   /** All lights out (wrecked). */
@@ -155,6 +161,17 @@ export class Vehicle {
   private prevQuat = new THREE.Quaternion();
   private currPos = new THREE.Vector3();
   private currQuat = new THREE.Quaternion();
+  /**
+   * Velocity and spin as of the last step (`snapshot()`), kept current by writes from outside the
+   * step (`push`, `setVelocity`). Each Rapier getter allocates, so read these instead of `body.linvel()`.
+   */
+  readonly vel = new THREE.Vector3();
+  readonly spin = new THREE.Vector3();
+  // The same within `drive`, kept current by its own writes (and read again after `updateVehicle`).
+  private lin = new THREE.Vector3();
+  private ang = new THREE.Vector3();
+  private linStale = false; // an impulse in `drive` changed the velocity since `lin` was set
+  private wheelConn: THREE.Vector3[] = []; // wheels' chassis connection points, read once
 
   constructor(
     private world: RAPIER.World,
@@ -220,6 +237,14 @@ export class Vehicle {
     });
 
     this.mesh = buildCarMesh(spec);
+    // Only the root, body, wheel pivots and spinners ever move, and syncMesh updates their matrices
+    // itself: three recomposing ~35 parts per car every frame was most of updateMatrixWorld's time.
+    const root = this.mesh.root;
+    root.traverse((o) => {
+      if (o === root) return;
+      o.updateMatrix();
+      o.matrixAutoUpdate = false;
+    });
     this.snapshot();
     this.prevPos.copy(this.currPos);
     this.prevQuat.copy(this.currQuat);
@@ -260,14 +285,60 @@ export class Vehicle {
 
   /** Sideways velocity in m/s (positive = sliding right). */
   get lateralSpeed(): number {
-    const v = this.body.linvel();
+    return this.lateralOf(this.vel);
+  }
+
+  private lateralOf(v: THREE.Vector3): number {
     tmpVec.copy(RIGHT).applyQuaternion(this.currQuat);
     return v.x * tmpVec.x + v.y * tmpVec.y + v.z * tmpVec.z;
   }
 
   /** Any wheel touching the ground (false only when the car is in the air). */
   get grounded(): boolean {
-    return [0, 1, 2, 3].some((i) => this.controller.wheelIsInContact(i));
+    for (let i = 0; i < 4; i++) if (this.controller.wheelIsInContact(i)) return true;
+    return false;
+  }
+
+  /** Push the body from outside the step (and spin it): `vel` and `spin` are read again. */
+  push(impulse: RAPIER.Vector, torque?: RAPIER.Vector): void {
+    this.body.applyImpulse(impulse, true);
+    if (torque) this.body.applyTorqueImpulse(torque, true);
+    this.readVelocity(this.vel, this.spin);
+  }
+
+  /** Set the body's velocity (and spin) from outside the step, keeping `vel` and `spin` current. */
+  setVelocity(lin: RAPIER.Vector, ang?: RAPIER.Vector): void {
+    this.body.setLinvel(lin, true);
+    this.vel.set(Math.fround(lin.x), Math.fround(lin.y), Math.fround(lin.z));
+    if (ang) {
+      this.body.setAngvel(ang, true);
+      this.spin.set(Math.fround(ang.x), Math.fround(ang.y), Math.fround(ang.z));
+    }
+  }
+
+  private readVelocity(lin: THREE.Vector3, ang: THREE.Vector3): void {
+    const v = this.body.linvel();
+    const w = this.body.angvel();
+    lin.set(v.x, v.y, v.z);
+    ang.set(w.x, w.y, w.z);
+  }
+
+  // Within `drive`: set the body's velocity or spin and the working copy. Rapier keeps f32, so the copy
+  // is rounded the same way and reads exactly what `linvel()`/`angvel()` would return.
+  private setLin(x: number, y: number, z: number): void {
+    vec.x = x;
+    vec.y = y;
+    vec.z = z;
+    this.body.setLinvel(vec, true);
+    this.lin.set(Math.fround(x), Math.fround(y), Math.fround(z));
+  }
+
+  private setAng(x: number, y: number, z: number): void {
+    vec.x = x;
+    vec.y = y;
+    vec.z = z;
+    this.body.setAngvel(vec, true);
+    this.ang.set(Math.fround(x), Math.fround(y), Math.fround(z));
   }
 
   /** World-space ground contact point of a wheel, or null if it is in the air. */
@@ -281,7 +352,7 @@ export class Vehicle {
   private potholeJolt(): void {
     const holes = Vehicle.potholes;
     if (!holes) return;
-    const v = this.body.linvel();
+    const v = this.linStale ? this.body.linvel() : this.lin;
     const speed = Math.hypot(v.x, v.z);
     for (let i = 0; i < 4; i++) {
       const p = this.wheelContact(i, this.holeAt);
@@ -301,6 +372,9 @@ export class Vehicle {
     const s = this.spec;
     const c = this.controller;
     const speed = this.speed;
+    this.lin.copy(this.vel);
+    this.ang.copy(this.spin);
+    this.linStale = false;
     const speedRatio = Math.min(Math.abs(speed) / s.maxSpeed, 1);
 
     // Smoothed, speed-sensitive steering. Positive wheel angle turns left, so negate.
@@ -345,6 +419,8 @@ export class Vehicle {
     this.softDrag(dt);
     this.potholeJolt();
     c.updateVehicle(dt, undefined, CAR_GROUPS);
+    this.readVelocity(this.lin, this.ang); // the wheels pushed the body
+    this.linStale = false;
     if (drifting && speed > 0) this.driftAssist(input, dt);
     this.lastInput = input;
     // Brake lights follow real braking (not coasting), held briefly so feathering doesn't flicker.
@@ -352,7 +428,7 @@ export class Vehicle {
     this.brakeLightTimer = braking ? BRAKE_LIGHT_HOLD : Math.max(0, this.brakeLightTimer - dt);
 
     // Skid intensity: sideways slide, handbrake lock, or hard braking at speed.
-    let skid = THREE.MathUtils.clamp((Math.abs(this.lateralSpeed) - 2.5) / 6, 0, 1);
+    let skid = THREE.MathUtils.clamp((Math.abs(this.lateralOf(this.lin)) - 2.5) / 6, 0, 1);
     if (input.handbrake && absSpeed > 5) skid = Math.max(skid, 0.6);
     if (absSpeed > DRIFT_MIN_SPEED) skid = Math.max(skid, (1 - this.rearGrip) * 0.8);
     // Hard cornering at high speed: grip holds, but the tyres still squeal a little.
@@ -369,11 +445,14 @@ export class Vehicle {
     this.airborneFor = this.grounded ? 0 : this.airborneFor + dt;
     if (this.airborneFor > AIR_CONTROL_AFTER) this.airControl(dt);
 
-    // Speed-scaled downforce keeps the car planted in fast corners.
-    const rot = this.body.rotation();
-    tmpVec.copy(UP).applyQuaternion(tmpQuat.set(rot.x, rot.y, rot.z, rot.w));
+    // Speed-scaled downforce keeps the car planted in fast corners. (Rotation only changes in the
+    // step, so currQuat is the body's.) `lin` goes stale here: nothing reads it before the step.
+    tmpVec.copy(UP).applyQuaternion(this.currQuat);
     const f = -s.downforce * Math.abs(speed) * dt;
-    this.body.applyImpulse({ x: tmpVec.x * f, y: tmpVec.y * f, z: tmpVec.z * f }, true);
+    vec.x = tmpVec.x * f;
+    vec.y = tmpVec.y * f;
+    vec.z = tmpVec.z * f;
+    this.body.applyImpulse(vec, true);
   }
 
   /**
@@ -454,21 +533,22 @@ export class Vehicle {
    * carries its speed around the corner and counter-steer straightens it out.
    */
   private driftAssist(input: DriveInput, dt: number): void {
-    const w = this.body.angvel();
+    const w = this.ang;
     let yaw = w.y;
     // Positive yaw turns left; positive steer is right.
     if (input.handbrake) yaw -= Math.sign(input.steer) * Math.min(1, Math.abs(input.steer)) * DRIFT_YAW_KICK * dt;
     yaw = THREE.MathUtils.clamp(yaw, -DRIFT_MAX_YAW, DRIFT_MAX_YAW);
-    this.body.setAngvel({ x: w.x, y: yaw, z: w.z }, true);
+    this.setAng(w.x, yaw, w.z);
 
-    const v = this.body.linvel();
-    const flat = Math.hypot(v.x, v.z);
+    let vx = this.lin.x;
+    let vz = this.lin.z;
+    const flat = Math.hypot(vx, vz);
     if (flat < 1) return;
     // Spinning rears still push: on the throttle the slide holds its speed instead of scrubbing off.
     if (!input.handbrake && input.throttle > 0 && flat < this.spec.maxSpeed) {
       const k = 1 + (DRIFT_POWER_PUSH * input.throttle * (1 - this.rearGrip) * dt) / flat;
-      v.x *= k;
-      v.z *= k;
+      vx *= k;
+      vz *= k;
     }
     // Swing the velocity a fraction of the way toward the heading each step; speed is kept.
     const slip = this.slipAngle();
@@ -476,7 +556,7 @@ export class Vehicle {
     const turn = -slip * Math.min(1, DRIFT_CARRY * (1 - this.rearGrip * 0.5) * dt);
     const cos = Math.cos(turn);
     const sin = Math.sin(turn);
-    this.body.setLinvel({ x: v.x * cos + v.z * sin, y: v.y, z: -v.x * sin + v.z * cos }, true);
+    this.setLin(vx * cos + vz * sin, this.lin.y, -vx * sin + vz * cos);
   }
 
   /**
@@ -486,8 +566,8 @@ export class Vehicle {
    */
   private slideAfterKnock(axle: 0 | 1, dt: number): number {
     const d = axle === 0 ? this.spec.wheelZ : -this.spec.wheelZ; // axle offset along the car
-    const v = this.body.linvel();
-    const w = this.body.angvel();
+    const v = this.lin;
+    const w = this.ang;
     const f = this.forward(tmpVec);
     // Sideways velocity at the axle, along (f.z, -f.x): the body's plus the spin swinging it.
     const u = v.x * f.z - v.z * f.x + w.y * d;
@@ -500,38 +580,37 @@ export class Vehicle {
       // Each axle carries half the weight; never push past stopping the axle's slide.
       const stop = Math.abs(u) / (1 / m + (d * d) / inertia);
       const j = -Math.sign(u) * Math.min(stop, SLIDE_FRICTION * 9.81 * this.gripScale * (m / 2) * k * dt);
-      this.body.setLinvel({ x: v.x + (f.z * j) / m, y: v.y, z: v.z - (f.x * j) / m }, true);
-      this.body.setAngvel({ x: w.x, y: w.y + (j * d) / inertia, z: w.z }, true);
+      this.setLin(v.x + (f.z * j) / m, v.y, v.z - (f.x * j) / m);
+      this.setAng(w.x, w.y + (j * d) / inertia, w.z);
     }
     return 1 - 0.97 * k;
   }
 
   /** Damp pitch and roll spin in the air and ease the body level (see AIR_SPIN_DAMP). */
   private airControl(dt: number): void {
-    const r = this.body.rotation();
-    const up = tmpVec.copy(UP).applyQuaternion(tmpQuat.set(r.x, r.y, r.z, r.w));
+    const up = tmpVec.copy(UP).applyQuaternion(this.currQuat);
     if (up.y < 0) return; // upside down already: no saving it
     // Axis and angle that would bring the car's up back to world up (up × Y, |.| = sin tilt).
     const ax = -up.z;
     const az = up.x;
-    const w = this.body.angvel();
+    const w = this.ang;
     // Split the spin into yaw (about world up, kept) and the tumble (pitch and roll, damped).
     const damp = Math.min(1, AIR_SPIN_DAMP * dt);
     const level = AIR_LEVEL * dt;
-    this.body.setAngvel({ x: w.x * (1 - damp) + ax * level, y: w.y, z: w.z * (1 - damp) + az * level }, true);
+    this.setAng(w.x * (1 - damp) + ax * level, w.y, w.z * (1 - damp) + az * level);
   }
 
   /** Signed angle between where the car points and where it's going (radians, 0 = no slide). */
   private slipAngle(): number {
-    const v = this.body.linvel();
+    const v = this.lin;
     const f = this.forward(tmpVec);
     return Math.atan2(v.x * f.z - v.z * f.x, v.x * f.x + v.z * f.z);
   }
 
   /** Sideways speed of the front tyres across the way they're steered (m/s, 0 = rolling true). */
   private frontSlipSpeed(steerAngle: number): number {
-    const v = this.body.linvel();
-    const wy = this.body.angvel().y;
+    const v = this.lin;
+    const wy = this.ang.y;
     const f = this.forward(tmpVec);
     // Velocity at the front axle: the body's, plus the yaw spin swinging the nose round.
     const rx = f.x * this.spec.wheelZ;
@@ -548,20 +627,21 @@ export class Vehicle {
   /** Remove part of the sideways velocity, and of any yaw spin the steering isn't asking for. */
   private assistTraction(dt: number): void {
     const k = Math.min(1, this.tractionAssist * dt);
-    const v = this.body.linvel();
+    const vx = this.lin.x;
+    const vz = this.lin.z;
     const f = this.forward(tmpVec);
-    const lateral = v.x * f.z - v.z * f.x; // velocity along the car's right/left axis
-    this.body.setLinvel({ x: v.x - f.z * lateral * k, y: v.y, z: v.z + f.x * lateral * k }, true);
+    const lateral = vx * f.z - vz * f.x; // velocity along the car's right/left axis
+    this.setLin(vx - f.z * lateral * k, this.lin.y, vz + f.x * lateral * k);
     // Yaw rate a car rolling at this speed and steering angle would have (bicycle model).
     const s = this.spec;
-    const speed = v.x * f.x + v.z * f.z;
+    const speed = vx * f.x + vz * f.z;
     const steerAngle = -this.steer * THREE.MathUtils.lerp(s.maxSteer, s.minSteer, Math.min(1, Math.abs(speed) / s.maxSpeed));
     const wanted = (speed * Math.tan(steerAngle)) / Math.max(1, s.wheelZ * 2);
     // Only rein in spin beyond that (the model over-predicts, so never add turning).
-    const w = this.body.angvel();
+    const w = this.ang;
     const limit = Math.abs(wanted) + 0.15;
     const target = Math.sign(w.y) === Math.sign(wanted) || wanted === 0 ? THREE.MathUtils.clamp(w.y, -limit, limit) : 0;
-    this.body.setAngvel({ x: w.x, y: w.y + (target - w.y) * k, z: w.z }, true);
+    this.setAng(w.x, w.y + (target - w.y) * k, w.z);
   }
 
   /** Call after world.step() to record the new physics transform. */
@@ -573,8 +653,9 @@ export class Vehicle {
     this.currPos.set(t.x, t.y, t.z);
     this.currQuat.set(r.x, r.y, r.z, r.w);
 
+    this.readVelocity(this.vel, this.spin);
     // Normal driving changes velocity < 0.2 m/s per step; anything well above is a hit.
-    const v = this.body.linvel();
+    const v = this.vel;
     const dv = Math.hypot(v.x - this.lastVel.x, v.y - this.lastVel.y, v.z - this.lastVel.z);
     const dt = this.stepDt;
     this.updateBody((v.x - this.lastVel.x) / dt, (v.y - this.lastVel.y) / dt, (v.z - this.lastVel.z) / dt, dt);
@@ -585,11 +666,11 @@ export class Vehicle {
     // Knock each axle by the sideways jolt it took: the body's shove plus the sudden spin.
     const f = this.forward(tmpVec);
     const shove = (v.x - this.lastVel.x) * f.z - (v.z - this.lastVel.z) * f.x;
-    const yawRate = this.body.angvel().y;
+    const yawRate = this.spin.y;
     const spin = yawRate - this.lastYawRate;
     this.lastYawRate = yawRate;
     if (absorbed > 1.5) {
-      for (const axle of [0, 1] as const) {
+      for (let axle = 0 as 0 | 1; axle < 2; axle++) {
         const jolt = Math.abs(shove + spin * (axle === 0 ? this.spec.wheelZ : -this.spec.wheelZ));
         this.knock[axle] = Math.min(1, Math.max(this.knock[axle], jolt / KNOCK_FULL_SHOVE));
       }
@@ -634,18 +715,41 @@ export class Vehicle {
 
   /** Update the mesh, interpolating between the last two physics steps. */
   syncMesh(alpha: number): void {
-    this.mesh.root.position.lerpVectors(this.prevPos, this.currPos, alpha);
-    this.mesh.root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha);
-    this.mesh.body.rotation.set(this.pitch, 0, this.roll);
+    const root = this.mesh.root;
+    root.matrixAutoUpdate = true; // awake again after holdMesh
+    this.meshShown = true;
+    root.position.lerpVectors(this.prevPos, this.currPos, alpha);
+    root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha);
+    const body = this.mesh.body;
+    body.rotation.set(this.pitch, 0, this.roll);
+    body.updateMatrix();
     const c = this.controller;
-    this.mesh.wheels.forEach(({ pivot, spinners }, i) => {
-      const conn = c.wheelChassisConnectionPointCs(i)!;
+    const wheels = this.mesh.wheels;
+    for (let i = 0; i < wheels.length; i++) {
+      const { pivot, spinners } = wheels[i];
+      // The connection point is fixed on the chassis: read once (the getter allocates).
+      const conn = (this.wheelConn[i] ??= new THREE.Vector3().copy(c.wheelChassisConnectionPointCs(i)!));
       const len = c.wheelSuspensionLength(i) ?? this.spec.suspensionRestLength;
       pivot.position.set(conn.x, conn.y - len, conn.z);
       pivot.rotation.y = c.wheelSteering(i) ?? 0;
-      for (const spinner of spinners) spinner.rotation.x = c.wheelRotation(i) ?? 0;
-    });
+      pivot.updateMatrix();
+      const spin = c.wheelRotation(i) ?? 0;
+      for (let k = 0; k < spinners.length; k++) {
+        spinners[k].rotation.x = spin;
+        spinners[k].updateMatrix();
+      }
+    }
     this.updateLights();
+  }
+
+  /**
+   * Out of sight: leave the mesh as last drawn, so neither this nor three's matrix update spends
+   * anything on it (its matrices stay valid; nothing else moves its parts). The next syncMesh
+   * wakes it. A car never yet drawn is synced instead, so it isn't left at the origin.
+   */
+  holdMesh(alpha: number): void {
+    if (this.meshShown) this.mesh.root.matrixAutoUpdate = false;
+    else this.syncMesh(alpha);
   }
 
   get indicator(): 'left' | 'right' | null {
@@ -671,7 +775,7 @@ export class Vehicle {
 
   /** On soft ground: the tyres' grip drops and the ground drags at the wheels (on the ground only). */
   private softDrag(dt: number): void {
-    const p = this.body.translation();
+    const p = this.currPos; // position only changes in the step
     const soft = Vehicle.softGround?.at(p.x, p.z) ?? null;
     if (soft !== this.soft) {
       this.soft = soft;
@@ -679,11 +783,15 @@ export class Vehicle {
       this.applyFrictionSlip();
     }
     if (!soft || !this.grounded) return;
-    const v = this.body.linvel();
+    const v = this.lin;
     const s = Math.hypot(v.x, v.z);
     if (s < 0.1) return;
     const dv = Math.min(s, soft.drag * dt) * this.body.mass();
-    this.body.applyImpulse({ x: (-v.x / s) * dv, y: 0, z: (-v.z / s) * dv }, true);
+    vec.x = (-v.x / s) * dv;
+    vec.y = 0;
+    vec.z = (-v.z / s) * dv;
+    this.body.applyImpulse(vec, true);
+    this.linStale = true;
   }
 
   /**
@@ -691,28 +799,31 @@ export class Vehicle {
    * of day; everything off when wrecked.
    */
   private updateLights(): void {
+    // Per car per frame: index loops (no iterators), and the clock only read with an indicator on.
     const m = this.mesh;
     const brake = this.lightsOff ? 0 : this.brakeLightTimer > 0 ? 1 : this.headlights * 0.3;
     m.taillight.emissiveIntensity = brake * 5;
-    for (const g of m.tailGlows) setGlow(g, brake * (0.35 + this.headlights * 0.45));
+    glowAll(m.tailGlows, brake * (0.35 + this.headlights * 0.45));
 
     const head = this.lightsOff ? 0 : this.headlights;
     m.headlight.emissiveIntensity = 1.2 + head * 3;
-    for (const beam of m.beams) {
+    for (let i = 0; i < m.beams.length; i++) {
+      const beam = m.beams[i];
       beam.intensity = head * 300; // two overlapping beams, a bit brighter overall than the old single one
       // Wrecked, a beam just goes dark: hiding it changes the scene's light count, which recompiles
       // every lit material — a hitch right as the car blows up.
       beam.visible = this.headlights > 0 && this.beamEnabled;
     }
-    for (const g of m.headGlows) setGlow(g, head * 0.9);
+    glowAll(m.headGlows, head * 0.9);
 
     // About 1.5 flashes a second (road rules allow 1–2), lit for the first half of each.
     const flash = !this.lightsOff && this.signal !== null && ((performance.now() - this.signalSince) / 1000) * INDICATOR_HZ % 1 < 0.5;
-    for (const side of ['left', 'right'] as const) {
+    for (let k = 0; k < SIDES.length; k++) {
+      const side = SIDES[k];
       const on = flash && this.signal === side ? 1 : 0;
       const { lamp, glows } = m.indicators[side];
       lamp.emissiveIntensity = on * 2.5;
-      for (const g of glows) setGlow(g, on * (0.55 + this.headlights * 0.35));
+      glowAll(glows, on * (0.55 + this.headlights * 0.35));
     }
   }
 

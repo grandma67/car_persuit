@@ -37,7 +37,7 @@ Core 0.35 (in npm 0.20.0), from the changelog:
 ## Measured on our city
 
 `node scripts/rapier-bench.mjs 0.18.2 0.20.0 0.21.0` (seed 11 with the Old City: 711 static boxes
-and a ground slab; ray-cast vehicles with the game's wheel and suspension numbers, throttle and a
+when measured, 845 as of 2026-10-31, and a ground slab; ray-cast vehicles with the game's wheel and suspension numbers, throttle and a
 weave). µs per `world.step()` plus the vehicle updates, best of 3 × 900 steps, Node 24 on the
 development Mac:
 

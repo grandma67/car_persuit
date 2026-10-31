@@ -331,8 +331,13 @@ export function renderQuay(q: District, city: CityData, scene: THREE.Scene, ctx:
 
   // The moving parts of the working cranes.
   const n = Math.max(1, motion.length);
+  // Their own copy of `material`, and all with instance colours (white: untinted; the boxes are
+  // tinted): one material drawn by plain, instanced and colour-instanced meshes switches program
+  // variants at every draw (see mixedMaterials.ts).
+  const instanced = material.clone();
   const inst = (geo: THREE.BufferGeometry) => {
-    const m = new THREE.InstancedMesh(geo, material, n);
+    const m = new THREE.InstancedMesh(geo, instanced, n);
+    m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     m.castShadow = true;
     m.frustumCulled = false;

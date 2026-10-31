@@ -41,8 +41,8 @@ export class CopContact {
       }
     });
     if (impulse > 0) touching = true;
-    const a = cop.vehicle.body.linvel();
-    const b = this.player.body.linvel();
+    const a = cop.vehicle.vel;
+    const b = this.player.vel;
     const closing = this.closing.get(cop) ?? 0;
     this.closing.set(cop, Math.hypot(a.x - b.x, a.z - b.z));
     const wasTouching = this.touching.has(cop);

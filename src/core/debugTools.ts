@@ -7,6 +7,9 @@ import { inRect } from '../world/lots';
 import type { Game } from './Game';
 import { createStudio, type StudioShot } from './debugStudio';
 import { readCityParams, serializeCityParams } from '../world/CityParamsFile';
+import { mixedMaterials } from '../render/mixedMaterials';
+import { sceneBreakdown, staleMatrices } from '../render/sceneAudit';
+import type * as THREE from 'three';
 
 type P = { x: number; z: number };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -22,10 +25,13 @@ interface Internals {
     body: { rotation(): { x: number; y: number; z: number; w: number } };
   };
   policeOff: boolean;
-  director: { cops: { vehicle: { position: P } }[] };
+  director: { cops: { vehicle: { position: P; mesh: { root: object } }; wreckedFor: number | null; controller: { state: string } }[] };
+  traffic: { cars: { vehicle: { mesh: { root: object } } }[] };
+  explodeCop(cop: unknown): void;
   ground: (x: number, z: number) => number;
   renderer: { info: { programs: unknown[] | null; render: { calls: number; triangles: number } } };
   overview: boolean;
+  chase: { camera: { position: { set(x: number, y: number, z: number): void }; lookAt(x: number, y: number, z: number): void; far: number }; update(...a: unknown[]): void };
   overviewCamera(): { position: { set(x: number, y: number, z: number): void }; lookAt(x: number, y: number, z: number): void; near: number; updateProjectionMatrix(): void };
   debugView: unknown;
   health: { repair(share: number): number; destroyed: boolean; ratio: number };
@@ -35,6 +41,14 @@ interface Internals {
 export function debugTools(game: Game) {
   const g = game as unknown as Internals;
   const city = () => g.city;
+  /** Car roots by who drives them (the builders tag the rest of the scene themselves). */
+  const carOwners = () => {
+    const m = new Map<THREE.Object3D, string>();
+    m.set((g.player as unknown as { mesh: { root: THREE.Object3D } }).mesh.root, 'player');
+    for (const c of g.director.cops) m.set(c.vehicle.mesh.root as THREE.Object3D, 'cops');
+    for (const c of g.traffic.cars) m.set(c.vehicle.mesh.root as THREE.Object3D, 'traffic');
+    return m;
+  };
   let roadPoints: P[] | null = null;
   /** Points every 4 m along every road's centre line and on every junction. */
   const roads = () =>
@@ -116,6 +130,69 @@ export function debugTools(game: Game) {
       cam.position.set(t.x + Math.sin(from) * dist, g.ground(t.x, t.z) + height, t.z + Math.cos(from) * dist);
       cam.lookAt(t.x, g.ground(t.x, t.z) + look, t.z);
       await sleep(wait);
+    },
+    /**
+     * Look at a point with the game's own camera (fog and far plane as in play, unlike aerial()): the
+     * chase camera is held `dist` m away on the side `from` (a heading; default: toward the car) and
+     * `height` m up, until `aim(false)`. For checking what's drawn far off, past the fog, and the like.
+     * `look` (m above the target's ground) defaults to 20 for far views: close up pass `look: 1`, or
+     * a low camera stares at the sky.
+     */
+    async aim(target: P | [number, number] | false, { dist = 200, height = 40, from, look = 20, wait = 600 }: { dist?: number; height?: number; from?: number; look?: number; wait?: number } = {}) {
+      const chase = g.chase as { update(...a: unknown[]): void; held?: (...a: unknown[]) => void };
+      if (target === false) {
+        if (chase.held) chase.update = chase.held;
+        delete chase.held;
+        return;
+      }
+      chase.held ??= chase.update;
+      chase.update = () => {};
+      const t = at(target);
+      const car = g.player.position;
+      const side = from ?? Math.atan2(car.x - t.x, car.z - t.z);
+      g.chase.camera.position.set(t.x + Math.sin(side) * dist, g.ground(t.x, t.z) + height, t.z + Math.cos(side) * dist);
+      g.chase.camera.lookAt(t.x, g.ground(t.x, t.z) + look, t.z);
+      await sleep(wait);
+      return { far: g.chase.camera.far };
+    },
+    /**
+     * Shader program lookups per frame over `ms`, by material: three redoes one whenever a material is
+     * drawn in another program variant than last time (instancing, instance colours, lights changed),
+     * each a heap of garbage. Expected `[]` while driving; see mixedMaterials() for the usual cause.
+     */
+    async programLookups(ms = 1000) {
+      type Props = { get(o: object): Record<string, unknown> };
+      const props = (g.renderer as unknown as { properties: Props }).properties;
+      // The materials the renderer touches over a few frames (the shadow pass's own included).
+      const mats = new Set<{ type: string; name: string; isMaterial?: boolean }>();
+      const get = props.get;
+      props.get = function (o) {
+        if ((o as { isMaterial?: boolean }).isMaterial) mats.add(o as never);
+        return get.call(this, o);
+      };
+      await sleep(300);
+      props.get = get;
+      // Each lookup ends by storing the light state's version: count those stores.
+      const counts = new Map<object, number>();
+      for (const m of mats) {
+        const p = props.get(m);
+        let v = p.lightsStateVersion;
+        Object.defineProperty(p, 'lightsStateVersion', { configurable: true, enumerable: true, get: () => v, set: (x) => ((v = x), counts.set(m, (counts.get(m) ?? 0) + 1)) });
+      }
+      let frames = 0;
+      const t0 = performance.now();
+      await new Promise<void>((done) => {
+        const tick = () => (frames++, performance.now() - t0 < ms ? requestAnimationFrame(tick) : done());
+        requestAnimationFrame(tick);
+      });
+      for (const m of mats) {
+        const p = props.get(m);
+        const v = p.lightsStateVersion;
+        Object.defineProperty(p, 'lightsStateVersion', { configurable: true, enumerable: true, writable: true, value: v });
+      }
+      return [...counts]
+        .sort((a, b) => b[1] - a[1])
+        .map(([m, n]) => `${(n / frames).toFixed(1)}/frame ${(m as { type: string }).type} ${(m as { name: string }).name}`.trim());
     },
     /**
      * The studio: prop models, landmarks, vehicles, zone and district lot buildings on a plain floor, labelled, away from the
@@ -258,6 +335,39 @@ export function debugTools(game: Game) {
       // for the rest of the run. Measure before any aerial().
       const warn = aerialUsed ? 'aerial() ran: fog was off, programs not comparable' : undefined;
       return { programs: g.renderer.info.programs?.length ?? 0, calls, triangles, staticTris: Math.round(staticTris), ...(warn ? { warn } : {}) };
+    },
+    /**
+     * The scene by owner (city, props, districts, player, cops, traffic…): objects, how many three
+     * recomposes every frame (`auto`), meshes, instanced, shadow casters; and the visible lights by
+     * type (each costs every lit pixel). Where the matrix and light costs come from, before guessing.
+     */
+    sceneBreakdown() {
+      return sceneBreakdown(g.scene as unknown as THREE.Object3D, carOwners());
+    },
+    /** Frozen objects moved without updateMatrix() (drawn where they were): expected `[]`. */
+    staleMatrices() {
+      return staleMatrices(g.scene as unknown as THREE.Object3D, carOwners());
+    },
+    /**
+     * The i-th nearest cop on duty (0: nearest) as a point for view/aim, with its distance and
+     * state; undefined if there are fewer. Close up: `aim(dbg.cop(), { dist: 18, height: 6, look: 1 })`.
+     */
+    cop(i = 0) {
+      const p = g.player.position;
+      const cops = g.director.cops.filter((c) => c.wreckedFor === null).map((c) => ({ c, d: Math.hypot(c.vehicle.position.x - p.x, c.vehicle.position.z - p.z) })).sort((a, b) => a.d - b.d);
+      const hit = cops[i];
+      return hit && { x: Math.round(hit.c.vehicle.position.x), z: Math.round(hit.c.vehicle.position.z), dist: Math.round(hit.d), state: hit.c.controller.state };
+    },
+    /** Blow up the i-th nearest cop on duty, as a crash would (fireball, flash, wreck). */
+    wreckCop(i = 0) {
+      const p = g.player.position;
+      const cop = g.director.cops.filter((c) => c.wreckedFor === null).sort((a, b) => Math.hypot(a.vehicle.position.x - p.x, a.vehicle.position.z - p.z) - Math.hypot(b.vehicle.position.x - p.x, b.vehicle.position.z - p.z))[i];
+      if (cop) g.explodeCop(cop);
+      return !!cop;
+    },
+    /** Materials drawn by more than one kind of mesh, shadow pass included (each costs garbage every frame): expected empty. */
+    mixedMaterials() {
+      return mixedMaterials(g.scene as unknown as THREE.Object3D);
     },
     /**
      * This run's complete params as a file (what `npm run city -- dump` writes for its seed and URL

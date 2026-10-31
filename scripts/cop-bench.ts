@@ -1,9 +1,11 @@
 // One cop chase benchmark run (`npm run cops` runs three of these and compares; see knowledge/COPS_DEV.md):
-//   node scripts/run-ts.mjs scripts/cop-bench.ts [stars=3] [seeds=24] [secs=120] [maxBlocks=12] [ghost] [diag=hits|uturns|recovers] [verbose]
+//   node scripts/run-ts.mjs scripts/cop-bench.ts [stars=3] [seeds=24] [secs=120] [maxBlocks=12] [ghost] [diag=hits|uturns|recovers] [sample=0] [verbose]
 // Real cities (the game's per-seed grid, flat ones no wider than maxBlocks), 30 civilians, street
 // props as fixed boxes, a scripted suspect driving to far junctions, and the real CopDirector at a
 // star level. `ghost`: the suspect and the cops pass through each other, so the suspect never gets
-// pinned and the run measures how well cops keep up. Prints per-city averages as `RESULT {json}`.
+// pinned and the run measures how well cops keep up. `sample=N` (N > 0): other traffic and another
+// suspect route in the same cities, a second draw of the same thing, to see the noise (sample=0 is
+// the usual run). Prints per-city averages as `RESULT {json}`.
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { Rng } from '../src/core/Rng';
@@ -33,10 +35,10 @@ const DEBOUNCE = 1; // seconds: a pair that touches again this soon is the same 
 /** Trace letters for the diag examples. */
 const STATE_LETTER: Record<string, string> = { navigate: 'n', chase: 'c', ram: 'R', recover: 'v', backoff: 'b' };
 
-type Opts = { stars: number; seeds: number; secs: number; maxBlocks: number; ghost: boolean; diag: string; verbose: boolean };
+type Opts = { stars: number; seeds: number; secs: number; maxBlocks: number; ghost: boolean; diag: string; verbose: boolean; sample: number };
 
 function parse(args: string[]): Opts {
-  const o: Opts = { stars: 3, seeds: 24, secs: 120, maxBlocks: 12, ghost: false, diag: '', verbose: false };
+  const o: Opts = { stars: 3, seeds: 24, secs: 120, maxBlocks: 12, ghost: false, diag: '', verbose: false, sample: 0 };
   for (const a of args) {
     const [k, v] = a.includes('=') ? a.split('=') : [a, ''];
     if (k === 'ghost') o.ghost = true;
@@ -102,7 +104,8 @@ function run(seed: number, o: Opts, diag: Diag): Record<string, number> {
   const world = cityWorld(city);
   const props = propColliders(world, city);
   const graph = city.graph;
-  const rng = new Rng(seed ^ 0x51);
+  const draw = o.sample * 0x9e3779b1; // 0 for the usual run: its numbers stay as they were
+  const rng = new Rng(seed ^ 0x51 ^ draw);
   const randomNode = () => graph.nodes[Math.floor(rng.next() * graph.nodes.length)];
 
   // The suspect: a cop brain without feelers or sight, driving from one far junction to the next.
@@ -120,10 +123,11 @@ function run(seed: number, o: Opts, diag: Diag): Record<string, number> {
   const goalTarget = { position: new THREE.Vector3(goal.x, 0, goal.z), velocity: new THREE.Vector3() };
 
   const traffic = new CivilianTraffic(
-    world, new THREE.Scene(), graph, approachControls(graph, city.streetProps), new Rng(seed ^ 0x7a4f1c), 0,
+    world, new THREE.Scene(), graph, approachControls(graph, city.streetProps), new Rng(seed ^ 0x7a4f1c ^ draw), 0,
     undefined, keepOf(city.driveSide), fastStreets(graph, city.streetProps), busStops(graph, city.streetProps), districtTraffic(city),
   );
   traffic.count = 30;
+  traffic.lod = true; // as the game drives them
   const director = new CopDirector(world, new THREE.Scene(), graph, staticLineOfSight(world), new Rng(seed ^ 0xc095), 0, { ...DIRECTOR_TUNING, firstSpawnDelay: 1 }, undefined, keepOf(city.driveSide), {
     nav: new NavGrid(city),
     ignore: (c) => c.parent()?.handle === player.body.handle,
@@ -169,7 +173,9 @@ function run(seed: number, o: Opts, diag: Diag): Record<string, number> {
       for (const cop of director.cops) cop.vehicle.collider.setCollisionGroups((0x0004 << 16) | (0xffff & ~0x0002));
     }
     player.drive(driver.update(DT, goalTarget), DT);
-    for (const car of traffic.cars) car.vehicle.drive(car.controller.update(DT, t), DT);
+    // --vs runs this script on older refs too: before the traffic LOD, every car thought every step.
+    if (typeof traffic.drive === 'function') traffic.drive(DT, t);
+    else for (const car of traffic.cars) car.vehicle.drive(car.controller.update(DT, t), DT);
     for (const cop of active) cop.vehicle.drive(cop.controller.update(DT, target), DT);
     world.step();
     player.snapshot();

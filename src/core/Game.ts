@@ -39,7 +39,7 @@ import { PassBy } from '../audio/passBy';
 import { keepOf } from '../world/driveSide';
 import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
-import { Minimap } from '../ui/Minimap';
+import { Minimap, type MinimapTarget } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
 import { DestinationMarker } from '../render/DestinationMarker';
 import { MissionSystem, pickDestinations, routeAim, type Route } from '../gameplay/MissionSystem';
@@ -59,8 +59,9 @@ import { buildDistricts, type DistrictView } from '../render/districts/index';
 import { TouchControls, isTouchDevice } from '../ui/TouchControls';
 import { TiltInput, detectTilt, requestTiltPermission } from './tilt';
 import { getPref, setPref } from './idbPrefs';
-import { COP_RAM, DAMAGE, SLUMS } from '../gameplay/balance';
+import { COP_RAM, DAMAGE, SLUMS, type StarLevel } from '../gameplay/balance';
 import { GlowBatch } from '../render/GlowBatch';
+import { separateInstancedShadows } from '../render/instancedShadows';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 3; // more only snowballs on a slow phone: each catch-up step makes the frame slower still
@@ -69,11 +70,59 @@ const CIVILIAN_PROP_RANGE = 90; // metres: civilians nearer the player than this
 const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
 const SINK_DEPTH = 3; // metres under the surface a car in the water comes to rest
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+const UP = new THREE.Vector3(0, 1, 0);
+const tmpA = new THREE.Vector3(); // scratch for the frame
+const tmpB = new THREE.Vector3();
 const STEER_PREF = 'steering'; // IndexedDB key: 'buttons' | 'tilt'
+const FAR_PAST_FOG = 20; // metres: the chase camera's far plane past the fog end
 const SHADOW_HALF = 125; // metres: half the width of the sun's shadow map
 const SHADOW_LEAD = 60; // metres ahead of the car to centre the shadow map, towards what the camera sees
 /** On phones, other cars further than this cast no shadow (switched back on 10 m nearer, so it doesn't flicker). */
 const CAR_SHADOW_RANGE = 65;
+// A civilian this far outside the view (beyond its own size) keeps its last drawn pose: past the
+// frustum's sides, or past the far plane at the fog end. Room for its shadow and a fast turn.
+const HOLD_MARGIN = 20;
+const viewFrustum = new THREE.Frustum();
+
+function dropArray(this: THREE.BufferAttribute): void {
+  (this as { array: unknown }).array = null;
+}
+
+/**
+ * The city's merged meshes keep a copy of every vertex in the JS heap after the GPU has its own.
+ * Nothing reads them back: the bounding spheres are worked out here, `count` survives, and the
+ * colliders come from the city data. So once uploaded, drop them.
+ * Not for instanced meshes (their matrices are rewritten) or anything re-merged later.
+ */
+function releaseAfterUpload(roots: THREE.Object3D[]): void {
+  for (const root of roots) {
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh) return;
+      const geo = mesh.geometry;
+      if (!geo.boundingSphere) geo.computeBoundingSphere(); // now, for anything that asks later (an unculled mesh never did)
+      for (const name in geo.attributes) {
+        const attr = geo.attributes[name];
+        if ((attr as THREE.BufferAttribute).isBufferAttribute) (attr as THREE.BufferAttribute).onUpload(dropArray);
+      }
+      geo.index?.onUpload(dropArray);
+    });
+  }
+}
+
+/**
+ * Scenery that never moves (the city's meshes, the props' instanced meshes): matrices worked out
+ * once, then skipped by three's per-frame update. Districts, landmarks and roadworks animate parts
+ * (clock hands, lantern strings, the windmill, the ship, knocked barriers) and stay automatic.
+ */
+function freezeStatic(roots: THREE.Object3D[]): void {
+  for (const root of roots) {
+    root.updateMatrixWorld(true);
+    root.traverse((o) => (o.matrixAutoUpdate = false));
+  }
+}
+const viewSphere = new THREE.Sphere();
+const viewMatrix = new THREE.Matrix4();
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
 
@@ -99,6 +148,9 @@ export function createRenderer(container: HTMLElement): THREE.WebGLRenderer {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // three r186 dropped PCFSoftShadowMap for this
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  // Reading each program's info log waits on its compile: ~9% of a cold load's CPU. Kept in dev
+  // and with ?debug, where a broken shader must say why.
+  renderer.debug.checkShaderErrors = import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug');
   container.appendChild(renderer.domElement);
   return renderer;
 }
@@ -163,6 +215,11 @@ export class Game {
   private sirens: Sirens;
   private glows: GlowBatch;
   private glowCars: CarMesh[] = []; // reused each frame
+  // Also reused each frame: the player and cops for the traffic, the director's level, the minimap's cops and target.
+  private otherVehicles: Vehicle[] = [];
+  private levelArg: StarLevel | null = null;
+  private copDots: THREE.Vector3[] = [];
+  private mapTarget: MinimapTarget = { x: 0, z: 0, final: false };
   private mission: MissionSystem;
   private route: Route | null = null;
   private routeTimer = 0;
@@ -204,9 +261,12 @@ export class Game {
     this.fog = new THREE.Fog(time.skyHorizon, time.fogNear, time.fogFar);
     this.scene.background = new THREE.Color(time.skyHorizon);
     this.scene.fog = this.fog;
+    // The root never moves, so three needn't recompose it and force every object's world matrix
+    // each frame; the frame updates the scene's matrices once itself, before the glows read them.
+    this.scene.matrixAutoUpdate = false;
+    this.scene.matrixWorldAutoUpdate = false;
     this.sky = new Sky(time.skyZenith, time.skyHorizon);
-    this.scene.add(this.sky.mesh);
-    this.scene.add(new THREE.HemisphereLight(time.hemiSky, time.hemiGround, time.hemiIntensity));
+    this.owned('sky', () => this.scene.add(this.sky.mesh, new THREE.HemisphereLight(time.hemiSky, time.hemiGround, time.hemiIntensity)));
 
     // Shadow-casting sun follows the player so a small shadow frustum covers the visible area.
     this.sun = new THREE.DirectionalLight(time.sunColor, time.sunIntensity);
@@ -218,7 +278,7 @@ export class Game {
     s.right = s.top = SHADOW_HALF;
     s.near = 1;
     this.sunTexel = (2 * SHADOW_HALF) / mapSize;
-    this.scene.add(this.sun, this.sun.target);
+    this.owned('sun', () => this.scene.add(this.sun, this.sun.target));
 
     this.world.timestep = FIXED_DT;
     // Night-only street props (Chinatown's night market and festival) join the city on a night run.
@@ -226,16 +286,19 @@ export class Game {
     if (night) this.city.streetProps.push(...nightProps(this.city));
     // Dressing for this run's night and climate (the Farm's harvest night, its desert irrigator).
     joinRunDressing(this.city, { night, climate: climate.name });
-    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
+    const built = this.owned('city', () => buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow }));
+    freezeStatic(this.rootsOf('city'));
+    releaseAfterUpload(this.rootsOf('city'));
     this.canalWater = built.canalWater;
     this.walls = built.walls;
-    this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs);
+    this.landmarks = this.owned('landmarks', () => new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs));
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
-    this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
+    this.props = this.owned('props', () => new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
       leaves: theme.leaves[0],
       trunk: theme.trunk,
       snowy: climate.snowRoofs,
-    });
+    }));
+    freezeStatic(this.rootsOf('props')); // instanced: props move in their buffers, never the meshes
     // Shadow casters behind the shadow camera are dropped, so it must sit up-sun of the tallest
     // tower's top: a low golden-hour sun throws shadows ~3× a building's height, and towers well
     // outside the map's footprint shade the streets in it. Only the depth range grows, not the map.
@@ -246,14 +309,15 @@ export class Game {
     s.far = sunDist + 100;
     // The shadow camera looks down -sunDir with world up, as Object3D.lookAt orients it.
     new THREE.Matrix4().lookAt(sunDir, new THREE.Vector3(), new THREE.Object3D().up).extractBasis(this.sunAxes[0], this.sunAxes[1], new THREE.Vector3());
-    this.districtViews = buildDistricts(this.city, this.scene, {
+    this.districtViews = this.owned('districts', () => buildDistricts(this.city, this.scene, {
       theme, climate, lampGlow: time.lampGlow, night, ground: this.ground, hour0: startHourAt(p.time!, p.startMinute!),
       bell: (strikes, at) => this.audio.bell(strikes, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.position) / 450, 0, 1)),
       firework: (at, colour) => this.effects.firework(at, colour),
       steam: (at) => this.effects.steamPuff(at),
       movers: () => [this.player, ...this.director.cops.map((c) => c.vehicle)],
-    });
-    this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
+    }));
+    this.roadworks = this.owned('roadworks', () => this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls)));
+    separateInstancedShadows(this.scene);
 
     const { spawn } = this.city;
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
@@ -273,13 +337,14 @@ export class Game {
     });
     Vehicle.potholes = holes.length ? { at: (x, z) => holes.some((h) => inside(h.bounds, x, z) && h.rects.some((r) => inside(r, x, z))), kick: SLUMS.potholeKick } : null;
     this.player.setGrip(playerGrip(climate, weather));
-    this.effects = new Effects(this.scene, climate.spray, weather === 'rain');
+    this.effects = this.owned('effects', () => new Effects(this.scene, climate.spray, weather === 'rain'));
     if (weather !== 'clear') {
       this.precipitation = new Precipitation(weather, mobile ? 0.5 : 1);
-      this.scene.add(this.precipitation.object);
+      this.owned('precipitation', () => this.scene.add(this.precipitation!.object));
     }
     this.scene.add(this.player.mesh.root);
-    this.scene.add(this.marker.group, this.sea.mesh);
+    this.owned('marker', () => this.scene.add(this.marker.group));
+    this.owned('sea', () => this.scene.add(this.sea.mesh));
 
     // Destinations get their own RNG stream so they're stable per seed (or come pinned in the params).
     this.destinations = cityDestinations(this.city);
@@ -302,12 +367,17 @@ export class Game {
       busStops(this.city.graph, this.city.streetProps),
       districtTraffic(this.city),
     );
-    this.scene.add(this.crashMarks.mesh);
-    this.sirens = new Sirens(this.scene);
-    this.glows = new GlowBatch(this.scene);
+    this.traffic.lod = true;
+    this.owned('crashMarks', () => this.scene.add(this.crashMarks.mesh));
+    this.sirens = this.owned('sirens', () => new Sirens(this.scene));
+    this.glows = this.owned('glows', () => new GlowBatch(this.scene));
     this.copContact = new CopContact(this.world, this.player);
 
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
+    // Past the fog end everything is fog colour, which the sky dome behind shows anyway: stop there, so
+    // frustum culling drops what lies past it (building tiles, landmarks, district pieces).
+    this.chase.camera.far = this.fog.far + FAR_PAST_FOG;
+    this.chase.camera.updateProjectionMatrix();
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
     this.audio.setMuted(this.prefs.muted);
@@ -646,14 +716,14 @@ export class Game {
     let ramDamage = 0;
     let crashSound = 0; // loudest car-on-car/wall crash heard this frame, 0..1 (strength × distance)
     const breaks: PropBreak[] = [];
-    const lv = this.player.body.linvel();
+    const lv = this.player.vel;
     this.chaseTarget.position.copy(this.player.position);
     this.chaseTarget.velocity.set(lv.x, 0, lv.z);
     const copsChase = this.state === 'playing';
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.player.drive(driveInput, FIXED_DT);
       const now = this.timer.getElapsed();
-      for (const car of this.traffic.cars) car.vehicle.drive(car.controller.update(FIXED_DT, now), FIXED_DT);
+      this.traffic.drive(FIXED_DT, now);
       for (const cop of this.director.cops) {
         const active = copsChase && cop.wreckedFor === null;
         cop.vehicle.drive(active ? cop.controller.update(FIXED_DT, this.chaseTarget) : NO_INPUT, FIXED_DT);
@@ -679,7 +749,7 @@ export class Game {
           // Measured along the truck's own up axis, so it still holds parked on a slope.
           const onRamp =
             car.vehicle.spec.body === 'ramptruck' &&
-            this.player.position.clone().sub(car.vehicle.position).dot(new THREE.Vector3(0, 1, 0).applyQuaternion(car.vehicle.quaternion)) > -0.5;
+            tmpA.copy(this.player.position).sub(car.vehicle.position).dot(tmpB.copy(UP).applyQuaternion(car.vehicle.quaternion)) > -0.5;
           car.controller.hit(!onRamp);
           if (this.state === 'playing' && !onRamp && car.vehicle.position.distanceTo(this.player.position) < 8) {
             this.logIncident('civilian', `Crashed into a ${car.vehicle.spec.name.toLowerCase()}`);
@@ -690,15 +760,15 @@ export class Game {
       const smashed = this.scratchOnProps(this.player, this.props.checkVehicle(this.player, FIXED_DT));
       // A firecracker crate goes off under the car: a hop and a shove back, no damage.
       if (smashed.some((b) => b.kind === 'firecrackerCrate')) {
-        const v = this.player.body.linvel();
+        const v = this.player.vel;
         const m = this.player.body.mass();
-        this.player.body.applyImpulse({ x: -v.x * m * 0.12, y: m * 2.2, z: -v.z * m * 0.12 }, true);
+        this.player.push({ x: -v.x * m * 0.12, y: m * 2.2, z: -v.z * m * 0.12 });
       }
       if (this.state === 'playing') this.runLog.propsSmashed += smashed.length;
-      breaks.push(...smashed);
+      for (const b of smashed) breaks.push(b);
       for (const cop of this.director.cops) {
         cop.vehicle.snapshot();
-        breaks.push(...this.scratchOnProps(cop.vehicle, this.props.checkVehicle(cop.vehicle, FIXED_DT)));
+        for (const b of this.scratchOnProps(cop.vehicle, this.props.checkVehicle(cop.vehicle, FIXED_DT))) breaks.push(b);
         if (copsChase && cop.wreckedFor === null) {
           const contact = this.copContactDamage(cop, FIXED_DT);
           ramDamage += contact.damage;
@@ -722,10 +792,13 @@ export class Game {
 
     this.player.syncMesh(alpha);
     for (const cop of this.director.cops) cop.vehicle.syncMesh(alpha);
-    for (const car of this.traffic.cars) car.vehicle.syncMesh(alpha);
     if (this.carShadowCull) this.cullCarShadows();
     this.checkWater();
-    this.traffic.update(this.player.position, [this.player, ...this.director.cops.map((c) => c.vehicle)]);
+    const others = this.otherVehicles;
+    others.length = 0;
+    others.push(this.player);
+    for (const cop of this.director.cops) others.push(cop.vehicle);
+    this.traffic.update(this.player.position, others);
     if (this.state === 'playing' && this.police) {
       this.raiseStars(this.wanted.update(frameDt));
       const level = this.wanted.level;
@@ -733,14 +806,16 @@ export class Game {
         frameDt,
         this.chaseTarget,
         this.player.forward(),
-        { ...level, maxCops: scaledCopCap(level.maxCops, this.difficulty) },
+        this.levelFor(level),
         this.route?.path ?? null,
         this.mission.current,
       );
     }
-    const nearestCop = this.sirens.update(this.timer.getElapsed(), this.director.cops, this.player.position, this.player.headlights, this.state !== 'won');
+    const nearestCop = this.sirens.update(this.timer.getElapsed(), this.director.cops, this.player.position, this.player.headlights, this.state !== 'won', this.effects.flash);
     this.audio.setSiren(this.state === 'playing' ? nearestCop : null);
-    this.props.sync();
+    // Props past the fog end aren't drawn; with the fog off (the overview) all are. Last frame's camera.
+    const eye = this.chase.camera.position;
+    this.props.sync(this.scene.fog ? { x: eye.x, z: eye.z, fogFar: this.fog.far } : null);
     this.props.updateSignals(this.timer.getElapsed());
     this.props.updateLamps(this.timer.getElapsed());
     for (const works of this.roadworks) works.update(frameDt, this.timer.getElapsed());
@@ -780,8 +855,8 @@ export class Game {
       carPos.z,
       Math.atan2(fwd.x, fwd.z),
       target ? (this.route?.path ?? null) : null,
-      target ? { x: target.x, z: target.z, final: this.mission.index === this.mission.total - 1 } : null,
-      this.director.activeCops.map((c) => c.vehicle.position),
+      target ? this.mapTargetAt(target) : null,
+      this.copDotsNow(),
       this.rampTruckOnMap(),
     );
 
@@ -793,14 +868,52 @@ export class Game {
       return;
     }
     const camera = this.overview ? this.overviewCamera() : this.chase.camera;
+    this.syncTraffic(alpha); // after the camera moved: a look back must not show cars held out of the old view
     const cars = this.glowCars;
     cars.length = 0;
     cars.push(this.player.mesh);
     for (const cop of this.director.cops) cars.push(cop.vehicle.mesh);
     for (const car of this.traffic.cars) cars.push(car.vehicle.mesh);
+    // Matrices once, here: the glows read them, and the render (scene.matrixWorldAutoUpdate off) reuses them.
+    this.scene.updateMatrixWorld();
     this.glows.update(cars, camera);
     this.renderer.render(this.scene, camera);
     this.input.endFrame();
+  }
+
+  /** Run `build` and tag what it adds to the scene with `owner` (`userData.owner`: dbg.sceneBreakdown, rootsOf). */
+  private owned<T>(owner: string, build: () => T): T {
+    const from = this.scene.children.length;
+    const out = build();
+    for (const o of this.scene.children.slice(from)) o.userData.owner = owner;
+    return out;
+  }
+
+  /** The scene's top-level objects a builder added (see owned). */
+  private rootsOf(owner: string): THREE.Object3D[] {
+    return this.scene.children.filter((o) => o.userData.owner === owner);
+  }
+
+  /**
+   * Civilians' meshes: interpolated when in view (this frame's camera), held as last drawn when
+   * well out of it, which spares their matrices too (Vehicle.holdMesh).
+   */
+  private syncTraffic(alpha: number): void {
+    const cars = this.traffic.cars;
+    const cam = this.chase.camera;
+    const hold = !this.overview;
+    if (hold) {
+      cam.updateMatrixWorld(); // its inverse, for this frame's view (the render would do it next)
+      viewFrustum.setFromProjectionMatrix(viewMatrix.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    }
+    for (let i = 0; i < cars.length; i++) {
+      const v = cars[i].vehicle;
+      const he = v.spec.halfExtents;
+      viewSphere.center.copy(v.position);
+      viewSphere.radius = Math.hypot(he.x, he.y, he.z) + HOLD_MARGIN;
+      if (hold && !viewFrustum.intersectsSphere(viewSphere)) v.holdMesh(alpha);
+      else v.syncMesh(alpha);
+    }
   }
 
   private cullCarShadows(): void {
@@ -900,8 +1013,7 @@ export class Game {
     for (const v of [this.player, ...this.director.cops.map((c) => c.vehicle)]) {
       if (!this.sunk.has(v) || v.position.y > SEA_LEVEL - SINK_DEPTH) continue;
       v.body.setGravityScale(0, true);
-      v.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      v.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      v.setVelocity({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     }
   }
 
@@ -909,7 +1021,7 @@ export class Game {
   private waterBlast(vehicle: Vehicle, size: number): void {
     this.sunk.add(vehicle);
     const body = vehicle.body;
-    const v = body.linvel();
+    const v = vehicle.vel;
     const at = vehicle.position.clone().setY(SEA_LEVEL);
     this.effects.splash(at, new THREE.Vector3(v.x, 0, v.z));
     this.effects.explode(at.setY(SEA_LEVEL + 0.8), { fireball: 90 * size, smoke: 60 * size, fire: 0, flash: 4000 * size });
@@ -932,10 +1044,11 @@ export class Game {
 
   /** Wrecked: the car blows up — fireball, flash, smoke, a jolt into the air — then the lose screen. */
   private explode(): void {
-    const body = this.player.body;
     const m = this.player.spec.mass;
-    body.applyImpulse({ x: (Math.random() - 0.5) * m * 2, y: m * 7, z: (Math.random() - 0.5) * m * 2 }, true);
-    body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m * 3, y: (Math.random() - 0.5) * m, z: (Math.random() - 0.5) * m * 3 }, true);
+    this.player.push(
+      { x: (Math.random() - 0.5) * m * 2, y: m * 7, z: (Math.random() - 0.5) * m * 2 },
+      { x: (Math.random() - 0.5) * m * 3, y: (Math.random() - 0.5) * m, z: (Math.random() - 0.5) * m * 3 },
+    );
 
     this.player.mesh.paint.color.multiplyScalar(0.15);
     this.player.lightsOff = true;
@@ -951,6 +1064,31 @@ export class Game {
   }
 
   /** The ramp truck for the minimap: where it is and which way it launches you. */
+  /** The wanted level with the cop cap scaled for the difficulty (one object, refilled). */
+  private levelFor(level: StarLevel): StarLevel {
+    const arg = (this.levelArg ??= { ...level });
+    Object.assign(arg, level);
+    arg.maxCops = scaledCopCap(level.maxCops, this.difficulty);
+    return arg;
+  }
+
+  /** The mission target for the minimap (one object, refilled). */
+  private mapTargetAt(target: { x: number; z: number }): MinimapTarget {
+    const t = this.mapTarget;
+    t.x = target.x;
+    t.z = target.z;
+    t.final = this.mission.index === this.mission.total - 1;
+    return t;
+  }
+
+  /** Active cops' positions for the minimap (one array, refilled). */
+  private copDotsNow(): THREE.Vector3[] {
+    const dots = this.copDots;
+    dots.length = 0;
+    for (const c of this.director.activeCops) dots.push(c.vehicle.position);
+    return dots;
+  }
+
   private rampTruckOnMap(): { x: number; z: number; yaw: number } | null {
     const truck = this.traffic.rampTruck?.vehicle;
     if (!truck) return null;
@@ -966,7 +1104,7 @@ export class Game {
   /** Smashing through street furniture scuffs the front (or whichever way the car was going). */
   private scratchOnProps(vehicle: Vehicle, hits: readonly PropBreak[]): readonly PropBreak[] {
     if (hits.length) {
-      const v = vehicle.body.linvel();
+      const v = vehicle.vel;
       scratchCar(vehicle, new THREE.Vector3(v.x, 0, v.z), 0.15 * hits.length);
     }
     return hits;
@@ -1047,8 +1185,7 @@ export class Game {
     if (this.state === 'playing') this.raiseStars(this.wanted.copWrecked());
     const v = cop.vehicle;
     const m = v.spec.mass;
-    v.body.applyImpulse({ x: 0, y: m * 5, z: 0 }, true);
-    v.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m * 3, y: 0, z: (Math.random() - 0.5) * m * 3 }, true);
+    v.push({ x: 0, y: m * 5, z: 0 }, { x: (Math.random() - 0.5) * m * 3, y: 0, z: (Math.random() - 0.5) * m * 3 });
     v.mesh.paint.color.multiplyScalar(0.15);
     const at = v.position.clone().setY(v.position.y + 0.8);
     this.effects.explode(at, { fireball: 60, smoke: 40, fire: 0, flash: 3000 });
@@ -1176,7 +1313,7 @@ export class Game {
   /** Civilians leaning on the horn (see horn.ts): fading with distance, panned to where they are. */
   private honks(): void {
     const p = this.player.position;
-    const right = this.player.forward(new THREE.Vector3()).cross(new THREE.Vector3(0, 1, 0)); // forward × up
+    const right = this.player.forward(tmpA).cross(UP); // forward × up
     for (const car of this.traffic.cars) {
       const honk = car.controller.honk();
       if (!honk || this.state !== 'playing') continue;
@@ -1194,16 +1331,18 @@ export class Game {
   /** A whoosh for each car the player flashes past close (or that flashes past them). */
   private whooshes(): void {
     const p = this.player.position;
-    const pv = this.player.body.linvel();
-    const right = this.player.forward(new THREE.Vector3()).cross(new THREE.Vector3(0, 1, 0)); // forward × up
-    for (const v of [...this.traffic.cars.map((c) => c.vehicle), ...this.director.cops.map((c) => c.vehicle)]) {
+    const pv = this.player.vel;
+    const right = this.player.forward(tmpA).cross(UP); // forward × up
+    const pass = (v: Vehicle) => {
       const rx = v.position.x - p.x;
       const rz = v.position.z - p.z;
-      if (rx * rx + rz * rz > 50 * 50) continue;
-      const ov = v.body.linvel();
+      if (rx * rx + rz * rz > 50 * 50) return;
+      const ov = v.vel;
       const w = this.passBy.check(v, rx, rz, ov.x - pv.x, ov.z - pv.z, right.x, right.z, v.spec.mass);
       if (w) this.audio.whoosh(w.strength, w.pan, w.heavy, w.speed);
-    }
+    };
+    for (const car of this.traffic.cars) pass(car.vehicle);
+    for (const cop of this.director.cops) pass(cop.vehicle);
   }
 }
 
@@ -1221,6 +1360,7 @@ function disposeScene(scene: THREE.Scene): void {
     if (o instanceof THREE.Mesh || o instanceof THREE.Line || o instanceof THREE.Points || o instanceof THREE.Sprite) {
       o.geometry.dispose();
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
+      if (o.customDepthMaterial) materials.add(o.customDepthMaterial);
     }
     if (o instanceof THREE.InstancedMesh) o.dispose();
     if (o instanceof THREE.Light) o.dispose();

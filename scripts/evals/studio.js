@@ -5,7 +5,8 @@
 // `-` (`wreck-`, `sign-`), tints (`couch~6a3a2a`: tinted models show white where the tint goes),
 // lot buildings (`lot:slums/gutted`, `lot:farm/barn@9` with a height), landmarks (`mark:statue`, `mark:`
 // for all, `mark:pagoda@3` storeys, `mark:silo@1` steel), vehicles (`car:bus`, `car:cop-`,
-// `car:` for all, `car:sedan~c9ccd1` repainted), zone buildings (`zone:residential`, `zone:` for all
+// `car:` for all, `car:sedan~c9ccd1` repainted; keys: `CARS` in src/core/debugStudio.ts:
+// player, cop-patrol…, sedan, bus, tractor…), zone buildings (`zone:residential`, `zone:` for all
 // four, then `@height`, `v<variant>` 0..1, `=WxD`; the seed picks the theme). Shots: `grid-<k>` from
 // `angles` directions round the whole grid (default 4), one low eye-level grid shot with `low=1`,
 // and with `closeups=1` each item alone (the others hidden) from the front-left and back-right (`<i>-<name>-a|b`).

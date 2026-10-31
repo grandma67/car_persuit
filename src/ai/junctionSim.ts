@@ -119,8 +119,11 @@ interface Car {
 export type Mode = 'stop' | 'signal' | 'priority' | 'fast';
 const FAST_SPAWN_AT = 130;
 
-/** Run the junction for SECONDS, a new arrival on each arm every `gap` seconds (min, max). */
-function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
+/**
+ * Run the junction for SECONDS, a new arrival on each arm every `gap` seconds (min, max). `every`:
+ * drivers think every this many steps (the game's traffic LOD past CivilianTraffic's lodNear).
+ */
+function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number], every = 1) {
   const rng = new Rng(seed);
   const graph = crossroads();
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -153,7 +156,8 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
   const nextSpawn = ARMS.map(() => rng.range(0, 4));
   let nextId = 0;
 
-  for (let t = 0; t < SECONDS; t += DT) {
+  let step = 0;
+  for (let t = 0; t < SECONDS; t += DT, step++) {
     // Arrivals: on each arm, every few seconds, if the spawn spot is clear.
     ARMS.forEach((a, i) => {
       if (t < nextSpawn[i] || t > SECONDS - DRAIN) return;
@@ -181,7 +185,10 @@ function simulate(mode: Mode, seed: number, keep: Keep, gap: [number, number]) {
       const p = v.body.translation();
       return [{ handle: v.body.handle, x: p.x, z: p.z, vx: lv.x, vz: lv.z, civilian: true }];
     });
-    for (const c of cars) c.vehicle.drive(c.controller.update(DT, t), DT);
+    for (const c of cars) {
+      c.controller.every = every;
+      c.vehicle.drive(c.controller.tick(DT, t, step + c.id), DT);
+    }
     world.step();
 
     for (const c of cars) {
@@ -315,9 +322,12 @@ function report(r: ReturnType<typeof simulate>) {
   };
 }
 
-/** The junction cases for one control mode: each seed with each of `keeps`, and the rush hour if `rush`. */
-export function junctionSuite(mode: Mode, keeps: readonly Keep[], rush: boolean): void {
-  describe('four-way junction simulation', () => {
+/**
+ * The junction cases for one control mode: each seed with each of `keeps`, and the rush hour if
+ * `rush`. `every` > 1: every driver on the traffic LOD (thinking every `every` steps).
+ */
+export function junctionSuite(mode: Mode, keeps: readonly Keep[], rush: boolean, every = 1): void {
+  describe(`four-way junction simulation${every > 1 ? `, thinking every ${every} steps` : ''}`, () => {
     beforeAll(() => RAPIER.init());
 
     const safe = (r: ReturnType<typeof report>) => {
@@ -337,7 +347,7 @@ export function junctionSuite(mode: Mode, keeps: readonly Keep[], rush: boolean)
     // times what one sees in a game. Keeping right and keeping left.
     const CASES = keeps.flatMap((keep) => (mode === 'fast' ? [1, 2, 3, 4, 5, 6, 7, 8] : [1, 2, 3]) /* the fast road: more seeds, it's the hardest */.map((seed) => ({ mode, keep, seed })));
     it.each(CASES)('$mode, keep $keep, seed $seed: everyone through, safely and in their lane', ({ mode, keep, seed }) => {
-      const r = report(simulate(mode, seed, keep, [15, 25]));
+      const r = report(simulate(mode, seed, keep, [15, 25], every));
       expect(r.through).toBeGreaterThanOrEqual(20);
       expect(r.stuck).toEqual([]);
       // Behind a bus swinging wide through a turn, a queue can wait a while (at a light, a green or
@@ -357,7 +367,7 @@ export function junctionSuite(mode: Mode, keeps: readonly Keep[], rush: boolean)
     // cuts across or drives round the queue.
     if (rush) {
       it(`${mode}, rush hour: queues, never a crash or a shortcut`, () => {
-        const r = report(simulate(mode, 7, 1, [4, 7]));
+        const r = report(simulate(mode, 7, 1, [4, 7], every));
         expect(r.through).toBeGreaterThan(30);
         safe(r);
       }, 120_000);

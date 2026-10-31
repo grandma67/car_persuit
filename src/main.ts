@@ -132,7 +132,7 @@ async function build(source: number | CityParams): Promise<Game> {
 
 async function start(): Promise<void> {
   const seed = seedFromUrl();
-  // GPU leak hunting: window.gpuTrace names what the renderer still holds (see BROWSER_CHECKS.md).
+  // GPU leak hunting: window.gpuTrace names what the renderer still holds (see knowledge/LEAKS.md).
   if (new URLSearchParams(window.location.search).has('gputrace')) (await import('./core/gpuTrace')).installGpuTrace();
   await stage('Starting physics engine', 25);
   await RAPIER.init();
