@@ -133,7 +133,7 @@
   // Memory: JS heap after GC, GPU buffers/textures estimate.
   gc(); gc(); await sleep(200);
   const geos = new Set(), texs = new Set();
-  let geoBytes = 0, texBytes = 0, meshes = 0, castShadow = 0, instanced = 0, instances = 0;
+  let geoBytes = 0, geoHeap = 0, texBytes = 0, meshes = 0, castShadow = 0, instanced = 0, instances = 0;
   const byGeoOwner = {};
   g.scene.traverse((o) => {
     if (!o.isMesh && !o.isPoints && !o.isLine) return;
@@ -143,8 +143,14 @@
     const geo = o.geometry;
     if (geo && !geos.has(geo)) {
       geos.add(geo);
-      let b = geo.index ? geo.index.array.byteLength : 0;
-      for (const a of Object.values(geo.attributes)) b += a.array.byteLength;
+      // GPU size from count (a static city mesh drops its JS copy after upload: array null).
+      const size = (a) => a.count * a.itemSize * (a.array?.BYTES_PER_ELEMENT ?? 4);
+      let b = geo.index ? size(geo.index) : 0;
+      for (const a of Object.values(geo.attributes)) {
+        b += size(a);
+        if (a.array) geoHeap += a.array.byteLength;
+      }
+      if (geo.index?.array) geoHeap += geo.index.array.byteLength;
       if (o.isInstancedMesh) b += o.instanceMatrix.array.byteLength + (o.instanceColor?.array.byteLength ?? 0);
       geoBytes += b;
       const key = o.name || o.parent?.name || o.type;
@@ -162,7 +168,7 @@
   out.memory = {
     jsHeapMB: +(performance.memory.usedJSHeapSize / 1e6).toFixed(1),
     meshes, castShadow, instanced, instances,
-    geometries: geos.size, geometryMB: +(geoBytes / 1e6).toFixed(1),
+    geometries: geos.size, geometryMB: +(geoBytes / 1e6).toFixed(1), geometryHeapMB: +(geoHeap / 1e6).toFixed(1),
     textures: texs.size, textureMB: +(texBytes / 1e6).toFixed(1),
     topGeometryOwners: Object.entries(byGeoOwner).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k}: ${(v / 1e6).toFixed(2)} MB`),
     shadowMap: g.sun?.shadow?.mapSize?.x,

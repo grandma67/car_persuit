@@ -84,6 +84,32 @@ const CAR_SHADOW_RANGE = 65;
 const HOLD_MARGIN = 20;
 const viewFrustum = new THREE.Frustum();
 
+function dropArray(this: THREE.BufferAttribute): void {
+  (this as { array: unknown }).array = null;
+}
+
+/**
+ * The city's merged meshes keep a copy of every vertex in the JS heap after the GPU has its own.
+ * Nothing reads them back: the bounding spheres are worked out here, `count` survives, and the
+ * colliders come from the city data. So once uploaded, drop them.
+ * Not for instanced meshes (their matrices are rewritten) or anything re-merged later.
+ */
+function releaseAfterUpload(roots: THREE.Object3D[]): void {
+  for (const root of roots) {
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh) return;
+      const geo = mesh.geometry;
+      if (!geo.boundingSphere) geo.computeBoundingSphere(); // now, for anything that asks later (an unculled mesh never did)
+      for (const name in geo.attributes) {
+        const attr = geo.attributes[name];
+        if ((attr as THREE.BufferAttribute).isBufferAttribute) (attr as THREE.BufferAttribute).onUpload(dropArray);
+      }
+      geo.index?.onUpload(dropArray);
+    });
+  }
+}
+
 /**
  * Scenery that never moves (the city's meshes, the props' instanced meshes): matrices worked out
  * once, then skipped by three's per-frame update. Districts, landmarks and roadworks animate parts
@@ -122,6 +148,9 @@ export function createRenderer(container: HTMLElement): THREE.WebGLRenderer {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // three r186 dropped PCFSoftShadowMap for this
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  // Reading each program's info log waits on its compile: ~9% of a cold load's CPU. Kept in dev
+  // and with ?debug, where a broken shader must say why.
+  renderer.debug.checkShaderErrors = import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug');
   container.appendChild(renderer.domElement);
   return renderer;
 }
@@ -261,6 +290,7 @@ export class Game {
     let added = this.scene.children.length;
     const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
     freezeStatic(this.scene.children.slice(added));
+    releaseAfterUpload(this.scene.children.slice(added));
     this.canalWater = built.canalWater;
     this.walls = built.walls;
     this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs);
@@ -783,7 +813,7 @@ export class Game {
         this.mission.current,
       );
     }
-    const nearestCop = this.sirens.update(this.timer.getElapsed(), this.director.cops, this.player.position, this.player.headlights, this.state !== 'won');
+    const nearestCop = this.sirens.update(this.timer.getElapsed(), this.director.cops, this.player.position, this.player.headlights, this.state !== 'won', this.effects.flash);
     this.audio.setSiren(this.state === 'playing' ? nearestCop : null);
     // Props past the fog end aren't drawn; with the fog off (the overview) all are. Last frame's camera.
     const eye = this.chase.camera.position;

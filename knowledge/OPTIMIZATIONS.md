@@ -258,18 +258,22 @@ changing it recompiles every material.
 - Compare `per`, `allocMBperSec`, `render.calls/triangles` and `gpuMsPerFrame`.
 - On phones, judge by the JS frame ms, not FPS: headless desktop holds 60 either way.
 
-## 4. What the fixes found (branch `perf/runtime`, M1–M3)
+## 4. What the fixes found (branch `perf/runtime`, M1–M4)
 
 Measured with `perf-profile.js` on the reference city, cruising; phone = 390×844 at `--throttle 4`.
+Single runs swing by ~15 % with machine load: each column is against the one before, run with `--vs`.
 
-| | Start (ac1e4c8) | After M1 | After M2 | After M3 |
-|---|---|---|---|---|
-| Phone `FRAME` | 11.5 ms | 9.5 ms | 8.0 ms | 6.8 ms |
-| Phone `renderer.render` / shadow pass | 5.9 / 1.6 ms | 4.6 / 1.0 ms | 3.9 / 0.8 ms | 3.4 / 0.8 ms |
-| Phone civilians (controller + `syncMesh` + glows) | 2.5 ms | | 1.2 ms | 0.5 ms |
-| Garbage (desktop) | 30 MB/s, 1.4 GC/s | 16 MB/s, 0.6 GC/s | 16 MB/s | 15 MB/s |
-| Triangles per frame (main pass) | 1.79 M (1.28 M) | same | 1.10 M (0.80 M) | same |
-| Calls / programs | 327 / 37 | 327 / 34 | 308 / 34 | 308 / 34 |
+| | Start (ac1e4c8) | After M1 | After M2 | After M3 | After M4 |
+|---|---|---|---|---|---|
+| Phone `FRAME` | 11.5 ms | 9.5 ms | 8.0 ms | 6.8 ms | ~6.8 ms (−3 % vs M3 in one run) |
+| Phone `renderer.render` / shadow pass | 5.9 / 1.6 ms | 4.6 / 1.0 ms | 3.9 / 0.8 ms | 3.4 / 0.8 ms | same |
+| Phone civilians (controller + `syncMesh` + glows) | 2.5 ms | | 1.2 ms | 0.5 ms | same |
+| GPU ms per frame (point lights on → off, same page) | | | | | desktop 2.35 → 2.08, phone 1.79 → 1.56 |
+| Garbage (desktop) | 30 MB/s, 1.4 GC/s | 16 MB/s, 0.6 GC/s | 16 MB/s | 15 MB/s | same |
+| Triangles per frame (main pass) | 1.79 M (1.28 M) | same | 1.10 M (0.80 M) | same | same |
+| Calls / programs | 327 / 37 | 327 / 34 | 308 / 34 | 308 / 34 | 308 / 34 |
+| JS heap after GC / geometry kept in it | 107–123 MB / 31 MB | | | 101 MB / 30 MB | 87 MB / 16 MB |
+| Cold load of a new look (`loadCity`) | | | | 645 ms | 622 ms (shader checks off) |
 
 What the research above got wrong, and what was learned:
 
@@ -306,4 +310,15 @@ What the research above got wrong, and what was learned:
 - **Traffic LOD saves less than its call count**: a mid-range car thinks a third as often, but the
   forward rays already ran every 3rd step, so they cost as before (controller 0.53 → 0.44 ms).
   Despawning past the fog wouldn't help: the target count respawns them.
+- **Idle lights cost real GPU time** (M4): the three point lights at intensity 0 (two sirens, the crash
+  flash) were ~12 % of the GPU frame at desktop and phone size. One shared light now serves the
+  nearest cop's siren and a blast while its flash outshines it; the second-nearest cop loses its glow.
+- **Shader error checks cost little once warm**: the browser caches compiled shaders, so only a
+  cold load of a new look pays (−3.5 % there), not the 9 % the load profile suggested.
+- **Phones already had a 1024² shadow map**; a smaller shadowed area saved 0.04 of 0.66 ms. Headless
+  "phone" runs only take the phone path with `&touch` in the query (`isTouchDevice`): every phone
+  number above ran the desktop settings at phone size.
+- **Geometry arrays**: the city's merged meshes drop their JS copy once uploaded (bounding spheres
+  computed first), 14 MB of heap. District and landmark meshes keep theirs (the Slums re-merges its
+  wires as poles fall; the rest wasn't audited).
 

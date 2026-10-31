@@ -363,6 +363,11 @@ take ~5.6% of phone CPU.
 
 ## Milestone 4: load, lights, shadows, memory
 
+**Done:** 4.1 kept (cold load −3.5 %, not 9 %: warm reloads hit the browser's shader cache either
+way). 4.2: one shared point light for the nearest siren and a blast's flash, 3 → 1 (GPU −12 % at both
+sizes). 4.3 dropped: phones already had a 1024² map, and 90 m instead of 125 m saved 0.04 of 0.66 ms.
+4.4 for the city's merged meshes only: heap 104 → 89 MB.
+
 ### 4.1 Shader error checks off in builds
 
 1. Where the renderer is made (`Game.ts` ~line 94), add

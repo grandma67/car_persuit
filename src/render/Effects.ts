@@ -86,7 +86,8 @@ export class Effects {
   private exhaustTime = 0;
   private nextPipe = 0; // round-robin across the tailpipes, carried between frames
   private lastThrottle = 0;
-  private flash = new THREE.PointLight(0xff9a40, 0, 60, 1.5);
+  /** A blast's flash of light, decaying: Sirens lights it with the scene's one shared point light. */
+  readonly flash = { at: new THREE.Vector3(), intensity: 0 };
   private geysers: { position: THREE.Vector3; timeLeft: number; budget: number }[] = [];
   private smokeBudget = 0;
   private engineSmokeBudget = 0;
@@ -99,7 +100,7 @@ export class Effects {
     this.smoke.setColor(sprayColor);
     scene.add(this.dust.points, this.mud.points);
     scene.add(this.skidMarks.mesh, this.smoke.points);
-    scene.add(this.exhaust.points, this.soot.points, this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points, this.flash);
+    scene.add(this.exhaust.points, this.soot.points, this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points);
     scene.add(this.chips.points, this.straw.points, this.cloth.points, this.shards.points);
     scene.add(this.fruit.points, this.paper.points, this.steam.points, this.tiles.points, this.sparks.points, this.confetti.points);
     for (const f of this.fireworks) scene.add(f.points);
@@ -111,7 +112,7 @@ export class Effects {
     for (let i = 0; i < blast.fireball; i++) this.fireball.emit(at, this.tmpVel, 0);
     for (let i = 0; i < blast.smoke; i++) this.engineSmoke.emit(at, this.tmpVel, 1);
     for (let i = 0; i < blast.fire; i++) this.fire.emit(at, this.tmpVel, 1);
-    this.flash.position.copy(at).setY(at.y + 2);
+    this.flash.at.copy(at).setY(at.y + 2);
     this.flash.intensity = blast.flash;
   }
 

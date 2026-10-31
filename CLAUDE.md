@@ -107,7 +107,10 @@ Each script's header lists its options; the doc named here says when to use it.
 - Matrices: the scene root, the city's and props' meshes and every car part are manual
   (`matrixAutoUpdate = false`); `Game.frame` updates the scene once before the glows and the render.
   Moving one of those (a car part outside `syncMesh`, a city mesh) needs `updateMatrix()`. District,
-  landmark and roadworks objects stay automatic.
+  landmark and roadworks objects stay automatic. The city's merged meshes also drop their vertex
+  arrays once uploaded (`releaseAfterUpload`): read city geometry at build time only.
+- Lights: one point light in the scene, shared by the siren and a blast (`Sirens`); a new light is
+  ~4 % of the GPU frame even at intensity 0, and the count must never change at run time.
 - Big files (`CityBuilder`, `CivilianController`, `CopDirector`, `PropSystem`, `Game`): `grep -n`, read slices.
 
 ## Testing

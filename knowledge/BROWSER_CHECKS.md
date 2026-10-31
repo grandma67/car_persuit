@@ -16,7 +16,8 @@ npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-di
 - A city with a feature: `--make "flat chinatown festival night seed=N"` (`npm run city -- make` into a
   temp file) or `--city <file>` (a dump or a made file), loaded with `dbg.loadCity` before `--start`.
 - Phone: `--size 390x844`; `--throttle 4` slows the CPU during the expression (a mid-range phone's
-  CPU, not its GPU); `--profile f.json` adds CPU and heap sampling profiles (top self time and bytes
+  CPU, not its GPU); `&touch` in the query for the game's phone settings (1024² shadow map, car
+  shadows culled, half the precipitation, touch controls): the size alone keeps the desktop ones; `--profile f.json` adds CPU and heap sampling profiles (top self time and bytes
   per function; the line is the function's first line).
 - **Before/after: `--vs <ref>`** runs the same check on that ref first (its own worktree in the temp
   dir, kept for next time, and its own Vite on port + 100), then here; prints `{ vs, sha, base, current }`,
@@ -36,7 +37,7 @@ Each file's header lists its query options and what it returns.
 | `district-tour.js` + `?<kind>=1` | a milestone's look: stats + FPS first, then a road and an aerial shot of each structure kind and an overview. `&orbit=4` for gates and anything sized to its road; `&tourKinds=park,statue` tours city things with no district |
 | `district-drive.js` + `?<kind>=1` | a district's driving: 5★ chase in under the first overhead gate (stuck cops listed), every gate at 30 m/s, each off-road drivable rect end to end (`hit` = stopped inside, `exit` = past it, `stuck` = never moved). Use it instead of hand-written drive evals |
 | `studio.js` + `?studio=…` | every new prop, vehicle, landmark or look, alone on a grey floor, before placing it (prop keys, `wreck-` prefixes, `~tint`, `lot:`, `mark:`, `car:`, `zone:`). Compiles its own programs: take `dbg.stats()` in another run |
-| `perf-profile.js` | **after anything in the frame loop**: ms per system per frame, GPU ms, heap churn, calls, triangles, memory over idle, cruise and a 5★ chase. `budget` must be all true. Reference: seed 9 `oldtown=1&chinatown=1&harbor=1`, with `--vs` ([OPTIMIZATIONS.md](OPTIMIZATIONS.md)) |
+| `perf-profile.js` | **after anything in the frame loop**: ms per system per frame, GPU ms, heap churn, calls, triangles, memory (`geometryHeapMB`: vertex copies still in the JS heap) over idle, cruise and a 5★ chase. `budget` must be all true. Reference: seed 9 `oldtown=1&chinatown=1&harbor=1`, with `--vs` ([OPTIMIZATIONS.md](OPTIMIZATIONS.md)) |
 | `tri-breakdown.js` | **before choosing what to cull, merge or tile**: one cruising frame's calls and triangles per pass, and the meshes in view, biggest first |
 | `restart.js` | `npm run check:restart`: Retry / New city leaks ([LEAKS.md](LEAKS.md)) |
 | `city-reload.js` | `npm run check:reload`: a dump loads back as the same city, Retry keeps it, New city drops it |
@@ -86,8 +87,10 @@ feel to the user.
   recompiles: 35 read as 58; `stats()` warns) and before a drive breaks props (a first break can add one).
 - Draw calls read a few high for a frame or two after any restart (Retry, New city, `loadCity`): compare
   the lowest of a few samples ~700 ms apart (`city-reload.js` does).
-- `perf-profile.js` numbers swing with machine load: compare sides run one after the other (`--vs`
-  does), and run twice when they're close. Judge phones by `FRAME` ms at `--throttle 4`, not FPS.
+- `perf-profile.js` numbers swing with machine load (~15 % between runs; never with `npm run cops` or
+  a test run going): compare sides run one after the other (`--vs` does), and run twice when they're
+  close. Judge phones by `FRAME` ms at `--throttle 4`, not FPS. GPU ms drifts between pages: for a
+  GPU change, switch it on and off in one page (a light's `visible`, a uniform) and alternate.
 - The heap profile names functions, not lines. In hot per-car code the usual hidden costs are `for…of`
   (iterators), array destructuring, spreads and closures: index loops and plain locals instead. What
   three's WebGL uniform calls allocate is the browser's bindings: only fewer draws cut it.
