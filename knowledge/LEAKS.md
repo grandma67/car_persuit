@@ -11,7 +11,8 @@ eval's header lists every check and threshold. In short:
 - Retry, New city, Retry, New city through the end screen: fullscreen kept, seed kept/changed and in
   the URL, splash hidden with no animation left on it, one canvas/screen/touch layer, Enter starts.
 - The first two runs drive a 5★ chase first (`busy=ms`), so mid-run objects (cops, scratches, broken
-  props, fireworks) are in the Game being disposed. `dbg.mixedMaterials()` before and after it.
+  props, fireworks) are in the Game being disposed. `dbg.mixedMaterials()` and `dbg.staleMatrices()`
+  before and after it.
 - 10 same-city restarts: heap (after `gc()`), geometries, textures and programs must hold; every old
   Game must be collected (WeakRefs); the GPU orphan list must hold only three's own.
 - Its city is made from words (`--make` in `package.json`): every district with every feature that has
@@ -22,6 +23,10 @@ eval's header lists every check and threshold. In short:
   and menu shots per step; or `--query "seed=N&…&<flags>"` without `--make`).
 
 ## When it fails
+
+A run that takes many minutes instead of ~1.5 is every restart timing out (20 s each): run it again on
+its own first (once, a run stalled like that with nothing wrong, and passed alone in 73 s), then a
+single `game.retry()` in an eval with the console logs.
 
 Read `orphans` (`gpuTrace`, below): each names the code that created the leak. Things `dispose()`
 can't see on its own:

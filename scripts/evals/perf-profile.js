@@ -121,7 +121,8 @@
   out.cruise = await sample(5000);
   // Garbage budget while cruising (OPTIMIZATION_TASKS M1: 30 → 16 MB/s on seed 9, + ~30%). Most of
   // what's left is three's WebGL uniform calls (per draw) and Rapier's getters (per car per step).
-  out.budget = { allocMBperSec: out.cruise.allocMBperSec <= 21, mixedMaterials: !out.mixedMaterials?.length };
+  out.staleMatrices = window.dbg.staleMatrices?.() ?? []; // frozen objects moved without updateMatrix (expected empty)
+  out.budget = { allocMBperSec: out.cruise.allocMBperSec <= 21, mixedMaterials: !out.mixedMaterials?.length, staleMatrices: !out.staleMatrices.length };
   await drive;
   dbg.police(true);
   await dbg.stars(5);

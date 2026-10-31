@@ -299,7 +299,7 @@ What the research above got wrong, and what was learned:
   depth held inside it (it's meant to show past the fog).
 - **Cop metrics can't prove a refactor exact** (±10–20 % noise): two runs giving identical numbers did.
   For a change that does move them, a second sample of the same change (the LOD staggered one step
-  later) shows the noise: civilian hits swung 13–18 between two.
+  later) shows the noise: civilian hits swung 13–18 between two. Now `npm run cops -- --samples 2`.
 - **The matrix work was the cars, not the scenery** (M3): ~1 100 of the scene's ~1 400 objects are car
   parts, ~35 a car, of which 6 move. Three recomposes every object with `matrixAutoUpdate` each
   frame, and a root that does forces every world matrix under it. Now: the scene root and every

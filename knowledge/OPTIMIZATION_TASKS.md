@@ -22,14 +22,25 @@ Read from `base` and `current`:
 
 Wall time swings with machine load: compare the cruise phase, and run twice if the numbers are close.
 
-### Measure before choosing (the plan's guesses were wrong twice in M1–M2)
+### Measure before choosing (the plan's guesses were wrong in every milestone)
 
+- **The numbers, compared:** `--table` with `--vs` prints perf-profile as one Δ% table (full JSON
+  beside it). Small systems swing ±10–20 % run to run with no change: read `FRAME` and the big rows.
+- **What the scene is:** `dbg.sceneBreakdown()`: objects per owner, how many three recomposes each
+  frame, shadow casters, the lights in the shader loop. (M3's plan blamed static scenery; 70 % of the
+  objects were car parts.)
+- **A GPU cost:** `scripts/evals/gpu-ab.js` (`ab=pointLights|shadowPass|owner:<name>` or `abExpr=`):
+  on/off alternating in one page, with paired rounds. Separate pages drift more than most changes.
+- **Load time:** `cityLoadMs` (any `--make`/`--city` run, cold) and `scripts/evals/cold-load.js`
+  (warm reloads of it). The browser caches shaders: only a cold load shows a compile cost.
+- **Phones:** `--size 390x844 --throttle 4` and `&touch`, or the desktop settings run at phone size.
 - **Where triangles and calls go:** `scripts/evals/tri-breakdown.js` (per pass, biggest meshes in view).
 - **Where CPU and garbage go:** `--profile <file.json>` (CPU and heap sampling around the eval; top
   self time and bytes per function), with `--throttle 4` for a phone's CPU.
 - **Program lookups:** `dbg.programLookups()` (expected `[]` while driving).
 - **Looks:** shots from both sides of `--vs`, compared with `node scripts/png-diff.mjs`; the game's own
-  camera far off with `dbg.aim(point, {dist, height})`.
+  camera far off with `dbg.aim(point, {dist, height})`, close up with `look: 1`; a cop with
+  `dbg.cop(i)`, a blast with `dbg.wreckCop(i)`.
 
 ## Checks every task ends with
 

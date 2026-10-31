@@ -23,6 +23,9 @@
 //   --throttle N CPU slowdown during the expression (4: a mid-range phone's CPU)
 //   --profile f  CPU + heap sampling profiles around the expression, saved to f; prints the top self
 //                time and self bytes per `function url:line` (`profile`)
+//   --table      a perf-profile.js result as a compact table (with --vs: both sides, Δ%) instead of
+//                the JSON, which goes to --json (default <out-dir>/result.json); other evals print JSON
+//   --json f     also save the full output JSON to f
 //   --vs ref     the same run on that ref first (worktree in the temp dir, kept for next time; its own
 //                Vite on port + 100), then here, one after the other; prints { vs, sha, base, current },
 //                shots in <out-dir>/base and /current, --profile per side. Delete old worktrees with
@@ -31,6 +34,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { perfReport } from './perf-table.mjs';
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((pairs, a, i, all) => (a.startsWith('--') ? [...pairs, [a.slice(2), all[i + 1] === undefined || all[i + 1].startsWith('--') ? 'true' : all[i + 1]]] : pairs), []),
@@ -67,7 +71,7 @@ if (args.vs) {
   } catch {}
   const outDir = args['out-dir'] ?? dirname(args.out ?? 'browser-check.png');
   const pass = Object.entries(args).flatMap(([k, v]) =>
-    ['vs', 'make', 'port', 'out', 'out-dir', 'root', 'profile'].includes(k) ? [] : [`--${k}`, ...(v === 'true' ? [] : [k === 'eval-file' || k === 'city' ? resolve(v) : v])],
+    ['vs', 'make', 'port', 'out', 'out-dir', 'root', 'profile', 'table', 'json'].includes(k) ? [] : [`--${k}`, ...(v === 'true' ? [] : [k === 'eval-file' || k === 'city' ? resolve(v) : v])],
   );
   const run = (side, extra) => {
     const dir = join(outDir, side);
@@ -77,8 +81,21 @@ if (args.vs) {
   };
   const base = run('base', ['--port', String(basePort), '--root', tree]);
   const current = run('current', ['--port', String(vitePort)]);
-  console.log(print({ vs: args.vs, sha, base, current }, 3));
+  finish({ vs: args.vs, sha, base, current }, 3, outDir);
   process.exit(0);
+}
+
+/** Print the result: JSON, or with --table a perf-profile table (the JSON saved beside it). */
+function finish(result, depth, outDir) {
+  const json = print(result, depth);
+  const file = args.json ?? (args.table ? join(outDir, 'result.json') : null);
+  if (file) {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, json);
+  }
+  const report = args.table ? perfReport(result) : null;
+  if (args.table && !report) process.stderr.write('--table: not a perf-profile.js result, printing the JSON\n');
+  console.log(report ? `${report}\nfull result: ${file}` : json);
 }
 
 const children = [];
@@ -175,8 +192,17 @@ for (let i = 0; i < 150; i++) {
 }
 await sleep(1000);
 // --city: the page built its URL seed first; the file's city replaces it in place (no URL flag).
+// Timed until the next Game has drawn two frames: `cityLoadMs` (the first load of a look in a fresh
+// page compiles its shaders cold; a reload of it in the same page is warm, see cold-load.js).
+let cityLoadMs;
 if (args.city) {
-  const loaded = await send('Runtime.evaluate', { expression: `dbg.loadCity(${JSON.stringify(readFileSync(args.city, 'utf8'))})`, awaitPromise: true, returnByValue: true });
+  const t0 = Date.now();
+  const loaded = await send('Runtime.evaluate', {
+    expression: `(async () => { await dbg.loadCity(${JSON.stringify(readFileSync(args.city, 'utf8'))}); const r = window.game.renderer.info.render, f = r.frame; while (window.game.renderer.info.render.frame < f + 2) await new Promise((d) => setTimeout(d, 5)); })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  cityLoadMs = Date.now() - t0;
   if (loaded.result?.exceptionDetails) {
     console.error(`--city ${args.city}: ${loaded.result.exceptionDetails.exception?.description ?? loaded.result.exceptionDetails.text}`);
     ws.close();
@@ -229,7 +255,7 @@ if (!args['no-final']) {
 }
 // The deprecated-parameters warning from Rapier's init is always there: leave it out.
 const quiet = logs.filter((l) => !l.includes('deprecated parameters for the initialization function'));
-console.log(print({ url, shots, val, logs: quiet, ...(profile ? { profile } : {}) }, 2));
+finish({ url, shots, val, logs: quiet, ...(cityLoadMs !== undefined ? { cityLoadMs } : {}), ...(profile ? { profile } : {}) }, 2, args['out-dir'] ?? dirname(out));
 ws.close();
 cleanup();
 process.exit(0);

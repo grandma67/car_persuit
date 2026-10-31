@@ -8,8 +8,8 @@
 // the end screen (time's up via debug Y), the first two after a busy 5★ chase so cops, scratches and
 // broken props are in the Game disposed. After each: still fullscreen, seed kept (Retry) or changed
 // (New city) and in the URL, splash hidden with no animation left on it, one canvas, one .screen, at
-// most one .touch, state menu, and Enter starts the mission. dbg.mixedMaterials() at the start and
-// after the first chase.
+// most one .touch, state menu, and Enter starts the mission. dbg.mixedMaterials() and
+// dbg.staleMatrices() at the start and after the first chase.
 // (2) Quick same-city restarts (the loaded file's city first, if the run started from one): heap MB
 // after gc(), geometries, textures, programs per restart. From the 2nd on, heap must not climb > 1.5 MB
 // per restart, geometries hold within ±2 (props), textures and programs exactly. Every old Game must be
@@ -39,7 +39,8 @@
     const old = window.game;
     refs.push(new WeakRef(old));
     trigger(old);
-    for (let i = 0; i < 600; i++) {
+    // A restart takes ~1 s; 20 s means it failed (a failed check then ends in minutes, not 14).
+    for (let i = 0; i < 200; i++) {
       if (window.game !== old && splash.hidden) return true;
       await sleep(100);
     }
@@ -63,7 +64,11 @@
 
   const file = game.loaded ? dbg.dumpCity(false) : null; // the params the run was started from, as text
   // A material on both an instanced and a plain mesh rebuilds its program key every frame (garbage).
-  const mixed = () => { for (const m of dbg.mixedMaterials()) fail(`mixed material: ${m}`); };
+  // A frozen object (city, props, car parts) moved without updateMatrix() is drawn where it was.
+  const mixed = () => {
+    for (const m of dbg.mixedMaterials()) fail(`mixed material: ${m}`);
+    for (const m of dbg.staleMatrices?.() ?? []) fail(`stale matrix: ${m}`);
+  };
   mixed();
   const fsError = await document.documentElement.requestFullscreen().then(() => null, (e) => String(e));
   if (fsError) fail(`could not enter fullscreen: ${fsError}`);

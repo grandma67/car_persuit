@@ -15,6 +15,10 @@ npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-di
 - `await shot('name')` any number of times: **one run per milestone with all its views**.
 - A city with a feature: `--make "flat chinatown festival night seed=N"` (`npm run city -- make` into a
   temp file) or `--city <file>` (a dump or a made file), loaded with `dbg.loadCity` before `--start`.
+  The output's `cityLoadMs` times that load (a cold one: the page compiles that look's shaders).
+- **`--table`**: a `perf-profile.js` result as one table (phases × systems, with `--vs` both sides
+  and Δ%; budget, stats, memory, logs, profile tops under it) instead of the JSON, which goes to
+  `--json f` (default `<out-dir>/result.json`). `node scripts/perf-table.mjs <saved.json>` for a saved one.
 - Phone: `--size 390x844`; `--throttle 4` slows the CPU during the expression (a mid-range phone's
   CPU, not its GPU); `&touch` in the query for the game's phone settings (1024² shadow map, car
   shadows culled, half the precipitation, touch controls): the size alone keeps the desktop ones; `--profile f.json` adds CPU and heap sampling profiles (top self time and bytes
@@ -39,6 +43,8 @@ Each file's header lists its query options and what it returns.
 | `studio.js` + `?studio=…` | every new prop, vehicle, landmark or look, alone on a grey floor, before placing it (prop keys, `wreck-` prefixes, `~tint`, `lot:`, `mark:`, `car:`, `zone:`). Compiles its own programs: take `dbg.stats()` in another run |
 | `perf-profile.js` | **after anything in the frame loop**: ms per system per frame, GPU ms, heap churn, calls, triangles, memory (`geometryHeapMB`: vertex copies still in the JS heap) over idle, cruise and a 5★ chase. `budget` must be all true. Reference: seed 9 `oldtown=1&chinatown=1&harbor=1`, with `--vs` ([OPTIMIZATIONS.md](OPTIMIZATIONS.md)) |
 | `tri-breakdown.js` | **before choosing what to cull, merge or tile**: one cruising frame's calls and triangles per pass, and the meshes in view, biggest first |
+| `gpu-ab.js` + `&ab=…` | **any GPU question** (a light, the shadow pass, a builder's meshes, pixel ratio): switched on and off in one page, alternating; GPU, frame and render ms per state and how many paired rounds "off" won. `ab=pointLights\|spotLights\|shadowPass\|precipitation\|owner:<name>` or `abExpr=<js>` |
+| `cold-load.js` + `--make` | load time: the run's `cityLoadMs` is cold, the eval returns warm reloads of the same city. Shader compile changes show only cold |
 | `restart.js` | `npm run check:restart`: Retry / New city leaks ([LEAKS.md](LEAKS.md)) |
 | `city-reload.js` | `npm run check:reload`: a dump loads back as the same city, Retry keeps it, New city drops it |
 
@@ -66,10 +72,13 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `near(x,z,r)` | what stands there, nearest first, roadworks included |
 | `drive({from,yaw,speed,ms,police,snap})` | starts on the nearest road, holds W, samples position/speed/tilt, stops at a hit and lists what was there |
 | `aerial(point,{dist,height,from,look})` / `aerial(false)` | overview camera (fog off) aimed `look` m above a point's ground; loop `from` to orbit |
-| `aim(point,{dist,height,from,look})` / `aim(false)` | the game's own camera (fog and far plane as in play), for what's drawn far off or past the fog |
+| `aim(point,{dist,height,from,look})` / `aim(false)` | the game's own camera (fog and far plane as in play), for what's drawn far off or past the fog. `look` defaults to 20 m up: close up pass `look: 1` |
 | `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)` | model studio, HUD hidden |
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
+| `sceneBreakdown()` | the scene by owner (`Game.owned` tags: city, props, districts…; player, cops, traffic): objects, how many three recomposes per frame (`auto`), meshes, instanced, shadow casters, and visible lights by type. First stop for a matrix, draw or light cost |
+| `staleMatrices()` | frozen objects (`matrixAutoUpdate` off) moved without `updateMatrix()`, drawn where they were. Must be `[]` (in `perf-profile`'s budget and `check:restart`) |
+| `cop(i)`, `wreckCop(i)` | the i-th nearest cop on duty as a point (+ dist, state) for `view`/`aim`; blow it up (fireball, flash) |
 | `mixedMaterials()` | materials drawn by more than one kind of mesh (plain, instanced, instanced with colours), shadow pass included: each switches program every draw. Must be `[]` |
 | `programLookups(ms)` | shader program lookups per frame by material; `[]` while driving, else `mixedMaterials()` usually says why |
 | `dumpCity(download?)`, `loadCity(file)` | this run's params as text; restart in place with a params file ([CITY_PARAMS.md](CITY_PARAMS.md)) |
@@ -89,8 +98,9 @@ feel to the user.
   the lowest of a few samples ~700 ms apart (`city-reload.js` does).
 - `perf-profile.js` numbers swing with machine load (~15 % between runs; never with `npm run cops` or
   a test run going): compare sides run one after the other (`--vs` does), and run twice when they're
-  close. Judge phones by `FRAME` ms at `--throttle 4`, not FPS. GPU ms drifts between pages: for a
-  GPU change, switch it on and off in one page (a light's `visible`, a uniform) and alternate.
+  close. Judge phones by `FRAME` ms at `--throttle 4`, not FPS. Small systems swing ±10–20 % with no
+  change at all: judge `FRAME` and the big rows. GPU ms drifts between pages and creeps up within one:
+  use `gpu-ab.js`, and trust 4/4 paired rounds, not a few % of mean.
 - The heap profile names functions, not lines. In hot per-car code the usual hidden costs are `for…of`
   (iterators), array destructuring, spreads and closures: index loops and plain locals instead. What
   three's WebGL uniform calls allocate is the browser's bindings: only fewer draws cut it.

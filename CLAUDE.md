@@ -47,7 +47,8 @@ Each script's header lists its options; the doc named here says when to use it.
   reloads as its city). Older refs need a file baseline.
 - District numbers: `npm run stats -- <kind> [seeds=100]` (placement rate, shapes, gates, counts, gen ms
   on vs off). Building budget: `npm run budget -- <kind> [seeds=20]`. `DISTRICTS_DEV.md`.
-- Cop driving: `npm run cops -- --vs main` (~2 min; `--diag hits|uturns|recovers`; `COPS_DEV.md`).
+- Cop driving: `npm run cops -- --vs main` (~2 min; `--samples 2` adds the noise band, ±% per cell: a
+  Δ inside it is noise; `--diag hits|uturns|recovers`; `COPS_DEV.md`).
   Never write a chase sim for this.
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (`RAPIER.md`).
 - Browser (`BROWSER_CHECKS.md`; ~10 s plus the eval with Vite already on 5199, `check:restart` ~1.5 min;
@@ -56,8 +57,10 @@ Each script's header lists its options; the doc named here says when to use it.
   `npm run check:reload` after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or `city.params`.
 - Before/after in the browser: `npm run check:browser -- --vs <ref> …` (that ref in its own worktree and
   server, then here; never a baseline from the server you're editing against). Shots:
-  `node scripts/png-diff.mjs a.png b.png`. Perf: `--throttle 4`, `--profile f.json`, evals
-  `perf-profile.js` and `tri-breakdown.js` (measure before choosing what to optimize).
+  `node scripts/png-diff.mjs a.png b.png`. Perf: `--table` (perf-profile as a Δ% table), `--throttle 4`
+  with `&touch` (the phone path), `--profile f.json`; evals `perf-profile.js`, `tri-breakdown.js`,
+  `gpu-ab.js` (a GPU question: on/off in one page), `cold-load.js`; `dbg.sceneBreakdown()` (measure
+  before choosing what to optimize). Never measure while `npm run cops` or tests run.
 
 ## Working rules (from the user)
 
@@ -104,8 +107,11 @@ Each script's header lists its options; the doc named here says when to use it.
   (never `body.applyImpulse`/`setLinvel`), or `vel` goes stale.
 - New hooks: optional constructor params defaulting to "no district", so tests and seeds don't move.
 - Anything a run adds to the page or scene must be freed by `Game.dispose()` (Retry/New city restart in place).
+  A builder adding to the scene goes through `Game.owned('<name>', …)`, which tags its objects for
+  `dbg.sceneBreakdown` and `gpu-ab.js` (`ab=owner:<name>`).
 - Matrices: the scene root, the city's and props' meshes and every car part are manual
   (`matrixAutoUpdate = false`); `Game.frame` updates the scene once before the glows and the render.
+  `dbg.staleMatrices()` (in `perf-profile` and `check:restart`) lists frozen objects moved without it.
   Moving one of those (a car part outside `syncMesh`, a city mesh) needs `updateMatrix()`. District,
   landmark and roadworks objects stay automatic. The city's merged meshes also drop their vertex
   arrays once uploaded (`releaseAfterUpload`): read city geometry at build time only.

@@ -67,6 +67,8 @@ either car is off the road. A moving cop on the road ignores a grid path that st
 ```
 npm run cops                      # 3★, 5★, ghost 3★ on the working tree
 npm run cops -- --vs main         # also on a temp worktree of main (today's bench, main's game code), with Δ%
+npm run cops -- --vs main --samples 2   # each side the mean of 2 draws (other traffic and suspect routes,
+                                  # same cities), ±% = half the spread of this tree's draws (2× the CPU)
 npm run cops -- --diag hits       # one run: what the fast hits were (also: uturns, recovers); --stars 5, --ghost
    --seeds 24 --secs 120 --maxBlocks 12 --verbose
 ```
@@ -98,7 +100,8 @@ Reading it:
 
 - **Noise is ±10–20 %** on a single metric even over 24 cities; a change moves many cars' traffic.
   Trust a direction that shows across several metrics and columns, not one number. To see the noise
-  for your change, run a second sample of it that can't matter (a stagger or order shifted by one).
+  for your change, `--samples 2` (or 3): a Δ inside the cell's ±% is noise. A single draw is
+  `sample=N` on `cop-bench.ts` (0 is the usual run, so old numbers stay comparable).
 - `--vs <ref>` runs today's bench script on that ref's code: a script change must cope with code
   that lacks what it calls (the bench falls back to per-car `controller.update` without `traffic.drive`).
 - Per-city numbers depend on which cities ran before in the same process (shared state somewhere in the

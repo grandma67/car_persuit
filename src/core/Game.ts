@@ -266,8 +266,7 @@ export class Game {
     this.scene.matrixAutoUpdate = false;
     this.scene.matrixWorldAutoUpdate = false;
     this.sky = new Sky(time.skyZenith, time.skyHorizon);
-    this.scene.add(this.sky.mesh);
-    this.scene.add(new THREE.HemisphereLight(time.hemiSky, time.hemiGround, time.hemiIntensity));
+    this.owned('sky', () => this.scene.add(this.sky.mesh, new THREE.HemisphereLight(time.hemiSky, time.hemiGround, time.hemiIntensity)));
 
     // Shadow-casting sun follows the player so a small shadow frustum covers the visible area.
     this.sun = new THREE.DirectionalLight(time.sunColor, time.sunIntensity);
@@ -279,7 +278,7 @@ export class Game {
     s.right = s.top = SHADOW_HALF;
     s.near = 1;
     this.sunTexel = (2 * SHADOW_HALF) / mapSize;
-    this.scene.add(this.sun, this.sun.target);
+    this.owned('sun', () => this.scene.add(this.sun, this.sun.target));
 
     this.world.timestep = FIXED_DT;
     // Night-only street props (Chinatown's night market and festival) join the city on a night run.
@@ -287,21 +286,19 @@ export class Game {
     if (night) this.city.streetProps.push(...nightProps(this.city));
     // Dressing for this run's night and climate (the Farm's harvest night, its desert irrigator).
     joinRunDressing(this.city, { night, climate: climate.name });
-    let added = this.scene.children.length;
-    const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
-    freezeStatic(this.scene.children.slice(added));
-    releaseAfterUpload(this.scene.children.slice(added));
+    const built = this.owned('city', () => buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow }));
+    freezeStatic(this.rootsOf('city'));
+    releaseAfterUpload(this.rootsOf('city'));
     this.canalWater = built.canalWater;
     this.walls = built.walls;
-    this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs);
+    this.landmarks = this.owned('landmarks', () => new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs));
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
-    added = this.scene.children.length;
-    this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
+    this.props = this.owned('props', () => new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
       leaves: theme.leaves[0],
       trunk: theme.trunk,
       snowy: climate.snowRoofs,
-    });
-    freezeStatic(this.scene.children.slice(added)); // instanced: props move in their buffers, never the meshes
+    }));
+    freezeStatic(this.rootsOf('props')); // instanced: props move in their buffers, never the meshes
     // Shadow casters behind the shadow camera are dropped, so it must sit up-sun of the tallest
     // tower's top: a low golden-hour sun throws shadows ~3× a building's height, and towers well
     // outside the map's footprint shade the streets in it. Only the depth range grows, not the map.
@@ -312,14 +309,14 @@ export class Game {
     s.far = sunDist + 100;
     // The shadow camera looks down -sunDir with world up, as Object3D.lookAt orients it.
     new THREE.Matrix4().lookAt(sunDir, new THREE.Vector3(), new THREE.Object3D().up).extractBasis(this.sunAxes[0], this.sunAxes[1], new THREE.Vector3());
-    this.districtViews = buildDistricts(this.city, this.scene, {
+    this.districtViews = this.owned('districts', () => buildDistricts(this.city, this.scene, {
       theme, climate, lampGlow: time.lampGlow, night, ground: this.ground, hour0: startHourAt(p.time!, p.startMinute!),
       bell: (strikes, at) => this.audio.bell(strikes, THREE.MathUtils.clamp(1 - at.distanceTo(this.player.position) / 450, 0, 1)),
       firework: (at, colour) => this.effects.firework(at, colour),
       steam: (at) => this.effects.steamPuff(at),
       movers: () => [this.player, ...this.director.cops.map((c) => c.vehicle)],
-    });
-    this.roadworks = this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls));
+    }));
+    this.roadworks = this.owned('roadworks', () => this.city.roadworks.map((site) => new RoadworksSite(site, this.city.terrain, this.scene, this.world, this.walls)));
     separateInstancedShadows(this.scene);
 
     const { spawn } = this.city;
@@ -340,13 +337,14 @@ export class Game {
     });
     Vehicle.potholes = holes.length ? { at: (x, z) => holes.some((h) => inside(h.bounds, x, z) && h.rects.some((r) => inside(r, x, z))), kick: SLUMS.potholeKick } : null;
     this.player.setGrip(playerGrip(climate, weather));
-    this.effects = new Effects(this.scene, climate.spray, weather === 'rain');
+    this.effects = this.owned('effects', () => new Effects(this.scene, climate.spray, weather === 'rain'));
     if (weather !== 'clear') {
       this.precipitation = new Precipitation(weather, mobile ? 0.5 : 1);
-      this.scene.add(this.precipitation.object);
+      this.owned('precipitation', () => this.scene.add(this.precipitation!.object));
     }
     this.scene.add(this.player.mesh.root);
-    this.scene.add(this.marker.group, this.sea.mesh);
+    this.owned('marker', () => this.scene.add(this.marker.group));
+    this.owned('sea', () => this.scene.add(this.sea.mesh));
 
     // Destinations get their own RNG stream so they're stable per seed (or come pinned in the params).
     this.destinations = cityDestinations(this.city);
@@ -370,9 +368,9 @@ export class Game {
       districtTraffic(this.city),
     );
     this.traffic.lod = true;
-    this.scene.add(this.crashMarks.mesh);
-    this.sirens = new Sirens(this.scene);
-    this.glows = new GlowBatch(this.scene);
+    this.owned('crashMarks', () => this.scene.add(this.crashMarks.mesh));
+    this.sirens = this.owned('sirens', () => new Sirens(this.scene));
+    this.glows = this.owned('glows', () => new GlowBatch(this.scene));
     this.copContact = new CopContact(this.world, this.player);
 
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
@@ -881,6 +879,19 @@ export class Game {
     this.glows.update(cars, camera);
     this.renderer.render(this.scene, camera);
     this.input.endFrame();
+  }
+
+  /** Run `build` and tag what it adds to the scene with `owner` (`userData.owner`: dbg.sceneBreakdown, rootsOf). */
+  private owned<T>(owner: string, build: () => T): T {
+    const from = this.scene.children.length;
+    const out = build();
+    for (const o of this.scene.children.slice(from)) o.userData.owner = owner;
+    return out;
+  }
+
+  /** The scene's top-level objects a builder added (see owned). */
+  private rootsOf(owner: string): THREE.Object3D[] {
+    return this.scene.children.filter((o) => o.userData.owner === owner);
   }
 
   /**

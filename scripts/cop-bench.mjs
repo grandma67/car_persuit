@@ -2,6 +2,10 @@
 // Cop chase benchmark (knowledge/COPS_DEV.md):
 //   npm run cops                       3★, 5★ and ghost 3★ on the working tree, per-city averages
 //   npm run cops -- --vs main          the same on a temporary worktree of `main` too, as a table with Δ%
+//   npm run cops -- --samples 2        each side averaged over N draws (other traffic and suspect routes
+//                                      in the same cities), with the noise: ±% = half the spread between
+//                                      this tree's draws. A Δ inside it is noise. N× the CPU, same wall time
+//                                      on a machine with the cores (runs are parallel)
 //   npm run cops -- --diag hits        one run (3★, or --stars N / --ghost) listing what fast hits were
 //                                      (also uturns, recovers)
 // Options: --seeds 24 --secs 120 --maxBlocks 12 --stars N --ghost --verbose (per-city lines).
@@ -63,20 +67,35 @@ if (ref) {
   if (!existsSync(join(refDir, 'scripts/run-ts.mjs'))) copyFileSync(join(root, 'scripts/run-ts.mjs'), join(refDir, 'scripts/run-ts.mjs'));
 }
 try {
-  const now = CONFIGS.map(([, a]) => bench(root, [...a, ...common], !!flag('verbose')));
-  const then = refDir ? CONFIGS.map(([, a]) => bench(refDir, [...a, ...common])) : [];
-  const nowR = (await Promise.all(now)).map(result);
-  const thenR = (await Promise.all(then)).map(result);
-  console.log(`per-city averages over ${nowR[0].cities} cities, ${flag('secs', 120)} s each${ref ? `; ${ref} → working tree` : ''}`);
-  const keys = Object.keys(nowR[0]).filter((k) => k !== 'cities');
+  const samples = Math.max(1, Number(flag('samples', 1)));
+  const draws = [...Array(samples).keys()];
+  // Every config × draw of both sides at once; per config, the draws' results in order.
+  const side = (dir, verbose) => CONFIGS.map(([, a]) => draws.map((s) => bench(dir, [...a, ...common, ...(s ? [`sample=${s}`] : [])], verbose)));
+  const collect = async (runs) => Promise.all(runs.map(async (d) => (await Promise.all(d)).map(result)));
+  const nowRuns = side(root, !!flag('verbose') && samples === 1);
+  const thenRuns = refDir ? side(refDir, false) : [];
+  const nowS = await collect(nowRuns);
+  const thenS = await collect(thenRuns);
+  const mean = (rs, k) => Math.round((rs.reduce((t, r) => t + r[k], 0) / rs.length) * 10) / 10;
+  const keys = Object.keys(nowS[0][0]).filter((k) => k !== 'cities');
+  const nowR = nowS.map((rs) => Object.fromEntries(keys.map((k) => [k, mean(rs, k)])));
+  const thenR = thenS.map((rs) => Object.fromEntries(keys.map((k) => [k, mean(rs, k)])));
+  /** Half the spread between this tree's draws, as % of their mean. */
+  const noise = (i, k) => {
+    const v = nowS[i].map((r) => r[k]);
+    const m = v.reduce((a, b) => a + b, 0) / v.length;
+    return m ? Math.round(((Math.max(...v) - Math.min(...v)) / 2 / m) * 100) : 0;
+  };
+  console.log(`per-city averages over ${nowS[0][0].cities} cities, ${flag('secs', 120)} s each${samples > 1 ? `, ${samples} draws` : ''}${ref ? `; ${ref} → working tree` : ''}`);
   const cell = (i, k) => {
-    if (!refDir) return String(nowR[i][k]).padStart(8);
+    const n = samples > 1 ? ` ±${noise(i, k)}%`.padEnd(6) : '';
+    if (!refDir) return `${String(nowR[i][k]).padStart(8)}${n}`;
     const a = thenR[i][k];
     const b = nowR[i][k];
     const pct = a ? `${b >= a ? '+' : ''}${Math.round(((b - a) / a) * 100)}%` : '';
-    return `${String(a).padStart(7)} → ${String(b).padEnd(7)}${pct.padStart(5)}`;
+    return `${String(a).padStart(7)} → ${String(b).padEnd(7)}${pct.padStart(5)}${n}`;
   };
-  const w = refDir ? 26 : 9;
+  const w = (refDir ? 26 : 9) + (samples > 1 ? 6 : 0);
   console.log(''.padEnd(14) + CONFIGS.map(([name]) => name.padStart(w)).join(''));
   for (const k of keys) console.log(k.padEnd(14) + CONFIGS.map((_, i) => cell(i, k).padStart(w)).join(''));
 } finally {
