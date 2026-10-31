@@ -96,6 +96,7 @@ export class Vehicle {
    */
   tractionAssist = 0;
   private brakeLightTimer = 0; // seconds the brake lights stay lit after the last brake input
+  private meshShown = false; // synced at least once (holdMesh)
   /** Road-lighting spotlight; cops use glowing lamps only. */
   beamEnabled = true;
   /** All lights out (wrecked). */
@@ -236,6 +237,14 @@ export class Vehicle {
     });
 
     this.mesh = buildCarMesh(spec);
+    // Only the root, body, wheel pivots and spinners ever move, and syncMesh updates their matrices
+    // itself: three recomposing ~35 parts per car every frame was most of updateMatrixWorld's time.
+    const root = this.mesh.root;
+    root.traverse((o) => {
+      if (o === root) return;
+      o.updateMatrix();
+      o.matrixAutoUpdate = false;
+    });
     this.snapshot();
     this.prevPos.copy(this.currPos);
     this.prevQuat.copy(this.currQuat);
@@ -706,9 +715,14 @@ export class Vehicle {
 
   /** Update the mesh, interpolating between the last two physics steps. */
   syncMesh(alpha: number): void {
-    this.mesh.root.position.lerpVectors(this.prevPos, this.currPos, alpha);
-    this.mesh.root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha);
-    this.mesh.body.rotation.set(this.pitch, 0, this.roll);
+    const root = this.mesh.root;
+    root.matrixAutoUpdate = true; // awake again after holdMesh
+    this.meshShown = true;
+    root.position.lerpVectors(this.prevPos, this.currPos, alpha);
+    root.quaternion.slerpQuaternions(this.prevQuat, this.currQuat, alpha);
+    const body = this.mesh.body;
+    body.rotation.set(this.pitch, 0, this.roll);
+    body.updateMatrix();
     const c = this.controller;
     const wheels = this.mesh.wheels;
     for (let i = 0; i < wheels.length; i++) {
@@ -718,10 +732,24 @@ export class Vehicle {
       const len = c.wheelSuspensionLength(i) ?? this.spec.suspensionRestLength;
       pivot.position.set(conn.x, conn.y - len, conn.z);
       pivot.rotation.y = c.wheelSteering(i) ?? 0;
+      pivot.updateMatrix();
       const spin = c.wheelRotation(i) ?? 0;
-      for (let k = 0; k < spinners.length; k++) spinners[k].rotation.x = spin;
+      for (let k = 0; k < spinners.length; k++) {
+        spinners[k].rotation.x = spin;
+        spinners[k].updateMatrix();
+      }
     }
     this.updateLights();
+  }
+
+  /**
+   * Out of sight: leave the mesh as last drawn, so neither this nor three's matrix update spends
+   * anything on it (its matrices stay valid; nothing else moves its parts). The next syncMesh
+   * wakes it. A car never yet drawn is synced instead, so it isn't left at the origin.
+   */
+  holdMesh(alpha: number): void {
+    if (this.meshShown) this.mesh.root.matrixAutoUpdate = false;
+    else this.syncMesh(alpha);
   }
 
   get indicator(): 'left' | 'right' | null {

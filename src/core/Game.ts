@@ -79,6 +79,24 @@ const SHADOW_HALF = 125; // metres: half the width of the sun's shadow map
 const SHADOW_LEAD = 60; // metres ahead of the car to centre the shadow map, towards what the camera sees
 /** On phones, other cars further than this cast no shadow (switched back on 10 m nearer, so it doesn't flicker). */
 const CAR_SHADOW_RANGE = 65;
+// A civilian this far outside the view (beyond its own size) keeps its last drawn pose: past the
+// frustum's sides, or past the far plane at the fog end. Room for its shadow and a fast turn.
+const HOLD_MARGIN = 20;
+const viewFrustum = new THREE.Frustum();
+
+/**
+ * Scenery that never moves (the city's meshes, the props' instanced meshes): matrices worked out
+ * once, then skipped by three's per-frame update. Districts, landmarks and roadworks animate parts
+ * (clock hands, lantern strings, the windmill, the ship, knocked barriers) and stay automatic.
+ */
+function freezeStatic(roots: THREE.Object3D[]): void {
+  for (const root of roots) {
+    root.updateMatrixWorld(true);
+    root.traverse((o) => (o.matrixAutoUpdate = false));
+  }
+}
+const viewSphere = new THREE.Sphere();
+const viewMatrix = new THREE.Matrix4();
 
 type GameState = 'menu' | 'playing' | 'paused' | 'won' | 'lost';
 
@@ -214,6 +232,10 @@ export class Game {
     this.fog = new THREE.Fog(time.skyHorizon, time.fogNear, time.fogFar);
     this.scene.background = new THREE.Color(time.skyHorizon);
     this.scene.fog = this.fog;
+    // The root never moves, so three needn't recompose it and force every object's world matrix
+    // each frame; the frame updates the scene's matrices once itself, before the glows read them.
+    this.scene.matrixAutoUpdate = false;
+    this.scene.matrixWorldAutoUpdate = false;
     this.sky = new Sky(time.skyZenith, time.skyHorizon);
     this.scene.add(this.sky.mesh);
     this.scene.add(new THREE.HemisphereLight(time.hemiSky, time.hemiGround, time.hemiIntensity));
@@ -236,16 +258,20 @@ export class Game {
     if (night) this.city.streetProps.push(...nightProps(this.city));
     // Dressing for this run's night and climate (the Farm's harvest night, its desert irrigator).
     joinRunDressing(this.city, { night, climate: climate.name });
+    let added = this.scene.children.length;
     const built = buildCity(this.city, this.scene, this.world, { theme, climate, windowGlow: time.windowGlow, wet: weather === 'rain', sea: time.sea, shallow: climate.shallow });
+    freezeStatic(this.scene.children.slice(added));
     this.canalWater = built.canalWater;
     this.walls = built.walls;
     this.landmarks = new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs);
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
+    added = this.scene.children.length;
     this.props = new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
       leaves: theme.leaves[0],
       trunk: theme.trunk,
       snowy: climate.snowRoofs,
     });
+    freezeStatic(this.scene.children.slice(added)); // instanced: props move in their buffers, never the meshes
     // Shadow casters behind the shadow camera are dropped, so it must sit up-sun of the tallest
     // tower's top: a low golden-hour sun throws shadows ~3× a building's height, and towers well
     // outside the map's footprint shade the streets in it. Only the depth range grows, not the map.
@@ -313,6 +339,7 @@ export class Game {
       busStops(this.city.graph, this.city.streetProps),
       districtTraffic(this.city),
     );
+    this.traffic.lod = true;
     this.scene.add(this.crashMarks.mesh);
     this.sirens = new Sirens(this.scene);
     this.glows = new GlowBatch(this.scene);
@@ -668,7 +695,7 @@ export class Game {
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
       this.player.drive(driveInput, FIXED_DT);
       const now = this.timer.getElapsed();
-      for (const car of this.traffic.cars) car.vehicle.drive(car.controller.update(FIXED_DT, now), FIXED_DT);
+      this.traffic.drive(FIXED_DT, now);
       for (const cop of this.director.cops) {
         const active = copsChase && cop.wreckedFor === null;
         cop.vehicle.drive(active ? cop.controller.update(FIXED_DT, this.chaseTarget) : NO_INPUT, FIXED_DT);
@@ -737,7 +764,6 @@ export class Game {
 
     this.player.syncMesh(alpha);
     for (const cop of this.director.cops) cop.vehicle.syncMesh(alpha);
-    for (const car of this.traffic.cars) car.vehicle.syncMesh(alpha);
     if (this.carShadowCull) this.cullCarShadows();
     this.checkWater();
     const others = this.otherVehicles;
@@ -814,14 +840,39 @@ export class Game {
       return;
     }
     const camera = this.overview ? this.overviewCamera() : this.chase.camera;
+    this.syncTraffic(alpha); // after the camera moved: a look back must not show cars held out of the old view
     const cars = this.glowCars;
     cars.length = 0;
     cars.push(this.player.mesh);
     for (const cop of this.director.cops) cars.push(cop.vehicle.mesh);
     for (const car of this.traffic.cars) cars.push(car.vehicle.mesh);
+    // Matrices once, here: the glows read them, and the render (scene.matrixWorldAutoUpdate off) reuses them.
+    this.scene.updateMatrixWorld();
     this.glows.update(cars, camera);
     this.renderer.render(this.scene, camera);
     this.input.endFrame();
+  }
+
+  /**
+   * Civilians' meshes: interpolated when in view (this frame's camera), held as last drawn when
+   * well out of it, which spares their matrices too (Vehicle.holdMesh).
+   */
+  private syncTraffic(alpha: number): void {
+    const cars = this.traffic.cars;
+    const cam = this.chase.camera;
+    const hold = !this.overview;
+    if (hold) {
+      cam.updateMatrixWorld(); // its inverse, for this frame's view (the render would do it next)
+      viewFrustum.setFromProjectionMatrix(viewMatrix.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    }
+    for (let i = 0; i < cars.length; i++) {
+      const v = cars[i].vehicle;
+      const he = v.spec.halfExtents;
+      viewSphere.center.copy(v.position);
+      viewSphere.radius = Math.hypot(he.x, he.y, he.z) + HOLD_MARGIN;
+      if (hold && !viewFrustum.intersectsSphere(viewSphere)) v.holdMesh(alpha);
+      else v.syncMesh(alpha);
+    }
   }
 
   private cullCarShadows(): void {

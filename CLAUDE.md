@@ -104,6 +104,10 @@ Each script's header lists its options; the doc named here says when to use it.
   (never `body.applyImpulse`/`setLinvel`), or `vel` goes stale.
 - New hooks: optional constructor params defaulting to "no district", so tests and seeds don't move.
 - Anything a run adds to the page or scene must be freed by `Game.dispose()` (Retry/New city restart in place).
+- Matrices: the scene root, the city's and props' meshes and every car part are manual
+  (`matrixAutoUpdate = false`); `Game.frame` updates the scene once before the glows and the render.
+  Moving one of those (a car part outside `syncMesh`, a city mesh) needs `updateMatrix()`. District,
+  landmark and roadworks objects stay automatic.
 - Big files (`CityBuilder`, `CivilianController`, `CopDirector`, `PropSystem`, `Game`): `grep -n`, read slices.
 
 ## Testing

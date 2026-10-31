@@ -281,6 +281,14 @@ and after, and a note on the debris approach.
 
 ## Milestone 3: less CPU per frame
 
+**Done:** phone frame 8.0 → 6.8 ms cruising, 8.5 → 7.1 in a 5★ chase. 3.1: mid-range civilians think
+every 3rd step (far from the player and every cop), off-screen ones keep their last drawn pose and
+skip their matrices; no phone traffic cut (the frame is at 40% of budget; fewer cars is a gameplay
+call). 3.2: most matrix work was the cars' ~35 parts each, not the static scene: car parts are
+manual, the scene root is, and the frame updates matrices once (the glows did it a second time);
+only the city and the props are frozen (districts, landmarks and roadworks animate parts). 3.3 as
+planned.
+
 Measure each task's target first (`--profile` at `--throttle 4`: is `updateMatrixWorld` still 5 %, is
 `Precipitation.update` still there, what does each civilian cost now?) and drop or reshape a task the
 numbers don't support. Phone frame at the start of M3: 8.0 ms.

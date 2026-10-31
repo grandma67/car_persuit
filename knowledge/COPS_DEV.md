@@ -72,7 +72,8 @@ npm run cops -- --diag hits       # one run: what the fast hits were (also: utur
 ```
 
 Cities: the game's per-seed grid, the first 24 flat, canal-free seeds (i × 7919 + 11) no wider than
-12 blocks. Each has 30 civilians and street props as **fixed, unbreakable** boxes. The suspect is a
+12 blocks. Each has 30 civilians (on the game's traffic LOD: past 120 m from the suspect and every
+cop they think every 3rd step) and street props as **fixed, unbreakable** boxes. The suspect is a
 feeler-less cop brain driving to far junctions, and the real `CopDirector` runs at the star level.
 
 **Ghost** (`--ghost`, the third column): the suspect and the cops pass through each other. Otherwise
@@ -96,7 +97,10 @@ Metrics are per-city averages over 120 s. "far" = more than 30 m from the suspec
 Reading it:
 
 - **Noise is ±10–20 %** on a single metric even over 24 cities; a change moves many cars' traffic.
-  Trust a direction that shows across several metrics and columns, not one number.
+  Trust a direction that shows across several metrics and columns, not one number. To see the noise
+  for your change, run a second sample of it that can't matter (a stagger or order shifted by one).
+- `--vs <ref>` runs today's bench script on that ref's code: a script change must cope with code
+  that lacks what it calls (the bench falls back to per-car `controller.update` without `traffic.drive`).
 - Per-city numbers depend on which cities ran before in the same process (shared state somewhere in the
   physics). Totals for the same city list repeat exactly, so compare like with like.
 - Ghost artefact: a cop going for a ram drives *through* the suspect, then turns round. Ghost `uTurns`

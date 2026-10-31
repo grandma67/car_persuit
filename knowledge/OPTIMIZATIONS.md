@@ -258,17 +258,18 @@ changing it recompiles every material.
 - Compare `per`, `allocMBperSec`, `render.calls/triangles` and `gpuMsPerFrame`.
 - On phones, judge by the JS frame ms, not FPS: headless desktop holds 60 either way.
 
-## 4. What the fixes found (branch `perf/runtime`, M1–M2)
+## 4. What the fixes found (branch `perf/runtime`, M1–M3)
 
 Measured with `perf-profile.js` on the reference city, cruising; phone = 390×844 at `--throttle 4`.
 
-| | Start (ac1e4c8) | After M1 | After M2 |
-|---|---|---|---|
-| Phone `FRAME` | 11.5 ms | 9.5 ms | 8.0 ms |
-| Phone `renderer.render` / shadow pass | 5.9 / 1.6 ms | 4.6 / 1.0 ms | 3.9 / 0.8 ms |
-| Garbage (desktop) | 30 MB/s, 1.4 GC/s | 16 MB/s, 0.6 GC/s | 16 MB/s |
-| Triangles per frame (main pass) | 1.79 M (1.28 M) | same | 1.10 M (0.80 M) |
-| Calls / programs | 327 / 37 | 327 / 34 | 308 / 34 |
+| | Start (ac1e4c8) | After M1 | After M2 | After M3 |
+|---|---|---|---|---|
+| Phone `FRAME` | 11.5 ms | 9.5 ms | 8.0 ms | 6.8 ms |
+| Phone `renderer.render` / shadow pass | 5.9 / 1.6 ms | 4.6 / 1.0 ms | 3.9 / 0.8 ms | 3.4 / 0.8 ms |
+| Phone civilians (controller + `syncMesh` + glows) | 2.5 ms | | 1.2 ms | 0.5 ms |
+| Garbage (desktop) | 30 MB/s, 1.4 GC/s | 16 MB/s, 0.6 GC/s | 16 MB/s | 15 MB/s |
+| Triangles per frame (main pass) | 1.79 M (1.28 M) | same | 1.10 M (0.80 M) | same |
+| Calls / programs | 327 / 37 | 327 / 34 | 308 / 34 | 308 / 34 |
 
 What the research above got wrong, and what was learned:
 
@@ -293,4 +294,16 @@ What the research above got wrong, and what was learned:
 - **The far plane at the fog end** needed the sky dome scaled inside it and the destination beam's
   depth held inside it (it's meant to show past the fog).
 - **Cop metrics can't prove a refactor exact** (±10–20 % noise): two runs giving identical numbers did.
+  For a change that does move them, a second sample of the same change (the LOD staggered one step
+  later) shows the noise: civilian hits swung 13–18 between two.
+- **The matrix work was the cars, not the scenery** (M3): ~1 100 of the scene's ~1 400 objects are car
+  parts, ~35 a car, of which 6 move. Three recomposes every object with `matrixAutoUpdate` each
+  frame, and a root that does forces every world matrix under it. Now: the scene root and every
+  car part are manual (`Vehicle` freezes the parts, `syncMesh` updates the moving ones), an
+  off-screen civilian's root is too (`holdMesh`), the city and props are frozen after the build,
+  and `Game.frame` updates the scene once before `GlowBatch` reads it (it used to update each car
+  again). `updateMatrixWorld` 3.9 → 1.6 % of phone CPU, `multiplyMatrices` gone from the top.
+- **Traffic LOD saves less than its call count**: a mid-range car thinks a third as often, but the
+  forward rays already ran every 3rd step, so they cost as before (controller 0.53 → 0.44 ms).
+  Despawning past the fog wouldn't help: the target count respawns them.
 

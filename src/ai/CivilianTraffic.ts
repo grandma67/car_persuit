@@ -38,6 +38,11 @@ export const TRAFFIC = {
   stuckLimit: 6, // seconds
   spacing: 18, // metres between spawn points and existing traffic
   rampChance: 0.05, // per spawn, while no ramp truck is around
+  // LOD: past lodNear (straight-line, from the player and every cop) a driver thinks every lodEvery-th step and
+  // holds its input between (wheels and physics still step every time). Sensing already ran every
+  // 3rd step, so out there it loses nothing; only steering and speed react up to 2 steps later.
+  lodNear: 120,
+  lodEvery: 3,
 };
 
 const ALIGNED = 0.5; // heading dot product above which a blocker counts as queueing, not crashed
@@ -222,6 +227,9 @@ export class CivilianTraffic {
   private junctions = new Junctions();
   private spawnFrom = -1; // junction nearest the player when spawnNodes was worked out
   private spawnNodes: RoadGraph['nodes'] = [];
+  /** Traffic LOD on (the game; sims leave it off so every car thinks every step). */
+  lod = false;
+  private steps = 0;
 
   constructor(
     private world: RAPIER.World,
@@ -285,13 +293,22 @@ export class CivilianTraffic {
     return this.cars.find((c) => c.vehicle.spec.body === 'ramptruck');
   }
 
+  /** One physics step's driving for every car (before `world.step()`); under `lod`, far ones think less often. */
+  drive(dt: number, time: number): void {
+    const slot = this.steps++;
+    const cars = this.cars;
+    for (let i = 0; i < cars.length; i++) cars[i].vehicle.drive(cars[i].controller.tick(dt, time, slot + i), dt);
+  }
+
   /** Fill to the target count around the player, recycle far/stuck cars. Once per frame. */
   update(playerPos: THREE.Vector3, others: Vehicle[] = []): void {
     this.sampleMovers(others);
     for (let i = 0; i < this.cars.length; i++) {
       const car = this.cars[i];
       const p = car.vehicle.position;
-      const far = Math.hypot(p.x - playerPos.x, p.z - playerPos.z) > TRAFFIC.despawnDistance;
+      const away = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
+      if (this.lod) car.controller.every = this.lodNear(p, away, others) ? 1 : TRAFFIC.lodEvery;
+      const far = away > TRAFFIC.despawnDistance;
       const up = tmpUp.copy(UP).applyQuaternion(car.vehicle.quaternion).y;
       const sunk = p.y < SUNK_BELOW;
       if (far || sunk || car.controller.stuckFor > TRAFFIC.stuckLimit || up < 0.2) {
@@ -301,6 +318,17 @@ export class CivilianTraffic {
     }
     // Spawn at most one car per frame to spread the cost.
     if (this.cars.length < this.count) this.spawn(playerPos);
+  }
+
+  /** Near the player or any of `others` (cops): a car there thinks every step. */
+  private lodNear(p: THREE.Vector3, fromPlayer: number, others: readonly Vehicle[]): boolean {
+    const r = TRAFFIC.lodNear;
+    if (fromPlayer < r) return true;
+    for (let i = 0; i < others.length; i++) {
+      const o = others[i].position;
+      if ((o.x - p.x) ** 2 + (o.z - p.z) ** 2 < r * r) return true;
+    }
+    return false;
   }
 
   /** Pick by weight (spawn density per district). */

@@ -148,6 +148,12 @@ export class CivilianController {
   private leg: { from: number; to: number; control: ApproachControl | undefined } = { from: -1, to: -1, control: undefined };
   private style: DrivingStyle;
   private senseIn = 0; // steps until the next look around
+  private stepsNow = 1; // physics steps this update stands for (tick folds several into one)
+  private owed = 0; // seconds since the last update, while tick skips steps
+  private owedSteps = 0;
+  private last: DriveInput = this.input;
+  /** Traffic LOD: think every this many steps, holding the last input between (CivilianTraffic sets it). */
+  every = 1;
   private ahead: Obstacle | null = null;
   private free = Infinity;
   private hazardLimit = Infinity;
@@ -204,6 +210,22 @@ export class CivilianController {
   /** The honk due this step, if any (see horn.ts). */
   honk(): Honk | null {
     return this.horn.take();
+  }
+
+  /**
+   * One physics step's input under the traffic LOD: a full update every `every`th step (`slot`
+   * staggers cars over the steps), standing for the steps skipped since; the last input in between.
+   */
+  tick(dt: number, time: number, slot: number): DriveInput {
+    this.owed += dt;
+    this.owedSteps++;
+    if (this.every > 1 && slot % this.every !== 0) return this.last;
+    const owed = this.owed;
+    this.stepsNow = this.owedSteps;
+    this.owed = this.owedSteps = 0;
+    this.last = this.update(owed, time);
+    this.stepsNow = 1;
+    return this.last;
   }
 
   update(dt: number, time: number): DriveInput {
@@ -297,7 +319,7 @@ export class CivilianController {
 
     // Keep a gap to whatever is ahead (cars, the player, cops), looking further the faster we go.
     // Looking around (forward rays, then traffic about to cross us) runs every few steps.
-    if (--this.senseIn <= 0) {
+    if ((this.senseIn -= this.stepsNow) <= 0) {
       this.senseIn = SENSE_EVERY;
       const range = Math.max(30, (speed * speed) / (2 * decel) + GAP + GAP_TIME * Math.abs(speed) + 10);
       // Along the lane ahead, so through a turn the sensor looks where we're going.
