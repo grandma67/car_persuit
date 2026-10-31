@@ -61,19 +61,31 @@ export class CarAudio {
   private wantMusic = false;
   private muted = false;
 
+  private paused = false;
+
   constructor() {
-    const unlock = () => {
-      this.init();
-      window.removeEventListener('keydown', unlock);
-      window.removeEventListener('pointerdown', unlock);
+    // Chrome lets audio start only on a real activation: Escape or a lone modifier key is not one, and
+    // a context made then stays suspended (a console warning per source). Skip those and keep listening
+    // until the context is actually running.
+    const done = () => {
+      window.removeEventListener('keydown', onGesture);
+      window.removeEventListener('pointerdown', onGesture);
     };
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('pointerdown', unlock);
+    const onGesture = () => {
+      if (navigator.userActivation && !navigator.userActivation.isActive) return;
+      this.unlock();
+      const ctx = this.ctx!;
+      if (ctx.state === 'running') done();
+      else void ctx.resume().then(() => ctx.state === 'running' && done(), () => {});
+    };
+    window.addEventListener('keydown', onGesture);
+    window.addEventListener('pointerdown', onGesture);
   }
 
-  /** Create the audio context now (call from a user gesture). */
+  /** Create the audio context now, or resume one the browser left suspended (call from a user gesture). */
   unlock(): void {
     this.init();
+    if (this.ctx!.state === 'suspended' && !this.paused) void this.ctx!.resume();
   }
 
   private init(): void {
@@ -284,6 +296,7 @@ export class CarAudio {
     this.winMusic = null;
     this.sfx?.holdHorn(false);
     this.setSiren(null);
+    this.paused = false;
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     this.engineGain.gain.setTargetAtTime(0, now, 0.02);
@@ -293,6 +306,7 @@ export class CarAudio {
 
   /** Silence everything while the game is paused. */
   setPaused(paused: boolean): void {
+    this.paused = paused;
     if (!this.ctx) return;
     if (paused) void this.ctx.suspend();
     else void this.ctx.resume();
