@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+const RADIUS = 1000;
+
 // Gradient sky dome that follows the camera: horizon colour (matching the fog) up to the zenith.
 export class Sky {
   readonly mesh: THREE.Mesh;
@@ -28,12 +30,14 @@ export class Sky {
       depthWrite: false,
       fog: false,
     });
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1000, 32, 16), material);
+    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(RADIUS, 32, 16), material);
     this.mesh.renderOrder = -10;
     this.mesh.frustumCulled = false;
   }
 
-  follow(camera: THREE.Camera): void {
+  /** Centre on the camera, inside its far plane (the colour only depends on direction). */
+  follow(camera: THREE.PerspectiveCamera): void {
     this.mesh.position.copy(camera.position);
+    this.mesh.scale.setScalar(Math.min(1, (camera.far * 0.9) / RADIUS));
   }
 }

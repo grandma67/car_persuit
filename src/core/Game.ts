@@ -74,6 +74,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const tmpA = new THREE.Vector3(); // scratch for the frame
 const tmpB = new THREE.Vector3();
 const STEER_PREF = 'steering'; // IndexedDB key: 'buttons' | 'tilt'
+const FAR_PAST_FOG = 20; // metres: the chase camera's far plane past the fog end
 const SHADOW_HALF = 125; // metres: half the width of the sun's shadow map
 const SHADOW_LEAD = 60; // metres ahead of the car to centre the shadow map, towards what the camera sees
 /** On phones, other cars further than this cast no shadow (switched back on 10 m nearer, so it doesn't flicker). */
@@ -318,6 +319,10 @@ export class Game {
     this.copContact = new CopContact(this.world, this.player);
 
     this.chase = new ChaseCamera(window.innerWidth / window.innerHeight);
+    // Past the fog end everything is fog colour, which the sky dome behind shows anyway: stop there, so
+    // frustum culling drops what lies past it (building tiles, landmarks, district pieces).
+    this.chase.camera.far = this.fog.far + FAR_PAST_FOG;
+    this.chase.camera.updateProjectionMatrix();
     this.minimap = new Minimap(this.city);
     this.hud = new Hud(hudRoot, this.minimap.canvas);
     this.audio.setMuted(this.prefs.muted);
@@ -754,7 +759,9 @@ export class Game {
     }
     const nearestCop = this.sirens.update(this.timer.getElapsed(), this.director.cops, this.player.position, this.player.headlights, this.state !== 'won');
     this.audio.setSiren(this.state === 'playing' ? nearestCop : null);
-    this.props.sync();
+    // Props past the fog end aren't drawn; with the fog off (the overview) all are. Last frame's camera.
+    const eye = this.chase.camera.position;
+    this.props.sync(this.scene.fog ? { x: eye.x, z: eye.z, fogFar: this.fog.far } : null);
     this.props.updateSignals(this.timer.getElapsed());
     this.props.updateLamps(this.timer.getElapsed());
     for (const works of this.roadworks) works.update(frameDt, this.timer.getElapsed());

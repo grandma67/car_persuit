@@ -39,6 +39,10 @@ const ACTIVE_RADIUS = 22; // metres: give props within this of a vehicle a bodyâ
 const INACTIVE_RADIUS = 30; // â€¦and take it away once every vehicle is this far
 const NO_BREAKS: readonly PropBreak[] = Object.freeze([]);
 const ACTIVE_REFRESH = 0.15; // seconds between refreshes (a 70 m/s car covers ~10 m)
+// Only props near the camera are drawn (past the fog end they're fog colour anyway): each model's
+// drawn instances are packed to the front of its buffer, again once the camera has moved this far.
+const PACK_STEP = 20; // metres
+const PACK_MARGIN = 10; // metres past the fog end + PACK_STEP: the largest prop's reach
 
 type SignShape = 'octagon' | 'round' | 'triangle' | 'square' | 'diamond';
 const SIGN_SHAPE: Record<SignVariant, SignShape> = {
@@ -236,7 +240,6 @@ interface PropState {
   /** Debris at rest whose body was taken away (no vehicle near): where it lies. null: sunk, gone. */
   rest?: { t: RAPIER.Vector; r: RAPIER.Rotation } | null;
   key: ModelKey;
-  instance: number; // index within its model's instanced mesh
   attachments: Attachment[];
   pool?: number; // lamp bulb (or lantern flame) + light-pool instance (the pool stays on the ground)
   lenses?: number; // first signal-lens instance (3 consecutive)
@@ -1252,6 +1255,32 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
   'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed']);
 
+/**
+ * Copy the props in `list` lying within `radius` of (x, z) (their matrices' translation) from
+ * `matrices` and `tints` to the front of `out` and `colours`, in list order; each one's index there,
+ * or -1, into `slots`. Returns how many.
+ */
+export function packNear(
+  list: readonly number[], matrices: Float32Array, tints: Float32Array, x: number, z: number, radius: number,
+  out: Float32Array, colours: Float32Array, slots: Int32Array,
+): number {
+  const r2 = radius * radius;
+  let n = 0;
+  for (let k = 0; k < list.length; k++) {
+    const i = list[k];
+    const dx = matrices[i * 16 + 12] - x;
+    const dz = matrices[i * 16 + 14] - z;
+    if (dx * dx + dz * dz > r2) {
+      slots[i] = -1;
+      continue;
+    }
+    for (let e = 0; e < 16; e++) out[n * 16 + e] = matrices[i * 16 + e];
+    for (let c = 0; c < 3; c++) colours[n * 3 + c] = tints[i * 3 + c];
+    slots[i] = n++;
+  }
+  return n;
+}
+
 // Street furniture: solid when nudged slowly, knocked loose (becomes a dynamic body) when a vehicle
 // arrives fast enough. Detection runs a step ahead of contact so smashing through doesn't feel
 // like hitting a wall.
@@ -1259,6 +1288,11 @@ export class PropSystem {
   private props: PropState[] = [];
   private grid = new Map<number, number[]>();
   private meshes = {} as Record<ModelKey, THREE.InstancedMesh>;
+  private keyProps = {} as Record<ModelKey, number[]>; // each model's props (indices), in build order
+  private matrices: Float32Array; // every prop's world matrix (16 floats each), drawn or not
+  private tints: Float32Array; // every prop's instance colour (3 floats each)
+  private slots: Int32Array; // every prop's index within its model's mesh while drawn, -1 while too far
+  private packedAt = { x: 0, z: 0, radius: Infinity }; // where the drawn props were last picked
   private bulbs: THREE.InstancedMesh;
   private pools: THREE.InstancedMesh;
   private lenses: THREE.InstancedMesh;
@@ -1286,6 +1320,10 @@ export class PropSystem {
     for (const key of Object.keys(models) as ModelKey[]) counts[key] = 0;
     for (const p of defs) counts[modelKey(p)]++;
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.7, metalness: 0.2 });
+    this.matrices = new Float32Array(defs.length * 16);
+    this.tints = new Float32Array(defs.length * 3).fill(1);
+    this.slots = new Int32Array(defs.length);
+    for (const key of Object.keys(models) as ModelKey[]) this.keyProps[key] = [];
     for (const key of Object.keys(models) as ModelKey[]) {
       // Old-style and district props only exist in cities that have them.
       if (!counts[key] && (key.endsWith('-old') || DISTRICT_KEYS.has(key))) continue;
@@ -1372,11 +1410,17 @@ export class PropSystem {
       this.q.setFromAxisAngle(UP, def.yaw);
       const key = modelKey(def);
       const y = groundBase(city.terrain, def.x, def.z, Math.max(spec.hx, spec.hz));
-      const state: PropState = { def, y, body: null, broken: false, key, instance: next[key]++, attachments: [] };
+      const state: PropState = { def, y, body: null, broken: false, key, attachments: [] };
+      const slot = (this.slots[i] = next[key]++);
       this.props.push(state);
+      this.keyProps[key].push(i);
       const world4 = new THREE.Matrix4().compose(this.v.set(def.x, y, def.z), this.q, this.scale(def));
-      this.meshes[key].setMatrixAt(state.instance, world4);
-      if (TINTED.has(def.kind)) this.meshes[key].setColorAt(state.instance, this.color.setHex(def.color ?? 0xffffff));
+      world4.toArray(this.matrices, i * 16);
+      this.meshes[key].setMatrixAt(slot, world4);
+      if (TINTED.has(def.kind)) {
+        this.color.setHex(def.color ?? 0xffffff).toArray(this.tints, i * 3);
+        this.meshes[key].setColorAt(slot, this.color);
+      }
 
       const attach = (mesh: THREE.InstancedMesh, index: number, local: THREE.Matrix4, color?: THREE.Color) => {
         state.attachments.push({ mesh, index, local });
@@ -1552,7 +1596,7 @@ export class PropSystem {
     this.moving.delete(i);
     const touched = new Set<THREE.InstancedMesh>();
     this.m4.makeScale(0, 0, 0);
-    this.setMatrix(this.meshes[p.key], p.instance, this.m4, touched);
+    this.place(i, this.m4, touched);
     for (const a of p.attachments) this.setMatrix(a.mesh, a.index, this.m4, touched);
     for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true;
   }
@@ -1682,8 +1726,38 @@ export class PropSystem {
     touched.add(mesh);
   }
 
-  /** Move debris meshes to their physics bodies. Call once per rendered frame. */
-  sync(): void {
+  /** A prop's model to world matrix `m`: kept, and shown if it's drawn. */
+  private place(i: number, m: THREE.Matrix4, touched: Set<THREE.InstancedMesh>): void {
+    m.toArray(this.matrices, i * 16);
+    if (this.slots[i] >= 0) this.setMatrix(this.meshes[this.props[i].key], this.slots[i], m, touched);
+  }
+
+  /**
+   * Draw only the props within `radius` of (x, z) (Infinity: all): each model's are packed to the front
+   * of its buffer and its count cut to them. One draw per model as before, minus what's past the fog.
+   */
+  private pack(x: number, z: number, radius: number): void {
+    this.packedAt.x = x;
+    this.packedAt.z = z;
+    this.packedAt.radius = radius;
+    for (const key of Object.keys(this.meshes) as ModelKey[]) {
+      const mesh = this.meshes[key];
+      const n = packNear(this.keyProps[key], this.matrices, this.tints, x, z, radius, mesh.instanceMatrix.array as Float32Array, mesh.instanceColor!.array as Float32Array, this.slots);
+      mesh.count = n;
+      // Upload just the drawn part (a partial range from debris this frame would leave the rest stale).
+      for (const attr of [mesh.instanceMatrix, mesh.instanceColor!]) {
+        attr.clearUpdateRanges();
+        attr.addUpdateRange(0, n * attr.itemSize);
+        attr.needsUpdate = true;
+      }
+    }
+  }
+
+  /**
+   * Move debris meshes to their physics bodies, and pick the props to draw around `view` (the camera
+   * and the fog end; null: all, as with the fog off). Call once per rendered frame.
+   */
+  sync(view: { x: number; z: number; fogFar: number } | null = null): void {
     const touched = new Set<THREE.InstancedMesh>();
     for (const i of this.moving) {
       const p = this.props[i];
@@ -1692,12 +1766,23 @@ export class PropSystem {
       const r = p.body.rotation();
       this.q.set(r.x, r.y, r.z, r.w);
       this.m4.compose(this.v.set(t.x, t.y, t.z), this.q, this.scale(p.def));
-      this.setMatrix(this.meshes[p.key], p.instance, this.m4, touched);
+      this.place(i, this.m4, touched);
       for (const a of p.attachments) this.setMatrix(a.mesh, a.index, this.m4.clone().multiply(a.local), touched);
       // Debris at rest no longer needs updating; debris lost in the sea is gone.
       if (t.y < SUNK_BELOW) this.sink(i);
       else if (p.body.isSleeping()) this.moving.delete(i);
     }
     for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true;
+    // After the debris: packing re-sends every drawn matrix, theirs included.
+    const radius = view ? view.fogFar + PACK_STEP + PACK_MARGIN : Infinity;
+    const at = this.packedAt;
+    if (radius !== at.radius || (view && Math.hypot(view.x - at.x, view.z - at.z) > PACK_STEP)) this.pack(view?.x ?? 0, view?.z ?? 0, radius);
+  }
+
+  /** Props of each model drawn now (for tests and debugging). */
+  drawnCounts(): Partial<Record<ModelKey, number>> {
+    const out: Partial<Record<ModelKey, number>> = {};
+    for (const key of Object.keys(this.meshes) as ModelKey[]) out[key] = this.meshes[key].count;
+    return out;
   }
 }

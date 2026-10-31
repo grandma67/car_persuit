@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { addDebrisColliders, buildModels, debrisParts, modelKey } from './PropSystem';
+import { addDebrisColliders, buildModels, debrisParts, modelKey, packNear } from './PropSystem';
 import { CAR_GROUPS } from '../vehicles/Vehicle';
 import { propSpec, type SignVariant, type StreetProp } from './StreetProps';
 
@@ -115,5 +115,38 @@ describe('PropSystem debris colliders', () => {
     expect(world.castRay(ray, 10, true, undefined, CAR_GROUPS, chassis)).toBeNull();
     expect(world.castRay(ray, 10, true, undefined, undefined, chassis)).not.toBeNull(); // still there for everything else
     world.free();
+  });
+});
+
+describe('PropSystem drawing only the props short of the fog', () => {
+  // Five props of one model along x, at 0, 100 … 400 m; their matrices and a tint each.
+  const list = [0, 1, 2, 3, 4];
+  const matrices = new Float32Array(list.length * 16);
+  const tints = new Float32Array(list.length * 3);
+  for (const i of list) {
+    new THREE.Matrix4().makeTranslation(i * 100, 0, 5).toArray(matrices, i * 16);
+    tints.set([i / 10, 0.5, 1], i * 3);
+  }
+  const pack = (x: number, radius: number) => {
+    const out = new Float32Array(list.length * 16);
+    const colours = new Float32Array(list.length * 3);
+    const slots = new Int32Array(list.length);
+    const n = packNear(list, matrices, tints, x, 0, radius, out, colours, slots);
+    return { n, out, colours, slots };
+  };
+
+  it('packs those within reach to the front, in order, with their colours', () => {
+    const { n, out, colours, slots } = pack(200, 120);
+    expect(n).toBe(3); // 100, 200, 300 m
+    expect([...slots]).toEqual([-1, 0, 1, 2, -1]);
+    expect([out[12], out[16 + 12], out[32 + 12]]).toEqual([100, 200, 300]);
+    expect(out[14]).toBe(5);
+    expect(colours[3]).toBeCloseTo(0.2);
+  });
+
+  it('draws every one with the fog off', () => {
+    const { n, slots } = pack(0, Infinity);
+    expect(n).toBe(5);
+    expect([...slots]).toEqual([0, 1, 2, 3, 4]);
   });
 });
