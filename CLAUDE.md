@@ -52,6 +52,10 @@ destinations, cops, civilian traffic, themed districts.
   `npm run check:browser …`; `npm run check:restart` after anything that adds to the scene, page or
   listeners; `npm run check:reload` after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or
   `city.params`. See `BROWSER_CHECKS.md`.
+- Before/after in the browser: `npm run check:browser -- --vs <ref> …` (that ref in its own worktree and
+  server, then here; never a baseline from the server you're editing against). Shots:
+  `node scripts/png-diff.mjs a.png b.png`. Perf: `--throttle 4`, `--profile f.json`, evals
+  `perf-profile.js` and `tri-breakdown.js` (measure before choosing what to optimize).
 
 ## Working rules (from the user)
 

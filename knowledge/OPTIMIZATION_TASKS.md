@@ -6,38 +6,30 @@ working rules: one commit per milestone, then stop for approval before merging.
 
 ## Before anything: the baseline
 
-Every task is judged against the same run. Take it once on `main` and save the JSON.
+Every task is judged against the branch's start. `--vs <ref>` runs the same check there (its own
+worktree and Vite, so your edits can't hot-reload into the baseline) and then on the working tree:
 
-1. Start Vite: `npx vite --port 5199` (in the background).
-2. Take the desktop baseline:
-   ```sh
-   npm run check:browser -- --query "seed=9&debug&oldtown=1&chinatown=1&harbor=1" --start 2000 \
-     --no-final --eval-file scripts/evals/perf-profile.js > <scratchpad>/base-desktop.json
-   ```
-3. Take the phone baseline: add `--size 390x844` and save to `base-phone.json`. The headless check
-   can't slow the CPU. For a 4× CPU throttle, use the CDP `Emulation.setCPUThrottlingRate` (see
-   "Profiler" below).
-4. Read from the JSON:
-   - `per` (ms per frame for each system);
-   - `allocMBperSec` and `gcPerSec`;
-   - `render.calls` and `render.triangles`;
-   - `gpuMsPerFrame`;
-   - `memory` (`jsHeapMB`, `geometryMB`, `textureMB`).
+```sh
+npm run check:browser -- --vs <branch-start> --query "seed=9&debug&oldtown=1&chinatown=1&harbor=1" \
+  --start 2000 --no-final --eval-file scripts/evals/perf-profile.js > <scratchpad>/desktop.json
+# phone: --size 390x844 --throttle 4
+```
 
-   Wall time swings with machine load, so compare the cruise phase's `FRAME` ms and `allocMBperSec`.
-   Run each side twice if the numbers are close.
+Read from `base` and `current`:
+- `per` (ms per frame for each system); on phones judge by `FRAME` ms, not FPS;
+- `allocMBperSec`, `gcPerSec` and `budget`;
+- `render.calls` and `render.triangles`, `gpuMsPerFrame`, `memory`.
 
-### Profiler (when a number doesn't explain itself)
+Wall time swings with machine load: compare the cruise phase, and run twice if the numbers are close.
 
-`browser-check.mjs` has no profiler. A scratch copy with these CDP calls around the eval worked
-(2026-10-31):
-- `Profiler.start`/`stop` (sampling interval 200 µs);
-- `HeapProfiler.startSampling`/`stopSampling` (`samplingInterval: 4096`, include objects collected by
-  minor and major GC);
-- `Emulation.setCPUThrottlingRate { rate: 4 }`.
+### Measure before choosing (the plan's guesses were wrong twice in M1–M2)
 
-To read the results, sum self time and self bytes per `functionName url:line`. If profiling becomes
-routine, add it to `browser-check.mjs` behind `--profile`.
+- **Where triangles and calls go:** `scripts/evals/tri-breakdown.js` (per pass, biggest meshes in view).
+- **Where CPU and garbage go:** `--profile <file.json>` (CPU and heap sampling around the eval; top
+  self time and bytes per function), with `--throttle 4` for a phone's CPU.
+- **Program lookups:** `dbg.programLookups()` (expected `[]` while driving).
+- **Looks:** shots from both sides of `--vs`, compared with `node scripts/png-diff.mjs`; the game's own
+  camera far off with `dbg.aim(point, {dist, height})`.
 
 ## Checks every task ends with
 
@@ -47,11 +39,17 @@ routine, add it to `browser-check.mjs` behind `--profile`.
 - `dbg.stats().programs` the same as before or lower, measured before any `aerial()`.
 - `npm run check:restart` after anything that adds or splits meshes or materials. Each new
   material or geometry must still be freed by `Game.dispose()`.
-- `perf-profile.js` again, compared with the baseline. The result goes in the commit body.
+- `perf-profile.js` again with `--vs <branch-start>` (`budget` all true). The result goes in the
+  commit body.
+- Anything that changes what's drawn: a shot pair through `--vs`, diffed with `png-diff.mjs`.
 
 ---
 
 ## Milestone 1: less garbage (GC)
+
+**Done** (`febe8ac`): 30 → 16 MB/s, phone frame 11.5 → 9.5 ms. Under 10 MB/s wasn't reached (what's
+left: `OPTIMIZATIONS.md` section 4), so the budget is ≤ 21. 1.1 found two more causes than listed
+(instance colours, the shadow pass's depth material).
 
 Goal: cut `allocMBperSec` from ~30–38 to under ~10 while cruising.
 
@@ -187,6 +185,11 @@ step: ~53 MB per 18 s, ~18% of the garbage.
 
 ## Milestone 2: draw only what can be seen
 
+**Done** (`2c78f02`): triangles 1.79 → 1.10 M, calls 327 → 308, phone frame 9.5 → 8.0 ms. 2.1 packs
+props by distance instead of tiling (one draw per model kept); 2.2 was tried and dropped (walls are
+~5k triangles in view); 2.3 as planned, plus the sky and the beacon. The main pass is at 0.80 M, not
+0.6 M: the rest is two city-wide meshes and the props within the fog.
+
 Goal: main-pass triangles from ~1.28 M to under ~0.6 M, and the shadow pass with them; no more draw
 calls than today (~220 main).
 
@@ -277,6 +280,10 @@ and after, and a note on the debris approach.
 ---
 
 ## Milestone 3: less CPU per frame
+
+Measure each task's target first (`--profile` at `--throttle 4`: is `updateMatrixWorld` still 5 %, is
+`Precipitation.update` still there, what does each civilian cost now?) and drop or reshape a task the
+numbers don't support. Phone frame at the start of M3: 8.0 ms.
 
 ### 3.1 Traffic LOD
 

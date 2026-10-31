@@ -129,7 +129,7 @@ Sampling heap profile over 18 s of driving, top 50 sites, 302 MB in all:
 
 | Source | MB | Cause |
 |---|---|---|
-| three `getParameters`, `getProgramCacheKey`, `join` | **80** | **3 materials are shared between an `InstancedMesh` and a plain `Mesh`.** three keys programs on `instancing`, so each time it alternates between them it rebuilds the program parameters and cache key. This happens every frame. |
+| three `getParameters`, `getProgramCacheKey`, `join` | **80** | Materials drawn in more than one program variant, so three rebuilds the program parameters and cache key at every switch, every frame. **Corrected (section 4):** the 3 plain/instanced pairs below were a small part; the bulk was one prop material on instanced meshes with and without `instanceColor`, and three's shared shadow depth material. |
 | Rapier getters (`translation`, `linvel`, `angvel`, `rotation`, FinalizationRegistry `register`) | 53 | Each call returns a new JS object, registered for finalization. `Vehicle.ts` has 21 such calls, run per car per step (`drive`, `snapshot`, `softDrag`, `assistTraction`, `grounded`…), plus `CivilianTraffic.forwardObstacle`. |
 | three uniform `setValueM4` / `setValueV3f` / `setValueM3` | 53 | Probably inlined callers. Measure again after the material fix, since program switches re-upload every uniform. |
 | `CivilianController.update`, `trafficDue`, `forwardObstacle`, `districtLimit`, `cruiseFor`, `signal` | ~30 | Small per-car objects every step: destructured `[ux, uz] = [...]` pairs, `{x, z}` results, `awareness.movers()`. |
@@ -256,3 +256,40 @@ changing it recompiles every material.
   --no-final --eval-file scripts/evals/perf-profile.js`, plus `--size 390x844`.
 - Compare `per`, `allocMBperSec`, `render.calls/triangles` and `gpuMsPerFrame`.
 - On phones, judge by the JS frame ms, not FPS: headless desktop holds 60 either way.
+
+## 4. What the fixes found (branch `perf/runtime`, M1–M2)
+
+Measured with `perf-profile.js` on the reference city, cruising; phone = 390×844 at `--throttle 4`.
+
+| | Start (ac1e4c8) | After M1 | After M2 |
+|---|---|---|---|
+| Phone `FRAME` | 11.5 ms | 9.5 ms | 8.0 ms |
+| Phone `renderer.render` / shadow pass | 5.9 / 1.6 ms | 4.6 / 1.0 ms | 3.9 / 0.8 ms |
+| Garbage (desktop) | 30 MB/s, 1.4 GC/s | 16 MB/s, 0.6 GC/s | 16 MB/s |
+| Triangles per frame (main pass) | 1.79 M (1.28 M) | same | 1.10 M (0.80 M) |
+| Calls / programs | 327 / 37 | 327 / 34 | 308 / 34 |
+
+What the research above got wrong, and what was learned:
+
+- **Program lookups had three causes, not one.** The plain/instanced pairs (Landmarks, OldCity, Harbor)
+  were real but small. The bulk: one prop material on 48 `InstancedMesh`es, only the tinted models
+  with `instanceColor` (three keys programs on `instancingColor` too), and **three's single shadow
+  depth material**, which every caster without a `customDepthMaterial` shares, so instanced and plain
+  casters alternate it (~29 lookups a frame). Fixes: every prop model gets (white) instance colours;
+  `separateInstancedShadows` gives instanced casters their own depth materials. Guards:
+  `dbg.mixedMaterials()` (static check, shadow pass included) and `dbg.programLookups()` (counts them).
+- **Hot per-car code allocated through `for…of` and destructuring**, not only through the Rapier
+  getters: `updateLights` and `syncMesh` dropped out of the heap profile once their loops were indexed.
+- **What's left of the garbage** (16 MB/s): three's WebGL uniform calls (per draw; the allocation is in
+  the browser's bindings, so only fewer draws cut it) and Rapier's getters (4 per car per step in
+  `snapshot`, 2 after `updateVehicle`). Swapping three's uniform caches for typed arrays didn't help.
+- **Tiling multiplies draw calls; phones pay for calls.** Props are instead packed: each model's
+  instances within fog end + 30 m are copied to the front of its buffer and `count` cut, repacked every
+  20 m of camera travel. One draw per model as before.
+- **Building walls are cheap** (~5k triangles in view: textured quads). Tiling them added ~30 calls for
+  0.1 M triangles and was dropped. The main pass's remaining bulk is two city-wide meshes (154k and 100k
+  triangles, `tri-breakdown.js`) and the props within the fog.
+- **The far plane at the fog end** needed the sky dome scaled inside it and the destination beam's
+  depth held inside it (it's meant to show past the fog).
+- **Cop metrics can't prove a refactor exact** (±10–20 % noise): two runs giving identical numbers did.
+

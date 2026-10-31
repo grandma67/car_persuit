@@ -27,13 +27,18 @@
 //   --size   viewport WxH (390x844 for a phone)                               default 1280x800
 //   --port   Vite port                                                        default 5199
 //   --throttle  CPU slowdown during the expression (4 stands in for a mid-range phone)  default off
+//   --vs     a git ref: the same run on that ref first (a worktree in the temp dir, kept for next time,
+//            its own Vite on --port + 100), then on the working tree; prints { vs, base, current }.
+//            Shots go to <out-dir>/base and <out-dir>/current. Runs one after the other, never at once
+//            (they'd share the CPU). Remove old worktrees with `git worktree prune` after deleting them.
+//   --root   the folder to start Vite in (default: here; --vs passes the worktree)
 //   --profile   file.json: CPU and heap sampling profiles around the expression; prints the top
 //               self time and self bytes per `function url:line` (`profile` in the output)
 // A Vite server already listening on --port is reused (start one with `npx vite --port 5199`).
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((pairs, a, i, all) => (a.startsWith('--') ? [...pairs, [a.slice(2), all[i + 1] === undefined || all[i + 1].startsWith('--') ? 'true' : all[i + 1]]] : pairs), []),
@@ -47,6 +52,36 @@ if (args.make) {
   args.city = join(mkdtempSync(join(tmpdir(), 'cp-city-')), 'city.json');
   const made = execFileSync('node', ['scripts/run-ts.mjs', 'scripts/city.ts', 'make', ...args.make.split(/\s+/), '--out', args.city], { encoding: 'utf8' });
   process.stderr.write(made);
+}
+
+// --vs: run this same check on a ref (in a worktree, its own Vite), then here, and print both.
+if (args.vs) {
+  const sha = execFileSync('git', ['rev-parse', '--short', args.vs], { encoding: 'utf8' }).trim();
+  const tree = join(tmpdir(), `cp-vs-${sha}`);
+  if (!existsSync(tree)) {
+    execFileSync('git', ['worktree', 'add', '--detach', tree, sha], { stdio: 'ignore' });
+    symlinkSync(resolve('node_modules'), join(tree, 'node_modules'));
+  }
+  const basePort = vitePort + 100;
+  try {
+    await fetch(`http://localhost:${basePort}/`);
+    console.error(`--vs: port ${basePort} is taken (a server from another tree?): stop it first`);
+    process.exit(1);
+  } catch {}
+  const outDir = args['out-dir'] ?? dirname(args.out ?? 'browser-check.png');
+  const pass = Object.entries(args).flatMap(([k, v]) =>
+    ['vs', 'make', 'port', 'out', 'out-dir', 'root', 'profile'].includes(k) ? [] : [`--${k}`, ...(v === 'true' ? [] : [k === 'eval-file' || k === 'city' ? resolve(v) : v])],
+  );
+  const run = (side, extra) => {
+    const dir = join(outDir, side);
+    const profile = args.profile ? ['--profile', resolve(args.profile).replace(/(\.json)?$/, `.${side}.json`)] : [];
+    const text = execFileSync('node', [process.argv[1], ...pass, ...profile, '--out-dir', dir, '--out', join(dir, 'final.png'), ...extra], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 28 });
+    return JSON.parse(text);
+  };
+  const base = run('base', ['--port', String(basePort), '--root', tree]);
+  const current = run('current', ['--port', String(vitePort)]);
+  console.log(JSON.stringify({ vs: args.vs, sha, base, current }, null, 2));
+  process.exit(0);
 }
 
 const children = [];
@@ -63,7 +98,7 @@ const up = async () => {
 let url = args.url;
 if (!url && (await up())) url = `http://localhost:${vitePort}/?${args.query ?? 'debug'}`; // reuse a running server
 if (!url) {
-  const vite = spawn('npx', ['vite', '--port', String(vitePort), '--strictPort'], { stdio: 'ignore' });
+  const vite = spawn('npx', ['vite', '--port', String(vitePort), '--strictPort'], { stdio: 'ignore', cwd: args.root ?? process.cwd() });
   children.push(vite);
   for (let i = 0; i < 60; i++) {
     await sleep(250);

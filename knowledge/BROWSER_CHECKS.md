@@ -10,7 +10,15 @@ threw. Phone perf: `--size 390x844`; `--throttle 4` slows the CPU 4× during the
 phone's CPU); `--profile <file.json>` records CPU and heap sampling profiles around it and prints the
 top self time and self bytes per function (`profile` in the output; line = the function's first line).
 
-Compare with main: `git worktree add <scratchpad>/mainwt main`, symlink `node_modules`, `--port 5299`.
+**Compare with a ref: `--vs main`** (or any commit) runs the same check on that ref first (a worktree in
+the temp dir, kept for next time; its own Vite on port + 100), then on the working tree, and prints
+`{ vs, base, current }`; shots in `<out-dir>/base` and `/current`, `--profile` per side. Use it for every
+before/after: a baseline taken from the working tree's own server picks up your edits as Vite hot-reloads
+them. An eval run on an older ref must cope with `dbg` helpers it lacks (`dbg.x?.()`).
+
+**Compare two shots:** `node scripts/png-diff.mjs a.png b.png [--threshold 24] [--out diff.png]`: pixels
+that differ, their share and bounding box, and the differences in red over a dimmed copy. Traffic, rain
+and the HUD always differ a little; judge by where the box and the red fall, not by zero.
 
 ## Ready-made evals (`scripts/evals/`): start there
 
@@ -35,7 +43,11 @@ Compare with main: `git worktree add <scratchpad>/mainwt main`, symlink `node_mo
   ms per system per frame, GPU ms, heap churn (`allocMBperSec`, `gcPerSec`), calls, triangles and
   memory over idle, a police-off cruise and a 5★ chase. `budget` must be all true: cruise garbage under
   its limit and `mixedMaterials` empty. Seed 9 with `oldtown=1&chinatown=1&harbor=1` is the reference;
-  compare against a baseline run of `main` (worktree, `--port 5299`).
+  compare with `--vs <ref>`.
+- **Triangles and calls** `tri-breakdown.js`: one cruising frame's calls and triangles per pass (shadow,
+  main), and the meshes in view, biggest first (instances drawn, bounding radius and centre, never-culled,
+  shadow casters). **Run it before choosing what to cull, merge or tile**: the plan that tiled buildings
+  missed that their textured walls are ~5k triangles in view.
 
 Write a custom eval (in the scratchpad) only for drives and chases:
 
@@ -65,6 +77,8 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `aerial(point,{dist,height,from,look})` / `aerial(false)` | overview camera aimed `look` m above a point's ground (loop `from` to orbit) |
 | `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)` | model studio, HUD hidden |
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
+| `aim(point,{dist,height,from,look})` / `aim(false)` | the game's own camera (fog and far plane as in play) held `dist` m from a point, `height` up, from the car's side by default: for what's drawn far off or past the fog. `aerial()` uses another camera with the fog off |
+| `programLookups(ms)` | shader program lookups per frame by material over `ms` (three redoes one each time a material is drawn in another variant: garbage). Expected `[]` while driving; when not, `mixedMaterials()` usually says why |
 | `mixedMaterials()` | materials drawn by more than one kind of mesh (plain, instanced, instanced with colours), shadow pass included: each switches program variants every draw (garbage). Expected `[]`; `perf-profile.js` and `check:restart` check it |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
 | `dumpCity(download?)`, `loadCity(file)` | this run's params as text; restart in place with a params file (`CITY_PARAMS.md`). `npm run check:reload` (`scripts/evals/city-reload.js`): dump → load is the same city, Retry keeps it, New city drops it |
@@ -113,6 +127,15 @@ console; perf at phone size with `dbg.fps()`. Stills can't show flicker or feel:
 feel to the user.
 
 ## Pitfalls
+
+- A baseline from the server you're editing against isn't one: Vite hot-reloads every save into it.
+  `--vs <ref>` runs the baseline in its own worktree and server.
+- `perf-profile.js` numbers swing with machine load: compare sides run one after the other (`--vs`
+  does), and run twice when they're close. Judge phones by `FRAME` ms at `--throttle 4`, not FPS.
+- The heap profile (`--profile`) names functions, not lines. In hot per-car code the usual hidden costs
+  are `for…of` (iterator objects), array destructuring (`const [a, b] = …`), spreads and closures:
+  index loops and plain locals instead. Allocations three's WebGL uniform calls show are the browser's
+  bindings: only fewer draws cut them.
 
 - Draw calls read a few high for a frame or two after any restart (Retry, New city, `loadCity`), with
   plain seeds too: compare the lowest of a few samples ~700 ms apart (`city-reload.js` does).

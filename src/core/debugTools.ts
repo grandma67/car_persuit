@@ -28,6 +28,7 @@ interface Internals {
   ground: (x: number, z: number) => number;
   renderer: { info: { programs: unknown[] | null; render: { calls: number; triangles: number } } };
   overview: boolean;
+  chase: { camera: { position: { set(x: number, y: number, z: number): void }; lookAt(x: number, y: number, z: number): void; far: number }; update(...a: unknown[]): void };
   overviewCamera(): { position: { set(x: number, y: number, z: number): void }; lookAt(x: number, y: number, z: number): void; near: number; updateProjectionMatrix(): void };
   debugView: unknown;
   health: { repair(share: number): number; destroyed: boolean; ratio: number };
@@ -118,6 +119,67 @@ export function debugTools(game: Game) {
       cam.position.set(t.x + Math.sin(from) * dist, g.ground(t.x, t.z) + height, t.z + Math.cos(from) * dist);
       cam.lookAt(t.x, g.ground(t.x, t.z) + look, t.z);
       await sleep(wait);
+    },
+    /**
+     * Look at a point with the game's own camera (fog and far plane as in play, unlike aerial()): the
+     * chase camera is held `dist` m away on the side `from` (a heading; default: toward the car) and
+     * `height` m up, until `aim(false)`. For checking what's drawn far off, past the fog, and the like.
+     */
+    async aim(target: P | [number, number] | false, { dist = 200, height = 40, from, look = 20, wait = 600 }: { dist?: number; height?: number; from?: number; look?: number; wait?: number } = {}) {
+      const chase = g.chase as { update(...a: unknown[]): void; held?: (...a: unknown[]) => void };
+      if (target === false) {
+        if (chase.held) chase.update = chase.held;
+        delete chase.held;
+        return;
+      }
+      chase.held ??= chase.update;
+      chase.update = () => {};
+      const t = at(target);
+      const car = g.player.position;
+      const side = from ?? Math.atan2(car.x - t.x, car.z - t.z);
+      g.chase.camera.position.set(t.x + Math.sin(side) * dist, g.ground(t.x, t.z) + height, t.z + Math.cos(side) * dist);
+      g.chase.camera.lookAt(t.x, g.ground(t.x, t.z) + look, t.z);
+      await sleep(wait);
+      return { far: g.chase.camera.far };
+    },
+    /**
+     * Shader program lookups per frame over `ms`, by material: three redoes one whenever a material is
+     * drawn in another program variant than last time (instancing, instance colours, lights changed),
+     * each a heap of garbage. Expected `[]` while driving; see mixedMaterials() for the usual cause.
+     */
+    async programLookups(ms = 1000) {
+      type Props = { get(o: object): Record<string, unknown> };
+      const props = (g.renderer as unknown as { properties: Props }).properties;
+      // The materials the renderer touches over a few frames (the shadow pass's own included).
+      const mats = new Set<{ type: string; name: string; isMaterial?: boolean }>();
+      const get = props.get;
+      props.get = function (o) {
+        if ((o as { isMaterial?: boolean }).isMaterial) mats.add(o as never);
+        return get.call(this, o);
+      };
+      await sleep(300);
+      props.get = get;
+      // Each lookup ends by storing the light state's version: count those stores.
+      const counts = new Map<object, number>();
+      for (const m of mats) {
+        const p = props.get(m);
+        let v = p.lightsStateVersion;
+        Object.defineProperty(p, 'lightsStateVersion', { configurable: true, enumerable: true, get: () => v, set: (x) => ((v = x), counts.set(m, (counts.get(m) ?? 0) + 1)) });
+      }
+      let frames = 0;
+      const t0 = performance.now();
+      await new Promise<void>((done) => {
+        const tick = () => (frames++, performance.now() - t0 < ms ? requestAnimationFrame(tick) : done());
+        requestAnimationFrame(tick);
+      });
+      for (const m of mats) {
+        const p = props.get(m);
+        const v = p.lightsStateVersion;
+        Object.defineProperty(p, 'lightsStateVersion', { configurable: true, enumerable: true, writable: true, value: v });
+      }
+      return [...counts]
+        .sort((a, b) => b[1] - a[1])
+        .map(([m, n]) => `${(n / frames).toFixed(1)}/frame ${(m as { type: string }).type} ${(m as { name: string }).name}`.trim());
     },
     /**
      * The studio: prop models, landmarks, vehicles, zone and district lot buildings on a plain floor, labelled, away from the
@@ -261,7 +323,7 @@ export function debugTools(game: Game) {
       const warn = aerialUsed ? 'aerial() ran: fog was off, programs not comparable' : undefined;
       return { programs: g.renderer.info.programs?.length ?? 0, calls, triangles, staticTris: Math.round(staticTris), ...(warn ? { warn } : {}) };
     },
-    /** Materials shared by an instanced and a plain mesh (each costs garbage every frame): expected empty. */
+    /** Materials drawn by more than one kind of mesh, shadow pass included (each costs garbage every frame): expected empty. */
     mixedMaterials() {
       return mixedMaterials(g.scene as unknown as THREE.Object3D);
     },
