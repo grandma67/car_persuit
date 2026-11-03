@@ -75,7 +75,7 @@ function promise(word: string, city: CityData): void {
   else if (name === 'canals') expect(city.terrain.canals.length).toBe(Number(v));
   else if (name === 'blocks') expect(city.blocks.length).toBe(Number(v) ** 2);
   else if (name === 'pond' || name === 'ponds') expect(city.water.filter((w) => w.kind === 'pond').length).toBe(v === undefined ? 1 : Number(v));
-  else if (name === 'pitch' || name === 'pitches') expect(city.streetProps.filter((q) => q.kind === 'goal').length).toBe(2 * (v === undefined ? 1 : Number(v)));
+  else if (name === 'pitch' || name === 'pitches') expect(city.streetProps.filter((q) => q.kind === 'goal' && !city.districts.some((d) => Math.abs(q.x - d.bounds.x) <= d.bounds.w / 2 && Math.abs(q.z - d.bounds.z) <= d.bounds.d / 2)).length).toBe(2 * (v === undefined ? 1 : Number(v))); // the parks' own (not the Mega-park's)
   else if (isFeature(name)) {
     const [kind, f] = name.includes('.') ? name.split('.') : [DISTRICT_DEFS.find((d) => name in d.features)!.kind, name];
     const q = city.districts.find((x) => x.kind === kind);

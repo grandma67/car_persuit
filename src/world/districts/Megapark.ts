@@ -14,6 +14,7 @@ import { emptyDressing, feature, type BlockRole, type District, type DistrictDef
 import { isJunctionControl } from './apply';
 import { clearOf } from './HarborYard';
 import { layLake } from './MegaparkLake';
+import { layBandstand, layPlayground, laySports, layTrack, type GroundsLayout } from './MegaparkGrounds';
 import { ranchGate } from './Farm';
 import { streetSides } from './Harbor';
 import { shuffle } from './place';
@@ -150,7 +151,7 @@ const drop = (p: StreetProp) => p.kind === 'fence' || p.kind === 'umbrella' || (
 function MEGAPARK_LOOKS(): Record<MegaparkLot, LotLook> {
   return {
     cafe: { facade: 'stucco', ground: 'storefront', roof: 'hip', palette: [0xf2ead8, 0xeee4cc, 0xf4eee2], roofTiles: [0x5f8f7a, 0x6a9a84], trims: ['colonnade'] },
-    lodge: { facade: 'ashlar', roof: 'steepGable', palette: [0xc8bca4, 0xb8ac94, 0xd0c4ae], roofTiles: [0x4a4e56, 0x5a4a44], trims: ['chimney', 'porch'] },
+    lodge: { facade: 'ashlar', roof: 'steepGable', palette: [0xc8bca4, 0xb8ac94, 0xd0c4ae], roofTiles: [0x4a4e56, 0x5a4a44], trims: ['chimney'] },
     boathouse: { facade: 'siding', roof: 'gable', palette: [0xf2f2ec, 0xdde8ee, 0xe8eef0], roofTiles: [0x3f5a4a, 0x5a3a34] },
   };
 }
@@ -208,6 +209,23 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   out.structures.push(...lake.structures);
   out.solids.push(...lake.solids);
   props.push(...lake.props);
+  // The set blocks: sports grounds, the track, the playground, the bandstand lawn and the café's terrace.
+  const n = city.config.blocks;
+  const join = (g: GroundsLayout) => {
+    out.structures.push(...g.structures);
+    out.solids.push(...g.solids);
+    out.ground.push(...g.ground);
+    city.parkPieces.push(...g.pieces);
+    props.push(...g.props);
+  };
+  for (const k of q.blocks) {
+    const inner = shrink(city.blocks[k].rect, sw);
+    const role = q.roles.get(k);
+    if (role === 'sports') join(laySports(inner, [k % n, Math.floor(k / n)], rng));
+    else if (role === 'track') join(layTrack(inner, rng));
+    else if (role === 'playground') join(layPlayground(inner, rng));
+    else if (role === 'bandstand') join(layBandstand(inner, buildings.find((b) => b.lot === 'cafe')!, rng));
+  }
   // The props keep clear of the solids, the buildings, the junction controls and each other.
   const controls = city.streetProps.filter((p) => inRect(q.bounds, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
   out.props = clearOf(props, [...out.solids, ...controls, ...buildings.map(rectFootprint)], city.streetProps.filter((p) => inRect(q.bounds, p, 2)).map((p) => propFootprint(p, 0.1)));

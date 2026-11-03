@@ -6,8 +6,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MEGAPARK } from '../../gameplay/balance';
-import type { CityData } from '../../world/CityGenerator';
-import type { District, Structure } from '../../world/districts/District';
+import type { CityData, Rect } from '../../world/CityGenerator';
+import { GeometryBuilder } from '../../world/CityBuilder';
+import { shrink } from '../../world/lots';
+import { groundHeight, type Terrain } from '../../world/Terrain';
+import type { District, GroundPatch, Structure } from '../../world/districts/District';
 import { part } from '../geometry';
 import { rowboat } from '../Landmarks';
 import type { DistrictRenderContext, DistrictView } from './index';
@@ -125,14 +128,203 @@ function jetGeometry(): THREE.BufferGeometry {
   return mergeGeometries(g);
 }
 
+// --- Set blocks: the stand, the playground's kit, the bandstand (local X along the length, front +Z) ---
+
+/** The stand beside the track: four tiers of benches on a steel frame, rising to the back (-Z). */
+function bleachers(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+  const L = s.data!.length as number, D = s.data!.depth as number;
+  const steel = 0x6a7076, seat = 0x2f6aa8;
+  const g: THREE.BufferGeometry[] = [];
+  const tiers = 4;
+  for (let t = 0; t < tiers; t++) {
+    const z = D / 2 - (t + 0.5) * (D / tiers), h = 0.45 + t * 0.55;
+    g.push(part(box(L, 0.08, D / tiers), 0x9a9c98, 0, h - 0.04, z)); // the step
+    g.push(part(box(L - 0.4, 0.1, 0.35), snowy ? SNOW : seat, 0, h + 0.4, z + 0.1)); // the bench
+    for (let x = -L / 2 + 1; x <= L / 2 - 1; x += 3) g.push(part(box(0.08, 0.4, 0.08), steel, x, h + 0.2, z + 0.1));
+  }
+  for (let x = -L / 2 + 0.2; x <= L / 2; x += 3.1) {
+    g.push(part(box(0.12, 2.4, 0.12), steel, x, 1.2, -D / 2 + 0.1)); // back posts
+    g.push(part(box(0.1, 0.1, D).rotateX(-0.45), steel, x, 0.95, 0)); // raking beams
+  }
+  g.push(part(box(L, 0.08, 0.08), steel, 0, 2.6, -D / 2 + 0.1)); // the back rail
+  for (const e of [-1, 1]) g.push(part(box(0.1, 2.0, D), 0x8a8e8a, e * (L / 2 - 0.05), 1.0, 0)); // end panels
+  place(g, frameOf(s.x, y, s.z, s.yaw), out);
+}
+
+const KIT_RED = 0xd8402e, KIT_YELLOW = 0xf0c02a, KIT_BLUE = 0x2f6ac8, KIT_GREEN = 0x3a9a4a;
+
+/** Swings: an A-frame along X, two seats on chains. */
+function swings(): THREE.BufferGeometry[] {
+  const g: THREE.BufferGeometry[] = [part(cyl(0.07, 0.07, 4.6, 8).rotateZ(Math.PI / 2), KIT_BLUE, 0, 2.4, 0)];
+  for (const x of [-2.2, 2.2]) for (const z of [-1, 1]) g.push(part(cyl(0.06, 0.06, 2.6, 6).rotateX(z * 0.42), KIT_BLUE, x, 1.2, z * 0.5));
+  for (const x of [-1, 1]) {
+    for (const dx of [-0.22, 0.22]) g.push(part(box(0.02, 1.8, 0.02), 0x8a8e94, x + dx, 1.5, 0));
+    g.push(part(box(0.5, 0.05, 0.22), KIT_RED, x, 0.58, 0));
+  }
+  return g;
+}
+
+/** A slide: a ladder up to a railed deck at -Z, the chute down to +Z. */
+function slide(): THREE.BufferGeometry[] {
+  const g: THREE.BufferGeometry[] = [part(box(1.2, 0.1, 1.2), KIT_YELLOW, 0, 1.6, -1.8)];
+  for (const x of [-0.55, 0.55]) for (const z of [-2.35, -1.25]) g.push(part(box(0.08, 2.5, 0.08), KIT_BLUE, x, 1.25, z));
+  for (let k = 0; k < 5; k++) g.push(part(box(1.0, 0.05, 0.05), KIT_BLUE, 0, 0.3 + k * 0.3, -2.4));
+  for (const x of [-0.55, 0.55]) g.push(part(box(0.05, 0.05, 1.1), KIT_BLUE, x, 2.4, -1.8));
+  const len = Math.hypot(3.4, 1.55), tilt = Math.atan2(1.55, 3.4);
+  g.push(part(box(0.7, 0.06, len).rotateX(tilt), KIT_RED, 0, 0.85, 0.5));
+  for (const x of [-0.37, 0.37]) g.push(part(box(0.06, 0.25, len).rotateX(tilt), KIT_RED, x, 0.98, 0.5));
+  return g;
+}
+
+/** A climbing frame: a cube of bars with a deck. */
+function climber(): THREE.BufferGeometry[] {
+  const g: THREE.BufferGeometry[] = [];
+  for (const x of [-1.5, 0, 1.5]) for (const z of [-1.5, 0, 1.5]) g.push(part(cyl(0.05, 0.05, 2.2, 6), KIT_GREEN, x, 1.1, z));
+  for (const y of [0.7, 1.4, 2.1]) {
+    for (const z of [-1.5, 0, 1.5]) g.push(part(cyl(0.04, 0.04, 3.0, 6).rotateZ(Math.PI / 2), KIT_YELLOW, 0, y, z));
+    for (const x of [-1.5, 0, 1.5]) g.push(part(cyl(0.04, 0.04, 3.0, 6).rotateX(Math.PI / 2), KIT_YELLOW, x, y, 0));
+  }
+  g.push(part(box(1.5, 0.06, 1.5), KIT_RED, 0.75, 1.42, 0.75));
+  return g;
+}
+
+function roundabout(): THREE.BufferGeometry[] {
+  const g: THREE.BufferGeometry[] = [part(cyl(1.3, 1.3, 0.12, 16), KIT_RED, 0, 0.32), part(cyl(0.15, 0.2, 0.3, 8), 0x6a7076, 0, 0.13)];
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2;
+    g.push(part(cyl(0.03, 0.03, 0.6, 6), KIT_YELLOW, Math.cos(a) * 1.0, 0.68, Math.sin(a) * 1.0));
+    g.push(part(cyl(0.03, 0.03, 1.0, 6).rotateZ(Math.PI / 2).rotateY(-a), KIT_YELLOW, Math.cos(a) * 0.5, 0.98, Math.sin(a) * 0.5));
+  }
+  return g;
+}
+
+/** A seesaw along Z, tipped one way. */
+function seesaw(): THREE.BufferGeometry[] {
+  return [
+    part(box(0.4, 0.5, 0.3), KIT_BLUE, 0, 0.25, 0),
+    part(box(0.35, 0.08, 4.2).rotateX(0.18), KIT_YELLOW, 0, 0.52, 0),
+    ...[-1.8, 1.8].map((z) => part(box(0.5, 0.06, 0.06), KIT_RED, 0, 0.62 - z * 0.18, z)),
+  ];
+}
+
+const KIT_PARTS: Record<string, () => THREE.BufferGeometry[]> = { swings, slide, climber, roundabout, seesaw };
+
+/** The bandstand: an octagonal stone plinth, iron columns and railings, a roof with a finial, steps facing +Z. */
+function bandstand(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+  const R = (s.data?.radius as number) ?? MEGAPARK.bandstand;
+  const iron = 0x2f3a34, cream = 0xf2ead8, roof = snowy ? SNOW : ROOF;
+  const g: THREE.BufferGeometry[] = [
+    part(cyl(R, R + 0.15, 1.0, 8).rotateY(Math.PI / 8), 0xb8b0a0, 0, 0.5),
+    part(cyl(R + 0.05, R + 0.05, 0.08, 8).rotateY(Math.PI / 8), 0x8a6a48, 0, 1.04),
+    part(new THREE.ConeGeometry(R + 0.6, 2.2, 8).rotateY(Math.PI / 8), roof, 0, 5.4),
+    part(cyl(R + 0.6, R + 0.6, 0.3, 8).rotateY(Math.PI / 8), cream, 0, 4.15),
+    part(cyl(0.06, 0.18, 1.0, 6), iron, 0, 6.9),
+    part(new THREE.SphereGeometry(0.16, 8, 6), 0xc8a040, 0, 7.45),
+  ];
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    const x = Math.sin(a) * (R - 0.3), z = Math.cos(a) * (R - 0.3);
+    g.push(part(cyl(0.08, 0.1, 3.0, 8), iron, x, 2.6, z));
+    // Railings between the columns but on the steps' side.
+    if (k === 0) continue;
+    const a2 = ((k + 0.5) / 8) * Math.PI * 2;
+    const chord = 2 * (R - 0.3) * Math.sin(Math.PI / 8);
+    g.push(part(box(chord, 0.06, 0.06).rotateY(a2 + Math.PI / 2), iron, Math.sin(a2) * (R - 0.3) * Math.cos(Math.PI / 8), 1.95, Math.cos(a2) * (R - 0.3) * Math.cos(Math.PI / 8)));
+  }
+  // The steps up to it, on +Z.
+  for (let t = 0; t < 3; t++) g.push(part(box(2.4, 0.33, 0.45), 0xa8a090, 0, 0.165 + t * 0.33 - 0.33 * 0, R + 0.9 - t * 0.45));
+  place(g, frameOf(s.x, y, s.z, s.yaw), out);
+}
+
+// --- Ground: the court, the track, sandpits, the playground's bark, the café's terrace ---
+
+/** Push a flat triangle draped on the ground, facing up. */
+function tri(flat: GeometryBuilder, a: number[], b: number[], c: number[], color: THREE.Color): void {
+  const up = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]);
+  const pts = up >= 0 ? [a, b, c] : [a, c, b];
+  flat.quad([pts[0], pts[1], pts[2], pts[2]], [0, 1, 0], color);
+}
+
+/** The running track: an oval band (lanes, lines, the start) draped `lift` over the ground. */
+function trackGround(flat: GeometryBuilder, s: Structure, terrain: Terrain, snowy: boolean): void {
+  const ground = (x: number, z: number) => groundHeight(terrain, x, z);
+  const S = s.data!.straight as number, Ro = s.data!.outer as number, W = s.data!.width as number;
+  const alongX = s.data!.alongX as boolean;
+  // A point on the stadium shape of radius r at parameter i of N.
+  const N = 72;
+  const pt = (i: number, r: number) => {
+    const t = ((i % N) + N) % N / N; // 0..1 round
+    // 0–0.4: right bend, 0.4–0.5 top straight, 0.5–0.9 left bend, 0.9–1 bottom straight.
+    let u: number, v: number;
+    if (t < 0.4) { const a = -Math.PI / 2 + (t / 0.4) * Math.PI; u = S / 2 + r * Math.cos(a); v = r * Math.sin(a); }
+    else if (t < 0.5) { u = S / 2 - ((t - 0.4) / 0.1) * S; v = r; }
+    else if (t < 0.9) { const a = Math.PI / 2 + ((t - 0.5) / 0.4) * Math.PI; u = -S / 2 + r * Math.cos(a); v = r * Math.sin(a); }
+    else { u = -S / 2 + ((t - 0.9) / 0.1) * S; v = -r; }
+    const x = s.x + (alongX ? u : v), z = s.z + (alongX ? v : u);
+    return [x, z];
+  };
+  const band = (r0: number, r1: number, lift: number, color: THREE.Color) => {
+    for (let i = 0; i < N; i++) {
+      const [a0, b0] = [pt(i, r0), pt(i, r1)], [a1, b1] = [pt(i + 1, r0), pt(i + 1, r1)];
+      const v = (p: number[]) => [p[0], ground(p[0], p[1]) + lift, p[1]];
+      tri(flat, v(a0), v(b0), v(b1), color);
+      tri(flat, v(a0), v(b1), v(a1), color);
+    }
+  };
+  const red = new THREE.Color(snowy ? 0xe6eaee : 0xb8553a), line = new THREE.Color(snowy ? 0xc8d0d6 : 0xf2f0ea);
+  band(Ro - W, Ro, 0.07, red);
+  for (let k = 0; k <= 4; k++) { const r = Ro - W + (W * k) / 4; band(r - 0.05, r + 0.05, 0.09, line); }
+  // The start line across the bottom straight's middle.
+  const [x0, z0] = pt(N * 0.95, Ro - W), [x1, z1] = pt(N * 0.95, Ro);
+  const r: Rect = alongX ? { x: x0, z: (z0 + z1) / 2, w: 0.3, d: Math.abs(z1 - z0) } : { x: (x0 + x1) / 2, z: z0, w: Math.abs(x1 - x0), d: 0.3 };
+  flat.drape(r, 0.1, line, terrain);
+}
+
+/** A tennis court: the run-off, the playing area and its lines (doubles and singles, service boxes). */
+function courtGround(flat: GeometryBuilder, p: GroundPatch, terrain: Terrain, snowy: boolean): void {
+  const alongX = (p.yaw ?? 0) === 0;
+  flat.drape(p, 0.07, new THREE.Color(snowy ? 0xe2e6ea : 0x4a7a5a), terrain);
+  const L = 23.77, W = 10.97, Ws = 8.23, svc = 6.4;
+  const r = (u: number, v: number, lu: number, lv: number): Rect => (alongX ? { x: p.x + u, z: p.z + v, w: lu, d: lv } : { x: p.x + v, z: p.z + u, w: lv, d: lu });
+  flat.drape(r(0, 0, L, W), 0.085, new THREE.Color(snowy ? 0xd8dee4 : 0x3a6a9a), terrain);
+  const white = new THREE.Color(0xf4f4f0), t = 0.06;
+  for (const e of [-1, 1]) {
+    flat.drape(r(0, e * W / 2, L, t * 2), 0.1, white, terrain); // doubles sidelines
+    flat.drape(r(0, e * Ws / 2, L, t * 2), 0.1, white, terrain); // singles sidelines
+    flat.drape(r(e * L / 2, 0, t * 2, W), 0.1, white, terrain); // baselines
+    flat.drape(r(e * svc, 0, t * 2, Ws), 0.1, white, terrain); // service lines
+  }
+  flat.drape(r(0, 0, svc * 2, t * 2), 0.1, white, terrain); // the centre service line
+}
+
+const SAND = 0xd8c08a;
+
 export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
   const snowy = ctx.climate.snowRoofs;
   const frozen = ctx.climate.name === 'snow';
   const solid: THREE.BufferGeometry[] = [];
   const lake = city.water.find((w) => w.kind === 'lake' && Math.abs(w.x - q.bounds.x) <= q.bounds.w / 2 && Math.abs(w.z - q.bounds.z) <= q.bounds.d / 2);
   const surface = (x: number, z: number) => ctx.ground(x, z) + (lake?.depth ?? 0);
+  const flat = new GeometryBuilder();
+  for (const p of q.dressing.ground) {
+    if (p.kind === 'court') courtGround(flat, p, city.terrain, snowy);
+    else if (p.kind === 'sandpit') {
+      flat.drape(p, 0.08, new THREE.Color(snowy ? 0xeef2f6 : SAND), city.terrain);
+      // A timber border round it.
+      const y = ctx.ground(p.x, p.z);
+      for (const e of [-1, 1]) {
+        solid.push(part(box(p.w + 0.3, 0.22, 0.15), PLANK, p.x, y + 0.1, p.z + e * (p.d / 2 + 0.07)));
+        solid.push(part(box(0.15, 0.22, p.d), PLANK, p.x + e * (p.w / 2 + 0.07), y + 0.1, p.z));
+      }
+    } else if (p.kind === 'playground') flat.drape(shrink(p, 0.3), 0.07, new THREE.Color(snowy ? 0xe8ecf0 : 0x8a6a4a), city.terrain); // bark
+    else if (p.kind === 'terrace') flat.drape(p, 0.07, new THREE.Color(snowy ? 0xe4e8ec : 0xc8bca4), city.terrain);
+  }
   for (const s of q.dressing.structures) {
     const y = ctx.ground(s.x, s.z);
+    if (s.kind === 'track') { trackGround(flat, s, city.terrain, snowy); continue; }
+    if (s.kind === 'bleachers') { bleachers(s, y - 0.05, snowy, solid); continue; }
+    if (s.kind === 'bandstand') { bandstand(s, y - 0.05, snowy, solid); continue; }
+    if (KIT_PARTS[s.kind]) { place(KIT_PARTS[s.kind](), frameOf(s.x, y - 0.02, s.z, s.yaw), solid); continue; }
     if (s.kind === 'island') island(s, y - 0.05, snowy, solid);
     else if (s.kind === 'jetty') jetty(s, y, snowy, solid);
     else if (s.kind === 'footbridge') footbridge(s, y - 0.05, snowy, solid);
@@ -141,6 +333,11 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
       const boat = rowboat().applyMatrix4(frameOf(s.x, surface(s.x, s.z) - (frozen ? 0.1 : 0.22), s.z, s.yaw));
       solid.push(boat);
     }
+  }
+  if (flat.positions.length) {
+    const mesh = new THREE.Mesh(flat.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    mesh.receiveShadow = true;
+    scene.add(mesh);
   }
   if (solid.length) {
     const mesh = new THREE.Mesh(mergeGeometries(solid), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 }));

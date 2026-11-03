@@ -91,7 +91,7 @@ export const modelKey = (p: StreetProp): ModelKey => {
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
 /** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale', 'dumpster', 'couch', 'wreck']);
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale', 'dumpster', 'couch', 'wreck', 'deckChair', 'cafeTable']);
 /**
  * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
  * standing on its rim or a round bale on its side (the axle along local X).
@@ -208,6 +208,14 @@ export function debrisParts(def: StreetProp): DebrisPart[] {
         { x: 0.225, y: 1.0, z: 0, hx: 3.4, hy: 0.06, hz: 0.06, carPasses: true }, // arm
         { x: 3.4, y: 0.49, z: 0, hx: 0.15, hy: 0.49, hz: 0.06, carPasses: true }, // fork
       ];
+    case 'tennisNet':
+      // The net and its far post: cars pass through them lying on the court (the near post is the intact collider's).
+      return [
+        { x: 0, y: 0.5, z: 0, hx: 6.2, hy: 0.45, hz: 0.03, carPasses: true }, // net
+        { x: 6.35, y: 0.55, z: 0, hx: 0.05, hy: 0.55, hz: 0.05, carPasses: true },
+      ];
+    case 'cafeTable':
+      return [{ x: 0, y: 2.15, z: 0, hx: 1.2, hy: 0.25, hz: 1.2, round: true }]; // the parasol
     default:
       return [];
   }
@@ -399,6 +407,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     ...farmModels(),
     ...slumsModels(),
     ...parkModels(),
+    ...megaparkModels(),
     'tree-fruit-pear': fruitTree(look, 0xc8c43a),
   };
 }
@@ -934,6 +943,105 @@ function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball', THREE.Bu
   return { reeds: mergeGeometries([...blades, ...heads]), goal, cornerFlag, ball };
 }
 
+type MegaparkKind = 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard';
+/** The Mega-park's breakables (local +Z is the front: a deck chair's seat faces it, the net runs along X). */
+function megaparkModels(): Record<MegaparkKind, THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (r0: number, r1: number, h: number, n = 8) => new THREE.CylinderGeometry(r0, r1, h, n);
+  const wood = 0x8a6040, woodLight = 0xb08a5a, iron = 0x2a2d33, white = 0xf2f2ee, green = 0x2f5a3a;
+  // Tennis net: two posts, the tape along the top, the mesh as a grid of cords (opaque, like the goal's).
+  const net: THREE.BufferGeometry[] = [
+    ...[-6.35, 6.35].map((x) => part(cyl(0.05, 0.05, 1.07, 6), iron, x, 0.535, 0)),
+    part(box(12.7, 0.06, 0.04), white, 0, 0.94, 0),
+    part(box(0.05, 0.94, 0.03), white, 0, 0.47, 0), // the centre strap
+  ];
+  for (let k = 0; k <= 50; k++) net.push(part(box(0.012, 0.88, 0.012), 0x1a1c1e, -6.25 + k * 0.25, 0.47, 0));
+  for (let k = 0; k <= 7; k++) net.push(part(box(12.5, 0.012, 0.012), 0x1a1c1e, 0, 0.06 + k * 0.12, 0));
+  // Deck chair: a wooden frame leaning back, the striped canvas tinted per chair (white here).
+  const deckChair = mergeGeometries([
+    ...[-0.27, 0.27].flatMap((x) => [
+      part(box(0.04, 0.04, 1.1).rotateX(-0.55), woodLight, x, 0.45, 0.05),
+      part(box(0.04, 0.04, 0.9).rotateX(0.7), woodLight, x, 0.3, 0.25),
+    ]),
+    part(box(0.5, 0.02, 1.0).rotateX(-0.6), 0xffffff, 0, 0.47, 0.0),
+    part(box(0.56, 0.04, 0.04), woodLight, 0, 0.78, -0.42),
+  ]);
+  // Café table: a round top on a pedestal, two chairs, the parasol tinted per table.
+  const chair = (x: number) => [
+    part(box(0.42, 0.04, 0.42), iron, x, 0.46, 0),
+    part(box(0.04, 0.42, 0.4), iron, x + Math.sign(x) * 0.2, 0.68, 0),
+    ...[-0.18, 0.18].flatMap((z) => [-0.18, 0.18].map((dx) => part(cyl(0.015, 0.015, 0.46, 4), iron, x + dx, 0.23, z))),
+  ];
+  const cafeTable = mergeGeometries([
+    part(cyl(0.4, 0.4, 0.04, 12), white, 0, 0.74),
+    part(cyl(0.03, 0.03, 0.72, 6), iron, 0, 0.37),
+    part(cyl(0.25, 0.25, 0.03, 10), iron, 0, 0.015),
+    ...chair(-0.6), ...chair(0.6),
+    part(cyl(0.025, 0.025, 2.2, 6), white, 0, 1.4),
+    part(new THREE.ConeGeometry(1.15, 0.45, 8), 0xffffff, 0, 2.2),
+  ]);
+  // Flower planter: a stone urn on a plinth, full of blooms.
+  const blooms = [0xd83a5a, 0xf2c23a, 0xe86a9a, 0xf4f0ee].flatMap((c, k) =>
+    [0, 1, 2].map((m) => part(new THREE.IcosahedronGeometry(0.11, 0), c, Math.cos(k * 1.6 + m * 2.1) * 0.28, 0.98 + (m % 2) * 0.06, Math.sin(k * 1.6 + m * 2.1) * 0.28)));
+  const flowerPlanter = mergeGeometries([
+    part(box(0.7, 0.25, 0.7), 0xa8a296, 0, 0.125),
+    part(cyl(0.18, 0.18, 0.25, 8), 0xa8a296, 0, 0.37),
+    part(cyl(0.48, 0.3, 0.38, 10), 0xb4aea2, 0, 0.68),
+    part(new THREE.SphereGeometry(0.42, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0x3f7a34, 0, 0.84),
+    ...blooms,
+  ]);
+  // Ice-cream cart: a white box on two wheels, a striped canopy on poles, a cone on top.
+  const iceCreamCart = mergeGeometries([
+    part(box(1.0, 0.9, 1.6), white, 0, 0.75),
+    part(box(1.02, 0.18, 1.62), 0x7ac8e0, 0, 1.0),
+    ...[-0.55, 0.55].map((x) => part(cyl(0.3, 0.3, 0.06, 12).rotateZ(Math.PI / 2), iron, x, 0.3, -0.3)),
+    part(box(0.06, 0.06, 0.6), iron, 0, 0.6, 1.05), // the handle
+    ...[-0.45, 0.45].flatMap((x) => [-0.7, 0.7].map((z) => part(cyl(0.02, 0.02, 1.0, 4), white, x, 1.7, z))),
+    part(box(1.3, 0.08, 1.9), 0xe8586a, 0, 2.22),
+    ...[-0.4, 0, 0.4].map((x) => part(box(0.2, 0.085, 1.9), white, x, 2.225, 0)),
+    part(new THREE.ConeGeometry(0.16, 0.4, 8).rotateX(Math.PI), 0xd8a868, 0, 1.45, 0.4),
+    part(new THREE.SphereGeometry(0.17, 8, 6), 0xf0c8d8, 0, 1.7, 0.4),
+  ]);
+  // Ice-cream kiosk: a little booth, serving hatch to the front under an awning, a big cone sign.
+  const kiosk = mergeGeometries([
+    part(box(2.5, 2.4, 1.9), 0xf4eee2, 0, 1.2),
+    part(box(1.6, 0.8, 0.06), 0x2a3036, 0, 1.45, 0.96), // the hatch
+    part(box(2.0, 0.1, 0.1), white, 0, 1.0, 1.0), // the counter
+    part(box(2.7, 0.08, 0.9).rotateX(0.25), 0x7ac8e0, 0, 2.1, 1.25),
+    part(box(2.7, 0.1, 2.1), 0xe8586a, 0, 2.45),
+    part(new THREE.ConeGeometry(0.3, 0.8, 10).rotateX(Math.PI), 0xd8a868, 0, 2.95),
+    part(new THREE.SphereGeometry(0.34, 10, 6), 0xf0c8d8, 0, 3.4),
+  ]);
+  // Picnic table: a plank top and two benches on A-frame legs.
+  const picnicTable = mergeGeometries([
+    part(box(1.8, 0.06, 0.75), woodLight, 0, 0.74),
+    ...[-0.65, 0.65].map((z) => part(box(1.8, 0.05, 0.28), woodLight, 0, 0.44, z)),
+    ...[-0.7, 0.7].flatMap((x) => [
+      part(box(0.07, 0.07, 1.6), wood, x, 0.4, 0),
+      part(box(0.07, 0.85, 0.07).rotateX(0.5), wood, x, 0.38, 0.22),
+      part(box(0.07, 0.85, 0.07).rotateX(-0.5), wood, x, 0.38, -0.22),
+    ]),
+  ]);
+  // Litter bin: a green slatted drum on a post.
+  const litterBin = mergeGeometries([
+    part(cyl(0.05, 0.05, 0.9, 6), iron, 0, 0.45),
+    part(cyl(0.22, 0.2, 0.6, 10), green, 0, 0.55),
+    part(cyl(0.23, 0.23, 0.05, 10), iron, 0, 0.86),
+  ]);
+  // Notice board: a green framed board on two posts, a painted map of paths and a lake on it.
+  const parkBoard = mergeGeometries([
+    ...[-0.7, 0.7].map((x) => part(box(0.09, 2.2, 0.09), green, x, 1.1, 0)),
+    part(box(1.5, 1.0, 0.06), green, 0, 1.55, 0),
+    part(box(1.36, 0.86, 0.02), 0xe8e0c4, 0, 1.55, 0.035),
+    part(box(0.5, 0.3, 0.01), 0x6aa0c8, 0.2, 1.5, 0.05),
+    part(box(0.9, 0.05, 0.01), 0xb89a6a, -0.1, 1.72, 0.05),
+    part(box(0.05, 0.6, 0.01), 0xb89a6a, -0.3, 1.5, 0.05),
+    part(box(0.3, 0.25, 0.01), 0x6a9a4a, -0.45, 1.3, 0.05),
+    part(box(1.7, 0.12, 0.3).rotateX(0.1), green, 0, 2.12, 0), // the little roof
+  ]);
+  return { tennisNet: mergeGeometries(net), deckChair, cafeTable, flowerPlanter, iceCreamCart, kiosk, picnicTable, litterBin, parkBoard };
+}
+
 type SlumsKind = 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp'
   | 'utilityPole' | 'utilityPole-transformer' | 'fence-torn' | `wreck-${WreckKind}`;
 /** The Slums' junk: loose bricks, kerb clutter, a dead street lamp, a payphone, utility poles, torn chain-link, the wrecks. */
@@ -1339,7 +1447,8 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
-  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball']);
+  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball',
+  'tennisNet', 'deckChair', 'cafeTable', 'flowerPlanter', 'iceCreamCart', 'kiosk', 'picnicTable', 'litterBin', 'parkBoard']);
 
 /**
  * Copy the props in `list` lying within `radius` of (x, z) (their matrices' translation) from
@@ -1586,6 +1695,11 @@ export class PropSystem {
 
   private addCollider(p: PropState): void {
     const spec = propSpec(p.def);
+    if (p.def.kind === 'tennisNet') {
+      // Only the posts stand solid (it still breaks on its whole footprint): a net across the court is no wall.
+      for (const x of [-6.35, 6.35]) this.world.createCollider(RAPIER.ColliderDesc.cuboid(0.06, 0.55, 0.06).setTranslation(x, 0.55, 0).setMass(spec.mass / 2).setFriction(0.6), p.body!);
+      return;
+    }
     if (p.def.kind === 'boomGate') {
       // Only the post is solid while it stands (it still breaks on its whole footprint, see
       // checkVehicle); knocked loose, the arm and fork rest on the ground (debrisParts).

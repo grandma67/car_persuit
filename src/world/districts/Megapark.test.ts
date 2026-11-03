@@ -3,6 +3,8 @@ import { DISTRICTS, MEGAPARK } from '../../gameplay/balance';
 import { generateCity } from '../CityGenerator';
 import { districtCities } from '../paramsTesting';
 import { inRect, shrink } from '../lots';
+import { onPitch } from '../ParkPieces';
+import { footprintsOverlap, propFootprint } from '../StreetProps';
 import { FootprintIndex, rectFootprint } from '../StreetProps';
 import { at } from './rules';
 import { gateBlocks, lodgeBlock, mainGate, roleBlocks } from './Megapark';
@@ -92,7 +94,8 @@ describe('Mega-park roles and lots', () => {
 
 describe('Mega-park traffic', () => {
   it.each(placed.slice(0, 8))('seed %i: no picket fences, beach umbrellas or bus stops inside; lamps are the old lanterns', (_seed, c, q) => {
-    const inside = c.streetProps.filter((p) => inRect(q.bounds, p));
+    const own = new Set(q.dressing.props);
+    const inside = c.streetProps.filter((p) => inRect(q.bounds, p) && !own.has(p)); // the city's own (the park's fences are its own)
     expect(inside.filter((p) => p.kind === 'fence' || p.kind === 'umbrella' || (p.kind === 'sign' && p.variant === 'busStop')).map(at)).toEqual([]);
     expect(inside.filter((p) => p.kind === 'lamp').map(at)).toEqual([]);
   });
@@ -150,5 +153,70 @@ describe('Mega-park lake', () => {
       expect(inWater(lakeWater(c, q), jet.x, jet.z, 2), `seed ${seed}`).toBe(true);
     }
     for (const [seed, , q] of districtCities('megapark', ['!fountain'])) expect(q.dressing.extra!.fountain, `seed ${seed}`).toBeUndefined();
+  });
+});
+
+const kinds = (q: District, kind: string) => q.dressing.props.filter((p) => p.kind === kind);
+/** Every footprint corner of a solid, for "inside" checks. */
+const corners = (f: { x: number; z: number; hx: number; hz: number; yaw: number }) => [[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([a, b]) => ({
+  x: f.x + a * f.hx * Math.cos(f.yaw) + b * f.hz * Math.sin(f.yaw), z: f.z - a * f.hx * Math.sin(f.yaw) + b * f.hz * Math.cos(f.yaw),
+}));
+const withAll = [...placed.map(([seed, c, q]) => [seed, c, q] as const), ...byFeature.map(([seed, c, q]) => [seed, c, q] as const)];
+
+describe('Mega-park set blocks', () => {
+  it.each(withAll)('seed %i: every solid stands inside one block, inside its sidewalk line', (_seed, c, q) => {
+    const inners = q.blocks.map((k) => shrink(c.blocks[k].rect, c.config.sidewalk));
+    const breaks = q.dressing.solids.filter((f) => !inners.some((r) => corners(f).every((p) => inRect(r, p, 1e-6)))).map(at);
+    expect(breaks).toEqual([]);
+  });
+
+  it.each(withAll)('seed %i: each sports ground has its pitch (two goals, a ball) inside the block, and a tennis court with its net', (_seed, c, q) => {
+    const blocks = roleBlocks(q, 'sports');
+    const pitches = c.parkPieces.filter((p) => p.district === 'megapark' && p.kind === 'pitch');
+    expect(pitches).toHaveLength(blocks.length);
+    for (const p of pitches) {
+      const inner = shrink(c.blocks[q.blocks.find((k) => inRect(c.blocks[k].rect, p))!].rect, c.config.sidewalk);
+      const out = [[-1, -1], [1, 1]].map(([a, b]) => ({ x: inner.x + (a * inner.w) / 2, z: inner.z + (b * inner.d) / 2 }));
+      expect(out.some((o) => onPitch(p, o.x, o.z))).toBe(false);
+    }
+    expect(kinds(q, 'goal')).toHaveLength(2 * blocks.length);
+    expect(kinds(q, 'ball')).toHaveLength(blocks.length);
+    expect(q.dressing.ground.filter((g) => g.kind === 'court')).toHaveLength(blocks.length);
+    expect(kinds(q, 'tennisNet')).toHaveLength(blocks.length);
+    // The court keeps off the pitch.
+    for (const g of q.dressing.ground.filter((x) => x.kind === 'court')) expect(pitches.filter((p) => onPitch(p, g.x, g.z, -Math.min(g.w, g.d) / 2 + 0.5)).length).toBe(0);
+  });
+
+  it.each(withAll)('seed %i: the track keeps inside its block and clear of its stand', (_seed, c, q) => {
+    for (const s of q.dressing.structures.filter((x) => x.kind === 'track')) {
+      const inner = shrink(c.blocks[q.blocks.find((k) => inRect(c.blocks[k].rect, s))!].rect, c.config.sidewalk);
+      const d = s.data as { straight: number; outer: number; alongX: boolean };
+      const [hu, hv] = [d.straight / 2 + d.outer, d.outer];
+      const box = d.alongX ? { x: s.x, z: s.z, w: hu * 2, d: hv * 2 } : { x: s.x, z: s.z, w: hv * 2, d: hu * 2 };
+      expect(inRect(inner, { x: box.x - box.w / 2, z: box.z - box.d / 2 }) && inRect(inner, { x: box.x + box.w / 2, z: box.z + box.d / 2 })).toBe(true);
+      const stand = q.dressing.structures.find((x) => x.kind === 'bleachers')!.footprints[0];
+      expect(footprintsOverlap(stand, { x: box.x, z: box.z, hx: box.w / 2, hz: box.d / 2, yaw: 0 })).toBe(false);
+    }
+  });
+
+  it.each(withAll)('seed %i: the playground holds its five pieces and a sandpit inside its fence', (_seed, _c, q) => {
+    const yard = q.dressing.ground.find((g) => g.kind === 'playground')!;
+    const kit = q.dressing.structures.filter((s) => ['swings', 'slide', 'climber', 'roundabout', 'seesaw'].includes(s.kind));
+    expect(kit).toHaveLength(5);
+    expect(kit.flatMap((s) => s.footprints.flatMap(corners)).filter((p) => !inRect(shrink(yard, 0.4), p)).map(at)).toEqual([]);
+    expect(q.dressing.ground.filter((g) => g.kind === 'sandpit' && inRect(yard, g))).toHaveLength(1);
+    expect(kinds(q, 'fence').filter((p) => inRect(yard, p, 0.5)).length).toBeGreaterThan(20);
+  });
+
+  it.each(withAll)('seed %i: the bandstand, deck chairs round it, tables on the café terrace before the café', (_seed, c, q) => {
+    const cafe = c.buildings.find((b) => b.district === 'megapark' && b.lot === 'cafe')!;
+    const band = q.dressing.structures.find((s) => s.kind === 'bandstand')!;
+    expect(band.footprints.some((f) => footprintsOverlap(f, rectFootprint(cafe)))).toBe(false);
+    expect(kinds(q, 'deckChair').length).toBeGreaterThanOrEqual(4);
+    const terrace = q.dressing.ground.find((g) => g.kind === 'terrace')!;
+    expect(footprintsOverlap(rectFootprint(terrace), rectFootprint({ ...cafe, w: cafe.w + 0.2, d: cafe.d + 0.2 }))).toBe(true);
+    expect(footprintsOverlap(rectFootprint(shrink(terrace, 0.05)), rectFootprint(cafe))).toBe(false);
+    expect(kinds(q, 'cafeTable').filter((p) => inRect(terrace, p)).length).toBeGreaterThanOrEqual(2);
+    expect(kinds(q, 'deckChair').filter((p) => footprintsOverlap(propFootprint(p), rectFootprint(terrace)))).toEqual([]);
   });
 });
