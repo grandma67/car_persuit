@@ -53,6 +53,8 @@ in `dispose()` (`npm run check:restart`, [LEAKS.md](../LEAKS.md)).
   rarely, left-hand traffic.
 - Traffic lights, priority junctions with stop signs, crossings, bus stops, 90 km/h main streets,
   roadworks; lamps, hydrants, signs, fences, trees and more are breakable.
+- Parks with no centrepiece may get a fish pond (shallow water you wade through, never drown in;
+  ice in the snow) or a 7-a-side soccer pitch (goals, floodlights, a ball that rolls and adds no heat).
 - Districts (Old City, Chinatown, Harbor, Farm, Slums) overlay themed blocks.
 
 ## Police
@@ -117,3 +119,4 @@ No git tags; grouped by day of work.
 - **v0.11 (10-23, 10-24):** grid size per seed (8–15); cops brake for what's ahead, costlier turns,
   head the suspect off; look back (B); civilian horns and the player's (H); Retry/New city in place.
 - **v0.12 (10-30):** city params: every city choice as JSON, built from feature words.
+- **v0.13 (11-03):** shallow water; park fish ponds and soccer pitches.

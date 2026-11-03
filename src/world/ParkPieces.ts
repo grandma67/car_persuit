@@ -65,6 +65,33 @@ export function rollParkPieces(blocks: Block[], hasCentrepiece: (b: Block) => bo
   return out;
 }
 
+/**
+ * Pinned counts (`ponds`, `pitches`): the rolled pieces of a pinned kind past the count go (the
+ * last first), and short of it more parks are given one, in an order from their own stream. A park
+ * already holding the other kind keeps it. Best effort: a word that isn't met tries the next seed.
+ */
+export function pinParkCounts(rolled: Map<number, ParkPieceKind>, eligible: number[], pins: Partial<Record<ParkPieceKind, number>>, seed: number): void {
+  const order = [...eligible];
+  const rng = new Rng(seed ^ PARKS.salt ^ 0x51f7);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.next() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  for (const kind of ['pond', 'pitch'] as const) {
+    const want = pins[kind];
+    if (want === undefined) continue;
+    const have = [...rolled].filter(([, k]) => k === kind).map(([b]) => b);
+    for (const b of have.slice(want)) rolled.delete(b);
+    let n = Math.min(have.length, want);
+    for (const b of order) {
+      if (n >= want) break;
+      if (rolled.has(b)) continue;
+      rolled.set(b, kind);
+      n++;
+    }
+  }
+}
+
 /** A pond in the park `block` (index k of an n-wide grid), from its own stream. Null if it can't fit dry. */
 export function layPond(block: Block, k: number, n: number, config: CityConfig, terrain: Terrain, seed: number): Omit<ParkPieceLayout, 'clears'> & { piece: ParkPiece } | null {
   const rng = new Rng(seed ^ PARKS.salt ^ ((k + 1) * 0x9e3779b1));

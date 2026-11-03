@@ -1,6 +1,6 @@
 # Nature: park pieces and three nature districts (plan)
 
-Plan written 2026-11-03, nothing built yet. Milestones go in `TASKS.md`. How districts are built:
+Plan written 2026-11-03. Branch 1 built (see "Where branch 1 bent" at the end). Milestones go in `TASKS.md`. How districts are built:
 `DISTRICTS_DEV.md`; rolls, fields and words: `CITY_PARAMS.md`. From `TODO.md` #17 (fish pond, swamp
 with a witch house) plus the user's forest and mega-park.
 
@@ -185,3 +185,22 @@ Woods on the island edge, the one district cops can't cut through.
 - Whether the pitch's ball should ever count a goal (a sound, nothing else; toasts are for game modes).
   Default: no.
 - Mega-park drives at 30 km/h: keep only if the chase still feels fair (the user judges feel).
+
+## Where branch 1 bent from the plan
+
+- **Pond chance 0.12, not 0.3** (the user: 0.3 put a pond in ~3 of 4 cities); now ~1 in 3, ~0.5 a
+  city. Pitches stay 0.25 (~1 a city, in ~60 % of cities).
+- **One more program is accepted** (the user): a pond city with no canals compiles the canal water's
+  program; with canals or in the snow (ice: a plain material) the count is unchanged.
+- **Laid after the districts**, parks inside one skipped, one draw per *block* (a district turning
+  a park into a lot must not shift the other parks' rolls): districts stay byte-identical.
+- **No jetty on the pond:** a deck flush with the bank can't have a collider without a step; it
+  moves to the Mega-park lake. The pond has a rowboat pulled up on the bank (a solid landmark).
+- **Floodlights are tall street lamps** at the corners (lit at night by the existing bulbs and
+  pools), not the Harbor's masts (a district structure, not a prop).
+- **Water drag grows with speed** (`SoftPatch.dragPerSpeed`): a flat drag strong enough to matter at
+  70 km/h left a stopped car stuck. Flat out through 15 m: 70 → ~48 km/h; wading tops out ~19 km/h.
+- **Words:** `pond` / `ponds=N`, `pitch` / `pitches=N` (exact counts, best effort; a word that isn't
+  met tries the next seed). Park pieces are not read-only `landmarks` (a landmark is solid).
+- Seed guard vs main: exactly the cities with a pond or pitch moved (95 of 120 before the pond
+  chance came down); `city-hash` skips empty `water` / `parkPieces` lists.

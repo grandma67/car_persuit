@@ -22,7 +22,7 @@ import {
 import type { RampPins } from './Landmarks';
 import type { WorksPin } from './Roadworks';
 import type { ShallowWater } from './Water';
-import { layParkPieces, rollParkPieces, type ParkPiece } from './ParkPieces';
+import { layParkPieces, pinParkCounts, rollParkPieces, type ParkPiece } from './ParkPieces';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
@@ -615,7 +615,12 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
   // --- Park pieces (own stream): a fish pond or a soccer pitch in a park with no centrepiece, laid
   // after the districts (parks inside one are skipped), so nothing rolled before them moves ---
   const centred = (b: Block) => city.landmarks.some((l) => l.kind !== 'ramp' && l.x === b.rect.x && l.z === b.rect.z);
-  const laid = layParkPieces(blocksOut, rollParkPieces(blocksOut, centred, seed), n, config, terrain, seed);
+  const rolledPieces = rollParkPieces(blocksOut, centred, seed);
+  if (p.ponds !== undefined || p.pitches !== undefined) {
+    const eligible = blocksOut.flatMap((b, k) => (b.park && !b.district && !b.square && !centred(b) ? [k] : []));
+    pinParkCounts(rolledPieces, eligible, { pond: p.ponds, pitch: p.pitches }, seed);
+  }
+  const laid = layParkPieces(blocksOut, rolledPieces, n, config, terrain, seed);
   if (laid.pieces.length) {
     city.trees = city.trees.filter((t) => !laid.clears(t.x, t.z, 0.5));
     city.streetProps = city.streetProps.filter((q) => !(q.kind === 'bench' && laid.clears(q.x, q.z, 1)));
@@ -625,6 +630,8 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     city.parkPieces = laid.pieces;
   }
 
+  if (p.ponds !== undefined) city.params.ponds = p.ponds;
+  if (p.pitches !== undefined) city.params.pitches = p.pitches;
   city.params.districts = city.districts.map((q) => ({
     kind: q.kind, rect: { i: q.grid.i0, j: q.grid.j0, w: q.grid.w, h: q.grid.h }, roles: rolesOf(q, n), features: { ...q.features },
   }));

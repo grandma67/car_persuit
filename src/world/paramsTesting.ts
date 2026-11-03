@@ -39,7 +39,7 @@ export function districtCities(kind: DistrictKind, words: string[], seeds = [11,
 
 /** Values for the words that take a number. */
 const NUMBERS: Record<string, string[]> = {
-  roadworks: ['0', '2'], blocks: ['6'], canalramps: ['1'], ramps: ['0', '2'], canalwidth: ['30'], startminute: ['7'], yards: ['1'],
+  roadworks: ['0', '2'], blocks: ['6'], canalramps: ['1'], ramps: ['0', '2'], canalwidth: ['30'], startminute: ['7'], yards: ['1'], ponds: ['0', '2'], pitches: ['0', '2'],
 };
 
 /** Each word as it is used: bare, !name for an on/off feature, each named value, a sample count. */
@@ -74,6 +74,8 @@ function promise(word: string, city: CityData): void {
   else if (name === 'england') expect(city.driveSide).toBe('left');
   else if (name === 'canals') expect(city.terrain.canals.length).toBe(Number(v));
   else if (name === 'blocks') expect(city.blocks.length).toBe(Number(v) ** 2);
+  else if (name === 'pond' || name === 'ponds') expect(city.water.length).toBe(v === undefined ? 1 : Number(v));
+  else if (name === 'pitch' || name === 'pitches') expect(city.streetProps.filter((q) => q.kind === 'goal').length).toBe(2 * (v === undefined ? 1 : Number(v)));
   else if (isFeature(name)) {
     const [kind, f] = name.includes('.') ? name.split('.') : [DISTRICT_DEFS.find((d) => name in d.features)!.kind, name];
     const q = city.districts.find((x) => x.kind === kind);
