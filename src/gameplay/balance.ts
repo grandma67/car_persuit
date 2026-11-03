@@ -417,7 +417,7 @@ export const WATER = {
 /** Park pieces (`world/ParkPieces.ts`): a fish pond or a soccer pitch in a park with no centrepiece. */
 export const PARKS = {
   salt: 0x9a4c5, // their own stream: nothing that rolled before moves
-  pondChance: 0.3, // per park without a centrepiece
+  pondChance: 0.12, // per park without a centrepiece (0.3 gave ~3 in 4 cities a pond: too many)
   pitchChance: 0.25,
   fenceInset: 3.3, // the park's picket fence, in from the block edge (StreetProps' FENCE_INSET)
   pondRadius: [7, 11] as [number, number], // the long half-axis, metres
@@ -431,4 +431,12 @@ export const PARKS = {
   signOut: 3.2,
   pads: 10, // lily pads, at most
   treeClear: 4.5, // trees and loose benches this close to the water go (clear of the sign and the boat)
+  pitchLength: 40, // a 7-a-side pitch, touchline to touchline: metres
+  pitchWidth: 25,
+  pitchRunOff: 3.5, // its footprint past the lines (goals, fences, floodlights): cleared of trees
+  fenceBehind: 2.6, // chain-link this far behind each goal line
+  fencePanel: 3, // one panel and its gap (a panel is 2.9 m)
+  lampOut: 1.6, // floodlights off each corner, both ways
+  benchBack: 2.2, // the dugout benches behind a touchline
+  dugout: 5, // either side of the halfway line
 };

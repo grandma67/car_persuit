@@ -252,6 +252,10 @@ export class SoundEffects {
       if (kind === 'fruitBin') this.woodBreak(0.5, gain);
       return;
     }
+    if (kind === 'ball') {
+      this.burst(0, 0.07, 'bandpass', 420, 1.4, gain * 1.3); // a hollow thump
+      return;
+    }
     if (kind === 'reeds') {
       this.burst(0, 0.35, 'highpass', 2200, 0.5, gain * 0.5); // a rustle and swish of stalks
       return;

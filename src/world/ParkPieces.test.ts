@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PARKS } from '../gameplay/balance';
 import { generateCity, type Block, type CityData } from './CityGenerator';
-import { rollParkPieces } from './ParkPieces';
+import { onPitch, rollParkPieces } from './ParkPieces';
 import { footprintsOverlap, propFootprint } from './StreetProps';
 import { onGround } from './Terrain';
 import { inWater, shoreDistance, waterReach } from './Water';
@@ -113,6 +113,47 @@ describe('park pieces: the pond', () => {
           if (shoreDistance(p.water!, a.x, a.z) < 1.2 + a.r) breaks.push(`${c.seed} ${p.block}: pad at the edge`);
           for (const b of pads) if (a !== b && Math.hypot(a.x - b.x, a.z - b.z) < a.r + b.r) breaks.push(`${c.seed} ${p.block}: pads overlap`);
         }
+      }
+    }
+    expect(breaks).toEqual([]);
+  });
+});
+
+describe('park pieces: the pitch', () => {
+  const pitches = (c: CityData) => c.parkPieces.filter((p) => p.kind === 'pitch');
+
+  it('fits inside its park\'s fence on dry ground; some seeds have one', () => {
+    const breaks: string[] = [];
+    for (const c of cities) {
+      for (const p of pitches(c)) {
+        const b = blockOf(c, p.block);
+        const half = c.config.blockSize / 2 - PARKS.fenceInset;
+        const ru = p.length! / 2 + PARKS.pitchRunOff;
+        const rv = p.width! / 2 + PARKS.pitchRunOff;
+        const [hx, hz] = p.alongX ? [ru, rv] : [rv, ru];
+        if (Math.abs(p.x - b.rect.x) + hx > half || Math.abs(p.z - b.rect.z) + hz > half) breaks.push(`${c.seed} ${p.block}: past the fence`);
+        for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) if (!onGround(c.terrain, p.x + sx * hx, p.z + sz * hz)) breaks.push(`${c.seed} ${p.block}: over a canal`);
+      }
+    }
+    expect(breaks).toEqual([]);
+    expect(cities.filter((c) => pitches(c).length).length).toBeGreaterThan(5);
+  });
+
+  it('two goals facing each other on the goal lines, four flags, four floodlights, a ball on the centre spot, no trees', () => {
+    const breaks: string[] = [];
+    for (const c of cities) {
+      for (const p of pitches(c)) {
+        const mine = c.streetProps.filter((q) => onPitch(p, q.x, q.z, 0.1));
+        const count = (kind: string) => mine.filter((q) => q.kind === kind).length;
+        const want = { goal: 2, cornerFlag: 4, lamp: 4, ball: 1 };
+        for (const [kind, n] of Object.entries(want)) if (count(kind) !== n) breaks.push(`${c.seed} ${p.block}: ${count(kind)} ${kind}`);
+        for (const g of mine.filter((q) => q.kind === 'goal')) {
+          const towards = Math.sin(g.yaw) * (p.x - g.x) + Math.cos(g.yaw) * (p.z - g.z);
+          if (towards < p.length! / 2 - 1) breaks.push(`${c.seed} ${p.block}: goal not facing the pitch`);
+        }
+        const ball = mine.find((q) => q.kind === 'ball');
+        if (ball && Math.hypot(ball.x - p.x, ball.z - p.z) > 1) breaks.push(`${c.seed} ${p.block}: ball off the spot`);
+        for (const t of c.trees) if (onPitch(p, t.x, t.z, 0.5)) breaks.push(`${c.seed} ${p.block}: tree on the pitch`);
       }
     }
     expect(breaks).toEqual([]);

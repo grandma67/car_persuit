@@ -29,6 +29,10 @@ export interface ParkPiece {
   water?: ShallowWater;
   pads?: LilyPad[];
   stoneRim?: boolean;
+  /** Pitches: the long side runs along world X (else Z); its length and width (touchlines in). */
+  alongX?: boolean;
+  length?: number;
+  width?: number;
 }
 
 /** What laying the pieces adds to the city and how much ground each one clears. */
@@ -148,11 +152,72 @@ export function layPond(block: Block, k: number, n: number, config: CityConfig, 
   return { piece, pieces: [piece], water: [water], props, landmarks };
 }
 
-/** Lay every rolled piece. Pitches come in M3: a park that rolls one keeps its trees for now. */
+/** A soccer pitch in the park `block`, from its own stream. Null if it can't fit dry. */
+export function layPitch(block: Block, k: number, n: number, config: CityConfig, terrain: Terrain, seed: number): { piece: ParkPiece; props: StreetProp[] } | null {
+  const rng = new Rng(seed ^ PARKS.salt ^ ((k + 1) * 0x9e3779b1));
+  const half = grassHalf(config);
+  const L = PARKS.pitchLength;
+  const W = PARKS.pitchWidth;
+  const alongX = rng.next() < 0.5;
+  // Its whole footprint (run-off, the fences behind the goals, the floodlights) inside the fence.
+  const reachU = L / 2 + PARKS.pitchRunOff;
+  const reachV = W / 2 + PARKS.pitchRunOff;
+  const du = rng.range(-1, 1) * Math.max(0, half - reachU);
+  const dv = rng.range(-1, 1) * Math.max(0, half - reachV);
+  if (reachU > half || reachV > half) return null;
+  const cx = block.rect.x + (alongX ? du : dv);
+  const cz = block.rect.z + (alongX ? dv : du);
+  const at = (u: number, v: number) => (alongX ? { x: cx + u, z: cz + v } : { x: cx + v, z: cz + u });
+  const corners = [[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([a, b]) => at(a * reachU, b * reachV));
+  if (corners.some((c) => !onGround(terrain, c.x, c.z, 1))) return null;
+  const facing = (p: { x: number; z: number }, to: { x: number; z: number }) => Math.atan2(to.x - p.x, to.z - p.z);
+  const centre = { x: cx, z: cz };
+  const props: StreetProp[] = [];
+  for (const e of [-1, 1]) {
+    // The goal on the goal line, mouth facing up the pitch; chain-link behind it to stop the ball.
+    const g = at(e * (L / 2 + 0.5), 0);
+    props.push({ kind: 'goal', ...g, yaw: facing(g, centre) });
+    for (const v of [-PARKS.fencePanel, 0, PARKS.fencePanel]) {
+      props.push({ kind: 'fence', style: 'chainlink', ...at(e * (L / 2 + PARKS.fenceBehind), v), yaw: alongX ? Math.PI / 2 : 0 });
+    }
+    for (const s of [-1, 1]) {
+      const f = at(e * L / 2, s * W / 2);
+      props.push({ kind: 'cornerFlag', ...f, yaw: facing(f, centre) });
+      // Floodlights: tall lamps off each corner, arms over the pitch.
+      const lamp = at(e * (L / 2 + PARKS.lampOut), s * (W / 2 + PARKS.lampOut));
+      props.push({ kind: 'lamp', ...lamp, yaw: facing(lamp, centre) });
+    }
+  }
+  // Two benches by the halfway line on one side, facing the play.
+  const side = rng.next() < 0.5 ? -1 : 1;
+  for (const u of [-PARKS.dugout, PARKS.dugout]) {
+    const b = at(u, side * (W / 2 + PARKS.benchBack));
+    props.push({ kind: 'bench', ...b, yaw: facing(b, at(u, 0)) });
+  }
+  const spot = at(rng.range(-0.5, 0.5), rng.range(-0.5, 0.5));
+  props.push({ kind: 'ball', ...spot, yaw: rng.range(0, Math.PI * 2) });
+  const [i, j] = [k % n, Math.floor(k / n)];
+  return { piece: { kind: 'pitch', block: [i, j], x: cx, z: cz, yaw: alongX ? 0 : Math.PI / 2, alongX, length: L, width: W }, props };
+}
+
+/** Whether (x, z) lies within `margin` of a pitch's footprint (run-off included). */
+export function onPitch(p: ParkPiece, x: number, z: number, margin = 0): boolean {
+  const du = Math.abs(p.alongX ? x - p.x : z - p.z);
+  const dv = Math.abs(p.alongX ? z - p.z : x - p.x);
+  return du <= p.length! / 2 + PARKS.pitchRunOff + margin && dv <= p.width! / 2 + PARKS.pitchRunOff + margin;
+}
+
+/** Lay every rolled piece. */
 export function layParkPieces(blocks: Block[], rolled: Map<number, ParkPieceKind>, n: number, config: CityConfig, terrain: Terrain, seed: number): ParkPieceLayout {
   const out: ParkPieceLayout = { pieces: [], water: [], props: [], landmarks: [], clears: () => false };
   for (const [k, kind] of rolled) {
-    if (kind !== 'pond') continue;
+    if (kind === 'pitch') {
+      const pitch = layPitch(blocks[k], k, n, config, terrain, seed);
+      if (!pitch) continue;
+      out.pieces.push(pitch.piece);
+      out.props.push(...pitch.props);
+      continue;
+    }
     const pond = layPond(blocks[k], k, n, config, terrain, seed);
     if (!pond) continue;
     out.pieces.push(pond.piece);
@@ -161,6 +226,7 @@ export function layParkPieces(blocks: Block[], rolled: Map<number, ParkPieceKind
     out.landmarks.push(...pond.landmarks);
   }
   const ponds = out.water;
-  out.clears = (x, z, r) => ponds.some((w) => shoreDistance(w, x, z) > -(PARKS.treeClear + r));
+  const pitches = out.pieces.filter((p) => p.kind === 'pitch');
+  out.clears = (x, z, r) => ponds.some((w) => shoreDistance(w, x, z) > -(PARKS.treeClear + r)) || pitches.some((p) => onPitch(p, x, z, r + 0.5));
   return out;
 }

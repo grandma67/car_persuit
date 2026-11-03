@@ -40,6 +40,7 @@ import { keepOf } from '../world/driveSide';
 import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
 import { softGroundOf } from '../world/softGround';
+import type { PropKind } from '../world/StreetProps';
 import { ShallowWaterView } from '../render/ShallowWater';
 import { buildParkPieces } from '../render/ParkPieces';
 import { Minimap, type MinimapTarget } from '../ui/Minimap';
@@ -72,6 +73,8 @@ const ROUTE_REFRESH = 0.25; // seconds between GPS route recalculations
 const CIVILIAN_PROP_RANGE = 90; // metres: civilians nearer the player than this collide with props
 const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
 const SINK_DEPTH = 3; // metres under the surface a car in the water comes to rest
+/** Breakables that raise no heat: knocking a park's ball about is no crime. */
+const HEATLESS = new Set<PropKind>(['ball']);
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpA = new THREE.Vector3(); // scratch for the frame
@@ -303,7 +306,7 @@ export class Game {
         return view;
       });
     }
-    if (this.city.parkPieces.length) this.owned('parkPieces', () => buildParkPieces(this.city.parkPieces, this.city.terrain, this.scene, climate.name === 'snow'));
+    if (this.city.parkPieces.length) this.owned('parkPieces', () => buildParkPieces(this.city.parkPieces, this.city.terrain, this.scene, climate.name));
     this.landmarks = this.owned('landmarks', () => new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs));
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
     this.props = this.owned('props', () => new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
@@ -1291,7 +1294,7 @@ export class Game {
 
   private updatePropBreaks(breaks: PropBreak[]): void {
     for (const b of breaks) {
-      if (this.state === 'playing') this.raiseStars(this.wanted.propSmashed());
+      if (this.state === 'playing' && !HEATLESS.has(b.kind)) this.raiseStars(this.wanted.propSmashed());
       this.audio.propBreak(b.kind, b.strength, b.tree);
       this.effects.propBreak(b);
       for (const view of this.districtViews) view.propBroken?.(b.kind, b.position.x, b.position.z);

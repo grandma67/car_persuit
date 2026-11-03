@@ -20,7 +20,7 @@ export type PropKind =
   // Slums
   | 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp' | 'utilityPole' | 'wreck'
   // Park pieces
-  | 'reeds';
+  | 'reeds' | 'goal' | 'cornerFlag' | 'ball';
 /** A wrecked car's state: burnt out, up on bricks, stripped (doors open), on its roof, or crushed flat. */
 export type WreckKind = 'burnt' | 'bricks' | 'stripped' | 'flipped' | 'crushed';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop' | 'noFishing';
@@ -112,6 +112,11 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   pumpkin: { hx: 0.32, hz: 0.32, height: 0.5, mass: 12, breakSpeed: 0.8, slowdown: 0.01 },
   // A clump of reeds at a pond's edge: snaps at a walking pace, costs nothing.
   reeds: { hx: 0.45, hz: 0.45, height: 1.6, mass: 4, breakSpeed: 0.6, slowdown: 0.01 },
+  // A 7-a-side goal: a 5 m frame and its net (local +Z is the mouth). Light, but wide.
+  goal: { hx: 2.6, hz: 0.5, height: 2.1, mass: 60, breakSpeed: 3, slowdown: 0.05 },
+  cornerFlag: { hx: 0.05, hz: 0.05, height: 1.5, mass: 2, breakSpeed: 0.5, slowdown: 0 },
+  // The pitch's ball: any touch sends it rolling (a sphere collider), and it costs nothing.
+  ball: { hx: 0.11, hz: 0.11, height: 0.22, mass: 0.45, breakSpeed: 0.2, slowdown: 0 },
   farmStand: { hx: 1.4, hz: 0.7, height: 2.4, mass: 70, breakSpeed: 2, slowdown: 0.05 },
   scarecrow: { hx: 0.15, hz: 0.15, height: 2.2, mass: 10, breakSpeed: 1, slowdown: 0.01 },
   toolRack: { hx: 0.9, hz: 0.25, height: 1.8, mass: 30, breakSpeed: 1.5, slowdown: 0.02 },
