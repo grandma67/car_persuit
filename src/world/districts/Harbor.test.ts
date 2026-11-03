@@ -10,7 +10,7 @@ import { coastFrame, quayLines, uOf, uSpan, vOf, type CraneData, type ShipData }
 import { at, pavedOf } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const city = (seed: number) => generateCity(seed, undefined, { force: { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false } });
+const city = (seed: number) => generateCity(seed, undefined, { force: { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false, megapark: false } });
 const placed = SEEDS.flatMap((seed) => {
   const c = city(seed);
   const q = c.districts.find((d) => d.kind === 'harbor');

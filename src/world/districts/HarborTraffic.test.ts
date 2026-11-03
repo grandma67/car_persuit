@@ -14,7 +14,7 @@ import { inDistrict } from './apply';
 import { carFootprint, cityWorld, DT, flatCities, simulate } from './trafficSim';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const ALONE = { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false };
+const ALONE = { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false, megapark: false };
 
 function solidSim(seed: number, city: CityData, q: District) {
   const world = cityWorld(city);

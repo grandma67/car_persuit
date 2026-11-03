@@ -11,7 +11,7 @@ import type { Decal } from './SlumsStreet';
 import { at, pavedOf } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const ALONE = { slums: true, oldtown: false, chinatown: false, harbor: false, farm: false };
+const ALONE = { slums: true, oldtown: false, chinatown: false, harbor: false, farm: false, megapark: false };
 const city = (seed: number) => generateCity(seed, undefined, { force: ALONE });
 const placed = SEEDS.flatMap((seed) => {
   const c = city(seed);
@@ -98,7 +98,7 @@ describe('Slums roles and lots', () => {
 });
 
 describe('Slums with every district forced on', () => {
-  const ALL = { slums: true, oldtown: true, chinatown: true, harbor: true, farm: true };
+  const ALL = { slums: true, oldtown: true, chinatown: true, harbor: true, farm: true, megapark: true };
 
   it('places on most seeds, with its one corner store', () => {
     const slums = SEEDS.map((seed) => generateCity(seed, undefined, { force: ALL })).flatMap((c) => (c.districts.some((d) => d.kind === 'slums') ? [c] : []));

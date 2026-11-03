@@ -401,6 +401,49 @@ export const TILT = {
   smoothing: 12, // 1/s low-pass on the sensor (it updates ~60 Hz and jitters)
 };
 
+/** The Mega-park: one grand park over a rectangle of blocks (world/districts/Megapark.ts), metres where not said. */
+export const MEGAPARK = {
+  chance: 0.3,
+  speed: 30 / 3.6, // m/s cap on the park drives
+  density: 0.5,
+  copSpawnSkip: 0.5,
+  lawnGrip: 0.85, // tyre grip multiplier on the lawns
+  lawnDrag: 1, // extra rolling drag there, m/s²
+  sports: [1, 2] as [number, number], // sports blocks (a 2×2 has room for one)
+  trackChance: 0.4, // one sports block is a running track
+  fountainChance: 0.6, // a fountain jet in the lake
+  maxGlow: 90, // at night: the park's lamps, the gate lamps, the bandstand's bulbs
+  /** The lots: footprint (long, short) and height. */
+  cafe: { size: [15, 9] as [number, number], h: 4.6 },
+  lodge: { size: [8, 7] as [number, number], h: 6.5 },
+  boathouse: { size: [11, 7] as [number, number], h: 5 },
+  lotInset: 1, // in from the sidewalk line
+  lakeRadius: [16.5, 18.5] as [number, number], // the lake's long half-axis
+  lakeDepth: 0.4,
+  lakeBank: 2.5, // dry bank kept round the lake inside the block (and before the boathouse)
+  island: 3.6, // the island's radius (solid)
+  bridgeWidth: 2.6,
+  jetty: [2.6, 7] as [number, number], // width, length out from the boathouse
+  jettyHeight: 0.65, // the deck over the ground
+  rowboats: 2,
+  pitchRunOff: 3.5, // as PARKS
+  court: [30, 15] as [number, number], // a tennis court inside its chain-link, along and across
+  trackStraight: 14, // the running track's straights
+  trackOuter: 17.5, // its outer radius at the bends
+  trackWidth: 5,
+  bleachers: [16, 4] as [number, number],
+  playground: [30, 24] as [number, number], // the fenced playground
+  bandstand: 5, // radius
+  deckChairs: [6, 10] as [number, number],
+  pathWidth: 2.6,
+  lawnTrees: [7, 12] as [number, number], // per lawn block
+  avenueStep: 13, // avenue trees along the drives, this far apart
+  avenueIn: 2.4, // in from the kerb
+  pathLampStep: 16,
+  beds: [2, 4] as [number, number], // flower beds per lawn block
+  picnicTables: [2, 4] as [number, number],
+};
+
 /** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */
 export const WATER = {
   grip: 0.7, // tyre grip multiplier in the water

@@ -13,10 +13,11 @@ import { pin, type FeatureValue } from '../CityParams';
 export type { LotStyle } from '../lots';
 
 /** Grows with the registry (world/districts/index.ts). */
-export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums';
+export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums' | 'megapark';
 
 /** What a special (unfilled) block is for; the district's dressing fills it. */
-export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'camp' | 'junkyard';
+export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'camp' | 'junkyard'
+  | 'lake' | 'sports' | 'track' | 'playground' | 'bandstand' | 'lawn';
 
 // --- Building looks (rendered by CityBuilder's addBuilding through the facade pipeline) ---
 

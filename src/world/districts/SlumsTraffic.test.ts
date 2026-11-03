@@ -16,7 +16,7 @@ import { addBox, carFootprint, cityWorld, DT, flatCities, simulate } from './tra
 import { vacantLots } from './Slums';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const ALONE = { slums: true, oldtown: false, chinatown: false, harbor: false, farm: false };
+const ALONE = { slums: true, oldtown: false, chinatown: false, harbor: false, farm: false, megapark: false };
 
 /** The wrecks stand fixed: the worst case, none shoved aside. */
 function wreckSim(seed: number, city: CityData, q: District) {

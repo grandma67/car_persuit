@@ -14,7 +14,7 @@ import type { RanchGateData } from './FarmGate';
 import { at, landmarkFootprint, pavedOf, solidsOf } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const city = (seed: number) => generateCity(seed, undefined, { force: { farm: true, oldtown: false, chinatown: false, harbor: false, slums: false } });
+const city = (seed: number) => generateCity(seed, undefined, { force: { farm: true, oldtown: false, chinatown: false, harbor: false, slums: false, megapark: false } });
 const placed = SEEDS.flatMap((seed) => {
   const c = city(seed);
   const q = c.districts.find((d) => d.kind === 'farm');
@@ -290,7 +290,7 @@ describe('Farm runs: harvest night, climate, glow', () => {
 });
 
 describe('Farm with every district forced on', () => {
-  const all = SEEDS.map((seed) => generateCity(seed, undefined, { force: { farm: true, oldtown: true, chinatown: true, harbor: true, slums: true } }));
+  const all = SEEDS.map((seed) => generateCity(seed, undefined, { force: { farm: true, oldtown: true, chinatown: true, harbor: true, slums: true, megapark: true } }));
   const farms = all.flatMap((c) => c.districts.filter((d) => d.kind === 'farm').map((q) => [c, q] as const));
 
   it('places on most seeds, with its barn and every field', () => {

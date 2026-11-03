@@ -98,9 +98,9 @@ describe('Chinatown lots', () => {
 
 describe('Chinatown with the Old City (no Harbor)', () => {
   const alone = (seed: number, kind: 'oldtown' | 'chinatown') =>
-    generateCity(seed, undefined, { force: { oldtown: kind === 'oldtown', chinatown: kind === 'chinatown', harbor: false, farm: false, slums: false } });
+    generateCity(seed, undefined, { force: { oldtown: kind === 'oldtown', chinatown: kind === 'chinatown', harbor: false, farm: false, slums: false, megapark: false } });
 
-  const pairs = SEEDS.map((seed) => [seed, generateCity(seed, undefined, { force: { oldtown: true, chinatown: true, harbor: false, farm: false, slums: false } })] as const);
+  const pairs = SEEDS.map((seed) => [seed, generateCity(seed, undefined, { force: { oldtown: true, chinatown: true, harbor: false, farm: false, slums: false, megapark: false } })] as const);
 
   it.each(pairs)('seed %i: the first placed sits as alone, the second keeps clear or drops cleanly', (seed, both) => {
     expect(both.districts.length).toBeGreaterThan(0);
