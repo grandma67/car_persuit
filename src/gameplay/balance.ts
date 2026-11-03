@@ -400,3 +400,16 @@ export const TILT = {
   fullLock: 25, // degrees of roll for full steer
   smoothing: 12, // 1/s low-pass on the sensor (it updates ~60 Hz and jitters)
 };
+
+/** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */
+export const WATER = {
+  grip: 0.7, // tyre grip multiplier in the water
+  drag: 2, // extra rolling drag in the water, m/s²…
+  // …plus this per m/s (1/s): flat out through 15 m of pond, 70 km/h comes out near 48 and 100 near 68;
+  // wading tops out near 19 km/h, so a stopped car still drives out (SoftGround.test).
+  dragPerSpeed: 0.9,
+  iceGrip: 0.35, // frozen (snow climate): grip multiplier, no drag
+  shoreRamp: 1.5, // metres over which the surface rises from the rim to its full depth
+  navPenalty: 100, // NavGrid step cost added in the water (road 10, off-road 15): cops go round
+  sprayPerSecond: 40, // spray puffs per rear wheel wading at speed
+};

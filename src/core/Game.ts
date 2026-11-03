@@ -39,6 +39,8 @@ import { PassBy } from '../audio/passBy';
 import { keepOf } from '../world/driveSide';
 import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
+import { softGroundOf } from '../world/softGround';
+import { ShallowWaterView } from '../render/ShallowWater';
 import { Minimap, type MinimapTarget } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
 import { DestinationMarker } from '../render/DestinationMarker';
@@ -183,6 +185,7 @@ export class Game {
   private marker = new DestinationMarker(MISSION.reachRadius);
   private sea: Sea;
   private canalWater: CanalWater | null;
+  private shallowWater: ShallowWaterView | null = null;
   private minimap: Minimap;
   private health = new Health();
   private prefs = loadPrefs(safeStorage()); // mute and difficulty, kept between sessions
@@ -291,6 +294,14 @@ export class Game {
     releaseAfterUpload(this.rootsOf('city'));
     this.canalWater = built.canalWater;
     this.walls = built.walls;
+    if (this.city.water.length) {
+      const look = { sea: time.sea, shallow: climate.shallow, frozen: climate.name === 'snow', islandHalf: this.city.islandSize / 2 };
+      this.shallowWater = this.owned('water', () => {
+        const view = new ShallowWaterView(this.city.water, this.city.terrain, look);
+        this.scene.add(view.mesh);
+        return view;
+      });
+    }
     this.landmarks = this.owned('landmarks', () => new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs));
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
     this.props = this.owned('props', () => new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
@@ -323,14 +334,10 @@ export class Game {
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
     this.player.gearShifts = true;
     this.player.headlights = Math.max({ day: 0, afternoon: 0.45, night: 1 }[time.name], weather === 'clear' ? 0 : 0.45);
-    // Soft ground for every car (the Farm's fields, the Slums' rubble lots: less grip, more drag),
-    // and the Slums' potholes jolting every wheel that drops into one.
+    // Soft ground for every car: shallow water (ice in the snow), the Farm's fields, the Slums'
+    // rubble lots (less grip, more drag); and the Slums' potholes jolting every wheel that drops in.
     const inside = (r: Rect, x: number, z: number) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2;
-    const soft = this.city.districts.flatMap((q) => {
-      const patch = DISTRICT_DEFS.find((d) => d.kind === q.kind)?.softGround;
-      return patch && q.dressing.soft?.length ? [{ bounds: q.bounds, rects: q.dressing.soft, patch }] : [];
-    });
-    Vehicle.softGround = soft.length ? { at: (x, z) => soft.find((s) => inside(s.bounds, x, z) && s.rects.some((r) => inside(r, x, z)))?.patch ?? null } : null;
+    Vehicle.softGround = softGroundOf(this.city, DISTRICT_DEFS, climate.name === 'snow');
     const holes = this.city.districts.flatMap((q) => {
       const rects = (q.dressing.extra?.potholes ?? []) as Rect[];
       return rects.length ? [{ bounds: q.bounds, rects }] : [];
@@ -829,6 +836,7 @@ export class Game {
     this.marker.update(frameDt);
     this.sea.update(frameDt);
     this.canalWater?.update(frameDt);
+    this.shallowWater?.update(frameDt);
     this.precipitation?.update(frameDt, this.chase.camera.position);
     this.landmarks.update(frameDt, this.chase.camera, window.innerHeight, this.chase.camera.fov);
     this.effects.update(frameDt, this.player, this.health);

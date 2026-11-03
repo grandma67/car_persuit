@@ -78,6 +78,10 @@ export const CAR_GROUPS = ((0xffff << 16) | (0xffff & ~CAR_PASSES)) >>> 0;
 export interface SoftPatch {
   grip: number;
   drag: number;
+  /** Extra drag per m/s of speed (1/s): water pushes back harder the faster you hit it. */
+  dragPerSpeed?: number;
+  /** Wading through shallow water (spray, no ruts), or on its ice when frozen. */
+  water?: 'wet' | 'ice';
 }
 
 export class Vehicle {
@@ -134,6 +138,10 @@ export class Vehicle {
   private gripScale = 1; // road grip (wet, ice)
   /** On soft ground (a field, a rubble lot) this step: less grip, more rolling drag. */
   onSoft = false;
+  /** The soft ground under the car as of the last step (null: firm). */
+  get softPatch(): SoftPatch | null {
+    return this.soft;
+  }
   private soft: SoftPatch | null = null;
   /**
    * Soft ground for every car in the city (the Farm's fields, the Slums' rubble lots), set once per
@@ -786,7 +794,7 @@ export class Vehicle {
     const v = this.lin;
     const s = Math.hypot(v.x, v.z);
     if (s < 0.1) return;
-    const dv = Math.min(s, soft.drag * dt) * this.body.mass();
+    const dv = Math.min(s, (soft.drag + (soft.dragPerSpeed ?? 0) * s) * dt) * this.body.mass();
     vec.x = (-v.x / s) * dv;
     vec.y = 0;
     vec.z = (-v.z / s) * dv;

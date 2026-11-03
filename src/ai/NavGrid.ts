@@ -4,7 +4,9 @@
 // scene or physics.
 import type { CityData, Rect } from '../world/CityGenerator';
 import { propFootprint, rectFootprint, type Footprint, type PropKind, type StreetProp } from '../world/StreetProps';
+import { WATER } from '../gameplay/balance';
 import { onGround } from '../world/Terrain';
+import { inWater, waterReach } from '../world/Water';
 
 type P = { x: number; z: number };
 
@@ -31,7 +33,7 @@ export class NavGrid {
   readonly cell = CELL;
   readonly n: number; // cells per side
   private origin: number; // world coordinate of cell 0's lower edge (both axes)
-  /** Step cost per cell; 0 = impassable (buildings, water, statues, the trunk of a tree). */
+  /** Step cost per cell; 0 = impassable (buildings, the sea and canals, statues, the trunk of a tree). */
   readonly cost: Uint8Array;
   /** 1 where a car fits with room to spare (nothing within TIGHT): straight runs may cross it. */
   private clear: Uint8Array;
@@ -76,6 +78,14 @@ export class NavGrid {
     for (const q of city.districts) {
       for (const r of q.dressing.drivable) this.eachCellIn(r.x - r.w / 2, r.z - r.d / 2, r.x + r.w / 2, r.z + r.d / 2, (k) => (base[k] = OFF_ROAD));
     }
+    // Shallow water: a car can wade it, slowly, so a route crosses only when going round is far longer.
+    const wet = new Uint8Array(cells);
+    for (const w of city.water) {
+      const r = waterReach(w);
+      this.eachCellIn(w.x - r, w.z - r, w.x + r, w.z + r, (k, x, z) => {
+        if (inWater(w, x, z)) wet[k] = 1;
+      });
+    }
 
     // Everything solid, and how close to it a route may come.
     const obstacles: Obstacle[] = [
@@ -102,8 +112,8 @@ export class NavGrid {
       });
     }
     for (let k = 0; k < cells; k++) {
-      this.cost[k] = blocked[k] ? 0 : base[k] + penalty[k];
-      this.clear[k] = !blocked[k] && penalty[k] < PENALTY.tight ? 1 : 0;
+      this.cost[k] = blocked[k] ? 0 : Math.min(255, base[k] + penalty[k] + (wet[k] ? WATER.navPenalty : 0));
+      this.clear[k] = !blocked[k] && !wet[k] && penalty[k] < PENALTY.tight ? 1 : 0;
     }
 
     this.g = new Float32Array(cells);

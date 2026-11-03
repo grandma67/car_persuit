@@ -4,6 +4,7 @@ import type { Health } from '../gameplay/Health';
 import type { PropBreak } from '../world/PropSystem';
 import { SkidMarks } from './SkidMarks';
 import { TireSmoke } from './TireSmoke';
+import { WATER } from '../gameplay/balance';
 
 const FRONT_WHEELS = [0, 1];
 const REAR_WHEELS = [2, 3];
@@ -67,6 +68,9 @@ export class Effects {
   private dust = new TireSmoke({ color: 0xb89a6a, maxAlpha: 0.4, additive: false, startSize: 0.7, growth: 2.2, lift: [0.4, 1.4], spread: 1.2, life: [0.9, 1.5] });
   private mud = new TireSmoke({ color: 0x3e2e20, maxAlpha: 0.95, additive: false, startSize: 0.14, growth: 0, lift: [1.5, 3.5], gravity: 9.8, spread: 2, life: [0.4, 0.7], carry: 0.3 });
   private fieldBudget = 0;
+  // Wading through shallow water: white spray off the rear wheels.
+  private spray = new TireSmoke({ color: 0xe8f0f2, maxAlpha: 0.7, additive: false, startSize: 0.35, growth: 1.4, lift: [1.2, 3], gravity: 6, spread: 2.2, life: [0.4, 0.8], carry: 0.5 });
+  private sprayBudget = 0;
   private straw = new TireSmoke({ color: 0xdcbc62, maxAlpha: 0.9, additive: false, startSize: 0.3, growth: 0.5, lift: [2, 5], gravity: 4, spread: 4, life: [0.9, 1.5], carry: 0.3 });
   private cloth = new TireSmoke({ color: 0xece4d4, maxAlpha: 0.55, additive: false, startSize: 0.6, growth: 2.2, lift: [0.6, 1.6], spread: 1.5, life: [0.5, 0.9] });
   private shards = new TireSmoke({ color: 0xb8643a, maxAlpha: 0.95, additive: false, startSize: 0.2, growth: 0, lift: [1.5, 4.5], gravity: 9.8, spread: 4, life: [0.6, 0.9], carry: 0.3 });
@@ -98,7 +102,7 @@ export class Effects {
 
   constructor(scene: THREE.Scene, sprayColor: number, private wet = false) {
     this.smoke.setColor(sprayColor);
-    scene.add(this.dust.points, this.mud.points);
+    scene.add(this.dust.points, this.mud.points, this.spray.points);
     scene.add(this.skidMarks.mesh, this.smoke.points);
     scene.add(this.exhaust.points, this.soot.points, this.engineSmoke.points, this.fire.points, this.water.points, this.fireball.points);
     scene.add(this.chips.points, this.straw.points, this.cloth.points, this.shards.points);
@@ -213,7 +217,12 @@ export class Effects {
     const puffs = Math.floor(this.smokeBudget);
     this.smokeBudget -= puffs;
     // In a field the tyres cut ruts and throw up dust (or mud in the rain).
-    const rut = player.onSoft && Math.abs(player.speed) > 2;
+    const water = player.softPatch?.water;
+    const rut = player.onSoft && !water && Math.abs(player.speed) > 2;
+    const wading = water === 'wet' && Math.abs(player.speed) > 1.5;
+    this.sprayBudget += wading ? WATER.sprayPerSecond * speedFactor * dt : 0;
+    const drops = Math.floor(this.sprayBudget);
+    this.sprayBudget -= drops;
     this.fieldBudget += rut ? FIELD_PER_SECOND * speedFactor * dt : 0;
     const clods = Math.floor(this.fieldBudget);
     this.fieldBudget -= clods;
@@ -222,6 +231,7 @@ export class Effects {
       this.skidMarks.add(w, skid > 0.25 || rut ? contact : null, Math.max(skid, rut ? RUT : 0));
       if (contact) for (let i = 0; i < puffs; i++) this.smoke.emit(contact, this.tmpVel, skid);
       if (contact && rut) for (let i = 0; i < clods; i++) (this.wet ? this.mud : this.dust).emit(contact, this.tmpVel, 0.5);
+      if (contact && wading) for (let i = 0; i < drops; i++) this.spray.emit(contact, this.tmpVel, 0.6);
     }
     // Fronts leave their own marks when they scrub or the brakes bite (no smoke: the rears carry that).
     const frontSkid = player.frontSkid;
@@ -231,6 +241,7 @@ export class Effects {
     }
     this.dust.update(dt);
     this.mud.update(dt);
+    this.spray.update(dt);
     this.smoke.update(dt);
     this.updateExhaust(dt, player);
 

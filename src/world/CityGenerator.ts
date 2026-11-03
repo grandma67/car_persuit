@@ -21,6 +21,7 @@ import {
 } from './CityParams';
 import type { RampPins } from './Landmarks';
 import type { WorksPin } from './Roadworks';
+import type { ShallowWater } from './Water';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
@@ -114,6 +115,7 @@ export interface CityData {
   driveSide: DriveSide; // which side of the road traffic keeps to, for the whole game
   spawn: { x: number; z: number; yaw: number };
   districts: District[]; // themed districts laid over the grid (often none)
+  water: ShallowWater[]; // ponds, lakes and pools on land: wading, never drowning (`world/Water.ts`)
   params: CityParams; // every choice that made it: reloads as this city
   warnings: string[]; // pinned choices that hold but may not show, or a stale dump's read-only parts
 }
@@ -563,6 +565,7 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     roadMarks: traffic.marks.filter((m) => dry(m.x, m.z, 0)),
     roadworks: works.sites, terrain, spawn, driveSide,
     districts: [],
+    water: [],
     params: p,
     warnings,
   };

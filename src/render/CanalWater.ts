@@ -18,7 +18,9 @@ const GLSL = /* glsl */ `
   uniform vec3 murk;
   uniform vec3 algae;
   uniform vec3 shallow;
+  uniform float pond; // 1: shallow water on land (ponds, pools): the shore is the mesh's uv.x
   varying vec2 vCanalPos;
+  varying float vShore;
 
   float cwHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   vec2 cwHash2(vec2 p) {
@@ -76,7 +78,11 @@ export class CanalWater {
   readonly material: THREE.MeshStandardMaterial;
   private time = { value: 0 };
 
-  constructor(canals: Canal[], islandHalf: number, seaColor: number, shallowColor: number) {
+  /**
+   * `pond`: the same shader (one program) for shallow water on land, whose mesh carries each
+   * vertex's distance from the shore in uv.x; the canals' edges and the sea mouth are then unused.
+   */
+  constructor(canals: Canal[], islandHalf: number, seaColor: number, shallowColor: number, pond = false) {
     const sea = new THREE.Color(seaColor);
     const deep = sea.clone().lerp(new THREE.Color(0x1f2d1a), 0.72);
     const murk = deep.clone().lerp(new THREE.Color(0x4d5a2e), 0.6);
@@ -93,13 +99,15 @@ export class CanalWater {
         murk: { value: murk },
         algae: { value: algae },
         shallow: { value: new THREE.Color(shallowColor) },
+        pond: { value: pond ? 1 : 0 },
       });
       shader.vertexShader = `${GLSL}\n${shader.vertexShader}`.replace(
         '#include <begin_vertex>',
         /* glsl */ `
         #include <begin_vertex>
         vCanalPos = (modelMatrix * vec4(position, 1.0)).xz;
-        transformed.y += cwWaves(vCanalPos, time).x; // bobs against the quay walls
+        vShore = uv.x;
+        transformed.y += cwWaves(vCanalPos, time).x * (1.0 - 0.7 * pond); // bobs against the quay walls
         `,
       );
       shader.fragmentShader = `${GLSL}\n${shader.fragmentShader}`
