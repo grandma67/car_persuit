@@ -324,6 +324,14 @@ kbd {
   opacity: 0.5;
 }
 
+.screen-hint {
+  margin: 14px auto 0;
+  max-width: 22em;
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.7;
+}
+
 /* ---------- Splash ---------- */
 
 #splash {
