@@ -60,7 +60,8 @@ function int(v: string | undefined, lo: number, hi: number, mode: Mode): number 
 
 const count = (got: number, want: number, what: string) => (got === want ? undefined : `${what}: ${got}, not ${want}`);
 const rampCount = (city: CityData) => city.landmarks.filter((l) => l.kind === 'ramp' && l.crossing === undefined).length;
-const pieceCount = (city: CityData, kind: 'pond' | 'pitch') => city.parkPieces.filter((p) => p.kind === kind).length;
+/** Park pieces in the city's parks (a district's own, the Mega-park's lake and pitches, aren't counted). */
+const pieceCount = (city: CityData, kind: 'pond' | 'pitch') => city.parkPieces.filter((p) => p.kind === kind && !p.district).length;
 const canalRampCount = (city: CityData) => city.landmarks.filter((l) => l.kind === 'ramp' && l.crossing !== undefined).length;
 
 const TIME_WORD = (name: TimeOfDayName): Word => ({

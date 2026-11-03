@@ -418,7 +418,7 @@ export const MEGAPARK = {
   lodge: { size: [8, 7] as [number, number], h: 6.5 },
   boathouse: { size: [11, 7] as [number, number], h: 5 },
   lotInset: 1, // in from the sidewalk line
-  lakeRadius: [16.5, 18.5] as [number, number], // the lake's long half-axis
+  lakeRadius: [19, 21] as [number, number], // the lake's long half-axis (shrunk to fit its block: ~20 m)
   lakeDepth: 0.4,
   lakeBank: 2.5, // dry bank kept round the lake inside the block (and before the boathouse)
   island: 3.6, // the island's radius (solid)

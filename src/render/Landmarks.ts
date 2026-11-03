@@ -142,7 +142,7 @@ function well(): THREE.BufferGeometry {
  * A wooden rowboat pulled up on a pond's bank, upright, along local Z: a hull tapering to the bow,
  * a painted strake, two thwarts and the oars shipped inside.
  */
-function rowboat(): THREE.BufferGeometry {
+export function rowboat(): THREE.BufferGeometry {
   const hull = 0x6a4a30;
   const paint = 0x2f6a8a;
   const wood = 0x9a7a52;

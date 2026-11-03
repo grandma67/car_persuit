@@ -628,7 +628,7 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     city.streetProps.push(...laid.props);
     city.landmarks.push(...laid.landmarks);
     city.water.push(...laid.water);
-    city.parkPieces = laid.pieces;
+    city.parkPieces.push(...laid.pieces); // after a district's (the Mega-park's lake and pitches)
   }
 
   if (p.ponds !== undefined) city.params.ponds = p.ponds;

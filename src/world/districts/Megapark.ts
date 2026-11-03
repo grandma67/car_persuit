@@ -9,9 +9,11 @@ import type { Rng } from '../../core/Rng';
 import { MEGAPARK } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import type { StreetProp } from '../StreetProps';
+import { propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
 import { emptyDressing, feature, type BlockRole, type District, type DistrictDef, type DistrictDressing, type Gate, type LotLook } from './District';
 import { isJunctionControl } from './apply';
+import { clearOf } from './HarborYard';
+import { layLake } from './MegaparkLake';
 import { ranchGate } from './Farm';
 import { streetSides } from './Harbor';
 import { shuffle } from './place';
@@ -158,10 +160,11 @@ const MEGAPARK_STYLE = { lots: [1, 1] as [number, number], height: [4, 6] as [nu
 export const MEGAPARK_DEF: DistrictDef = {
   kind: 'megapark',
   label: 'Mega-park',
-  features: { sports: 'int', track: 'bool' },
+  features: { sports: 'int', track: 'bool', fountain: 'bool' },
   built: (q) => ({
     sports: roleBlocks(q, 'sports').length + roleBlocks(q, 'track').length,
     track: roleBlocks(q, 'track').length > 0,
+    fountain: !!q.dressing.extra?.fountain,
   }),
   salt: 0x3e9a7c,
   chance: MEGAPARK.chance,
@@ -193,7 +196,21 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   city.streetProps = city.streetProps.filter((p) => isJunctionControl(p) || !inners.some((r) => inRect(r, p)));
   // The lawns are soft (the track and the lake's bank are not).
   out.soft = q.blocks.filter((k) => q.roles.get(k) !== 'track' && q.roles.get(k) !== 'lake').map((k) => shrink(city.blocks[k].rect, sw));
-  void rng;
-  out.extra = { lodgeBlock: lodgeBlock(q) };
+  const buildings = city.buildings.filter((b) => b.district === 'megapark' && inRect(q.bounds, b));
+  const props: StreetProp[] = [];
+  // The lake: water, island, footbridge, jetty and boats (the boathouse is a lot).
+  const lakeK = roleBlocks(q, 'lake')[0];
+  const lakeInner = shrink(city.blocks[lakeK].rect, sw);
+  const fountain = feature(q, 'fountain', rng.next() < MEGAPARK.fountainChance);
+  const lake = layLake(lakeInner, buildings.find((b) => b.lot === 'boathouse')!, lakeK, city.config.blocks, fountain, rng);
+  city.water.push(lake.water);
+  city.parkPieces.push(lake.piece);
+  out.structures.push(...lake.structures);
+  out.solids.push(...lake.solids);
+  props.push(...lake.props);
+  // The props keep clear of the solids, the buildings, the junction controls and each other.
+  const controls = city.streetProps.filter((p) => inRect(q.bounds, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
+  out.props = clearOf(props, [...out.solids, ...controls, ...buildings.map(rectFootprint)], city.streetProps.filter((p) => inRect(q.bounds, p, 2)).map((p) => propFootprint(p, 0.1)));
+  out.extra = { lodgeBlock: lodgeBlock(q), fountain: lake.fountain };
   return out;
 }

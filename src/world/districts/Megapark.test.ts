@@ -6,6 +6,11 @@ import { inRect, shrink } from '../lots';
 import { FootprintIndex, rectFootprint } from '../StreetProps';
 import { at } from './rules';
 import { gateBlocks, lodgeBlock, mainGate, roleBlocks } from './Megapark';
+import { softGroundOf, WADING } from '../softGround';
+import { DISTRICT_DEFS } from './index';
+import { inWater, rimPoints, shoreDistance } from '../Water';
+import type { CityData } from '../CityGenerator';
+import type { District } from './District';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const ALONE = { megapark: true, oldtown: false, chinatown: false, harbor: false, farm: false, slums: false };
@@ -90,5 +95,60 @@ describe('Mega-park traffic', () => {
     const inside = c.streetProps.filter((p) => inRect(q.bounds, p));
     expect(inside.filter((p) => p.kind === 'fence' || p.kind === 'umbrella' || (p.kind === 'sign' && p.variant === 'busStop')).map(at)).toEqual([]);
     expect(inside.filter((p) => p.kind === 'lamp').map(at)).toEqual([]);
+  });
+});
+
+const lakeBlock = (c: CityData, q: District) => shrink(c.blocks[roleBlocks(q, 'lake')[0]].rect, c.config.sidewalk);
+const lakeWater = (c: CityData, q: District) => c.water.find((w) => w.kind === 'lake' && inRect(q.bounds, w))!;
+const structure = (q: District, kind: string) => q.dressing.structures.filter((s) => s.kind === kind);
+/** The far end of a span structure (along its yaw), from its centre. */
+const ends = (s: { x: number; z: number; yaw: number; data?: Record<string, unknown> }) => {
+  const h = (s.data!.length as number) / 2;
+  return [{ x: s.x - Math.sin(s.yaw) * h, z: s.z - Math.cos(s.yaw) * h }, { x: s.x + Math.sin(s.yaw) * h, z: s.z + Math.cos(s.yaw) * h }];
+};
+
+describe('Mega-park lake', () => {
+  it.each(placed)('seed %i: one lake inside its block with a bank all round, clear of the boathouse; it is wading water', (_seed, c, q) => {
+    const w = lakeWater(c, q);
+    const inner = lakeBlock(c, q);
+    const house = c.buildings.find((b) => b.district === 'megapark' && b.lot === 'boathouse')!;
+    const breaks = rimPoints(w, 64).filter((p) => !inRect(shrink(inner, MEGAPARK.lakeBank - 0.3), p)).map(at);
+    expect(breaks).toEqual([]);
+    expect(rimPoints(w, 64).filter((p) => inRect(house, p, 1)).map(at)).toEqual([]);
+    expect(c.parkPieces.filter((p) => p.district === 'megapark' && p.kind === 'pond')).toHaveLength(1);
+    expect(softGroundOf(c, DISTRICT_DEFS, false)!.at(w.x + 1, w.z + 1)).toBe(WADING);
+  });
+
+  it.each(placed)('seed %i: the jetty runs from the boathouse out over the water, the boats float beside it, the island stands in the lake', (_seed, c, q) => {
+    const w = lakeWater(c, q);
+    const house = c.buildings.find((b) => b.district === 'megapark' && b.lot === 'boathouse')!;
+    const [j] = structure(q, 'jetty');
+    const [a, b] = ends(j);
+    const [foot, tip] = inRect(house, a, 0.1) ? [a, b] : [b, a];
+    expect(inRect(house, foot, 0.1)).toBe(true);
+    expect(shoreDistance(w, tip.x, tip.z)).toBeGreaterThan(2);
+    expect(structure(q, 'moored').length).toBeGreaterThanOrEqual(1);
+    for (const boat of structure(q, 'moored')) expect(inWater(w, boat.x, boat.z, 1)).toBe(true);
+    const [isle] = structure(q, 'island');
+    expect(shoreDistance(w, isle.x, isle.z)).toBeGreaterThanOrEqual(MEGAPARK.island + 2);
+  });
+
+  it.each(placed)('seed %i: the footbridge joins the island to the dry bank', (_seed, c, q) => {
+    const w = lakeWater(c, q);
+    const [isle] = structure(q, 'island');
+    const [bridge] = structure(q, 'footbridge');
+    const [a, b] = ends(bridge);
+    const [near, far] = Math.hypot(a.x - isle.x, a.z - isle.z) < Math.hypot(b.x - isle.x, b.z - isle.z) ? [a, b] : [b, a];
+    expect(Math.hypot(near.x - isle.x, near.z - isle.z)).toBeLessThan(MEGAPARK.island);
+    expect(shoreDistance(w, far.x, far.z)).toBeLessThan(-1);
+    expect(inRect(lakeBlock(c, q), far)).toBe(true);
+  });
+
+  it('the fountain word: a jet in the lake, or none', () => {
+    for (const [seed, c, q] of districtCities('megapark', ['fountain'])) {
+      const jet = q.dressing.extra!.fountain as { x: number; z: number };
+      expect(inWater(lakeWater(c, q), jet.x, jet.z, 2), `seed ${seed}`).toBe(true);
+    }
+    for (const [seed, , q] of districtCities('megapark', ['!fountain'])) expect(q.dressing.extra!.fountain, `seed ${seed}`).toBeUndefined();
   });
 });

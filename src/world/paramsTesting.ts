@@ -74,7 +74,7 @@ function promise(word: string, city: CityData): void {
   else if (name === 'england') expect(city.driveSide).toBe('left');
   else if (name === 'canals') expect(city.terrain.canals.length).toBe(Number(v));
   else if (name === 'blocks') expect(city.blocks.length).toBe(Number(v) ** 2);
-  else if (name === 'pond' || name === 'ponds') expect(city.water.length).toBe(v === undefined ? 1 : Number(v));
+  else if (name === 'pond' || name === 'ponds') expect(city.water.filter((w) => w.kind === 'pond').length).toBe(v === undefined ? 1 : Number(v));
   else if (name === 'pitch' || name === 'pitches') expect(city.streetProps.filter((q) => q.kind === 'goal').length).toBe(2 * (v === undefined ? 1 : Number(v)));
   else if (isFeature(name)) {
     const [kind, f] = name.includes('.') ? name.split('.') : [DISTRICT_DEFS.find((d) => name in d.features)!.kind, name];

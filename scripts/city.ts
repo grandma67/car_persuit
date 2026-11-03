@@ -34,7 +34,7 @@ export function summary(city: CityData): string {
     t.hill ? `hill ${t.hill.height.toFixed(0)}m` : 'no hill', canals ? `canals ${canals}` : 'no canals',
     `${p.plazas?.length ?? 0} plazas`, `${ramps.length - ramps.filter((l) => l.crossing !== undefined).length} ramps`,
     `${ramps.filter((l) => l.crossing !== undefined).length} canal ramps`, `${city.roadworks.length} roadworks`,
-    `${city.parkPieces.filter((q) => q.kind === 'pond').length} ponds`, `${city.parkPieces.filter((q) => q.kind === 'pitch').length} pitches`,
+    `${city.parkPieces.filter((q) => q.kind === 'pond' && !q.district).length} ponds`, `${city.parkPieces.filter((q) => q.kind === 'pitch' && !q.district).length} pitches`,
     districts.length ? districts.join(', ') : 'no districts',
   ].filter(Boolean).join(' · ');
 }
