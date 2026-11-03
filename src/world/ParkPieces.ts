@@ -257,3 +257,18 @@ export function layParkPieces(blocks: Block[], rolled: Map<number, ParkPieceKind
   out.clears = (x, z, r) => ponds.some((w) => shoreDistance(w, x, z) > -(PARKS.treeClear + r)) || pitches.some((p) => onPitch(p, x, z, r + 0.5));
   return out;
 }
+
+/**
+ * The park's own loose benches (random yaw, laid before the piece) that the piece left standing
+ * turn to face it: a bench side-on to a pond looks dropped there. Only the yaw changes, and no draw
+ * is taken, so nothing else in the city moves. `blocks` indexed as the grid (`j * n + i`).
+ */
+export function faceThePieces(props: StreetProp[], pieces: ParkPiece[], blocks: Block[], n: number): void {
+  for (const piece of pieces) {
+    const { rect } = blocks[piece.block[1] * n + piece.block[0]];
+    for (const q of props) {
+      if (q.kind !== 'bench' || Math.abs(q.x - rect.x) > rect.w / 2 || Math.abs(q.z - rect.z) > rect.d / 2) continue;
+      q.yaw = Math.atan2(piece.x - q.x, piece.z - q.z);
+    }
+  }
+}

@@ -22,7 +22,7 @@ import {
 import type { RampPins } from './Landmarks';
 import type { WorksPin } from './Roadworks';
 import type { ShallowWater } from './Water';
-import { layParkPieces, pinParkCounts, rollParkPieces, type ParkPiece } from './ParkPieces';
+import { faceThePieces, layParkPieces, pinParkCounts, rollParkPieces, type ParkPiece } from './ParkPieces';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
@@ -624,6 +624,7 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
   if (laid.pieces.length) {
     city.trees = city.trees.filter((t) => !laid.clears(t.x, t.z, 0.5));
     city.streetProps = city.streetProps.filter((q) => !(q.kind === 'bench' && laid.clears(q.x, q.z, 1)));
+    faceThePieces(city.streetProps, laid.pieces, blocksOut, n); // the loose benches left, before the piece's own
     city.streetProps.push(...laid.props);
     city.landmarks.push(...laid.landmarks);
     city.water.push(...laid.water);

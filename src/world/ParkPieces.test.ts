@@ -103,6 +103,38 @@ describe('park pieces: the pond', () => {
     expect(breaks).toEqual([]);
   });
 
+  it('no bench stands in the water or on its edge', () => {
+    const breaks: string[] = [];
+    for (const c of cities) {
+      for (const p of ponds(c)) {
+        for (const q of c.streetProps) {
+          if (q.kind === 'bench' && shoreDistance(p.water!, q.x, q.z) > -2) breaks.push(`${c.seed} ${p.block}: bench at (${q.x.toFixed(1)}, ${q.z.toFixed(1)})`);
+        }
+      }
+    }
+    expect(breaks).toEqual([]);
+  });
+
+  it('every bench in a pond or pitch park faces the piece, the loose ones left standing included', () => {
+    const breaks: string[] = [];
+    let loose = 0;
+    for (const c of cities) {
+      for (const p of c.parkPieces) {
+        const { rect } = blockOf(c, p.block);
+        const benches = c.streetProps.filter((q) => q.kind === 'bench' && Math.abs(q.x - rect.x) <= rect.w / 2 && Math.abs(q.z - rect.z) <= rect.d / 2);
+        for (const q of benches) {
+          const to = Math.atan2(p.x - q.x, p.z - q.z);
+          const off = Math.abs(((q.yaw - to + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+          // A pond's benches look at its middle; a pitch's own look at the halfway line, off its middle.
+          if (off > (p.kind === 'pond' ? 1e-6 : Math.PI / 2)) breaks.push(`${c.seed} ${p.kind} ${p.block}: bench ${Math.round((off * 180) / Math.PI)}° off`);
+          if (p.kind === 'pond' && shoreDistance(p.water!, q.x, q.z) < -PARKS.benchOut - 1) loose++;
+        }
+      }
+    }
+    expect(breaks).toEqual([]);
+    expect(loose).toBeGreaterThan(0); // the sweep has loose benches left by a pond to check
+  });
+
   it('lily pads float well inside the water, apart', () => {
     const breaks: string[] = [];
     for (const c of cities) {
