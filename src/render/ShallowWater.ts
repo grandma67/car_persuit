@@ -60,7 +60,7 @@ export class ShallowWaterView {
 
   constructor(waters: ShallowWater[], terrain: Terrain, look: { sea: number; shallow: number; frozen: boolean; islandHalf: number }) {
     this.water = look.frozen ? null : new CanalWater([], look.islandHalf, look.sea, look.shallow, true);
-    const material = this.water?.material ?? new THREE.MeshStandardMaterial({ color: 0xc9dbe4, roughness: 0.22, metalness: 0.05 });
+    const material = this.water?.material ?? new THREE.MeshStandardMaterial({ color: 0x9fc4dc, roughness: 0.1, metalness: 0.15 });
     this.mesh = new THREE.Mesh(shallowWaterGeometry(waters, terrain), material);
     this.mesh.receiveShadow = true;
     this.mesh.matrixAutoUpdate = false;

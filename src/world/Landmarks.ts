@@ -14,7 +14,9 @@ export type LandmarkKind =
   // Harbor
   | 'bollard'
   // Farm
-  | 'silo' | 'grainBin' | 'windmill' | 'waterTower';
+  | 'silo' | 'grainBin' | 'windmill' | 'waterTower'
+  // Park pieces: a pond's rowboat pulled up on the bank
+  | 'rowboat';
 
 export interface Landmark {
   kind: LandmarkKind;
@@ -61,6 +63,7 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   grainBin: 3.6,
   windmill: 3.2, // the tower and its stock tank
   waterTower: 3,
+  rowboat: 1.4,
 };
 /** What a town square may roll (fixed: adding a kind above must not move any seed's squares). */
 const LANDMARK_KINDS: LandmarkKind[] = ['fountain', 'statue', 'obelisk', 'sculpture', 'ramp'];

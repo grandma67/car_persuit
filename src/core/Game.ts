@@ -41,6 +41,7 @@ import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
 import { softGroundOf } from '../world/softGround';
 import { ShallowWaterView } from '../render/ShallowWater';
+import { buildParkPieces } from '../render/ParkPieces';
 import { Minimap, type MinimapTarget } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
 import { DestinationMarker } from '../render/DestinationMarker';
@@ -302,6 +303,7 @@ export class Game {
         return view;
       });
     }
+    if (this.city.parkPieces.length) this.owned('parkPieces', () => buildParkPieces(this.city.parkPieces, this.city.terrain, this.scene, climate.name === 'snow'));
     this.landmarks = this.owned('landmarks', () => new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs));
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
     this.props = this.owned('props', () => new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
@@ -1313,7 +1315,7 @@ export class Game {
     if (this.state === 'playing') this.whooshes();
     this.honks();
     this.audio.holdHorn(this.state === 'playing' && this.input.horn());
-    this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
+    this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed, wading: p.softPatch?.water === 'wet' });
     const w = waterNearby(p.position.x, p.position.z, this.city.islandSize / 2, this.city.terrain.canals);
     this.audio.setWater(dt, { sea: w.sea, surge: swellAtWall(w.wallX, w.wallZ, this.sea.elapsed), canal: w.canal });
   }

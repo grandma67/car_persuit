@@ -32,6 +32,7 @@ export interface CarSoundState {
   throttle: number; // 0..1
   skid: number; // 0..1
   maxSpeed: number;
+  wading?: boolean; // in shallow water (a pond): sloshing, a splash on the way in
 }
 
 export class CarAudio {
@@ -47,6 +48,9 @@ export class CarAudio {
   private gear = 0;
   private screechFilter!: BiquadFilterNode;
   private screechGain!: GainNode;
+  private wadeFilter!: BiquadFilterNode;
+  private wadeGain!: GainNode;
+  private wasWading = false;
   private sirenOsc!: OscillatorNode;
   private sirenLfo!: OscillatorNode;
   private sirenFilter!: BiquadFilterNode;
@@ -165,6 +169,23 @@ export class CarAudio {
     this.screechGain.gain.value = 0;
     this.loopNoise().connect(this.screechFilter).connect(this.screechGain).connect(this.master);
 
+    // Wading: low band-passed noise, sloshing at a few hertz.
+    this.wadeFilter = ctx.createBiquadFilter();
+    this.wadeFilter.type = 'bandpass';
+    this.wadeFilter.frequency.value = 400;
+    this.wadeFilter.Q.value = 0.7;
+    const slosh = ctx.createGain();
+    slosh.gain.value = 0.6;
+    const sloshLfo = ctx.createOscillator();
+    sloshLfo.frequency.value = 4.5;
+    const sloshDepth = ctx.createGain();
+    sloshDepth.gain.value = 0.4;
+    sloshLfo.connect(sloshDepth).connect(slosh.gain);
+    sloshLfo.start();
+    this.wadeGain = ctx.createGain();
+    this.wadeGain.gain.value = 0;
+    this.loopNoise().connect(this.wadeFilter).connect(slosh).connect(this.wadeGain).connect(this.master);
+
     // Police siren: a triangle wave whose pitch an LFO sweeps up and down (the classic wail).
     // Distance muffles it through a lowpass.
     this.sirenOsc = ctx.createOscillator();
@@ -279,6 +300,12 @@ export class CarAudio {
 
     this.screechGain.gain.setTargetAtTime(silent ? 0 : s.skid * 0.12, now, 0.04);
     this.screechFilter.frequency.setTargetAtTime(950 + s.skid * 250 + Math.random() * 80, now, 0.05);
+
+    const wading = !!s.wading && !silent;
+    if (wading && !this.wasWading && absSpeed > 4) this.sfx?.splash(Math.min(1, absSpeed / 25));
+    this.wasWading = wading;
+    this.wadeGain.gain.setTargetAtTime(wading ? Math.min(1, absSpeed / 12) * 0.3 : 0, now, 0.08);
+    this.wadeFilter.frequency.setTargetAtTime(300 + absSpeed * 30, now, 0.1);
   }
 
   /** Surf and canal water near the player (heard once the run has started). */
@@ -301,6 +328,8 @@ export class CarAudio {
     const now = this.ctx.currentTime;
     this.engineGain.gain.setTargetAtTime(0, now, 0.02);
     this.screechGain.gain.setTargetAtTime(0, now, 0.02);
+    this.wadeGain.gain.setTargetAtTime(0, now, 0.02);
+    this.wasWading = false;
     void this.ctx.resume();
   }
 

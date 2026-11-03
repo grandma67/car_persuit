@@ -145,8 +145,8 @@ export class CanalWater {
           float raft = smoothstep(0.5, 0.64, cwFbm(p * 0.045 + vec2(13.0, 7.0) + t * 0.003));
           float leaf = 1.0 - smoothstep(0.16, 0.24, cwVoronoi(p * 1.7, 0.0).x);
           float weed = raft * leaf;
-          scum *= 1.0 - open;
-          weed *= 1.0 - open;
+          scum *= (1.0 - open) * (1.0 - 0.5 * pond);
+          weed *= (1.0 - open) * (1.0 - 0.85 * pond); // a pond has lily pads instead
           float cover = clamp(max(scum * 0.9, weed), 0.0, 1.0);
           water = mix(water, algae * (0.85 + 0.3 * cwNoise(p * 2.1)), cover);
           diffuseColor.rgb = mix(water, shallow, open * 0.8);

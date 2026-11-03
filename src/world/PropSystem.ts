@@ -56,8 +56,11 @@ const SIGN_SHAPE: Record<SignVariant, SignShape> = {
   children: 'triangle',
   pedestrian: 'square',
   busStop: 'square',
+  noFishing: 'round',
 };
 const SIGN_VARIANTS = Object.keys(SIGN_SHAPE) as SignVariant[];
+/** Sign faces built only in a city that has such a sign (newer ones: no cost elsewhere). */
+const LAZY_FACES = new Set<SignVariant>(['noFishing']);
 /** Plate geometry per shape. Circle-based so UVs map the square texture straight on. */
 const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   switch (shape) {
@@ -395,6 +398,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     ...harborModels(),
     ...farmModels(),
     ...slumsModels(),
+    ...parkModels(),
     'tree-fruit-pear': fruitTree(look, 0xc8c43a),
   };
 }
@@ -875,6 +879,27 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
   };
 }
 
+/** Park pieces' breakables: a pond's reeds. */
+function parkModels(): Record<'reeds', THREE.BufferGeometry> {
+  // A clump of reeds: thin blades leaning out from the root, a few bulrush heads on stalks.
+  const blades = Array.from({ length: 11 }, (_, k) => {
+    const a = k * 2.4;
+    const lean = 0.12 + (k % 3) * 0.06;
+    const h = 1.0 + ((k * 7) % 5) * 0.12;
+    return part(new THREE.BoxGeometry(0.05, h, 0.02).rotateX(lean).rotateY(a), k % 2 ? 0x6a8a3a : 0x7f9a48, Math.cos(a) * 0.18, h / 2, Math.sin(a) * 0.18);
+  });
+  const heads = [0, 2.1, 4.2].flatMap((a, k) => {
+    const h = 1.25 + k * 0.12;
+    const x = Math.cos(a) * 0.1;
+    const z = Math.sin(a) * 0.1;
+    return [
+      part(new THREE.CylinderGeometry(0.012, 0.012, h, 4), 0x5f7a34, x, h / 2, z),
+      part(new THREE.CylinderGeometry(0.045, 0.045, 0.22, 6), 0x5a3a22, x, h + 0.08, z),
+    ];
+  });
+  return { reeds: mergeGeometries([...blades, ...heads]) };
+}
+
 type SlumsKind = 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp'
   | 'utilityPole' | 'utilityPole-transformer' | 'fence-torn' | `wreck-${WreckKind}`;
 /** The Slums' junk: loose bricks, kerb clutter, a dead street lamp, a payphone, utility poles, torn chain-link, the wrecks. */
@@ -1158,6 +1183,33 @@ function signTexture(variant: SignVariant): THREE.Texture {
         text(g, 'P', c, c + 6, s * 0.46, '#ffffff');
         prohibit(g, s);
         break;
+      case 'noFishing': {
+        ringSign(g, s);
+        // A fish (body, tail, eye) on a hook's line, struck through.
+        g.fillStyle = '#111111';
+        g.beginPath();
+        g.ellipse(c - s * 0.04, c + s * 0.06, s * 0.2, s * 0.09, 0, 0, Math.PI * 2);
+        g.fill();
+        g.beginPath();
+        g.moveTo(c + s * 0.12, c + s * 0.06);
+        g.lineTo(c + s * 0.28, c - s * 0.04);
+        g.lineTo(c + s * 0.28, c + s * 0.16);
+        g.closePath();
+        g.fill();
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.arc(c - s * 0.15, c + s * 0.04, s * 0.018, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = '#111111';
+        g.lineWidth = 3;
+        g.beginPath();
+        g.moveTo(c - s * 0.2, c - s * 0.3);
+        g.lineTo(c - s * 0.2, c - s * 0.02);
+        g.arc(c - s * 0.16, c - s * 0.02, s * 0.04, Math.PI, 0, true);
+        g.stroke();
+        prohibit(g, s);
+        break;
+      }
       case 'noSmoking': {
         ringSign(g, s);
         // Cigarette: filter, paper, glowing tip, with a curl of smoke.
@@ -1253,7 +1305,7 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
-  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed']);
+  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds']);
 
 /**
  * Copy the props in `list` lying within `radius` of (x, z) (their matrices' translation) from
@@ -1370,6 +1422,7 @@ export class PropSystem {
     for (const p of defs) if (p.kind === 'sign') faceCounts[p.variant ?? 'stop']++;
     const faceMesh = {} as Record<SignVariant, THREE.InstancedMesh>;
     for (const v of SIGN_VARIANTS) {
+      if (!faceCounts[v] && LAZY_FACES.has(v)) continue; // a park piece's sign: only in a city that has one
       // A touch of self-illumination reads like retroreflective sheeting at night.
       const art = signTexture(v);
       faceMesh[v] = addAttachmentMesh(

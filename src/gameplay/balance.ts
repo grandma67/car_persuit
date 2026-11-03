@@ -413,3 +413,22 @@ export const WATER = {
   navPenalty: 100, // NavGrid step cost added in the water (road 10, off-road 15): cops go round
   sprayPerSecond: 40, // spray puffs per rear wheel wading at speed
 };
+
+/** Park pieces (`world/ParkPieces.ts`): a fish pond or a soccer pitch in a park with no centrepiece. */
+export const PARKS = {
+  salt: 0x9a4c5, // their own stream: nothing that rolled before moves
+  pondChance: 0.3, // per park without a centrepiece
+  pitchChance: 0.25,
+  fenceInset: 3.3, // the park's picket fence, in from the block edge (StreetProps' FENCE_INSET)
+  pondRadius: [7, 11] as [number, number], // the long half-axis, metres
+  pondDepth: 0.35, // surface over the ground
+  pondOffset: 4, // the pond's centre may sit this far off the park's
+  bankRoom: 4, // metres kept round the water inside the fence (benches, the boat)
+  stoneRimChance: 0.5, // else a grass bank with more reeds
+  benchOut: 2.4, // benches this far up the bank from the edge
+  boatOut: 1.6, // the rowboat pulled up on the bank
+  boatRadius: 1.4, // its solid footprint
+  signOut: 3.2,
+  pads: 10, // lily pads, at most
+  treeClear: 4.5, // trees and loose benches this close to the water go (clear of the sign and the boat)
+};

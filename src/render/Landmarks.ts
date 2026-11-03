@@ -138,6 +138,31 @@ function well(): THREE.BufferGeometry {
   ]);
 }
 
+/**
+ * A wooden rowboat pulled up on a pond's bank, upright, along local Z: a hull tapering to the bow,
+ * a painted strake, two thwarts and the oars shipped inside.
+ */
+function rowboat(): THREE.BufferGeometry {
+  const hull = 0x6a4a30;
+  const paint = 0x2f6a8a;
+  const wood = 0x9a7a52;
+  const side = (x: number) => [
+    part(box(0.08, 0.5, 2.6), hull, x * 0.6, 0.35, -0.2),
+    part(box(0.08, 0.5, 1.0).rotateY(-x * 0.5), hull, x * 0.38, 0.35, 1.48),
+    part(box(0.09, 0.1, 2.6), paint, x * 0.6, 0.55, -0.2),
+  ];
+  return mergeGeometries([
+    part(box(1.1, 0.08, 2.6), hull, 0, 0.12, -0.2), // the bottom
+    part(box(0.5, 0.08, 0.8), hull, 0, 0.12, 1.4),
+    ...side(-1),
+    ...side(1),
+    part(box(1.28, 0.5, 0.08), hull, 0, 0.35, -1.5), // the transom
+    part(box(0.12, 0.6, 0.14), hull, 0, 0.42, 1.92), // the stem
+    ...[-0.6, 0.5].map((z) => part(box(1.12, 0.06, 0.3), wood, 0, 0.44, z)), // thwarts
+    ...[-0.22, 0.22].map((x) => part(box(0.06, 0.05, 2.4).rotateY(x * 0.2), wood, x, 0.5, 0.0)), // oars
+  ]);
+}
+
 /** Market cross: an open-sided roofed shelter on a stepped stone base round a cross shaft. */
 function marketCross(): THREE.BufferGeometry {
   const parts = [
@@ -344,7 +369,7 @@ const SNOW_CAPS = {
 };
 
 /** District pieces (Old City, the lions, bollards) stand straight on the ground, without a paved pad. */
-const NO_PAD = new Set(['cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense', 'bollard', 'silo', 'grainBin', 'windmill', 'waterTower']);
+const NO_PAD = new Set(['rowboat', 'cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense', 'bollard', 'silo', 'grainBin', 'windmill', 'waterTower']);
 
 /**
  * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
@@ -442,8 +467,8 @@ export class Landmarks {
       cannon: cannon(), column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
       lion: lion(), incense: incense(), bollard: bollard(),
     };
-    // Farm pieces: built only in a city that has them.
-    const farm: Record<string, () => THREE.BufferGeometry> = { silo: () => silo(false), siloSteel: () => silo(true), grainBin, windmill, waterTower };
+    // Farm pieces and a pond's rowboat: built only in a city that has them.
+    const farm: Record<string, () => THREE.BufferGeometry> = { silo: () => silo(false), siloSteel: () => silo(true), grainBin, windmill, waterTower, rowboat };
     const modelOf = (key: string): THREE.BufferGeometry => (models as Record<string, THREE.BufferGeometry>)[key] ?? ((models as Record<string, THREE.BufferGeometry>)[key] = farm[key]());
 
     const plain = new Map<string, THREE.Matrix4[]>(); // district pieces by kind, drawn instanced

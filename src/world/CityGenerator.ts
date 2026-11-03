@@ -22,6 +22,7 @@ import {
 import type { RampPins } from './Landmarks';
 import type { WorksPin } from './Roadworks';
 import type { ShallowWater } from './Water';
+import { layParkPieces, rollParkPieces, type ParkPiece } from './ParkPieces';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
@@ -116,6 +117,7 @@ export interface CityData {
   spawn: { x: number; z: number; yaw: number };
   districts: District[]; // themed districts laid over the grid (often none)
   water: ShallowWater[]; // ponds, lakes and pools on land: wading, never drowning (`world/Water.ts`)
+  parkPieces: ParkPiece[]; // fish ponds and soccer pitches in parks (`world/ParkPieces.ts`)
   params: CityParams; // every choice that made it: reloads as this city
   warnings: string[]; // pinned choices that hold but may not show, or a stale dump's read-only parts
 }
@@ -566,6 +568,7 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     roadworks: works.sites, terrain, spawn, driveSide,
     districts: [],
     water: [],
+    parkPieces: [],
     params: p,
     warnings,
   };
@@ -609,6 +612,19 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     applyDistricts(city, grid, defs, p.force, p.districts, errors, warnings);
     fail();
   }
+  // --- Park pieces (own stream): a fish pond or a soccer pitch in a park with no centrepiece, laid
+  // after the districts (parks inside one are skipped), so nothing rolled before them moves ---
+  const centred = (b: Block) => city.landmarks.some((l) => l.kind !== 'ramp' && l.x === b.rect.x && l.z === b.rect.z);
+  const laid = layParkPieces(blocksOut, rollParkPieces(blocksOut, centred, seed), n, config, terrain, seed);
+  if (laid.pieces.length) {
+    city.trees = city.trees.filter((t) => !laid.clears(t.x, t.z, 0.5));
+    city.streetProps = city.streetProps.filter((q) => !(q.kind === 'bench' && laid.clears(q.x, q.z, 1)));
+    city.streetProps.push(...laid.props);
+    city.landmarks.push(...laid.landmarks);
+    city.water.push(...laid.water);
+    city.parkPieces = laid.pieces;
+  }
+
   city.params.districts = city.districts.map((q) => ({
     kind: q.kind, rect: { i: q.grid.i0, j: q.grid.j0, w: q.grid.w, h: q.grid.h }, roles: rolesOf(q, n), features: { ...q.features },
   }));
