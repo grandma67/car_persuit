@@ -60,6 +60,7 @@ function int(v: string | undefined, lo: number, hi: number, mode: Mode): number 
 
 const count = (got: number, want: number, what: string) => (got === want ? undefined : `${what}: ${got}, not ${want}`);
 const rampCount = (city: CityData) => city.landmarks.filter((l) => l.kind === 'ramp' && l.crossing === undefined).length;
+const pieceCount = (city: CityData, kind: 'pond' | 'pitch') => city.parkPieces.filter((p) => p.kind === kind).length;
 const canalRampCount = (city: CityData) => city.landmarks.filter((l) => l.kind === 'ramp' && l.crossing !== undefined).length;
 
 const TIME_WORD = (name: TimeOfDayName): Word => ({
@@ -213,6 +214,32 @@ export const WORDS: Word[] = [
       return n === undefined ? 'ramps=N: 0 to 8' : set(d, 'ramps', n, w);
     },
     check: (c, v) => count(rampCount(c), Number(v), 'ramps'),
+  },
+  {
+    name: 'pond', help: 'a fish pond in a park (ponds=N: N of them, 0 none)',
+    apply: (d, _v, _m, w) => set(d, 'ponds', 1, w),
+    check: (c) => count(pieceCount(c, 'pond'), 1, 'ponds'),
+  },
+  {
+    name: 'ponds', value: 'N', help: 'N parks with a fish pond',
+    apply: (d, v, mode, w) => {
+      const n = int(v, 0, 6, mode);
+      return n === undefined ? 'ponds=N: 0 to 6' : set(d, 'ponds', n, w);
+    },
+    check: (c, v) => count(pieceCount(c, 'pond'), Number(v), 'ponds'),
+  },
+  {
+    name: 'pitch', help: 'a soccer pitch in a park (pitches=N: N of them, 0 none)',
+    apply: (d, _v, _m, w) => set(d, 'pitches', 1, w),
+    check: (c) => count(pieceCount(c, 'pitch'), 1, 'pitches'),
+  },
+  {
+    name: 'pitches', value: 'N', help: 'N parks with a soccer pitch',
+    apply: (d, v, mode, w) => {
+      const n = int(v, 0, 6, mode);
+      return n === undefined ? 'pitches=N: 0 to 6' : set(d, 'pitches', n, w);
+    },
+    check: (c, v) => count(pieceCount(c, 'pitch'), Number(v), 'pitches'),
   },
   {
     name: 'canalwidth', value: 'W', help: 'every canal W metres wide (and at least one canal)',

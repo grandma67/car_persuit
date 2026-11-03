@@ -91,6 +91,9 @@ export interface CityParams {
   ramps?: number;
   /** 'all': every roll comes up (as ?canalramp); a count; or the ramps. */
   canalRamps?: CanalRampParams[] | number | 'all';
+  /** How many parks have a fish pond, and a soccer pitch (`world/ParkPieces.ts`); the rest rolled. */
+  ponds?: number;
+  pitches?: number;
   /** 'all': every slot rolls a site (as ?roadworks); a count; or the sites. */
   roadworks?: WorksParams[] | number | 'all';
   spawn?: { node: [number, number]; toward: [number, number] };
@@ -105,7 +108,7 @@ export interface CityParams {
 /** Every key a params file may have, in the order a file writes them. */
 export const CITY_KEYS = [
   'version', 'seed', 'note', 'climate', 'weather', 'time', 'startMinute', 'theme', 'blocks', 'driveSide', 'terrain', 'plazas',
-  'zones', 'landmarks', 'ramps', 'canalRamps', 'roadworks', 'spawn', 'destinations', 'districts', 'force',
+  'zones', 'landmarks', 'ramps', 'canalRamps', 'ponds', 'pitches', 'roadworks', 'spawn', 'destinations', 'districts', 'force',
 ] as const satisfies readonly (keyof CityParams)[];
 
 /** Draw, then override: the roll is always made (so later draws stay put), the pinned value wins. */

@@ -1,5 +1,6 @@
 // Fullscreen helpers. Safari (incl. iPad) still only has the webkit-prefixed API; iPhone has none for pages.
 
+import { wantsHomeScreenHint } from './homeScreenHint';
 import { isTouchDevice } from './TouchControls';
 
 type WebkitDocument = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => void };
@@ -18,6 +19,11 @@ const installedApp =
 export function fullscreenSupported(): boolean {
   const el = document.documentElement as WebkitElement;
   return !!(el.requestFullscreen || el.webkitRequestFullscreen) && !installedApp;
+}
+
+/** iPhone, where no browser can take a page fullscreen: tell the player about the home screen instead. */
+export function homeScreenHintWanted(): boolean {
+  return wantsHomeScreenHint({ userAgent: navigator.userAgent, fullscreen: fullscreenSupported(), installed: installedApp });
 }
 
 export function isFullscreen(): boolean {

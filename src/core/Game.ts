@@ -39,6 +39,10 @@ import { PassBy } from '../audio/passBy';
 import { keepOf } from '../world/driveSide';
 import { scratchCar, scratchPrewarmMesh } from '../render/CarScratches';
 import type { CanalWater } from '../render/CanalWater';
+import { softGroundOf } from '../world/softGround';
+import type { PropKind } from '../world/StreetProps';
+import { ShallowWaterView } from '../render/ShallowWater';
+import { buildParkPieces } from '../render/ParkPieces';
 import { Minimap, type MinimapTarget } from '../ui/Minimap';
 import { Health } from '../gameplay/Health';
 import { DestinationMarker } from '../render/DestinationMarker';
@@ -69,6 +73,8 @@ const ROUTE_REFRESH = 0.25; // seconds between GPS route recalculations
 const CIVILIAN_PROP_RANGE = 90; // metres: civilians nearer the player than this collide with props
 const WHACK_SPEED = 3; // m/s the player must be driving into a cop for a hit to count as a ram
 const SINK_DEPTH = 3; // metres under the surface a car in the water comes to rest
+/** Breakables that raise no heat: knocking a park's ball about is no crime. */
+const HEATLESS = new Set<PropKind>(['ball']);
 const NO_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpA = new THREE.Vector3(); // scratch for the frame
@@ -183,6 +189,7 @@ export class Game {
   private marker = new DestinationMarker(MISSION.reachRadius);
   private sea: Sea;
   private canalWater: CanalWater | null;
+  private shallowWater: ShallowWaterView | null = null;
   private minimap: Minimap;
   private health = new Health();
   private prefs = loadPrefs(safeStorage()); // mute and difficulty, kept between sessions
@@ -291,6 +298,15 @@ export class Game {
     releaseAfterUpload(this.rootsOf('city'));
     this.canalWater = built.canalWater;
     this.walls = built.walls;
+    if (this.city.water.length) {
+      const look = { sea: time.sea, shallow: climate.shallow, frozen: climate.name === 'snow', islandHalf: this.city.islandSize / 2 };
+      this.shallowWater = this.owned('water', () => {
+        const view = new ShallowWaterView(this.city.water, this.city.terrain, look);
+        this.scene.add(view.mesh);
+        return view;
+      });
+    }
+    if (this.city.parkPieces.length) this.owned('parkPieces', () => buildParkPieces(this.city.parkPieces, this.city.terrain, this.scene, climate.name));
     this.landmarks = this.owned('landmarks', () => new Landmarks(this.city.landmarks, this.city.terrain, this.scene, this.world, time.lampGlow, this.walls, climate.snowRoofs));
     this.sea = new Sea(this.city.islandSize / 2, time.sea, climate.shallow, this.city.terrain.canals);
     this.props = this.owned('props', () => new PropSystem(this.city, this.scene, this.world, time.lampGlow, built.props, {
@@ -323,14 +339,10 @@ export class Game {
     this.player = new Vehicle(this.world, PLAYER_SPEC, { x: spawn.x, y: this.ground(spawn.x, spawn.z) + 1.2, z: spawn.z }, spawn.yaw);
     this.player.gearShifts = true;
     this.player.headlights = Math.max({ day: 0, afternoon: 0.45, night: 1 }[time.name], weather === 'clear' ? 0 : 0.45);
-    // Soft ground for every car (the Farm's fields, the Slums' rubble lots: less grip, more drag),
-    // and the Slums' potholes jolting every wheel that drops into one.
+    // Soft ground for every car: shallow water (ice in the snow), the Farm's fields, the Slums'
+    // rubble lots (less grip, more drag); and the Slums' potholes jolting every wheel that drops in.
     const inside = (r: Rect, x: number, z: number) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2;
-    const soft = this.city.districts.flatMap((q) => {
-      const patch = DISTRICT_DEFS.find((d) => d.kind === q.kind)?.softGround;
-      return patch && q.dressing.soft?.length ? [{ bounds: q.bounds, rects: q.dressing.soft, patch }] : [];
-    });
-    Vehicle.softGround = soft.length ? { at: (x, z) => soft.find((s) => inside(s.bounds, x, z) && s.rects.some((r) => inside(r, x, z)))?.patch ?? null } : null;
+    Vehicle.softGround = softGroundOf(this.city, DISTRICT_DEFS, climate.name === 'snow');
     const holes = this.city.districts.flatMap((q) => {
       const rects = (q.dressing.extra?.potholes ?? []) as Rect[];
       return rects.length ? [{ bounds: q.bounds, rects }] : [];
@@ -829,6 +841,7 @@ export class Game {
     this.marker.update(frameDt);
     this.sea.update(frameDt);
     this.canalWater?.update(frameDt);
+    this.shallowWater?.update(frameDt);
     this.precipitation?.update(frameDt, this.chase.camera.position);
     this.landmarks.update(frameDt, this.chase.camera, window.innerHeight, this.chase.camera.fov);
     this.effects.update(frameDt, this.player, this.health);
@@ -1281,7 +1294,7 @@ export class Game {
 
   private updatePropBreaks(breaks: PropBreak[]): void {
     for (const b of breaks) {
-      if (this.state === 'playing') this.raiseStars(this.wanted.propSmashed());
+      if (this.state === 'playing' && !HEATLESS.has(b.kind)) this.raiseStars(this.wanted.propSmashed());
       this.audio.propBreak(b.kind, b.strength, b.tree);
       this.effects.propBreak(b);
       for (const view of this.districtViews) view.propBroken?.(b.kind, b.position.x, b.position.z);
@@ -1305,7 +1318,7 @@ export class Game {
     if (this.state === 'playing') this.whooshes();
     this.honks();
     this.audio.holdHorn(this.state === 'playing' && this.input.horn());
-    this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed });
+    this.audio.update(dt, { speed: p.speed, throttle: p.lastInput.throttle, skid: p.skid, maxSpeed: p.spec.maxSpeed, wading: p.softPatch?.water === 'wet' });
     const w = waterNearby(p.position.x, p.position.z, this.city.islandSize / 2, this.city.terrain.canals);
     this.audio.setWater(dt, { sea: w.sea, surge: swellAtWall(w.wallX, w.wallZ, this.sea.elapsed), canal: w.canal });
   }

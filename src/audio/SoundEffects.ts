@@ -252,6 +252,14 @@ export class SoundEffects {
       if (kind === 'fruitBin') this.woodBreak(0.5, gain);
       return;
     }
+    if (kind === 'ball') {
+      this.burst(0, 0.07, 'bandpass', 420, 1.4, gain * 1.3); // a hollow thump
+      return;
+    }
+    if (kind === 'reeds') {
+      this.burst(0, 0.35, 'highpass', 2200, 0.5, gain * 0.5); // a rustle and swish of stalks
+      return;
+    }
     if (kind === 'scarecrow' || kind === 'feedSacks') {
       this.burst(0, 0.3, 'lowpass', 800, 0.7, gain * 1.2);
       this.burst(0.02, 0.5, 'highpass', 2600, 0.5, gain * 0.45);
@@ -401,6 +409,12 @@ export class SoundEffects {
       thud.stop(t + 0.07);
       this.burst(k * gap, 0.04, 'bandpass', 1800, 2, gain * 0.35); // the steel's clank
     }
+  }
+
+  /** A car ploughing into a pond: a low whoomp of water and the spray coming down. */
+  splash(strength: number): void {
+    this.burst(0, 0.55, 'lowpass', 700 + strength * 600, 0.8, 0.5 * strength);
+    this.burst(0.08, 0.6, 'bandpass', 2600, 0.9, 0.18 * strength);
   }
 
   impact(strength: number): void {

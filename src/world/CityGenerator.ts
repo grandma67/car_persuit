@@ -21,6 +21,8 @@ import {
 } from './CityParams';
 import type { RampPins } from './Landmarks';
 import type { WorksPin } from './Roadworks';
+import type { ShallowWater } from './Water';
+import { faceThePieces, layParkPieces, pinParkCounts, rollParkPieces, type ParkPiece } from './ParkPieces';
 
 export interface CityConfig extends TerrainConfig {
   blocks: number; // blocks per side
@@ -114,6 +116,8 @@ export interface CityData {
   driveSide: DriveSide; // which side of the road traffic keeps to, for the whole game
   spawn: { x: number; z: number; yaw: number };
   districts: District[]; // themed districts laid over the grid (often none)
+  water: ShallowWater[]; // ponds, lakes and pools on land: wading, never drowning (`world/Water.ts`)
+  parkPieces: ParkPiece[]; // fish ponds and soccer pitches in parks (`world/ParkPieces.ts`)
   params: CityParams; // every choice that made it: reloads as this city
   warnings: string[]; // pinned choices that hold but may not show, or a stale dump's read-only parts
 }
@@ -563,6 +567,8 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     roadMarks: traffic.marks.filter((m) => dry(m.x, m.z, 0)),
     roadworks: works.sites, terrain, spawn, driveSide,
     districts: [],
+    water: [],
+    parkPieces: [],
     params: p,
     warnings,
   };
@@ -606,6 +612,27 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     applyDistricts(city, grid, defs, p.force, p.districts, errors, warnings);
     fail();
   }
+  // --- Park pieces (own stream): a fish pond or a soccer pitch in a park with no centrepiece, laid
+  // after the districts (parks inside one are skipped), so nothing rolled before them moves ---
+  const centred = (b: Block) => city.landmarks.some((l) => l.kind !== 'ramp' && l.x === b.rect.x && l.z === b.rect.z);
+  const rolledPieces = rollParkPieces(blocksOut, centred, seed);
+  if (p.ponds !== undefined || p.pitches !== undefined) {
+    const eligible = blocksOut.flatMap((b, k) => (b.park && !b.district && !b.square && !centred(b) ? [k] : []));
+    pinParkCounts(rolledPieces, eligible, { pond: p.ponds, pitch: p.pitches }, seed);
+  }
+  const laid = layParkPieces(blocksOut, rolledPieces, n, config, terrain, seed);
+  if (laid.pieces.length) {
+    city.trees = city.trees.filter((t) => !laid.clears(t.x, t.z, 0.5));
+    city.streetProps = city.streetProps.filter((q) => !(q.kind === 'bench' && laid.clears(q.x, q.z, 1)));
+    faceThePieces(city.streetProps, laid.pieces, blocksOut, n); // the loose benches left, before the piece's own
+    city.streetProps.push(...laid.props);
+    city.landmarks.push(...laid.landmarks);
+    city.water.push(...laid.water);
+    city.parkPieces = laid.pieces;
+  }
+
+  if (p.ponds !== undefined) city.params.ponds = p.ponds;
+  if (p.pitches !== undefined) city.params.pitches = p.pitches;
   city.params.districts = city.districts.map((q) => ({
     kind: q.kind, rect: { i: q.grid.i0, j: q.grid.j0, w: q.grid.w, h: q.grid.h }, roles: rolesOf(q, n), features: { ...q.features },
   }));

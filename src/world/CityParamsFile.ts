@@ -52,6 +52,7 @@ export function parseCityParams(input: string | unknown): { params: CityParams |
   if (o.startMinute !== undefined && !(isInt(o.startMinute) && o.startMinute >= 0 && o.startMinute < 60)) errors.push('startMinute: not 0 to 59');
   if (o.blocks !== undefined && !isInt(o.blocks)) errors.push('blocks: not a whole number');
   if (o.ramps !== undefined && !(isInt(o.ramps) && o.ramps >= 0)) errors.push('ramps: not a count');
+  for (const k of ['ponds', 'pitches'] as const) if (o[k] !== undefined && !(isInt(o[k]) && o[k] >= 0)) errors.push(`${k}: not a count`);
   if (o.terrain !== undefined) {
     const t = keys(o.terrain, 'terrain', ['hill', 'canals', 'canalWidth'], errors);
     if (t) {

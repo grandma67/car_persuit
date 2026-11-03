@@ -22,6 +22,7 @@ import { parseCityParams, serializeCityParams } from '../src/world/CityParamsFil
 export function cityJson(city: CityData): string {
   return JSON.stringify(city, (key, value) => {
     if (key === 'params' || key === 'warnings' || key === 'features' || key === 'pins') return undefined; // they describe the city, they aren't it
+    if ((key === 'water' || key === 'parkPieces') && Array.isArray(value) && !value.length) return undefined; // added later: none hashes as before
     if (value instanceof Map) return [...value];
     if (value instanceof Set) return [...value];
     if (typeof value === 'function') return undefined;

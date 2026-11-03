@@ -1,6 +1,7 @@
 // Full-screen overlays: start menu, pause, win/lose. Keyboard shortcuts are handled by Game.
 
-import { fullscreenSupported, isFullscreen, onFullscreenChange, toggleFullscreen } from './fullscreen';
+import { fullscreenSupported, homeScreenHintWanted, isFullscreen, onFullscreenChange, toggleFullscreen } from './fullscreen';
+import { HOME_SCREEN_HINT } from './homeScreenHint';
 
 export interface EndScreenInfo {
   won: boolean;
@@ -65,6 +66,11 @@ export class Screens {
     if (!fullscreenSupported()) return '';
     const label = this.fullscreenLabel();
     return `<button data-action="fullscreen" class="secondary icon" aria-label="${label}" title="${label}">${this.fullscreenIcon()}</button>`;
+  }
+
+  /** In place of the button on iPhone, which has no fullscreen for pages. */
+  private fullscreenHint(): string {
+    return homeScreenHintWanted() ? `<p class="screen-hint">${HOME_SCREEN_HINT}</p>` : '';
   }
 
   private syncFullscreenLabel(): void {
@@ -168,6 +174,7 @@ export class Screens {
         ${this.steerButton(info.steering, actions)}
         ${this.fullscreenButton()}
       </div>
+      ${this.fullscreenHint()}
       <p class="screen-seed">City #${info.seed} · ${info.look}${info.best ? ` · Best ${info.best}` : ''}</p>
     `,
       actions,
@@ -200,7 +207,8 @@ export class Screens {
         ${touch ? `<button data-action="mute" class="secondary">${muteLabel(touch.muted)}</button>` : ''}
         ${this.steerButton(touch?.steering, actions)}
         ${touch ? this.fullscreenButton() : ''}
-      </div>`,
+      </div>
+      ${touch ? this.fullscreenHint() : ''}`,
       actions,
     );
   }

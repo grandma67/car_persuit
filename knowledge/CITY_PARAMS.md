@@ -74,6 +74,7 @@ debugging. Pure data, no Three.js.
   "landmarks": [{ "kind": "fountain", "block": [6, 5] }, { "kind": "ramp", "edge": "h4,8", "dir": 1 }],
   "ramps": 2,                        // count; street ramps pinnable by edge, the rest read-only
   "canalRamps": [{ "edge": "v6,3", "dir": -1 }],               // or a count, or "all" (?canalramp)
+  "ponds": 1, "pitches": 0,          // park pieces: exactly this many (only when pinned; the rest rolled)
   "roadworks": [{ "node": [4, 9] }, { "edge": "h8,2", "stream": 123 }],  // or a count, or "all"; stream: dumps only
   "spawn": { "node": [6, 6], "toward": [6, 7] },
   "destinations": [[2, 3], [10, 1], [7, 11], [1, 9], [11, 6]],
@@ -96,7 +97,8 @@ the rolled ones after the squares roll, so the landmark stream never changes.
   with `debug` only: `city=`, `weather=`, `canals=`, `hill=0|1`. `urlOverrides` is this parser on the
   query string; debug-only words without `debug` are ignored with a note.
 - **Words only:** a bare district name = **exactly** the districts named; `flat` (no hill, no canals);
-  `canalramps=N`, `ramps=N`, `canalwidth=W`, `startminute=M`, `theme=`. Aliases: `night`/`day`/
+  `canalramps=N`, `ramps=N`, `pond` / `ponds=N`, `pitch` / `pitches=N` (park pieces, exactly N),
+  `canalwidth=W`, `startminute=M`, `theme=`. Aliases: `night`/`day`/
   `afternoon`, `rain`/`clear`/`snow` (snow also sets the snow climate), `temperate`/`beach`/`desert`.
 - **Feature words** come from each def's `features`: `festival`, `!festival` (only on/off features take
   `!`), `ship=bulk`, `yards=N`, `harbor.silo` (a feature word brings its district into the list).
@@ -133,7 +135,7 @@ never add a draw to it). Draw order top to bottom.
 | Plaza candidate shuffle | `CityGenerator` | main | `plazas` |
 | Zone noise (25), parks (1 per block) | `makeValueNoise`, `CityGenerator` | main | `zones` (read-only) |
 | Buildings, park trees | `lots.fillBlock`, `scatterTrees` | main | out (props) |
-| Town squares, centrepieces, street ramps, park pieces | `Landmarks.planLandmarks` | `0x1a4d` | `landmarks`, `ramps` |
+| Town squares, centrepieces, street ramps, park centrepieces | `Landmarks.planLandmarks` | `0x1a4d` | `landmarks`, `ramps` |
 | Canal ramps | `CityGenerator` | `0xca7a1` | `canalRamps` |
 | Plaza planters | `CityGenerator` | main | out |
 | Spawn street | `CityGenerator` | main | `spawn` |
@@ -142,6 +144,7 @@ never add a draw to it). Draw order top to bottom.
 | Street props | `StreetProps` | `0x57ee7` | out |
 | District chance, then placement, roles, lots, dressing | `place.rollDistricts`/`placeDistrict`, modules | the district's salt | `districts`, `force` |
 | District placement order | `apply.applyDistricts` | `DISTRICTS.orderSalt` | order of `districts` |
+| Park pieces (one draw per block, then a sub-stream per park; pinned counts fill from `^0x51f7`) | `ParkPieces.rollParkPieces`/`layPond`/`layPitch`, after the districts | `PARKS.salt` | `ponds`, `pitches` |
 | Climate / weather / time | `pickClimate` / `pickWeather` / `pickTimeOfDay` | `0xc11a` / `0x3a1d` / `0x71de` | `climate`, `weather`, `time` |
 | Theme (pick + colour jitter) | `CityTheme.pickTheme` | `0x7e3e` | `theme` (name) |
 | Start minute | `startMinuteOf` | `(seed · 2654435761) mod 60` | `startMinute` |

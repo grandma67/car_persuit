@@ -56,8 +56,11 @@ const SIGN_SHAPE: Record<SignVariant, SignShape> = {
   children: 'triangle',
   pedestrian: 'square',
   busStop: 'square',
+  noFishing: 'round',
 };
 const SIGN_VARIANTS = Object.keys(SIGN_SHAPE) as SignVariant[];
+/** Sign faces built only in a city that has such a sign (newer ones: no cost elsewhere). */
+const LAZY_FACES = new Set<SignVariant>(['noFishing']);
 /** Plate geometry per shape. Circle-based so UVs map the square texture straight on. */
 const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   switch (shape) {
@@ -93,7 +96,7 @@ const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', '
  * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
  * standing on its rim or a round bale on its side (the axle along local X).
  */
-const ROUND: Partial<Record<PropKind, 'upright' | 'axleX'>> = { drums: 'upright', cableReel: 'axleX', roundBale: 'axleX', tyres: 'upright', burnBarrel: 'upright' };
+const ROUND: Partial<Record<PropKind, 'upright' | 'axleX' | 'ball'>> = { drums: 'upright', cableReel: 'axleX', roundBale: 'axleX', tyres: 'upright', burnBarrel: 'upright', ball: 'ball' };
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -395,6 +398,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     ...harborModels(),
     ...farmModels(),
     ...slumsModels(),
+    ...parkModels(),
     'tree-fruit-pear': fruitTree(look, 0xc8c43a),
   };
 }
@@ -875,6 +879,61 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
   };
 }
 
+/** Park pieces' breakables: a pond's reeds; a pitch's goals, corner flags and ball. */
+function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball', THREE.BufferGeometry> {
+  // A clump of reeds: thin blades leaning out from the root, a few bulrush heads on stalks.
+  const blades = Array.from({ length: 11 }, (_, k) => {
+    const a = k * 2.4;
+    const lean = 0.12 + (k % 3) * 0.06;
+    const h = 1.0 + ((k * 7) % 5) * 0.12;
+    return part(new THREE.BoxGeometry(0.05, h, 0.02).rotateX(lean).rotateY(a), k % 2 ? 0x6a8a3a : 0x7f9a48, Math.cos(a) * 0.18, h / 2, Math.sin(a) * 0.18);
+  });
+  const heads = [0, 2.1, 4.2].flatMap((a, k) => {
+    const h = 1.25 + k * 0.12;
+    const x = Math.cos(a) * 0.1;
+    const z = Math.sin(a) * 0.1;
+    return [
+      part(new THREE.CylinderGeometry(0.012, 0.012, h, 4), 0x5f7a34, x, h / 2, z),
+      part(new THREE.CylinderGeometry(0.045, 0.045, 0.22, 6), 0x5a3a22, x, h + 0.08, z),
+    ];
+  });
+  // A goal: white posts and crossbar on the line (local z = +0.5, the mouth facing +Z), a frame
+  // back to z = -0.5 and the net as an opaque grid of cords (no transparency: no new program).
+  const white = 0xf2f2ee;
+  const cord = 0xd8dcd8;
+  const post = (x: number) => part(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 6), white, x, 1.0, 0.5);
+  const net: THREE.BufferGeometry[] = [];
+  for (let k = 0; k <= 20; k++) net.push(part(new THREE.BoxGeometry(0.015, 2.0, 0.015), cord, -2.5 + k * 0.25, 1.0, -0.5)); // back
+  for (let k = 0; k <= 8; k++) net.push(part(new THREE.BoxGeometry(5.0, 0.015, 0.015), cord, 0, 0.05 + k * 0.245, -0.5));
+  for (const x of [-2.5, 2.5]) {
+    for (let k = 0; k <= 8; k++) net.push(part(new THREE.BoxGeometry(0.015, 0.015, 1.0), cord, x, 0.05 + k * 0.245, 0)); // sides
+    for (let k = 0; k <= 4; k++) net.push(part(new THREE.BoxGeometry(0.015, 2.0, 0.015), cord, x, 1.0, -0.5 + k * 0.25));
+  }
+  for (let k = 0; k <= 20; k++) net.push(part(new THREE.BoxGeometry(0.015, 0.015, 1.0), cord, -2.5 + k * 0.25, 2.0, 0)); // roof
+  const goal = mergeGeometries([
+    post(-2.5), post(2.5),
+    part(new THREE.CylinderGeometry(0.06, 0.06, 5.12, 6).rotateZ(Math.PI / 2), white, 0, 2.0, 0.5),
+    ...[-2.5, 2.5].map((x) => part(new THREE.BoxGeometry(0.06, 0.06, 1.0), white, x, 0.03, 0)), // base bars
+    part(new THREE.BoxGeometry(5.0, 0.06, 0.06), white, 0, 0.03, -0.5),
+    ...net,
+  ]);
+  const cornerFlag = mergeGeometries([
+    part(new THREE.CylinderGeometry(0.02, 0.02, 1.5, 5), 0xf2f2ee, 0, 0.75, 0),
+    part(new THREE.BoxGeometry(0.01, 0.26, 0.36), 0xe8b020, 0, 1.36, 0.18),
+  ]);
+  // A ball: white, with dark patches.
+  const ball = mergeGeometries([
+    part(new THREE.IcosahedronGeometry(0.11, 1), 0xf4f4f0, 0, 0.11, 0),
+    ...Array.from({ length: 6 }, (_, k) => {
+      const a = k * 1.05;
+      const y = Math.cos(k * 1.9) * 0.08;
+      const r = Math.sqrt(0.11 * 0.11 - y * y) * 0.97;
+      return part(new THREE.DodecahedronGeometry(0.032, 0), 0x1c1c1c, Math.cos(a) * r, 0.11 + y, Math.sin(a) * r);
+    }),
+  ]);
+  return { reeds: mergeGeometries([...blades, ...heads]), goal, cornerFlag, ball };
+}
+
 type SlumsKind = 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp'
   | 'utilityPole' | 'utilityPole-transformer' | 'fence-torn' | `wreck-${WreckKind}`;
 /** The Slums' junk: loose bricks, kerb clutter, a dead street lamp, a payphone, utility poles, torn chain-link, the wrecks. */
@@ -1158,6 +1217,33 @@ function signTexture(variant: SignVariant): THREE.Texture {
         text(g, 'P', c, c + 6, s * 0.46, '#ffffff');
         prohibit(g, s);
         break;
+      case 'noFishing': {
+        ringSign(g, s);
+        // A fish (body, tail, eye) on a hook's line, struck through.
+        g.fillStyle = '#111111';
+        g.beginPath();
+        g.ellipse(c - s * 0.04, c + s * 0.06, s * 0.2, s * 0.09, 0, 0, Math.PI * 2);
+        g.fill();
+        g.beginPath();
+        g.moveTo(c + s * 0.12, c + s * 0.06);
+        g.lineTo(c + s * 0.28, c - s * 0.04);
+        g.lineTo(c + s * 0.28, c + s * 0.16);
+        g.closePath();
+        g.fill();
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.arc(c - s * 0.15, c + s * 0.04, s * 0.018, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = '#111111';
+        g.lineWidth = 3;
+        g.beginPath();
+        g.moveTo(c - s * 0.2, c - s * 0.3);
+        g.lineTo(c - s * 0.2, c - s * 0.02);
+        g.arc(c - s * 0.16, c - s * 0.02, s * 0.04, Math.PI, 0, true);
+        g.stroke();
+        prohibit(g, s);
+        break;
+      }
       case 'noSmoking': {
         ringSign(g, s);
         // Cigarette: filter, paper, glowing tip, with a curl of smoke.
@@ -1253,7 +1339,7 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
-  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed']);
+  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball']);
 
 /**
  * Copy the props in `list` lying within `radius` of (x, z) (their matrices' translation) from
@@ -1370,6 +1456,7 @@ export class PropSystem {
     for (const p of defs) if (p.kind === 'sign') faceCounts[p.variant ?? 'stop']++;
     const faceMesh = {} as Record<SignVariant, THREE.InstancedMesh>;
     for (const v of SIGN_VARIANTS) {
+      if (!faceCounts[v] && LAZY_FACES.has(v)) continue; // a park piece's sign: only in a city that has one
       // A touch of self-illumination reads like retroreflective sheeting at night.
       const art = signTexture(v);
       faceMesh[v] = addAttachmentMesh(
@@ -1507,6 +1594,11 @@ export class PropSystem {
     }
     const round = ROUND[p.def.kind];
     if (round) {
+      if (round === 'ball') {
+        // Bouncy, rolls a long way on the grass.
+        this.world.createCollider(RAPIER.ColliderDesc.ball(spec.hx).setTranslation(0, spec.hx, 0).setMass(spec.mass).setFriction(0.4).setRestitution(0.6), p.body!);
+        return;
+      }
       const desc = round === 'upright'
         ? RAPIER.ColliderDesc.cylinder(spec.height / 2, spec.hx)
         : RAPIER.ColliderDesc.cylinder(spec.hx, spec.height / 2).setRotation({ x: 0, y: 0, z: Math.SQRT1_2, w: Math.SQRT1_2 }); // axle along X

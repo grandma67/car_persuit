@@ -400,3 +400,43 @@ export const TILT = {
   fullLock: 25, // degrees of roll for full steer
   smoothing: 12, // 1/s low-pass on the sensor (it updates ~60 Hz and jitters)
 };
+
+/** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */
+export const WATER = {
+  grip: 0.7, // tyre grip multiplier in the water
+  drag: 2, // extra rolling drag in the water, m/s²…
+  // …plus this per m/s (1/s): flat out through 15 m of pond, 70 km/h comes out near 48 and 100 near 68;
+  // wading tops out near 19 km/h, so a stopped car still drives out (SoftGround.test).
+  dragPerSpeed: 0.9,
+  iceGrip: 0.35, // frozen (snow climate): grip multiplier, no drag
+  shoreRamp: 1.5, // metres over which the surface rises from the rim to its full depth
+  navPenalty: 100, // NavGrid step cost added in the water (road 10, off-road 15): cops go round
+  sprayPerSecond: 40, // spray puffs per rear wheel wading at speed
+};
+
+/** Park pieces (`world/ParkPieces.ts`): a fish pond or a soccer pitch in a park with no centrepiece. */
+export const PARKS = {
+  salt: 0x9a4c5, // their own stream: nothing that rolled before moves
+  pondChance: 0.12, // per park without a centrepiece (0.3 gave ~3 in 4 cities a pond: too many)
+  pitchChance: 0.25,
+  fenceInset: 3.3, // the park's picket fence, in from the block edge (StreetProps' FENCE_INSET)
+  pondRadius: [7, 11] as [number, number], // the long half-axis, metres
+  pondDepth: 0.35, // surface over the ground
+  pondOffset: 4, // the pond's centre may sit this far off the park's
+  bankRoom: 4, // metres kept round the water inside the fence (benches, the boat)
+  stoneRimChance: 0.5, // else a grass bank with more reeds
+  benchOut: 2.4, // benches this far up the bank from the edge
+  boatOut: 1.6, // the rowboat pulled up on the bank
+  boatRadius: 1.4, // its solid footprint
+  signOut: 3.2,
+  pads: 10, // lily pads, at most
+  treeClear: 4.5, // trees and loose benches this close to the water go (clear of the sign and the boat)
+  pitchLength: 40, // a 7-a-side pitch, touchline to touchline: metres
+  pitchWidth: 25,
+  pitchRunOff: 3.5, // its footprint past the lines (goals, fences, floodlights): cleared of trees
+  fenceBehind: 2.6, // chain-link this far behind each goal line
+  fencePanel: 3, // one panel and its gap (a panel is 2.9 m)
+  lampOut: 1.6, // floodlights off each corner, both ways
+  benchBack: 2.2, // the dugout benches behind a touchline
+  dugout: 5, // either side of the halfway line
+};

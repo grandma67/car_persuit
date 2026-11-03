@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Vehicle } from './Vehicle';
 import { COP_PATROL_SPEC, PLAYER_SPEC, TRACTOR_SPEC, type VehicleSpec } from './VehicleSpecs';
-import { FARM } from '../gameplay/balance';
+import { FARM, WATER } from '../gameplay/balance';
+import { ICE, WADING } from '../world/softGround';
 import type { DriveInput } from '../core/Input';
 
 const DT = 1 / 60;
@@ -74,5 +75,46 @@ describe('soft ground (the Farm\'s fields)', () => {
     Vehicle.softGround = { at: (_x, z) => (z >= FIELD.z0 && z <= FIELD.z1 ? FIELD_SOFT : null) };
     expect(field.car.speed).toBeLessThan(road.car.speed);
     expect(field.car.speed).toBeGreaterThan(road.car.speed * 0.6);
+  });
+});
+
+describe('shallow water (wading)', () => {
+  /** A 15 m pond from z = 40 to z = 55. */
+  const POND = { z0: 40, z1: 55 };
+  beforeAll(async () => {
+    await RAPIER.init();
+  });
+  afterAll(() => {
+    Vehicle.softGround = null;
+  });
+
+  it.each([PLAYER_SPEC, COP_PATROL_SPEC].map((s) => [s.name, s] as const))('%s: flat out at 70 km/h through 15 m costs about a third of the speed', (_name, spec) => {
+    Vehicle.softGround = { at: (_x, z) => (z >= POND.z0 && z <= POND.z1 ? WADING : null) };
+    const { world, car } = setup(spec, 30, 70 / 3.6);
+    let out = 0;
+    for (let i = 0; i < 4 / DT && !out; i++) {
+      run(world, car, FULL, DT);
+      if (car.position.z > POND.z1 + 2) out = car.speed * 3.6;
+    }
+    expect(out).toBeGreaterThan(38);
+    expect(out).toBeLessThan(58);
+  });
+
+  it('coasting in, the car stops in the water; from a stop it still drives out', () => {
+    Vehicle.softGround = { at: (_x, z) => (z >= POND.z0 && z <= POND.z1 ? WADING : null) };
+    const coast = setup(PLAYER_SPEC, 30, 40 / 3.6);
+    run(coast.world, coast.car, IDLE, 4);
+    expect(coast.car.position.z).toBeLessThan(POND.z1);
+    Vehicle.softGround = { at: () => WADING };
+    const { world, car } = setup(PLAYER_SPEC, 0, 0);
+    run(world, car, FULL, 3);
+    expect(car.speed * 3.6).toBeGreaterThan(12);
+  });
+
+  it('ice: no drag, little grip', () => {
+    Vehicle.softGround = { at: () => ICE };
+    const { world, car } = setup(PLAYER_SPEC, 0, 15);
+    run(world, car, IDLE, 0.3);
+    for (let i = 0; i < 4; i++) expect(car.controller.wheelFrictionSlip(i)).toBeCloseTo(PLAYER_SPEC.frictionSlip * WATER.iceGrip, 5);
   });
 });
