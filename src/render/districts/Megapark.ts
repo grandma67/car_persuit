@@ -132,7 +132,7 @@ function jetGeometry(): THREE.BufferGeometry {
   return mergeGeometries(g);
 }
 
-// --- Set blocks: the stand, the playground's kit, the bandstand (local X along the length, front +Z) ---
+// --- Set blocks: the stand, the bandstand (local X along the length, front +Z) ---
 
 /** The stand beside the track: four tiers of benches on a steel frame, rising to the back (-Z). */
 function bleachers(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
@@ -154,64 +154,6 @@ function bleachers(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeo
   for (const e of [-1, 1]) g.push(part(box(0.1, 2.0, D), 0x8a8e8a, e * (L / 2 - 0.05), 1.0, 0)); // end panels
   place(g, frameOf(s.x, y, s.z, s.yaw), out);
 }
-
-const KIT_RED = 0xd8402e, KIT_YELLOW = 0xf0c02a, KIT_BLUE = 0x2f6ac8, KIT_GREEN = 0x3a9a4a;
-
-/** Swings: an A-frame along X, two seats on chains. */
-function swings(): THREE.BufferGeometry[] {
-  const g: THREE.BufferGeometry[] = [part(cyl(0.07, 0.07, 4.6, 8).rotateZ(Math.PI / 2), KIT_BLUE, 0, 2.4, 0)];
-  for (const x of [-2.2, 2.2]) for (const z of [-1, 1]) g.push(part(cyl(0.06, 0.06, 2.6, 6).rotateX(z * 0.42), KIT_BLUE, x, 1.2, z * 0.5));
-  for (const x of [-1, 1]) {
-    for (const dx of [-0.22, 0.22]) g.push(part(box(0.02, 1.8, 0.02), 0x8a8e94, x + dx, 1.5, 0));
-    g.push(part(box(0.5, 0.05, 0.22), KIT_RED, x, 0.58, 0));
-  }
-  return g;
-}
-
-/** A slide: a ladder up to a railed deck at -Z, the chute down to +Z. */
-function slide(): THREE.BufferGeometry[] {
-  const g: THREE.BufferGeometry[] = [part(box(1.2, 0.1, 1.2), KIT_YELLOW, 0, 1.6, -1.8)];
-  for (const x of [-0.55, 0.55]) for (const z of [-2.35, -1.25]) g.push(part(box(0.08, 2.5, 0.08), KIT_BLUE, x, 1.25, z));
-  for (let k = 0; k < 5; k++) g.push(part(box(1.0, 0.05, 0.05), KIT_BLUE, 0, 0.3 + k * 0.3, -2.4));
-  for (const x of [-0.55, 0.55]) g.push(part(box(0.05, 0.05, 1.1), KIT_BLUE, x, 2.4, -1.8));
-  const len = Math.hypot(3.4, 1.55), tilt = Math.atan2(1.55, 3.4);
-  g.push(part(box(0.7, 0.06, len).rotateX(tilt), KIT_RED, 0, 0.85, 0.5));
-  for (const x of [-0.37, 0.37]) g.push(part(box(0.06, 0.25, len).rotateX(tilt), KIT_RED, x, 0.98, 0.5));
-  return g;
-}
-
-/** A climbing frame: a cube of bars with a deck. */
-function climber(): THREE.BufferGeometry[] {
-  const g: THREE.BufferGeometry[] = [];
-  for (const x of [-1.5, 0, 1.5]) for (const z of [-1.5, 0, 1.5]) g.push(part(cyl(0.05, 0.05, 2.2, 6), KIT_GREEN, x, 1.1, z));
-  for (const y of [0.7, 1.4, 2.1]) {
-    for (const z of [-1.5, 0, 1.5]) g.push(part(cyl(0.04, 0.04, 3.0, 6).rotateZ(Math.PI / 2), KIT_YELLOW, 0, y, z));
-    for (const x of [-1.5, 0, 1.5]) g.push(part(cyl(0.04, 0.04, 3.0, 6).rotateX(Math.PI / 2), KIT_YELLOW, x, y, 0));
-  }
-  g.push(part(box(1.5, 0.06, 1.5), KIT_RED, 0.75, 1.42, 0.75));
-  return g;
-}
-
-function roundabout(): THREE.BufferGeometry[] {
-  const g: THREE.BufferGeometry[] = [part(cyl(1.3, 1.3, 0.12, 16), KIT_RED, 0, 0.32), part(cyl(0.15, 0.2, 0.3, 8), 0x6a7076, 0, 0.13)];
-  for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * Math.PI * 2;
-    g.push(part(cyl(0.03, 0.03, 0.6, 6), KIT_YELLOW, Math.cos(a) * 1.0, 0.68, Math.sin(a) * 1.0));
-    g.push(part(cyl(0.03, 0.03, 1.0, 6).rotateZ(Math.PI / 2).rotateY(-a), KIT_YELLOW, Math.cos(a) * 0.5, 0.98, Math.sin(a) * 0.5));
-  }
-  return g;
-}
-
-/** A seesaw along Z, tipped one way. */
-function seesaw(): THREE.BufferGeometry[] {
-  return [
-    part(box(0.4, 0.5, 0.3), KIT_BLUE, 0, 0.25, 0),
-    part(box(0.35, 0.08, 4.2).rotateX(0.18), KIT_YELLOW, 0, 0.52, 0),
-    ...[-1.8, 1.8].map((z) => part(box(0.5, 0.06, 0.06), KIT_RED, 0, 0.62 - z * 0.18, z)),
-  ];
-}
-
-const KIT_PARTS: Record<string, () => THREE.BufferGeometry[]> = { swings, slide, climber, roundabout, seesaw };
 
 /** The bandstand: an octagonal stone plinth, iron columns and railings, a roof with a finial, steps facing +Z. */
 function bandstand(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
@@ -461,7 +403,6 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
       plates.push(parkNamePlate(f.hx * 2 - 0.3, 0.62, s.data!.name as number).applyMatrix4(frameOf(s.x, y + 0.75, s.z, s.yaw).multiply(new THREE.Matrix4().makeTranslation(0, 0, f.hz + 0.02))));
       continue;
     }
-    if (KIT_PARTS[s.kind]) { place(KIT_PARTS[s.kind](), frameOf(s.x, y - 0.02, s.z, s.yaw), solid); continue; }
     if (s.kind === 'island') island(s, y - 0.05, snowy, solid);
     else if (s.kind === 'jetty') jetty(s, y, snowy, solid);
     else if (s.kind === 'footbridge') footbridge(s, y - 0.05, snowy, solid);

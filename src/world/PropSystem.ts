@@ -210,8 +210,8 @@ export function debrisParts(def: StreetProp): DebrisPart[] {
     case 'tennisNet':
       // The net and its far post: cars pass through them lying on the court (the near post is the intact collider's).
       return [
-        { x: 0, y: 0.5, z: 0, hx: 6.2, hy: 0.45, hz: 0.03, carPasses: true }, // net
-        { x: 6.35, y: 0.55, z: 0, hx: 0.05, hy: 0.55, hz: 0.05, carPasses: true },
+        { x: 0, y: 0.68, z: 0, hx: 6.2, hy: 0.62, hz: 0.03, carPasses: true }, // net
+        { x: 6.35, y: 0.72, z: 0, hx: 0.05, hy: 0.72, hz: 0.05, carPasses: true },
       ];
     case 'cafeTable':
       return [{ x: 0, y: 2.15, z: 0, hx: 1.2, hy: 0.25, hz: 1.2, round: true }]; // the parasol
@@ -942,20 +942,22 @@ function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball', THREE.Bu
   return { reeds: mergeGeometries([...blades, ...heads]), goal, cornerFlag, ball };
 }
 
-type MegaparkKind = 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard';
+type MegaparkKind = 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard'
+  | 'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw';
 /** The Mega-park's breakables (local +Z is the front: a deck chair's seat faces it, the net runs along X). */
 function megaparkModels(): Record<MegaparkKind, THREE.BufferGeometry> {
   const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
   const cyl = (r0: number, r1: number, h: number, n = 8) => new THREE.CylinderGeometry(r0, r1, h, n);
   const wood = 0x8a6040, woodLight = 0xb08a5a, iron = 0x2a2d33, white = 0xf2f2ee, green = 0x2f5a3a;
   // Tennis net: two posts, the tape along the top, the mesh as a grid of cords (opaque, like the goal's).
+  // Taller than a real one (0.91 m) so it reads at the cars' scale.
   const net: THREE.BufferGeometry[] = [
-    ...[-6.35, 6.35].map((x) => part(cyl(0.05, 0.05, 1.07, 6), iron, x, 0.535, 0)),
-    part(box(12.7, 0.06, 0.04), white, 0, 0.94, 0),
-    part(box(0.05, 0.94, 0.03), white, 0, 0.47, 0), // the centre strap
+    ...[-6.35, 6.35].map((x) => part(cyl(0.05, 0.05, 1.45, 6), iron, x, 0.725, 0)),
+    part(box(12.7, 0.07, 0.04), white, 0, 1.32, 0),
+    part(box(0.05, 1.29, 0.03), white, 0, 0.645, 0), // the centre strap (top clear of the cords')
   ];
-  for (let k = 0; k <= 50; k++) net.push(part(box(0.012, 0.88, 0.012), 0x1a1c1e, -6.25 + k * 0.25, 0.47, 0));
-  for (let k = 0; k <= 7; k++) net.push(part(box(12.5, 0.012, 0.012), 0x1a1c1e, 0, 0.06 + k * 0.12, 0));
+  for (let k = 0; k <= 50; k++) net.push(part(box(0.012, 1.24, 0.012), 0x1a1c1e, -6.25 + k * 0.25, 0.68, 0));
+  for (let k = 0; k <= 10; k++) net.push(part(box(12.5, 0.012, 0.012), 0x1a1c1e, 0, 0.08 + k * 0.12, 0));
   // Deck chair: a wooden frame leaning back, the striped canvas tinted per chair (white here).
   const deckChair = mergeGeometries([
     ...[-0.27, 0.27].flatMap((x) => [
@@ -1038,7 +1040,51 @@ function megaparkModels(): Record<MegaparkKind, THREE.BufferGeometry> {
     part(box(0.3, 0.25, 0.01), 0x6a9a4a, -0.45, 1.3, 0.05),
     part(box(1.7, 0.12, 0.3).rotateX(0.1), green, 0, 2.12, 0), // the little roof
   ]);
-  return { tennisNet: mergeGeometries(net), deckChair, cafeTable, flowerPlanter, iceCreamCart, kiosk, picnicTable, litterBin, parkBoard };
+  return { tennisNet: mergeGeometries(net), deckChair, cafeTable, flowerPlanter, iceCreamCart, kiosk, picnicTable, litterBin, parkBoard, ...playgroundKit() };
+}
+
+/** The playground's steel kit (local X along its first size, as `PROP_SPECS`). */
+function playgroundKit(): Record<'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw', THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (r0: number, r1: number, h: number, n = 8) => new THREE.CylinderGeometry(r0, r1, h, n);
+  const red = 0xd8402e, yellow = 0xf0c02a, blue = 0x2f6ac8, green = 0x3a9a4a, steel = 0x6a7076;
+  // Swings: an A-frame at each end (legs splayed at the ground, meeting under the bar), two seats on chains.
+  const swings = [part(cyl(0.07, 0.07, 4.6, 8).rotateZ(Math.PI / 2), blue, 0, 2.4, 0)];
+  for (const x of [-2.2, 2.2]) for (const z of [-1, 1]) swings.push(part(cyl(0.06, 0.06, 2.6, 6).rotateX(-z * 0.42), blue, x, 1.2, z * 0.5));
+  for (const x of [-1, 1]) {
+    for (const dx of [-0.22, 0.22]) swings.push(part(box(0.02, 1.8, 0.02), 0x8a8e94, x + dx, 1.5, 0));
+    swings.push(part(box(0.5, 0.05, 0.22), red, x, 0.58, 0));
+  }
+  // A slide: a ladder up to a railed deck at -Z, the chute down to +Z.
+  const slide = [part(box(1.2, 0.1, 1.2), yellow, 0, 1.6, -1.8)];
+  for (const x of [-0.55, 0.55]) for (const z of [-2.35, -1.25]) slide.push(part(box(0.08, 2.5, 0.08), blue, x, 1.25, z));
+  for (let k = 0; k < 5; k++) slide.push(part(box(1.0, 0.05, 0.05), blue, 0, 0.3 + k * 0.3, -2.4));
+  for (const x of [-0.55, 0.55]) slide.push(part(box(0.05, 0.05, 1.1), blue, x, 2.4, -1.8));
+  const len = Math.hypot(3.4, 1.55), tilt = Math.atan2(1.55, 3.4);
+  slide.push(part(box(0.7, 0.06, len).rotateX(tilt), red, 0, 0.85, 0.5));
+  for (const x of [-0.37, 0.37]) slide.push(part(box(0.06, 0.25, len).rotateX(tilt), red, x, 0.98, 0.5));
+  // A climbing frame: a cube of bars with a deck.
+  const climber: THREE.BufferGeometry[] = [];
+  for (const x of [-1.5, 0, 1.5]) for (const z of [-1.5, 0, 1.5]) climber.push(part(cyl(0.05, 0.05, 2.2, 6), green, x, 1.1, z));
+  for (const y of [0.7, 1.4, 2.1]) {
+    for (const z of [-1.5, 0, 1.5]) climber.push(part(cyl(0.04, 0.04, 3.0, 6).rotateZ(Math.PI / 2), yellow, 0, y, z));
+    for (const x of [-1.5, 0, 1.5]) climber.push(part(cyl(0.04, 0.04, 3.0, 6).rotateX(Math.PI / 2), yellow, x, y, 0));
+  }
+  climber.push(part(box(1.5, 0.06, 1.5), red, 0.75, 1.42, 0.75));
+  // A roundabout: a turntable on a hub, four handles.
+  const roundabout = [part(cyl(1.3, 1.3, 0.12, 16), red, 0, 0.32), part(cyl(0.15, 0.2, 0.3, 8), steel, 0, 0.15)];
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2;
+    roundabout.push(part(cyl(0.03, 0.03, 0.6, 6), yellow, Math.cos(a) * 1.0, 0.68, Math.sin(a) * 1.0));
+    roundabout.push(part(cyl(0.03, 0.03, 1.0, 6).rotateZ(Math.PI / 2).rotateY(-a), yellow, Math.cos(a) * 0.5, 0.98, Math.sin(a) * 0.5));
+  }
+  // A seesaw along Z, tipped one way.
+  const seesaw = [
+    part(box(0.4, 0.5, 0.3), blue, 0, 0.25, 0),
+    part(box(0.35, 0.08, 4.2).rotateX(0.18), yellow, 0, 0.52, 0),
+    ...[-1.8, 1.8].map((z) => part(box(0.5, 0.06, 0.06), red, 0, 0.62 - z * 0.18, z)),
+  ];
+  return { swings: mergeGeometries(swings), slide: mergeGeometries(slide), climber: mergeGeometries(climber), roundabout: mergeGeometries(roundabout), seesaw: mergeGeometries(seesaw) };
 }
 
 type SlumsKind = 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp'
@@ -1447,7 +1493,8 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
   'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball',
-  'tennisNet', 'deckChair', 'cafeTable', 'flowerPlanter', 'iceCreamCart', 'kiosk', 'picnicTable', 'litterBin', 'parkBoard']);
+  'tennisNet', 'deckChair', 'cafeTable', 'flowerPlanter', 'iceCreamCart', 'kiosk', 'picnicTable', 'litterBin', 'parkBoard',
+  'swings', 'slide', 'climber', 'roundabout', 'seesaw']);
 
 /**
  * Copy the props in `list` lying within `radius` of (x, z) (their matrices' translation) from
@@ -1696,7 +1743,7 @@ export class PropSystem {
     const spec = propSpec(p.def);
     if (p.def.kind === 'tennisNet') {
       // Only the posts stand solid (it still breaks on its whole footprint): a net across the court is no wall.
-      for (const x of [-6.35, 6.35]) this.world.createCollider(RAPIER.ColliderDesc.cuboid(0.06, 0.55, 0.06).setTranslation(x, 0.55, 0).setMass(spec.mass / 2).setFriction(0.6), p.body!);
+      for (const x of [-6.35, 6.35]) this.world.createCollider(RAPIER.ColliderDesc.cuboid(0.06, 0.72, 0.06).setTranslation(x, 0.72, 0).setMass(spec.mass / 2).setFriction(0.6), p.body!);
       return;
     }
     if (p.def.kind === 'boomGate') {

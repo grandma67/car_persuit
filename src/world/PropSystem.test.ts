@@ -150,3 +150,26 @@ describe('PropSystem drawing only the props short of the fog', () => {
     expect([...slots]).toEqual([0, 1, 2, 3, 4]);
   });
 });
+
+describe("the Mega-park's set props", () => {
+  const at = (kind: StreetProp['kind']) => vertices({ kind, x: 0, z: 0, yaw: 0 });
+
+  it.each(['swings', 'slide', 'climber', 'roundabout', 'seesaw', 'tennisNet'] as const)('%s stands inside the box it breaks on', (kind) => {
+    const s = propSpec({ kind, x: 0, z: 0, yaw: 0 });
+    const out = at(kind).filter((v) => Math.abs(v.x) > s.hx + 0.02 || Math.abs(v.z) > s.hz + 0.02 || v.y < -0.02 || v.y > s.height + 0.02);
+    expect(out.length).toBe(0);
+  });
+
+  it('the swings stand as an A-frame: legs splayed at the ground, meeting under the bar', () => {
+    const spread = (lo: number, hi: number) => {
+      const zs = at('swings').filter((v) => v.y >= lo && v.y <= hi && Math.abs(v.x) > 2.1).map((v) => v.z);
+      return Math.max(...zs) - Math.min(...zs);
+    };
+    expect(spread(-0.1, 0.3)).toBeGreaterThan(1.6);
+    expect(spread(2.2, 2.6)).toBeLessThan(0.6);
+  });
+
+  it('the tennis net reads at the cars’ scale', () => {
+    expect(Math.max(...at('tennisNet').map((v) => v.y))).toBeGreaterThan(1.3);
+  });
+});

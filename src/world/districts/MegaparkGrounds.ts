@@ -118,14 +118,8 @@ export function layTrack(inner: Rect, rng: Rng): GroundsLayout {
   return out;
 }
 
-/** The playground's equipment: what a cell holds and its footprint (along, across). */
-const KIT: { kind: string; size: [number, number] }[] = [
-  { kind: 'swings', size: [4.8, 2.2] },
-  { kind: 'slide', size: [1.4, 5.2] },
-  { kind: 'climber', size: [3.2, 3.2] },
-  { kind: 'roundabout', size: [2.8, 2.8] },
-  { kind: 'seesaw', size: [0.6, 4.4] },
-];
+/** The playground's equipment, a breakable prop to a cell (footprints in `PROP_SPECS`). */
+const KIT = ['swings', 'slide', 'climber', 'roundabout', 'seesaw'] as const;
 
 /** The playground: a picket-fenced yard, gates on both long sides, its equipment on a grid of cells, a sandpit. */
 export function layPlayground(inner: Rect, rng: Rng): GroundsLayout {
@@ -136,7 +130,6 @@ export function layPlayground(inner: Rect, rng: Rng): GroundsLayout {
   const cu = rng.range(-1.5, 1.5), cv = rng.range(-1.5, 1.5);
   const yard = f.rect(cu, cv, pl, pw);
   out.ground.push({ kind: 'playground', ...yard });
-  out.props.push(...fenceRound(yard, [{ axis: alongX ? 'z' : 'x', side: -1, width: 4 }, { axis: alongX ? 'z' : 'x', side: 1, width: 4 }], undefined));
   // Six cells (3 along, 2 across): the kit in five, the sandpit in one.
   const cells = Array.from({ length: 6 }, (_, k) => ({ u: cu + (k % 3 - 1) * (pl / 3), v: cv + (Math.floor(k / 3) - 0.5) * (pw / 2) }));
   const order = cells.map((_, k) => k);
@@ -147,14 +140,13 @@ export function layPlayground(inner: Rect, rng: Rng): GroundsLayout {
   KIT.forEach((kit, n) => {
     const cell = cells[order[n]];
     const turn = rng.next() < 0.5; // a quarter turn in the frame
-    const [len, wid] = turn ? [kit.size[1], kit.size[0]] : kit.size;
     const p = f.at(cell.u, cell.v);
-    const fp = boxIn(f, alongX, cell.u, cell.v, len, wid);
-    // Structure yaw: local X along the kit's first size.
+    // A breakable prop: local X along the kit's first size.
     const yaw = (alongX ? 0 : Math.PI / 2) + (turn ? Math.PI / 2 : 0);
-    out.structures.push({ kind: kit.kind, ...p, yaw, footprints: [fp] });
-    out.solids.push(fp);
+    out.props.push({ kind: kit, ...p, yaw });
   });
+  // The fence after the kit, so the kit is what clearOf keeps where they touch.
+  out.props.push(...fenceRound(yard, [{ axis: alongX ? 'z' : 'x', side: -1, width: 4 }, { axis: alongX ? 'z' : 'x', side: 1, width: 4 }], undefined));
   const sand = cells[order[5]];
   out.ground.push({ kind: 'sandpit', ...f.rect(sand.u, sand.v, 5, 5) });
   // Benches inside the fence facing in, a bin by each gate, the ice-cream cart outside one.

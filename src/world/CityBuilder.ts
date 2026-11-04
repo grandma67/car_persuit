@@ -615,7 +615,7 @@ function addBuilding(
     const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2, yc = y1 - 0.02;
     roofs.quad([[x0, yc, z0], [x1, yc, z0], [x1, yc, z1], [x0, yc, z1]], [0, -1, 0], inside);
   }
-  addTrims(trims, b, { y0, floor, jetty, jetFloor, roofB, roof: look.roof, tile: roofColor, capUp: CAPS[look.facade].up }, roofs, wallColor, snowy);
+  addTrims(trims, b, { y0, floor, jetty, jetFloor, roofB, roof: look.roof, tile: roofColor, capUp: CAPS[look.facade].up, arcade }, roofs, wallColor, snowy);
 }
 
 const grow = (r: Rect, m: number): Rect => ({ x: r.x, z: r.z, w: r.w + m * 2, d: r.d + m * 2 });
@@ -811,6 +811,7 @@ interface TrimFrame {
   roof: LotLook['roof'];
   tile: THREE.Color;
   capUp: number; // the roof cap's height above the wall tops
+  arcade: boolean; // the ground floor is set back behind the colonnade
 }
 
 /**
@@ -892,23 +893,27 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
           break;
         }
         // Columns on the lot line every ~3 m round the set-back ground floor, and the arcade's ceiling.
+        // With the wall on the lot line (one storey) they stand a little proud of it as pilasters:
+        // flush, their faces would fight the wall's for the same pixels.
         const top = f.y0 + f.floor;
+        const inset = f.arcade ? 0.25 : 0.17;
+        const colH = f.arcade ? f.floor : f.floor - 0.3; // a pilaster stops under the eave, not through it
         const col = wallColor.clone().lerp(WHITE, 0.3);
         const x0 = b.x - b.w / 2, x1 = b.x + b.w / 2, z0 = b.z - b.d / 2, z1 = b.z + b.d / 2;
         const sides: [number, number, number, number][] = [[x0, z0, x1, z0], [x1, z0, x1, z1], [x1, z1, x0, z1], [x0, z1, x0, z0]];
         for (const [ax, az, bx, bz] of sides) {
           const len = Math.hypot(bx - ax, bz - az);
           const n = Math.max(2, Math.round(len / 3));
-          // Just inside the lot line, so the columns stay within the collider.
-          const ix = az === bz ? 0 : Math.sign(b.x - ax) * 0.25;
-          const iz = ax === bx ? 0 : Math.sign(b.z - az) * 0.25;
+          // Inside the lot line, so the columns stay within the collider (pilasters 8 cm past it).
+          const ix = az === bz ? 0 : Math.sign(b.x - ax) * inset;
+          const iz = ax === bx ? 0 : Math.sign(b.z - az) * inset;
           for (let k = 0; k < n; k++) {
             const u = (k + 0.5) / n;
-            roofs.box({ x: ax + (bx - ax) * u + ix, z: az + (bz - az) * u + iz, w: 0.5, d: 0.5 }, f.y0, f.floor, col, null, col);
+            roofs.box({ x: ax + (bx - ax) * u + ix, z: az + (bz - az) * u + iz, w: 0.5, d: 0.5 }, f.y0, colH, col, null, col);
           }
         }
         const yb = top - 0.02;
-        roofs.quad([[x0, yb, z0], [x1, yb, z0], [x1, yb, z1], [x0, yb, z1]], [0, -1, 0], col.clone().multiplyScalar(0.6));
+        if (f.arcade) roofs.quad([[x0, yb, z0], [x1, yb, z0], [x1, yb, z1], [x0, yb, z1]], [0, -1, 0], col.clone().multiplyScalar(0.6));
         break;
       }
       case 'balcony': {

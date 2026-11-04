@@ -202,9 +202,11 @@ describe('Mega-park set blocks', () => {
 
   it.each(withAll)('seed %i: the playground holds its five pieces and a sandpit inside its fence', (_seed, _c, q) => {
     const yard = q.dressing.ground.find((g) => g.kind === 'playground')!;
-    const kit = q.dressing.structures.filter((s) => ['swings', 'slide', 'climber', 'roundabout', 'seesaw'].includes(s.kind));
-    expect(kit).toHaveLength(5);
-    expect(kit.flatMap((s) => s.footprints.flatMap(corners)).filter((p) => !inRect(shrink(yard, 0.4), p)).map(at)).toEqual([]);
+    // The kit is breakable props, every piece kept (nothing solid in the yard).
+    const kit = q.dressing.props.filter((p) => ['swings', 'slide', 'climber', 'roundabout', 'seesaw'].includes(p.kind));
+    expect(kit.map((p) => p.kind).sort()).toEqual(['climber', 'roundabout', 'seesaw', 'slide', 'swings']);
+    expect(kit.flatMap((p) => corners(propFootprint(p))).filter((p) => !inRect(shrink(yard, 0.4), p)).map(at)).toEqual([]);
+    expect(q.dressing.solids.filter((f) => inRect(yard, f))).toEqual([]);
     expect(q.dressing.ground.filter((g) => g.kind === 'sandpit' && inRect(yard, g))).toHaveLength(1);
     expect(kinds(q, 'fence').filter((p) => inRect(yard, p, 0.5)).length).toBeGreaterThan(20);
   });

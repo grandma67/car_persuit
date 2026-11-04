@@ -90,7 +90,7 @@ One grand city park over a rectangle of blocks, its interior streets turned into
 - **Blocks** (roles, each a feature): one **lake** block (a big shallow-water lake 35–45 m with an
   island and a footbridge, rowboats at a boathouse, a fountain jet; `lake` always), one or two
   **sports** blocks (soccer pitch from branch 1, tennis courts behind chain-link, a running track loop;
-  `sports=N`), a **playground** (swings, slide, climbing frame, sandpit: solid structures, low fence),
+  `sports=N`), a **playground** (swings, slide, climbing frame, sandpit: breakable props, low fence),
   a **bandstand** lawn (octagonal bandstand, deck chairs breakable), the rest **lawns** (soft grass,
   winding paths, scattered trees, flower beds, picnic tables). A café pavilion with a terrace on one
   block edge (lot with a facade style; ≤ 3 new styles).

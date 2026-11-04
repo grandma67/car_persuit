@@ -22,7 +22,8 @@ export type PropKind =
   // Park pieces
   | 'reeds' | 'goal' | 'cornerFlag' | 'ball'
   // Mega-park
-  | 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard';
+  | 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard'
+  | 'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw';
 /** A wrecked car's state: burnt out, up on bricks, stripped (doors open), on its roof, or crushed flat. */
 export type WreckKind = 'burnt' | 'bricks' | 'stripped' | 'flipped' | 'crushed';
 export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop' | 'noFishing';
@@ -124,7 +125,7 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   ball: { hx: 0.11, hz: 0.11, height: 0.22, mass: 0.45, breakSpeed: 0.2, slowdown: 0 },
   // Mega-park: a tennis net across its court (only the posts solid while it stands), deck chairs, the
   // café's tables under parasols, planters, the ice-cream cart and kiosk, picnic tables, bins, notice boards.
-  tennisNet: { hx: 6.45, hz: 0.1, height: 1.07, mass: 20, breakSpeed: 1.5, slowdown: 0.02 },
+  tennisNet: { hx: 6.45, hz: 0.1, height: 1.45, mass: 20, breakSpeed: 1.5, slowdown: 0.02 },
   deckChair: { hx: 0.3, hz: 0.6, height: 0.9, mass: 6, breakSpeed: 0.8, slowdown: 0.01 },
   cafeTable: { hx: 0.8, hz: 0.8, height: 2.3, mass: 25, breakSpeed: 1.2, slowdown: 0.02 },
   flowerPlanter: { hx: 0.5, hz: 0.5, height: 0.9, mass: 150, breakSpeed: 2.5, slowdown: 0.05 },
@@ -133,6 +134,12 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   picnicTable: { hx: 0.9, hz: 0.8, height: 0.8, mass: 50, breakSpeed: 2, slowdown: 0.04 },
   litterBin: { hx: 0.25, hz: 0.25, height: 0.9, mass: 15, breakSpeed: 1, slowdown: 0.01 },
   parkBoard: { hx: 0.8, hz: 0.12, height: 2.2, mass: 30, breakSpeed: 2, slowdown: 0.02 },
+  // The playground's steel kit (local X along its first size): knocked flat at a fair lick.
+  swings: { hx: 2.4, hz: 1.1, height: 2.5, mass: 120, breakSpeed: 3, slowdown: 0.06 },
+  slide: { hx: 0.7, hz: 2.6, height: 2.5, mass: 100, breakSpeed: 3, slowdown: 0.05 },
+  climber: { hx: 1.6, hz: 1.6, height: 2.2, mass: 150, breakSpeed: 3, slowdown: 0.06 },
+  roundabout: { hx: 1.3, hz: 1.3, height: 1.05, mass: 150, breakSpeed: 3, slowdown: 0.06 },
+  seesaw: { hx: 0.3, hz: 2.2, height: 1.0, mass: 50, breakSpeed: 2, slowdown: 0.03 },
   farmStand: { hx: 1.4, hz: 0.7, height: 2.4, mass: 70, breakSpeed: 2, slowdown: 0.05 },
   scarecrow: { hx: 0.15, hz: 0.15, height: 2.2, mass: 10, breakSpeed: 1, slowdown: 0.01 },
   toolRack: { hx: 0.9, hz: 0.25, height: 1.8, mass: 30, breakSpeed: 1.5, slowdown: 0.02 },
