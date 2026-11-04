@@ -8,13 +8,14 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { MEGAPARK } from '../../gameplay/balance';
 import type { CityData, Rect } from '../../world/CityGenerator';
 import { GeometryBuilder } from '../../world/CityBuilder';
-import { shrink } from '../../world/lots';
+import { inRect, shrink } from '../../world/lots';
 import { groundHeight, type Terrain } from '../../world/Terrain';
 import type { District, GroundPatch, Structure } from '../../world/districts/District';
 import { drapePolyline, part, upTri } from '../geometry';
 import { rowboat } from '../Landmarks';
 import type { ParkPath } from '../../world/districts/MegaparkLawns';
 import type { DistrictRenderContext, DistrictView } from './index';
+import { fireflies } from './fireflies';
 import { parkNamePlate, parkSignMaterial } from './megaparkSigns';
 
 const STONE = 0x9a948a;
@@ -294,7 +295,6 @@ function courtGround(flat: GeometryBuilder, p: GroundPatch, terrain: Terrain, sn
 
 
 const IRON = 0x23282a;
-const LANTERN = 0xf2d9a0;
 const GRAVEL = 0xc2b49a;
 const SOIL = 0x5a4130;
 const FLOWERS = [0xd8434a, 0xf0c23a, 0xe88ab8, 0xf4f0ea, 0x8a5ac8, 0xf08a3a];
@@ -306,8 +306,9 @@ function pillar(snowy: boolean): THREE.BufferGeometry[] {
     part(box(1.1, 0.18, 1.1), STONE_DARK, 0, 2.59, 0),
     part(box(1.1, 0.06, 1.1), snowy ? SNOW : STONE_DARK, 0, 2.71, 0),
     part(box(0.12, 0.25, 0.12), IRON, 0, 2.86, 0),
-    part(box(0.34, 0.42, 0.34), LANTERN, 0, 3.2, 0),
+    part(box(0.4, 0.05, 0.4), IRON, 0, 2.99, 0),
     part(cyl(0.04, 0.3, 0.2, 4), IRON, 0, 3.51, 0),
+    // The glass (y 3.2) is a glow instance (glows()).
   ];
 }
 
@@ -324,11 +325,41 @@ function leaf(len: number): THREE.BufferGeometry[] {
 }
 
 /** The park gates: the parts are laid from the structure's footprints (pillars, then their leaf). */
-function parkGate(s: Structure, ground: (x: number, z: number) => number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+function parkGate(s: Structure, ground: (x: number, z: number) => number, snowy: boolean, out: THREE.BufferGeometry[], lights: THREE.Vector3[]): void {
   for (const f of s.footprints) {
     const y = ground(f.x, f.z) - 0.05;
-    const parts = f.hz > 0.2 ? pillar(snowy) : leaf(f.hx * 2);
-    place(parts, frameOf(f.x, y, f.z, f.yaw), out);
+    const isPillar = f.hz > 0.2;
+    place(isPillar ? pillar(snowy) : leaf(f.hx * 2), frameOf(f.x, y, f.z, f.yaw), out);
+    if (isPillar) lights.push(new THREE.Vector3(f.x, y + 3.2, f.z));
+  }
+}
+
+/** Where the bandstand's bulbs hang: round the rim of its eaves. */
+function bandstandBulbs(s: Structure, y: number): THREE.Vector3[] {
+  const R = ((s.data?.radius as number) ?? MEGAPARK.bandstand) + 0.65;
+  return Array.from({ length: MEGAPARK.bandstandBulbs }, (_, k) => {
+    const a = (k / MEGAPARK.bandstandBulbs) * Math.PI * 2;
+    return new THREE.Vector3(s.x + Math.sin(a) * R, y + 3.95, s.z + Math.cos(a) * R);
+  });
+}
+
+/**
+ * The gate lanterns' glass and the bandstand's bulbs: unlit and tone-map free, so they glow (the
+ * street lamps' bulbs' instanced material: no new shader); pale by day, warm at night.
+ */
+function glows(at: { pos: THREE.Vector3; geo: 'lantern' | 'bulb' }[], scene: THREE.Scene, lampGlow: number): void {
+  for (const geo of ['lantern', 'bulb'] as const) {
+    const list = at.filter((g) => g.geo === geo);
+    if (!list.length) continue;
+    const shape = geo === 'lantern' ? new THREE.BoxGeometry(0.32, 0.4, 0.32) : new THREE.SphereGeometry(0.09, 6, 4);
+    const mesh = new THREE.InstancedMesh(shape, new THREE.MeshBasicMaterial({ toneMapped: false }), list.length);
+    const color = new THREE.Color(geo === 'lantern' ? 0xd8ccb0 : 0xc8c0a8).lerp(new THREE.Color(0xffc870).multiplyScalar(1.6), lampGlow);
+    const m = new THREE.Matrix4();
+    list.forEach((g, i) => {
+      mesh.setMatrixAt(i, m.makeTranslation(g.pos.x, g.pos.y, g.pos.z));
+      mesh.setColorAt(i, color);
+    });
+    scene.add(mesh);
   }
 }
 
@@ -343,14 +374,14 @@ function nameWall(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeom
   ], frameOf(s.x, y, s.z, s.yaw), out);
 }
 
-/** A flower bed: an oval of dark soil, low clumps of flowers in two or three colours (snow: a white mound). */
-function bed(p: GroundPatch, terrain: Terrain, ground: (x: number, z: number) => number, snowy: boolean, flat: GeometryBuilder, out: THREE.BufferGeometry[]): void {
+/** A flower bed: an oval of dark soil, low clumps of flowers in two or three colours (snow: a white mound; desert: a cactus garden on gravel). */
+function bed(p: GroundPatch, terrain: Terrain, ground: (x: number, z: number) => number, snowy: boolean, desert: boolean, flat: GeometryBuilder, out: THREE.BufferGeometry[]): void {
   const N = 16;
   const v = (a: number, k: number) => {
     const x = p.x + Math.cos(a) * (p.w / 2) * k, z = p.z + Math.sin(a) * (p.d / 2) * k;
     return [x, groundHeight(terrain, x, z) + 0.07, z];
   };
-  const soil = new THREE.Color(snowy ? SNOW : SOIL), rim = new THREE.Color(snowy ? 0xdde3ea : STONE);
+  const soil = new THREE.Color(snowy ? SNOW : desert ? 0xc8b48e : SOIL), rim = new THREE.Color(snowy ? 0xdde3ea : STONE);
   const c = [p.x, groundHeight(terrain, p.x, p.z) + 0.07, p.z];
   for (let i = 0; i < N; i++) {
     const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
@@ -359,8 +390,20 @@ function bed(p: GroundPatch, terrain: Terrain, ground: (x: number, z: number) =>
     upTri(flat, v(a0, 0.9), v(a1, 1), v(a1, 0.9), rim);
   }
   if (snowy) return;
-  // Rings of clumps, the colour by ring (deterministic from the bed's place).
   const pick = Math.abs(Math.round(p.x * 7 + p.z * 13));
+  if (desert) {
+    // A few round cacti and a tall one with an arm, on the gravel.
+    const n = Math.max(3, Math.round((p.w * p.d) / 3));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + pick, k = i % 2 ? 0.55 : 0.25;
+      const x = p.x + Math.cos(a) * (p.w / 2) * k, z = p.z + Math.sin(a) * (p.d / 2) * k, y = ground(x, z);
+      if (i === 0) {
+        out.push(part(cyl(0.14, 0.16, 1.3, 6), 0x4f7f42, x, y + 0.65, z), part(cyl(0.09, 0.1, 0.5, 6), 0x4f7f42, x + 0.22, y + 0.85, z), part(box(0.22, 0.08, 0.08), 0x4f7f42, x + 0.11, y + 0.62, z));
+      } else out.push(part(new THREE.SphereGeometry(0.22 + (i % 3) * 0.05, 7, 5), (i + pick) % 4 ? 0x5f8f4a : 0x6a8a3a, x, y + 0.16, z));
+    }
+    return;
+  }
+  // Rings of clumps, the colour by ring (deterministic from the bed's place).
   for (let ring = 0; ring < 3; ring++) {
     const k = 0.75 - ring * 0.28;
     const n = Math.max(1, Math.round((N * k * Math.max(p.w, p.d)) / 5));
@@ -383,6 +426,7 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
   const surface = (x: number, z: number) => ctx.ground(x, z) + (lake?.depth ?? 0);
   const flat = new GeometryBuilder();
   const plates: THREE.BufferGeometry[] = [];
+  const lanterns: THREE.Vector3[] = [], bulbs: THREE.Vector3[] = [];
   for (const p of q.dressing.ground) {
     if (p.kind === 'court') courtGround(flat, p, city.terrain, snowy);
     else if (p.kind === 'sandpit') {
@@ -395,7 +439,7 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
       }
     } else if (p.kind === 'playground') flat.drape(shrink(p, 0.3), 0.07, new THREE.Color(snowy ? 0xe8ecf0 : 0x8a6a4a), city.terrain); // bark
     else if (p.kind === 'terrace') flat.drape(p, 0.07, new THREE.Color(snowy ? 0xe4e8ec : 0xc8bca4), city.terrain);
-    else if (p.kind === 'bed') bed(p, city.terrain, ctx.ground, snowy, flat, solid);
+    else if (p.kind === 'bed') bed(p, city.terrain, ctx.ground, snowy, ctx.climate.name === 'desert', flat, solid);
   }
   // Gravel paths (trodden snow in the snow).
   const gravel = new THREE.Color(snowy ? 0xb4bcc4 : GRAVEL);
@@ -404,8 +448,12 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
     const y = ctx.ground(s.x, s.z);
     if (s.kind === 'track') { trackGround(flat, s, city.terrain, snowy); continue; }
     if (s.kind === 'bleachers') { bleachers(s, y - 0.05, snowy, solid); continue; }
-    if (s.kind === 'bandstand') { bandstand(s, y - 0.05, snowy, solid); continue; }
-    if (s.kind === 'parkGate') { parkGate(s, ctx.ground, snowy, solid); continue; }
+    if (s.kind === 'bandstand') {
+      bandstand(s, y - 0.05, snowy, solid);
+      bulbs.push(...bandstandBulbs(s, y - 0.05));
+      continue;
+    }
+    if (s.kind === 'parkGate') { parkGate(s, ctx.ground, snowy, solid, lanterns); continue; }
     if (s.kind === 'nameWall') {
       nameWall(s, y - 0.05, snowy, solid);
       const f = s.footprints[0];
@@ -433,6 +481,12 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
     scene.add(mesh);
   }
   if (plates.length) scene.add(new THREE.Mesh(mergeGeometries(plates), parkSignMaterial(0.08 + ctx.lampGlow * 0.15)));
+  glows([...lanterns.map((pos) => ({ pos, geo: 'lantern' as const })), ...bulbs.map((pos) => ({ pos, geo: 'bulb' as const }))], scene, ctx.lampGlow);
+  // Fireflies over the lawns on warm nights, within the glow budget.
+  const warm = ctx.climate.name === 'temperate' || ctx.climate.name === 'beach';
+  const lit = city.streetProps.filter((p) => p.kind === 'oilLamp' && inRect(q.bounds, p, 1)).length + lanterns.length + bulbs.length;
+  const lawns = q.blocks.filter((k) => q.roles.get(k) === 'lawn' || q.roles.get(k) === 'bandstand').map((k) => shrink(city.blocks[k].rect, city.config.sidewalk + 4));
+  const flies = ctx.night && warm ? fireflies(lawns, Math.max(0, Math.min(MEGAPARK.fireflies, MEGAPARK.maxGlow - lit)), city.seed ^ 0x3e9a, scene, ctx.ground) : null;
   // The fountain jet (not in the snow: the lake is frozen).
   const at = q.dressing.extra?.fountain as { x: number; z: number } | undefined;
   let jet: THREE.Mesh | null = null;
@@ -443,6 +497,7 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
   }
   return {
     update(_dt, time) {
+      if (flies) flies.value = time;
       if (jet) jet.scale.y = 1 + 0.08 * Math.sin(time * 2.1) + 0.04 * Math.sin(time * 5.3);
     },
   };

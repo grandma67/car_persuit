@@ -4,23 +4,24 @@ Themed areas laid over a rectangle of blocks, each rolled per seed on its own st
 (`world/districts/`). Roads, the road graph and lanes never change: character comes from buildings,
 props, ground patches, overhead pieces and gates. How they are built: [DISTRICTS_DEV.md](DISTRICTS_DEV.md).
 
-Odds per seed (300 seeds): none 5%, one 25% (Old City 8%, Chinatown 6%, Harbor 4%, Slums 4%, Farm 3%),
-two 36%, three 25%, four 9%, all five under 1%. `?<kind>=0|1` forces one off or on.
+Odds per seed (300 seeds): none 3%, one 21% (Old City 7%, Chinatown 5%, Harbor 3%, Slums 3%, Farm 2%,
+Mega-park 2%), two 37%, three 26%, four 11%, five 2% (`DISTRICTS.max`). Any one: Old City 52%,
+Chinatown 48%, Harbor 42%, Farm 36%, Slums 27%, Mega-park 22%. `?<kind>=0|1` forces one off or on.
 
-| | Old City | Chinatown | Harbor | Farm | Slums |
-|---|---|---|---|---|---|
-| `kind` / URL | `oldtown` | `chinatown` | `harbor` | `farm` | `slums` |
-| Roll chance | 0.55 | 0.5 | 0.45 | 0.4 | 0.35 |
-| Site | inland (off the 2 outer rows) | inland | coast: outer rows, long side on the sea | edge: outer rows, touching the island edge | inland |
-| Shapes (rolled) | 2×2 / 3×3 / 4×4 | same | same | same | 2×2 / 3×3 (4×4 can't meet the share) |
-| Zones | ≥ ½ downtown + midtown | same | industrial + residential, ≥ ½ industrial | residential + industrial, ≥ ½ residential | midtown + residential + industrial, ≥ ½ residential + industrial |
-| Gates | all (gatehouses) | main street + ≤ 1 (paifang) | all; one terminal gate | main street (ranch gate) + ≤ 1 (cattle grid) | all; rail overpass on the main-street gate |
-| Speed cap | 30 km/h everywhere | 40 km/h main street | none | none | none (potholes jolt) |
-| Traffic | 0.5× | 1.3× | 0.9× | 0.4× | 0.6× |
-| Buses / trucks | out | in; vans ↑ | in; box trucks ↑ | in; pickups, tractors ↑ | out; pickups, vans ↑ |
-| Cop spawns skipped inside | 0.6 | 0 | 0 | 0.4 | 0.5 |
-| Zebras | removed | kept | removed | removed | removed (worn) |
-| Map colour | stone | red | steel blue | wheat gold | rust brown |
+| | Old City | Chinatown | Harbor | Farm | Slums | Mega-park |
+|---|---|---|---|---|---|---|
+| `kind` / URL | `oldtown` | `chinatown` | `harbor` | `farm` | `slums` | `megapark` |
+| Roll chance | 0.55 | 0.5 | 0.45 | 0.4 | 0.35 | 0.3 |
+| Site | inland (off the 2 outer rows) | inland | coast: outer rows, long side on the sea | edge: outer rows, touching the island edge | inland | inland |
+| Shapes (rolled) | 2×2 / 3×3 / 4×4 | same | same | same | 2×2 / 3×3 (4×4 can't meet the share) | 2×2 / 2×3 / 3×3 (3×3 rarely fits) |
+| Zones | ≥ ½ downtown + midtown | same | industrial + residential, ≥ ½ industrial | residential + industrial, ≥ ½ residential | midtown + residential + industrial, ≥ ½ residential + industrial | midtown + residential, ≥ ½ residential |
+| Gates | all (gatehouses) | main street + ≤ 1 (paifang) | all; one terminal gate | main street (ranch gate) + ≤ 1 (cattle grid) | all; rail overpass on the main-street gate | all (iron gates on stone pillars; name wall and lodge at the main one) |
+| Speed cap | 30 km/h everywhere | 40 km/h main street | none | none | none (potholes jolt) | 30 km/h everywhere |
+| Traffic | 0.5× | 1.3× | 0.9× | 0.4× | 0.6× | 0.5× |
+| Buses / trucks | out | in; vans ↑ | in; box trucks ↑ | in; pickups, tractors ↑ | out; pickups, vans ↑ | out |
+| Cop spawns skipped inside | 0.6 | 0 | 0 | 0.4 | 0.5 | 0.5 |
+| Zebras | removed | kept | removed | removed | removed (worn) | kept |
+| Map colour | stone | red | steel blue | wheat gold | rust brown | park green |
 
 Every district: 4★+ roadblocks prefer its gates, ≤ 1 mission destination inside, a minimap outline,
 no start toast. Respect: neutral real glyphs in Chinatown (福 春 茶 飯店), no caricature; made-up names
@@ -102,3 +103,19 @@ puddles, cracks, faded lines, litter, steaming manholes. Night: most lamps dead 
 junction, one buzzing per street), burn barrels and the camp fire glow. Climate: slush, icicles and
 barrels lit by day in snow; blown sand, adobe walls and bleached wrecks in the desert; chalky pastels
 and salt-rusted wrecks by the beach.
+
+## Mega-park
+
+One grand park over 2×2 to 3×3 blocks, its streets tree-lined park drives. Every block is grass (soft
+lawns: less grip, a little drag; cops follow). One block is a shallow lake (wading, never drowning)
+with a wooded island and its domed folly, a footbridge out to it, a white boathouse with a jetty and
+rowboats, sometimes a fountain jet. One or two sports grounds (a soccer pitch with goals and a ball and
+a tennis court behind chain-link, or a running track with a stand), a fenced playground (swings, slide,
+climbing frame, roundabout, seesaw, sandpit), a bandstand lawn with deck chairs and a café pavilion
+whose terrace has tables under parasols; the rest are lawns: winding gravel paths from the streets to
+a flower bed, trees, picnic tables, benches with bins, Victorian lamps, an ice-cream kiosk. Iron gates
+stand open on stone pillars with lanterns at every street in; a stone gate lodge and a low wall with
+the park's made-up name stand by the main gate. Night: oil lamps along the drives and paths, lit gate
+lanterns, a string of bulbs round the bandstand, fireflies on warm nights. Climate: a frozen lake and
+snowy lawns in the snow; sand, palms and cacti, and cactus gardens in the beds, in the desert (the lake
+kept as an oasis); palms by the beach.

@@ -262,7 +262,7 @@ describe('Mega-park lawns, paths and gates', () => {
     expect(PARK_NAMES[q.dressing.extra!.name as number]).toBeDefined();
     expect(kinds(q, 'parkBoard')).toHaveLength(1);
     const lamps = c.streetProps.filter((p) => p.kind === 'oilLamp' && inRect(q.bounds, p, 1)).length;
-    expect(lamps + 2 * q.gates.length).toBeLessThanOrEqual(MEGAPARK.maxGlow);
+    expect(lamps + 2 * q.gates.length + MEGAPARK.bandstandBulbs).toBeLessThanOrEqual(MEGAPARK.maxGlow);
     expect(kinds(q, 'oilLamp').length).toBeGreaterThan(0);
   });
 

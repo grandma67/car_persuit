@@ -205,21 +205,24 @@ Woods on the island edge, the one district cops can't cut through.
 - Seed guard vs main: exactly the cities with a pond or pitch moved (95 of 120 before the pond
   chance came down); `city-hash` skips empty `water` / `parkPieces` lists.
 
-## Branch 2 status (`districts/megapark`): M1–M4 done, M5 next (2026-11-04)
+## Branch 2 status (`districts/megapark`): done, waiting for the user's approval to merge (2026-11-04)
 
-- **Done and committed:** M1 placement, roles, lots (4fbdca6); M2 lake block (9169656); M3 sports
-  ground, running track, playground, bandstand and café terrace, plus the 9 new props (c758b46);
-  M4 lawns, paths, gates, name wall, traffic and police tests. Seed guard after each one moved
-  only cities where the Mega-park rolls (M4: 44 of 120, exactly the Mega-park cities).
-- **M4 as built:** `layLawns` runs at the end of `Megapark.dress` (it reads the set pieces through
-  `q.dressing = out`). Gates, the name wall and its notice board are laid before the beds, trees and
-  tables, so the filler keeps off them. Avenue trees skip the paths' mouths. Paths render with
-  `drapePolyline` (`render/geometry.ts`), the name plate from `megaparkSigns.ts`. Programs unchanged
-  (34 vs 34), +7 calls; `check:restart` on a Mega-park city ok; every gate driven at speed.
-- **Then M5:** night (bandstand bulbs, gate lanterns, fireflies), climate (frozen lake already ice;
-  desert dry lawns and a cactus garden; beach palms), perf on vs off, docs (`DISTRICTS.md` row and
-  section, odds line, `CITY_PARAMS.md` features table, PLAN_GAME version line). `check:restart` covers
-  at most 5 districts: the Mega-park was checked in its own run (ok).
+- **Committed:** M1 placement, roles, lots (4fbdca6); M2 lake block (9169656); M3 sports, track,
+  playground, bandstand, café terrace, 9 new props (c758b46); M4 lawns, paths, gates, name wall,
+  traffic and police tests (649776e); M5 night, desert beds, perf, docs. Seed guard after each
+  moved only Mega-park cities (M4: 44 of 120).
+- **M4/M5 as built:** `layLawns` runs at the end of `Megapark.dress` (reads the set pieces through
+  `q.dressing = out`); gates, the name wall and its board are laid before the filler. Paths render
+  with `drapePolyline` (`render/geometry.ts`), the name plate from `megaparkSigns.ts`. Night: gate
+  lanterns and 16 bandstand bulbs are glow instances (the lamp bulbs' program), fireflies over the
+  lawns share the Farm's (`render/districts/fireflies.ts`). Desert beds are cactus gardens; snow
+  paths a darker grey to show on the snow.
+- **Numbers:** placed naturally on 20 % of seeds (forced 70 %), +2 ms generation; programs unchanged
+  by day (34 = 34), +1 on warm nights in a city without a Farm (the fireflies' program, as the
+  pond's water); perf on vs off within noise (frame ~3.4 vs 3.3 ms, GPU ~2.4 both, 60 fps),
+  +70 calls, +15 MB textures; `check:restart` on a Mega-park city ok; every gate driven at speed.
+- **`maxGlow` 90 → 130:** a 3×3's drives alone carry 72 oil lamps, which left no path lamps once the
+  bulbs were reserved (Farm 110, Harbor 140).
 - **Bent from the plan:** shapes 2×2 / 2×3 / 3×3 (3×3 rarely fits inland: 70 % placement when forced);
   no new facade styles (café stucco and storefront, lodge ashlar, boathouse siding); the lodge has no
   porch; Victorian lamps are the Old City's `oilLamp`; the island is solid (a folly on it); the lake

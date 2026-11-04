@@ -216,7 +216,7 @@ export function layLawns(q: District, city: CityData, lake: ShallowWater, buildi
 
   // --- Along the paths: benches facing them with a bin by some, lamps on the other side (glow budget) ---
   const lamps = () => [...city.streetProps, ...out.props].filter((p) => p.kind === 'oilLamp' && inRect(q.bounds, p, 1)).length;
-  let lampRoom = MEGAPARK.maxGlow - lamps() - q.gates.length * 2; // the gate pillars' lanterns
+  let lampRoom = MEGAPARK.maxGlow - lamps() - q.gates.length * 2 - MEGAPARK.bandstandBulbs; // the gate lanterns, the bandstand's bulbs
   for (const path of out.paths) {
     const pts = path.points;
     let walked = 0, nextBench = rng.range(6, 10), nextLamp = rng.range(4, 8);

@@ -412,7 +412,9 @@ export const MEGAPARK = {
   sports: [1, 2] as [number, number], // sports blocks (a 2×2 has room for one)
   trackChance: 0.4, // one sports block is a running track
   fountainChance: 0.6, // a fountain jet in the lake
-  maxGlow: 90, // at night: the park's lamps, the gate lamps, the bandstand's bulbs
+  maxGlow: 130, // at night: the drives' and paths' lamps, the gate lanterns, the bandstand's bulbs, fireflies (a 3×3's drives alone have 72 lamps)
+  bandstandBulbs: 16, // a string of bulbs round the bandstand's eaves
+  fireflies: 30, // over the lawns on a warm night, at most (within maxGlow)
   /** The lots: footprint (long, short) and height. */
   cafe: { size: [15, 9] as [number, number], h: 4.6 },
   lodge: { size: [8, 7] as [number, number], h: 6.5 },
