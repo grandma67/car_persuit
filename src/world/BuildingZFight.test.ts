@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../core/Rng';
 import { generateCity } from './CityGenerator';
-import { buildingGeometry } from './CityBuilder';
+import { buildingGeometry, buildingReach } from './CityBuilder';
 import { ALL_THEMES } from './CityTheme';
 import { CLIMATES, type Climate } from './Climate';
 import type { CityData } from './CityGenerator';
@@ -11,31 +11,16 @@ import { colourTag, coplanarOverlaps, trianglesOf, type Tri } from '../render/co
 // Building faces sharing a plane, facing the same way, in different colours or from different
 // buildings: they z-fight. Swept over rolled cities (districts on), every theme and climate in turn.
 
-/**
- * What z-fights today, to fix, as `lot: meshes` (one building) or `lot | lot: meshes` (two
- * neighbours). Remove a key once it passes; a stale key fails too.
- */
-const KNOWN = new Set<string>([
-  // Neighbours in a terrace: lots stand 0.3–0.5 m apart, and equal-height neighbours' overhangs cross
-  // that gap in one plane. Old town: steep gables' soffits (at y - STEEP * EAVE, whatever the size);
-  // jettied upper floors grow on every side, so neighbours' fronts or bressumers can land in one plane.
-  // Chinatown: the cap slabs and soffits under the 0.9 m pagoda skirt, in different tile colours.
-  'oldtown/halfTimbered | oldtown/halfTimbered: roof/roof', 'oldtown/halfTimbered | oldtown/stoneHouse: roof/roof',
-  'oldtown/arcade | oldtown/halfTimbered: roof/roof', 'oldtown/stoneHouse | oldtown/stoneHouse: roof/roof',
-  'oldtown/arcade | oldtown/stoneHouse: roof/roof',
-  'oldtown/halfTimbered | oldtown/halfTimbered: halfTimber/halfTimber', 'oldtown/halfTimbered | oldtown/halfTimbered: halfTimber/roof',
-  'chinatown/shophouse | chinatown/shophouse: roof/roof', 'chinatown/restaurant | chinatown/shophouse: roof/roof',
-]);
-
 const SEEDS = Array.from({ length: 40 }, (_, k) => k + 1);
 
 /** Every wall and roof triangle, tagged `building:mesh:colour`: built one building at a time with the
  * rng shared in order, which gives the same geometry as building them all at once (tested below). */
 function trianglesByBuilding(city: CityData, theme: CityTheme, climate: Climate, seed: number): Tri[] {
   const rng = new Rng(seed ^ 0x5eed);
+  const reach = buildingReach(city.buildings); // from the whole city: each building's room next to its neighbours
   const tris: Tri[] = [];
   city.buildings.forEach((b, i) => {
-    const { walls, roofs } = buildingGeometry({ ...city, buildings: [b] }, theme, climate, rng);
+    const { walls, roofs } = buildingGeometry({ ...city, buildings: [b] }, theme, climate, rng, [reach[i]]);
     for (const [name, g] of [...walls, ['roof', roofs] as const]) {
       const col = colourTag(g.colors);
       tris.push(...trianglesOf(g.positions, g.indices, (v) => `${i}:${name}:${col(v)}`));
@@ -73,7 +58,34 @@ describe('building geometry z-fighting', () => {
         if (!found.has(key)) found.set(key, `${key} (seed ${seed} ${climate.name}, buildings ${a[0]}/${b[0]} at ${o.at.map((v) => v.toFixed(1))}, ${o.area.toFixed(2)} m²)`);
       }
     }
-    expect([...found].filter(([k]) => !KNOWN.has(k)).map(([, s]) => s), 'new z-fighting').toEqual([]);
-    expect([...KNOWN].filter((k) => !found.has(k)), 'fixed: drop from KNOWN').toEqual([]);
+    expect([...found.values()]).toEqual([]);
+  });
+});
+
+describe('buildingReach', () => {
+  const lot = (x: number, z: number, w = 10, d = 10) => ({ x, z, w, d });
+
+  it('splits the gap between neighbours, 1 cm short of the middle each', () => {
+    const [a, b] = buildingReach([lot(0, 0), lot(10.5, 0)]); // walls at 5 and 5.5
+    expect(a.x1).toBeCloseTo(5.24);
+    expect(b.x0).toBeCloseTo(5.26);
+    expect([a.x0, a.z0, a.z1, b.x1]).toEqual([-Infinity, -Infinity, Infinity, Infinity]);
+  });
+
+  it('a gap too narrow to stand out in: the walls themselves', () => {
+    const [a, b] = buildingReach([lot(0, 0), lot(10.06, 0)]);
+    expect(a.x1).toBe(5);
+    expect(b.x0).toBeCloseTo(5.06);
+  });
+
+  it('diagonal neighbours split along the axis they are furthest apart on', () => {
+    const [a, b] = buildingReach([lot(0, 0), lot(10.4, 10.8)]); // 0.4 apart in x, 0.8 in z
+    expect(a.z1).toBeCloseTo(5.39);
+    expect(b.z0).toBeCloseTo(5.41);
+    expect([a.x1, b.x0]).toEqual([Infinity, -Infinity]);
+  });
+
+  it('far neighbours leave it unlimited', () => {
+    expect(buildingReach([lot(0, 0), lot(20, 0)])[0].x1).toBe(Infinity);
   });
 });

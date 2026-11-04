@@ -88,6 +88,10 @@ there if it holds for all districts; don't repeat it in a district's test.
 - **No z-fighting:** never overlap coplanar faces. Butt-join exactly or stand one part 2–3 cm proud;
   ground layers ≥ 2 cm apart or `polygonOffset` on the lower (asphalt 1/1, street cobbles 0.5/0.5,
   markings none).
+  Tests catch it: `PropModels.test` (every prop model) and `BuildingZFight.test` (40 rolled cities,
+  every building and its neighbours; `render/coplanar.ts`). Building geometry in the roof mesh is
+  kept inside `buildingReach` (half the gap to each neighbour): overhangs are cut there, boxes stop
+  2 cm short, a jetty grows only that far. A new trim reaching past the walls needs nothing more.
 
 ## Looks and performance
 

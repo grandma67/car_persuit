@@ -5,9 +5,6 @@ import { colourTag, coplanarOverlaps, trianglesOf } from '../render/coplanar';
 // Two parts of a prop model sharing a plane, facing the same way, in different colours: they
 // z-fight (flicker) wherever they overlap. Parts must enclose each other or keep faces >= 1 cm apart.
 
-/** Models allowed to z-fight, each with its reason (none today). A stale key fails too. */
-const KNOWN = new Set<string>([]);
-
 const LOOKS = [
   { leaves: 0x3d7a3f, trunk: 0x4a3426, snowy: false },
   { leaves: 0x3d7a3f, trunk: 0x4a3426, snowy: true },
@@ -27,7 +24,6 @@ describe('prop models', () => {
         }
       }
     }
-    expect([...fighting].filter(([k]) => !KNOWN.has(k)).map(([, s]) => s), 'new z-fighting').toEqual([]);
-    expect([...KNOWN].filter((k) => !fighting.has(k)), 'fixed: drop from KNOWN').toEqual([]);
+    expect([...fighting.values()]).toEqual([]);
   });
 });

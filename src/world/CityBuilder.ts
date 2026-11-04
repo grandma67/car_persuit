@@ -183,6 +183,112 @@ export class GeometryBuilder {
   }
 }
 
+/** An axis-aligned box in plan (world x and z). */
+export interface PlanBox {
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+}
+
+/** Past any overhang, porch or dock: neighbours further apart than twice this never limit each other. */
+const REACH_MAX = 3;
+/** How far short of a limited reach a box stops (see `ClippedBuilder`). */
+const BOX_MARGIN = 0.02;
+
+/**
+ * How far each building's geometry may stand out past its walls: half the gap to the nearest
+ * neighbour on that side, less 1 cm (or the wall itself when that leaves under 4 cm). Neighbours in a terrace stand 0.3-0.5 m apart, and their eaves,
+ * caps and jetties crossed that gap into one plane (z-fighting): within these boxes they can't meet.
+ */
+export function buildingReach(buildings: readonly Rect[]): PlanBox[] {
+  const ext = buildings.map((b) => ({ x0: b.x - b.w / 2, x1: b.x + b.w / 2, z0: b.z - b.d / 2, z1: b.z + b.d / 2 }));
+  const reach = ext.map(() => ({ x0: -Infinity, x1: Infinity, z0: -Infinity, z1: Infinity }));
+  const order = ext.map((_, i) => i).sort((i, j) => ext[i].x0 - ext[j].x0);
+  for (let a = 0; a < order.length; a++) {
+    const i = order[a], p = ext[i];
+    for (let c = a + 1; c < order.length; c++) {
+      const j = order[c], q = ext[j];
+      if (q.x0 - p.x1 >= 2 * REACH_MAX) break; // sorted by x0: the rest are further still
+      const gx = Math.max(q.x0 - p.x1, p.x0 - q.x1), gz = Math.max(q.z0 - p.z1, p.z0 - q.z1);
+      const gap = Math.max(gx, gz);
+      if (gap < 0 || gap >= 2 * REACH_MAX) continue; // overlapping lots, or far apart
+      // Under 2 * BOX_MARGIN of room: the wall itself, so a box cut short of it ends inside, not a hair out.
+      const half = gap / 2 - 0.01 >= 2 * BOX_MARGIN ? gap / 2 - 0.01 : 0;
+      // Split the gap along the axis they're furthest apart on (diagonal neighbours: one is enough).
+      const [lo, hi] = (gx >= gz ? q.x0 >= p.x1 : q.z0 >= p.z1) ? [i, j] : [j, i];
+      if (gx >= gz) {
+        reach[lo].x1 = Math.min(reach[lo].x1, ext[lo].x1 + half);
+        reach[hi].x0 = Math.max(reach[hi].x0, ext[hi].x0 - half);
+      } else {
+        reach[lo].z1 = Math.min(reach[lo].z1, ext[lo].z1 + half);
+        reach[hi].z0 = Math.max(reach[hi].z0, ext[hi].z0 - half);
+      }
+    }
+  }
+  return reach;
+}
+
+/**
+ * Writes into another builder's arrays, keeping everything inside a plan box: a quad crossing it is
+ * cut along its sides (a surface: eaves, soffits, skirts); a box reaching within 2 cm of a side is
+ * shrunk to 2 cm short of it, its sides closed (a reach can end in the wall's plane: a cap or beam
+ * cut there would fight the wall).
+ */
+class ClippedBuilder extends GeometryBuilder {
+  constructor(to: GeometryBuilder, private readonly clip: PlanBox) {
+    super();
+    this.positions = to.positions;
+    this.normals = to.normals;
+    this.colors = to.colors;
+    this.uvs = to.uvs;
+    this.indices = to.indices;
+  }
+
+  override quad(corners: number[][], normal: number[], color: THREE.Color, uv?: number[][]): void {
+    const c = this.clip, e = 1e-6;
+    if (corners.every((p) => p[0] >= c.x0 - e && p[0] <= c.x1 + e && p[2] >= c.z0 - e && p[2] <= c.z1 + e)) {
+      super.quad(corners, normal, color, uv);
+      return;
+    }
+    // Sutherland-Hodgman against the four sides, carrying the UVs along.
+    let poly = corners.map((p, k) => [p[0], p[1], p[2], uv?.[k]?.[0] ?? 0, uv?.[k]?.[1] ?? 0]);
+    const sides: [number, number, number][] = [[0, c.x0, -1], [0, c.x1, 1], [2, c.z0, -1], [2, c.z1, 1]];
+    for (const [axis, lim, sign] of sides) {
+      const out: number[][] = [];
+      const inside = (p: number[]) => sign * (p[axis] - lim) <= e;
+      poly.forEach((p, k) => {
+        const q = poly[(k + 1) % poly.length];
+        if (inside(p)) out.push(p);
+        if (inside(p) !== inside(q)) {
+          const t = (lim - p[axis]) / (q[axis] - p[axis]);
+          out.push(p.map((v, n) => v + (q[n] - v) * t));
+        }
+      });
+      poly = out;
+      if (poly.length < 3) return;
+    }
+    const base = this.positions.length / 3;
+    for (const p of poly) {
+      this.positions.push(p[0], p[1], p[2]);
+      this.normals.push(normal[0], normal[1], normal[2]);
+      this.colors.push(color.r, color.g, color.b);
+      this.uvs.push(p[3], p[4]);
+    }
+    for (let k = 1; k < poly.length - 1; k++) this.indices.push(base, base + k, base + k + 1);
+  }
+
+  override box(r: Rect, y0: number, h: number, wallColor: THREE.Color, roof: GeometryBuilder | null, roofColor: THREE.Color,
+    wallUv?: (w: number, h: number) => number[][]): void {
+    const c = this.clip, m = BOX_MARGIN;
+    const x0 = Math.max(r.x - r.w / 2, c.x0 + m), x1 = Math.min(r.x + r.w / 2, c.x1 - m);
+    const z0 = Math.max(r.z - r.d / 2, c.z0 + m), z1 = Math.min(r.z + r.d / 2, c.z1 - m);
+    if (x1 - x0 < 1e-3 || z1 - z0 < 1e-3) return;
+    const inside = x0 === r.x - r.w / 2 && x1 === r.x + r.w / 2 && z0 === r.z - r.d / 2 && z1 === r.z + r.d / 2;
+    super.box(inside ? r : { x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0 }, y0, h, wallColor, roof, roofColor, wallUv);
+  }
+}
+
 export interface CityLook {
   theme: CityTheme;
   climate: Climate;
@@ -449,13 +555,15 @@ export function buildCity(
  * texture) and roofs, caps and base courses merged into one more. Also each building's footing.
  * `rng` is the city's visual stream (rooftop details), shared with the facade textures after.
  */
-export function buildingGeometry(city: CityData, theme: CityTheme, climate: Climate, rng: Rng): { walls: Map<FacadeStyle, GeometryBuilder>; roofs: GeometryBuilder; footings: number[] } {
+export function buildingGeometry(
+  city: CityData, theme: CityTheme, climate: Climate, rng: Rng, reach = buildingReach(city.buildings),
+): { walls: Map<FacadeStyle, GeometryBuilder>; roofs: GeometryBuilder; footings: number[] } {
   const terrain = city.terrain;
   const walls = new Map<FacadeStyle, GeometryBuilder>();
   const roofs = new GeometryBuilder();
   // On a slope a building stands on its lowest corner; the uphill side sinks into the ground.
   const footings = city.buildings.map((b) => groundBase(terrain, b.x, b.z, Math.max(b.w, b.d) / 2) - 0.3);
-  city.buildings.forEach((b, i) => addBuilding(b, footings[i], lookFor(b, theme), walls, roofs, rng, climate.snowRoofs, terrain));
+  city.buildings.forEach((b, i) => addBuilding(b, footings[i], lookFor(b, theme), walls, new ClippedBuilder(roofs, reach[i]), reach[i], rng, climate.snowRoofs, terrain));
   return { walls, roofs, footings };
 }
 
@@ -507,7 +615,7 @@ function wallsFor(walls: Map<FacadeStyle, GeometryBuilder>, facade: FacadeStyle)
  * look's ground style, when it has one), and its roof, caps and trims into the shared roof mesh.
  */
 function addBuilding(
-  b: Building, y0: number, look: LotLook, walls: Map<FacadeStyle, GeometryBuilder>, roofs: GeometryBuilder, rng: Rng, snowy: boolean, terrain: Terrain,
+  b: Building, y0: number, look: LotLook, walls: Map<FacadeStyle, GeometryBuilder>, roofs: GeometryBuilder, reach: PlanBox, rng: Rng, snowy: boolean, terrain: Terrain,
 ): void {
   // A granary stands on posts: its walls start above them (the collider stays the lot box).
   if (look.trims?.includes('stilts')) {
@@ -595,7 +703,10 @@ function addBuilding(
     wallFaces(b, y0 + floor, ySplit, 1, split, false);
   } else if (jetty) {
     const yj = y0 + jetFloor * floor;
-    roofB = { ...b, ...grow(b, jetty) };
+    // Out on every side, as far as the neighbours leave room (`reach`).
+    const x0 = Math.max(b.x - b.w / 2 - jetty, reach.x0), x1 = Math.min(b.x + b.w / 2 + jetty, reach.x1);
+    const z0 = Math.max(b.z - b.d / 2 - jetty, reach.z0), z1 = Math.min(b.z + b.d / 2 + jetty, reach.z1);
+    roofB = { ...b, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0 };
     wallFaces(b, y0, yj, 0, jetFloor, true);
     wallFaces(roofB, yj, y1, jetFloor, floors, false);
   } else {
