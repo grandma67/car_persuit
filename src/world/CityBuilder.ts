@@ -705,10 +705,12 @@ function addOpenShell(b: Building, f: RoofFrame, roofs: GeometryBuilder, wallCol
   const t = 0.35;
   const coping = wallColor.clone().multiplyScalar(0.6);
   const top = snowy ? new THREE.Color(SNOW) : coping;
-  roofs.box({ x: b.x, z: z1 - t / 2, w: b.w, d: t }, f.y1 - 0.1, 0.3, coping, null, top);
-  roofs.box({ x: b.x, z: z0 + t / 2, w: b.w, d: t }, f.y1 - 0.1, 0.3, coping, null, top);
-  roofs.box({ x: x1 - t / 2, z: b.z, w: t, d: b.d - 2 * t }, f.y1 - 0.1, 0.3, coping, null, top);
-  roofs.box({ x: x0 + t / 2, z: b.z, w: t, d: b.d - 2 * t }, f.y1 - 0.1, 0.3, coping, null, top);
+  // The coping stands 2 cm proud of the walls (its outer faces in their planes z-fought); its inner faces stay put.
+  const p = 0.02, tp = t + p;
+  roofs.box({ x: b.x, z: z1 + p - tp / 2, w: b.w + 2 * p, d: tp }, f.y1 - 0.1, 0.3, coping, null, top);
+  roofs.box({ x: b.x, z: z0 - p + tp / 2, w: b.w + 2 * p, d: tp }, f.y1 - 0.1, 0.3, coping, null, top);
+  roofs.box({ x: x1 + p - tp / 2, z: b.z, w: tp, d: b.d - 2 * t }, f.y1 - 0.1, 0.3, coping, null, top);
+  roofs.box({ x: x0 - p + tp / 2, z: b.z, w: tp, d: b.d - 2 * t }, f.y1 - 0.1, 0.3, coping, null, top);
   // The inner faces, inside the coping, down to the floor.
   const ix0 = x0 + t, ix1 = x1 - t, iz0 = z0 + t, iz1 = z1 - t, ya = yf, yb = f.y1 - 0.1;
   roofs.quad([[ix1, ya, iz1], [ix0, ya, iz1], [ix0, yb, iz1], [ix1, yb, iz1]], [0, 0, -1], soot);
@@ -844,7 +846,8 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
         const z = alongX ? r.z + across : r.z + end;
         const top = y1 + roofRise(f.roof, r) + 1.1;
         const brick = new THREE.Color(0x8a4a3a);
-        roofs.box({ x, z, w: 0.8, d: 0.8 }, y1 - 0.5, top - y1 + 0.5, brick, null, snowy ? new THREE.Color(SNOW) : new THREE.Color(0x2a2a2a));
+        // The stack ends inside its cap: level with the cap's top, their tops z-fought.
+        roofs.box({ x, z, w: 0.8, d: 0.8 }, y1 - 0.5, top - 0.25 - y1 + 0.5, brick, null, snowy ? new THREE.Color(SNOW) : new THREE.Color(0x2a2a2a));
         roofs.box({ x, z, w: 1.0, d: 1.0 }, top - 0.25, 0.25, brick.clone().multiplyScalar(0.8), null, snowy ? new THREE.Color(SNOW) : brick);
         break;
       }
@@ -887,7 +890,8 @@ function addTrims(trims: TrimKind[], b: Building, f: TrimFrame, roofs: GeometryB
               roofs.box({ x: ax + (bx - ax) * u + ix, z: az + (bz - az) * u + iz, w: 0.5, d: 0.5 }, f.y0, b.h, steel, null, steel);
             }
             // The eave beam over them.
-            const beam: Rect = az === bz ? { x: b.x, z: az + iz, w: b.w, d: 0.5 } : { x: ax + ix, z: b.z, w: 0.5, d: b.d };
+            // 2 cm short of the lot: ends level with the end walls' faces z-fought.
+            const beam: Rect = az === bz ? { x: b.x, z: az + iz, w: b.w - 0.02, d: 0.5 } : { x: ax + ix, z: b.z, w: 0.5, d: b.d - 0.02 };
             roofs.box(beam, y1 - 0.8, 0.8, steel, null, steel);
           }
           break;

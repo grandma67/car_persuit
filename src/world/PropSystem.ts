@@ -334,7 +334,9 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
   const bench = mergeGeometries([
     ...[-0.17, 0, 0.17].map((z) => part(box(1.8, 0.05, 0.14), wood, 0, 0.45, z)),
     ...[0.62, 0.82].map((y) => part(box(1.8, 0.12, 0.05), wood, 0, y, -0.27)),
-    ...[-0.8, 0.8].flatMap((x) => [part(box(0.06, 0.45, 0.5), iron, x, 0.22), part(box(0.06, 0.55, 0.05), iron, x, 0.7, -0.27)]),
+    // The back uprights are deeper than the rails and enclose them (z -0.33..-0.23 round -0.295..-0.245)
+    // and start 1 cm above the slats' underside: with shared faces they z-fought.
+    ...[-0.8, 0.8].flatMap((x) => [part(box(0.06, 0.45, 0.5), iron, x, 0.22), part(box(0.06, 0.54, 0.1), iron, x, 0.705, -0.28)]),
   ]);
   const fence = mergeGeometries([
     ...[-1.35, 1.35].map((x) => part(box(0.1, 1.0, 0.1), white, x, 0.5)),
@@ -433,7 +435,7 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
     part(new THREE.SphereGeometry(0.3, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0x4f7a3a, 0, 0.55), // a shrub
   ]);
   const cart = mergeGeometries([
-    part(box(1.3, 0.1, 2.0), oak, 0, 0.75, 0.2),
+    part(box(1.24, 0.1, 1.96), oak, 0, 0.75, 0.2), // inside the side boards: flush ends z-fought
     ...[-0.62, 0.62].map((x) => part(box(0.06, 0.45, 2.0), oakDark, x, 1.0, 0.2)),
     part(box(1.3, 0.45, 0.06), oakDark, 0, 1.0, 1.18),
     ...[-0.75, 0.75].map((x) => part(cyl(0.55, 0.55, 0.08, 10).rotateZ(Math.PI / 2), oakDark, x, 0.55, 0.1)),
@@ -444,7 +446,7 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
   const stall = mergeGeometries([
     ...[-1.2, 1.2].flatMap((x) => [-0.8, 0.8].map((z) => part(box(0.09, 2.5, 0.09), oak, x, 1.25, z))),
     part(box(2.5, 0.08, 1.2), oak, 0, 0.9, 0.2),
-    part(box(2.4, 0.8, 0.05), oakDark, 0, 0.5, 0.78),
+    part(box(2.4, 0.8, 0.05), oakDark, 0, 0.5, 0.77), // its back clear of the posts' (z-fighting)
     part(box(2.7, 0.06, 2.0).rotateX(-0.18), 0xffffff, 0, 2.55),
     part(box(2.7, 0.3, 0.03), 0xffffff, 0, 2.3, 1.02),
     ...[-0.8, -0.25, 0.3, 0.85].map((x, k) => part(box(0.4, 0.25, 0.35), [0xd04a2a, 0xe8b23a, 0x6f9a3a, 0xa83a5a][k], x, 1.07, 0.3)),
@@ -464,7 +466,7 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
     part(box(1.8, 0.15, 0.7), oakDark, 0, 0.07),
     part(box(0.18, 2.1, 0.18), oak, 0, 1.05),
     part(box(1.4, 0.35, 0.16), oak, 0, 1.75),
-    ...[-0.4, 0, 0.4].map((x) => part(cyl(0.06, 0.06, 0.18).rotateX(Math.PI / 2), 0x1a1a1a, x, 1.75)),
+    ...[-0.4, 0, 0.4].map((x) => part(cyl(0.06, 0.06, 0.17).rotateX(Math.PI / 2), 0x1a1a1a, x, 1.75)), // inside the post's faces
   ]);
   const haybale = mergeGeometries([
     part(box(1.15, 1.0, 1.15), straw, 0, 0.5),
@@ -696,7 +698,7 @@ function harborModels(): Record<HarborKind | 'fence-chainlink', THREE.BufferGeom
     part(box(0.6, 0.35, 0.5), dark, -3.4, 1.0), // the motor housing
     ...arm,
     part(box(0.08, 0.95, 0.08), steel, 3.4, 0.47),
-    part(box(0.3, 0.06, 0.12), steel, 3.4, 0.95),
+    part(box(0.3, 0.06, 0.16), steel, 3.4, 0.95), // deeper than the arm: same depth z-fought
   ]);
   // A level-crossing post: two white boards with red edges crossed in an X, facing +Z.
   const board = (rot: number) => [part(box(1.3, 0.22, 0.03).rotateZ(rot), 0xc8202a, 0, 2.55, 0.06), part(box(1.2, 0.14, 0.035).rotateZ(rot), 0xf2f2ee, 0, 2.55, 0.06)];
@@ -792,7 +794,8 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
   // A roadside stand: a plank counter of pumpkin crates under a little roof, a price board.
   const farmStand = mergeGeometries([
     part(box(2.6, 0.9, 1.0), timber, 0, 0.45),
-    ...[-1.2, 1.2].flatMap((x) => [-0.45, 0.45].map((z) => part(box(0.1, 2.3, 0.1), 0x6a4e30, x, 1.15, z))),
+    // Posts 1 cm proud of the counter and sunk 1 cm: flush with it they z-fought.
+    ...[-1.2, 1.2].flatMap((x) => [-0.46, 0.46].map((z) => part(box(0.1, 2.3, 0.1), 0x6a4e30, x, 1.14, z))),
     part(box(2.9, 0.08, 1.4).rotateX(0.18), red, 0, 2.3),
     ...[-0.8, 0, 0.8].map((x) => part(new THREE.SphereGeometry(0.22, 8, 6).scale(1, 0.75, 1), 0xe0741a, x, 1.05, 0.1)),
     part(box(0.9, 0.6, 0.04), 0xf2ecd8, 0.9, 1.7, 0.55),
@@ -909,20 +912,22 @@ function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball', THREE.Bu
   // back to z = -0.5 and the net as an opaque grid of cords (no transparency: no new program).
   const white = 0xf2f2ee;
   const cord = 0xd8dcd8;
-  const post = (x: number) => part(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 6), white, x, 1.0, 0.5);
+  const post = (x: number) => part(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 6), white, x, 0.99, 0.5); // sunk 1 cm (z-fighting)
   const net: THREE.BufferGeometry[] = [];
-  for (let k = 0; k <= 20; k++) net.push(part(new THREE.BoxGeometry(0.015, 2.0, 0.015), cord, -2.5 + k * 0.25, 1.0, -0.5)); // back
+  // Uprights stop inside the roof cords and the base bars sit inside the cords' ends, sunk 1 cm:
+  // ends flush with the frame's z-fought.
+  for (let k = 0; k <= 20; k++) net.push(part(new THREE.BoxGeometry(0.015, 1.995, 0.015), cord, -2.5 + k * 0.25, 0.9975, -0.5)); // back
   for (let k = 0; k <= 8; k++) net.push(part(new THREE.BoxGeometry(5.0, 0.015, 0.015), cord, 0, 0.05 + k * 0.245, -0.5));
   for (const x of [-2.5, 2.5]) {
     for (let k = 0; k <= 8; k++) net.push(part(new THREE.BoxGeometry(0.015, 0.015, 1.0), cord, x, 0.05 + k * 0.245, 0)); // sides
-    for (let k = 0; k <= 4; k++) net.push(part(new THREE.BoxGeometry(0.015, 2.0, 0.015), cord, x, 1.0, -0.5 + k * 0.25));
+    for (let k = 0; k <= 4; k++) net.push(part(new THREE.BoxGeometry(0.015, 1.995, 0.015), cord, x, 0.9975, -0.5 + k * 0.25));
   }
   for (let k = 0; k <= 20; k++) net.push(part(new THREE.BoxGeometry(0.015, 0.015, 1.0), cord, -2.5 + k * 0.25, 2.0, 0)); // roof
   const goal = mergeGeometries([
     post(-2.5), post(2.5),
     part(new THREE.CylinderGeometry(0.06, 0.06, 5.12, 6).rotateZ(Math.PI / 2), white, 0, 2.0, 0.5),
-    ...[-2.5, 2.5].map((x) => part(new THREE.BoxGeometry(0.06, 0.06, 1.0), white, x, 0.03, 0)), // base bars
-    part(new THREE.BoxGeometry(5.0, 0.06, 0.06), white, 0, 0.03, -0.5),
+    ...[-2.5, 2.5].map((x) => part(new THREE.BoxGeometry(0.06, 0.06, 0.98), white, x, 0.02, 0)), // base bars
+    part(new THREE.BoxGeometry(4.98, 0.06, 0.06), white, 0, 0.02, -0.5),
     ...net,
   ]);
   const cornerFlag = mergeGeometries([
@@ -999,7 +1004,7 @@ function megaparkModels(): Record<MegaparkKind, THREE.BufferGeometry> {
     part(box(0.06, 0.06, 0.6), iron, 0, 0.6, 1.05), // the handle
     ...[-0.45, 0.45].flatMap((x) => [-0.7, 0.7].map((z) => part(cyl(0.02, 0.02, 1.0, 4), white, x, 1.7, z))),
     part(box(1.3, 0.08, 1.9), 0xe8586a, 0, 2.22),
-    ...[-0.4, 0, 0.4].map((x) => part(box(0.2, 0.085, 1.9), white, x, 2.225, 0)),
+    ...[-0.4, 0, 0.4].map((x) => part(box(0.2, 0.085, 1.92), white, x, 2.225, 0)), // past the canopy's ends
     part(new THREE.ConeGeometry(0.16, 0.4, 8).rotateX(Math.PI), 0xd8a868, 0, 1.45, 0.4),
     part(new THREE.SphereGeometry(0.17, 8, 6), 0xf0c8d8, 0, 1.7, 0.4),
   ]);
@@ -1031,12 +1036,13 @@ function megaparkModels(): Record<MegaparkKind, THREE.BufferGeometry> {
   ]);
   // Notice board: a green framed board on two posts, a painted map of paths and a lake on it.
   const parkBoard = mergeGeometries([
-    ...[-0.7, 0.7].map((x) => part(box(0.09, 2.2, 0.09), green, x, 1.1, 0)),
+    ...[-0.7, 0.7].map((x) => part(box(0.09, 2.2, 0.08), green, x, 1.1, 0)), // fronts behind the paper's
     part(box(1.5, 1.0, 0.06), green, 0, 1.55, 0),
     part(box(1.36, 0.86, 0.02), 0xe8e0c4, 0, 1.55, 0.035),
     part(box(0.5, 0.3, 0.01), 0x6aa0c8, 0.2, 1.5, 0.05),
-    part(box(0.9, 0.05, 0.01), 0xb89a6a, -0.1, 1.72, 0.05),
-    part(box(0.05, 0.6, 0.01), 0xb89a6a, -0.3, 1.5, 0.05),
+    // The paths stand 1 cm proud of the lake and lawn they cross, their backs inside the paper.
+    part(box(0.9, 0.05, 0.03), 0xb89a6a, -0.1, 1.72, 0.05),
+    part(box(0.05, 0.6, 0.03), 0xb89a6a, -0.3, 1.5, 0.05),
     part(box(0.3, 0.25, 0.01), 0x6a9a4a, -0.45, 1.3, 0.05),
     part(box(1.7, 0.12, 0.3).rotateX(0.1), green, 0, 2.12, 0), // the little roof
   ]);
@@ -1070,7 +1076,7 @@ function playgroundKit(): Record<'swings' | 'slide' | 'climber' | 'roundabout' |
     for (const z of [-1.5, 0, 1.5]) climber.push(part(cyl(0.04, 0.04, 3.0, 6).rotateZ(Math.PI / 2), yellow, 0, y, z));
     for (const x of [-1.5, 0, 1.5]) climber.push(part(cyl(0.04, 0.04, 3.0, 6).rotateX(Math.PI / 2), yellow, x, y, 0));
   }
-  climber.push(part(box(1.5, 0.06, 1.5), red, 0.75, 1.42, 0.75));
+  climber.push(part(box(1.44, 0.06, 1.44), red, 0.75, 1.42, 0.75)); // inside the frame: the bars' end caps z-fought
   // A roundabout: a turntable on a hub, four handles.
   const roundabout = [part(cyl(1.3, 1.3, 0.12, 16), red, 0, 0.32), part(cyl(0.15, 0.2, 0.3, 8), steel, 0, 0.15)];
   for (let k = 0; k < 4; k++) {
@@ -1141,8 +1147,9 @@ function slumsModels(): Record<SlumsKind, THREE.BufferGeometry> {
   // A sagging couch (tinted per instance).
   const couch = mergeGeometries([
     part(box(1.6, 0.4, 0.75), 0xffffff, 0, 0.3),
-    part(box(1.6, 0.5, 0.2), 0xe0e0e0, 0, 0.65, -0.3).rotateX(-0.1),
-    ...[-1, 1].map((sx) => part(box(0.2, 0.55, 0.75), 0xe0e0e0, sx * 0.72, 0.38, 0)),
+    // Back ends inside the arms, arms 2 cm proud of the base front and back: flush they z-fought.
+    part(box(1.56, 0.5, 0.2), 0xe0e0e0, 0, 0.65, -0.3).rotateX(-0.1),
+    ...[-1, 1].map((sx) => part(box(0.2, 0.55, 0.79), 0xe0e0e0, sx * 0.72, 0.38, 0)),
     part(box(0.6, 0.15, 0.6).rotateZ(0.2), 0xd0d0d0, -0.35, 0.56, 0.05), // a cushion askew
   ]);
   // A stack of four bald tyres.
