@@ -95,6 +95,9 @@ there if it holds for all districts; don't repeat it in a district's test.
   builds past its walls lands in the other's planes. Building geometry in the roof mesh is
   kept inside `buildingReach` (half the gap to each neighbour): overhangs are cut there, boxes stop
   2 cm short, a jetty grows only that far. A new trim reaching past the walls needs nothing more.
+  Fix z-fighting in the geometry, not the camera: a chase camera `near` of 0.5 (5x the depth
+  precision far off) was tried and dropped. Nothing changed visibly at range, and it cut the
+  rain and snow nearest the lens, the streaks that sell it.
 
 ## Looks and performance
 
