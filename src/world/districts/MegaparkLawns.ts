@@ -7,7 +7,7 @@ import type { Rng } from '../../core/Rng';
 import { DISTRICTS, MEGAPARK } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import { FootprintIndex, footprintsOverlap, propFootprint, type Footprint, type StreetProp } from '../StreetProps';
+import { FootprintIndex, propFootprint, type Footprint, type StreetProp } from '../StreetProps';
 import { rimPoints, shoreDistance, type ShallowWater } from '../Water';
 import type { District, Gate, GroundPatch, Structure } from './District';
 import { edgeKey } from './place';
@@ -145,6 +145,41 @@ export function layLawns(q: District, city: CityData, lake: ShallowWater, buildi
     busy.add(propFootprint(p, r));
   };
 
+  // --- The gates: stone pillars either side of each street in, iron leaves folded back inside ---
+  const lodge = buildings.find((b) => b.lot === 'lodge');
+  for (const g of q.gates) {
+    const hx = Math.sin(g.yaw), hz = Math.cos(g.yaw); // heading in
+    const lx = Math.cos(g.yaw), lz = -Math.sin(g.yaw); // across
+    const main = g === mainGate;
+    const fps: Footprint[] = [];
+    for (const e of [-1, 1]) {
+      const o = g.opening / 2 + 0.5;
+      const px = g.x + lx * e * o + hx * 0.5, pz = g.z + lz * e * o + hz * 0.5;
+      fps.push({ x: px, z: pz, hx: 0.45, hz: 0.45, yaw: g.yaw });
+      // The leaf, open, along the wall line away from the street.
+      const leaf = 0.45 + 1.45;
+      fps.push({ x: px + lx * e * leaf, z: pz + lz * e * leaf, hx: 1.4, hz: 0.06, yaw: g.yaw });
+    }
+    out.structures.push({ kind: 'parkGate', x: g.x, z: g.z, yaw: g.yaw, footprints: fps, data: { opening: g.opening, main } });
+    out.solids.push(...fps);
+    for (const f of fps) busy.add(f);
+    if (!main) continue;
+    // The park's name on a low wall beyond the leaf, on the side away from the lodge; a notice board inside it.
+    const away = lodge ? -Math.sign((lodge.x - g.x) * lx + (lodge.z - g.z) * lz) || 1 : 1;
+    const o = g.opening / 2 + 0.5 + 0.45 + 2.9 + 2.2;
+    const wall: Footprint = { x: g.x + lx * away * o + hx * 0.5, z: g.z + lz * away * o + hz * 0.5, hx: 1.8, hz: 0.3, yaw: g.yaw };
+    out.structures.push({ kind: 'nameWall', x: wall.x, z: wall.z, yaw: g.yaw + Math.PI, footprints: [wall], data: { name: out.name } });
+    out.solids.push(wall);
+    busy.add(wall);
+    // The first free spot just inside the wall (a fence or a picnic table may have it).
+    for (const [inward, along] of [[2.2, 0], [1.4, 0], [3.2, 0], [2.2, 1.6], [2.2, -1.6], [3.6, 1.6], [3.6, -1.6]]) {
+      const board: StreetProp = { kind: 'parkBoard', x: wall.x + hx * inward + lx * along, z: wall.z + hz * inward + lz * along, yaw: g.yaw + Math.PI };
+      if (busy.hits(propFootprint(board, 0.4))) continue;
+      put(board, 0.4);
+      break;
+    }
+  }
+
   // --- Flower beds and trees ---
   const treeAt = new FootprintIndex();
   for (const k of q.blocks) {
@@ -232,34 +267,6 @@ export function layLawns(q: District, city: CityData, lake: ShallowWater, buildi
     }
   }
 
-  // --- The gates: stone pillars either side of each street in, iron leaves folded back inside ---
-  const lodge = buildings.find((b) => b.lot === 'lodge');
-  for (const g of q.gates) {
-    const hx = Math.sin(g.yaw), hz = Math.cos(g.yaw); // heading in
-    const lx = Math.cos(g.yaw), lz = -Math.sin(g.yaw); // across
-    const main = g === mainGate;
-    const fps: Footprint[] = [];
-    for (const e of [-1, 1]) {
-      const o = g.opening / 2 + 0.5;
-      const px = g.x + lx * e * o + hx * 0.5, pz = g.z + lz * e * o + hz * 0.5;
-      fps.push({ x: px, z: pz, hx: 0.45, hz: 0.45, yaw: g.yaw });
-      // The leaf, open, along the wall line away from the street.
-      const leaf = 0.45 + 1.45;
-      fps.push({ x: px + lx * e * leaf, z: pz + lz * e * leaf, hx: 1.4, hz: 0.06, yaw: g.yaw });
-    }
-    out.structures.push({ kind: 'parkGate', x: g.x, z: g.z, yaw: g.yaw, footprints: fps, data: { opening: g.opening, main } });
-    out.solids.push(...fps);
-    if (!main) continue;
-    // The park's name on a low wall beyond the leaf, on the side away from the lodge; a notice board inside it.
-    const away = lodge ? -Math.sign((lodge.x - g.x) * lx + (lodge.z - g.z) * lz) || 1 : 1;
-    const o = g.opening / 2 + 0.5 + 0.45 + 2.9 + 2.2;
-    const wall: Footprint = { x: g.x + lx * away * o + hx * 0.5, z: g.z + lz * away * o + hz * 0.5, hx: 1.8, hz: 0.3, yaw: g.yaw };
-    out.structures.push({ kind: 'nameWall', x: wall.x, z: wall.z, yaw: g.yaw + Math.PI, footprints: [wall], data: { name: out.name } });
-    out.solids.push(wall);
-    const bx = wall.x + hx * 2.2, bz = wall.z + hz * 2.2;
-    put({ kind: 'parkBoard', x: bx, z: bz, yaw: g.yaw + Math.PI }, 0.4);
-  }
-
   // --- Avenue trees along the drives, both sides, on the sidewalk's inner edge ---
   const { roadWidth: rw } = city.config;
   const nodes = city.graph.nodes;
@@ -280,7 +287,7 @@ export function layLawns(q: District, city: CityData, lake: ShallowWater, buildi
       for (let t = clearAt(a) + rng.range(0, 3); t < len - clearAt(b); t += MEGAPARK.avenueStep) {
         const x = A.x + dx * t - dz * lateral * side, z = A.z + dz * t + dx * lateral * side;
         const fp = { x, z, hx: 0.5, hz: 0.5, yaw: 0 };
-        if (sidewalkProps.hits(fp) || gateSolids.hits(fp) || busy.hits(fp)) continue;
+        if (sidewalkProps.hits(fp) || gateSolids.hits(fp) || busy.hits(fp) || nearPath(x, z, 1.2)) continue; // not in a path's mouth
         out.trees.push({ x, z });
       }
     }
@@ -288,6 +295,5 @@ export function layLawns(q: District, city: CityData, lake: ShallowWater, buildi
   return out;
 }
 
-/** The trees a lawns layout adds never stand on a path, in the water or on a solid (for tests). */
+/** A Mega-park's paths (kept in its dressing's `extra`). */
 export const pathsOf = (q: District) => (q.dressing.extra?.paths ?? []) as ParkPath[];
-export { footprintsOverlap };

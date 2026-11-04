@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { alone } from '../paramsTesting';
 import { generateCity, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
 import { HARBOR, HARBOR_QUAY } from '../../gameplay/balance';
@@ -10,7 +11,7 @@ import { coastFrame, quayLines, uOf, uSpan, vOf, type CraneData, type ShipData }
 import { at, pavedOf } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const city = (seed: number) => generateCity(seed, undefined, { force: { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false, megapark: false } });
+const city = (seed: number) => generateCity(seed, undefined, { force: alone('harbor') });
 const placed = SEEDS.flatMap((seed) => {
   const c = city(seed);
   const q = c.districts.find((d) => d.kind === 'harbor');

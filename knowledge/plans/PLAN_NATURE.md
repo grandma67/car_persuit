@@ -205,22 +205,17 @@ Woods on the island edge, the one district cops can't cut through.
 - Seed guard vs main: exactly the cities with a pond or pitch moved (95 of 120 before the pond
   chance came down); `city-hash` skips empty `water` / `parkPieces` lists.
 
-## Branch 2 status (`districts/megapark`): WIP, M4 in progress (2026-11-04)
+## Branch 2 status (`districts/megapark`): M1–M4 done, M5 next (2026-11-04)
 
 - **Done and committed:** M1 placement, roles, lots (4fbdca6); M2 lake block (9169656); M3 sports
-  ground, running track, playground, bandstand and café terrace, plus the 9 new props (c758b46).
-  Seed guard after each one moved only cities where the Mega-park rolls.
-- **WIP commit:** `world/districts/MegaparkLawns.ts` (`layLawns`: paths, beds, trees, picnic tables,
-  benches and path lamps under the glow budget, kiosk, gate pillars and leaves, name wall and board
-  at the main gate, avenue trees). It type-checks but is **not wired into `Megapark.dress` yet**, so
-  nothing calls it.
-- **Next (M4):** call `layLawns` in `dress` after the set blocks (taken = solids, buildings, set props;
-  grounds = court/terrace/playground/sandpit rects). Push trees to `city.trees`, paths to
-  `extra.paths`, the name to `extra.name`, its props through `clearOf`. Render paths (draped strips),
-  beds, `parkGate` and `nameWall`, and add a `megaparkSigns.ts` atlas like `farmSigns`. Tests: paths
-  inside blocks; trees off paths, solids and water; gate pillars per gate; lamps ≤ `MEGAPARK.maxGlow`;
-  `MegaparkTraffic.test.ts` (30 km/h cap, no heavies, NavGrid round the lake and never through the
-  bandstand or island).
+  ground, running track, playground, bandstand and café terrace, plus the 9 new props (c758b46);
+  M4 lawns, paths, gates, name wall, traffic and police tests. Seed guard after each one moved
+  only cities where the Mega-park rolls (M4: 44 of 120, exactly the Mega-park cities).
+- **M4 as built:** `layLawns` runs at the end of `Megapark.dress` (it reads the set pieces through
+  `q.dressing = out`). Gates, the name wall and its notice board are laid before the beds, trees and
+  tables, so the filler keeps off them. Avenue trees skip the paths' mouths. Paths render with
+  `drapePolyline` (`render/geometry.ts`), the name plate from `megaparkSigns.ts`. Programs unchanged
+  (34 vs 34), +7 calls; `check:restart` on a Mega-park city ok; every gate driven at speed.
 - **Then M5:** night (bandstand bulbs, gate lanterns, fireflies), climate (frozen lake already ice;
   desert dry lawns and a cactus garden; beach palms), perf on vs off, docs (`DISTRICTS.md` row and
   section, odds line, `CITY_PARAMS.md` features table, PLAN_GAME version line). `check:restart` covers
@@ -230,7 +225,7 @@ Woods on the island edge, the one district cops can't cut through.
   porch; Victorian lamps are the Old City's `oilLamp`; the island is solid (a folly on it); the lake
   is ~40 m across, sized to fit its block.
 
-### Before finishing M4 (cheap; saves time on this branch and the next two)
+### Before finishing M4 (done: `DISTRICTS_DEV.md` files list, conventions, reuse; `alone` / `everyDistrict`)
 
 From the branch-2 retrospective: this session's time went to reading code for reuse points, to rework
 caught by tests or screenshots, and to tool friction.
@@ -254,8 +249,7 @@ caught by tests or screenshots, and to tool friction.
 
 - `clearOf` returns or counts what it drops: it silently dropped half the fence panels (they sat
   end to end; panels now 3.0 m apart).
-- A shared polyline drape in `render/geometry.ts` (paths, track, the Swamp's boardwalks and the
-  Forest's tracks) and a shared `fenceRound` (Slums `chainLink` and `MegaparkGrounds` duplicate it).
+- ~~A shared polyline drape~~ (done in M4: `drapePolyline`; the track could move to it) and a shared `fenceRound` (Slums `chainLink` and `MegaparkGrounds` duplicate it).
 - `district-tour.js`: support `tourKinds=lot:…` and add a `top=1` straight-down view (angled aerials
   misled once, about the jetty). Studio: a props-only scale (lots make small props unreadable).
 - `check:restart`: also cover districts past the five-district `--make` (a second city).

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DISTRICTS, SLUMS } from '../../gameplay/balance';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 import { generateCity, type Rect } from '../CityGenerator';
-import { districtCities } from '../paramsTesting';
+import { alone, districtCities, everyDistrict } from '../paramsTesting';
 import { inRect } from '../lots';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
 import type { District } from './District';
@@ -11,7 +11,7 @@ import type { Decal } from './SlumsStreet';
 import { at, pavedOf } from './rules';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const ALONE = { slums: true, oldtown: false, chinatown: false, harbor: false, farm: false, megapark: false };
+const ALONE = alone('slums');
 const city = (seed: number) => generateCity(seed, undefined, { force: ALONE });
 const placed = SEEDS.flatMap((seed) => {
   const c = city(seed);
@@ -98,7 +98,7 @@ describe('Slums roles and lots', () => {
 });
 
 describe('Slums with every district forced on', () => {
-  const ALL = { slums: true, oldtown: true, chinatown: true, harbor: true, farm: true, megapark: true };
+  const ALL = everyDistrict();
 
   it('places on most seeds, with its one corner store', () => {
     const slums = SEEDS.map((seed) => generateCity(seed, undefined, { force: ALL })).flatMap((c) => (c.districts.some((d) => d.kind === 'slums') ? [c] : []));

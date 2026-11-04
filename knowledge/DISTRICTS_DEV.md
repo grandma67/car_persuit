@@ -129,6 +129,39 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
 4. Renderer `render/districts/<Name>.ts` in `DISTRICT_RENDERERS`.
 5. Docs: `DISTRICTS.md` (table row + section, odds line), `plans/PLAN_GAME.md` version line, README mention.
 
+**Every file a new kind touches** (beyond its own `world/districts/<Name>*.ts`, renderer and tests):
+the `DistrictKind` union (`District.ts`); `world/districts/index.ts`; `render/districts/index.ts`;
+`scripts/city.ts` (`DISTRICT_CHAR`); the kind lists in `scripts/evals/district-tour.js`
+and `district-drive.js`; `NUMBERS` in `paramsTesting.ts` for an `'int'` feature; `CityTheme` climate
+looks (optional); new props in `StreetProps.ts` + `PropSystem.ts`. Other districts' tests use
+`alone(kind…)` / `everyDistrict()` (`paramsTesting.ts`), so they need no edit. `check:restart`'s
+`--make` names five districts and `DISTRICTS.max` is 5: a sixth and later kind gets its own run.
+
+## Conventions
+
+- **Footprint yaw:** local X is `(cos yaw, −sin yaw)`, local Z `(sin yaw, cos yaw)` (three's rotation
+  about Y, so `frameOf(x, y, z, f.yaw)` lays a part on its footprint). A `Structure`'s yaw is the same.
+- **A prop's local +Z is its front** (a bench's seat, a board's face, a kiosk's hatch).
+- **`ShallowWater`:** `yaw = atan2(−nz, nx)` points local X along `(nx, nz)`; `rx`/`rz` the half
+  extents; `shoreDistance` > 0 in the water, < 0 on the bank.
+- **`Building.street` bits:** 1 = +Z side, 2 = −Z, 4 = +X, 8 = −X (`Megapark`'s `SIDES`).
+- **`Gate`:** `x, z` on the wall line (the block's sidewalk line), `yaw` heading in, `opening` = road +
+  both sidewalks; anything beside it stands past `opening / 2`.
+- **Ground lifts** (no z-fighting): sidewalk 0.03, grass 0.05, paths 0.065, patches 0.07, lines 0.09–0.1.
+- **Reading the dressing while laying it:** `q.dressing` is assigned after `dress` returns; a helper
+  that reads the pieces laid so far gets `q.dressing = out` first (`Megapark.dress`).
+
+## Reuse before writing
+
+- `block.park = true` in `roles`: grass ground and the minimap's park colour.
+- `ParkPiece.district` for a district's own pond or pitch (`pitchAt`, the park-piece renderer, the ball).
+- `rowboat()` (`render/Landmarks.ts`); Victorian lamps are the Old City's `oilLamp` (glow included).
+- `drapePolyline` / `upTri` (`render/geometry.ts`): a strip along a polyline on the ground (paths,
+  tracks, boardwalk shadows); `GeometryBuilder.drape` for rects.
+- A name board atlas: `farmSigns.ts` / `megaparkSigns.ts` (facade walls' material settings: no program).
+- `clearOf` (`HarborYard.ts`) keeps props off solids and each other, **silently dropping** what doesn't
+  fit: lay what must exist (a gate's board) before the filler, or into the busy index first.
+
 ## Pitfalls
 
 - **Measure placement rate** (`npm run stats -- <kind>`) after any rule, alone and with all districts

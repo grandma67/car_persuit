@@ -14,6 +14,7 @@ import { emptyDressing, feature, type BlockRole, type District, type DistrictDef
 import { isJunctionControl } from './apply';
 import { clearOf } from './HarborYard';
 import { layLake } from './MegaparkLake';
+import { layLawns } from './MegaparkLawns';
 import { layBandstand, layPlayground, laySports, layTrack, type GroundsLayout } from './MegaparkGrounds';
 import { ranchGate } from './Farm';
 import { streetSides } from './Harbor';
@@ -226,9 +227,18 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
     else if (role === 'playground') join(layPlayground(inner, rng));
     else if (role === 'bandstand') join(layBandstand(inner, buildings.find((b) => b.lot === 'cafe')!, rng));
   }
-  // The props keep clear of the solids, the buildings, the junction controls and each other.
+  // The lawns and the rest: paths, beds, trees, tables, benches, lamps, the kiosk, the gates, avenue trees.
   const controls = city.streetProps.filter((p) => inRect(q.bounds, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
+  const taken = [...out.solids, ...controls, ...buildings.map(rectFootprint), ...props.map((p) => propFootprint(p, 0.3))];
+  q.dressing = out; // layLawns reads the set pieces laid so far
+  const lawns = layLawns(q, city, lake.water, buildings, taken, out.ground.map((g) => shrink(g, -0.5)), mainGate(q), rng);
+  out.structures.push(...lawns.structures);
+  out.solids.push(...lawns.solids);
+  out.ground.push(...lawns.ground);
+  props.push(...lawns.props);
+  city.trees.push(...lawns.trees);
+  // The props keep clear of the solids, the buildings, the junction controls and each other.
   out.props = clearOf(props, [...out.solids, ...controls, ...buildings.map(rectFootprint)], city.streetProps.filter((p) => inRect(q.bounds, p, 2)).map((p) => propFootprint(p, 0.1)));
-  out.extra = { lodgeBlock: lodgeBlock(q), fountain: lake.fountain };
+  out.extra = { lodgeBlock: lodgeBlock(q), fountain: lake.fountain, paths: lawns.paths, name: lawns.name };
   return out;
 }

@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { DISTRICTS, MEGAPARK } from '../../gameplay/balance';
 import { generateCity } from '../CityGenerator';
-import { districtCities } from '../paramsTesting';
+import { alone, districtCities } from '../paramsTesting';
 import { inRect, shrink } from '../lots';
 import { onPitch } from '../ParkPieces';
 import { footprintsOverlap, propFootprint } from '../StreetProps';
 import { FootprintIndex, rectFootprint } from '../StreetProps';
 import { at } from './rules';
 import { gateBlocks, lodgeBlock, mainGate, roleBlocks } from './Megapark';
+import { PARK_NAMES, pathsOf, toPath } from './MegaparkLawns';
 import { softGroundOf, WADING } from '../softGround';
 import { DISTRICT_DEFS } from './index';
 import { inWater, rimPoints, shoreDistance } from '../Water';
@@ -15,7 +16,7 @@ import type { CityData } from '../CityGenerator';
 import type { District } from './District';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const ALONE = { megapark: true, oldtown: false, chinatown: false, harbor: false, farm: false, slums: false };
+const ALONE = alone('megapark');
 const placed = SEEDS.flatMap((seed) => {
   const c = generateCity(seed, undefined, { force: ALONE });
   const q = c.districts.find((d) => d.kind === 'megapark');
@@ -218,5 +219,57 @@ describe('Mega-park set blocks', () => {
     expect(footprintsOverlap(rectFootprint(shrink(terrace, 0.05)), rectFootprint(cafe))).toBe(false);
     expect(kinds(q, 'cafeTable').filter((p) => inRect(terrace, p)).length).toBeGreaterThanOrEqual(2);
     expect(kinds(q, 'deckChair').filter((p) => footprintsOverlap(propFootprint(p), rectFootprint(terrace)))).toEqual([]);
+  });
+});
+
+describe('Mega-park lawns, paths and gates', () => {
+  it.each(withAll)('seed %i: every path lies inside one block, inside its sidewalk line; every lawn block has some', (_seed, c, q) => {
+    const inners = q.blocks.map((k) => shrink(c.blocks[k].rect, c.config.sidewalk));
+    const paths = pathsOf(q);
+    const breaks = paths.flatMap((p) => p.points).filter((pt) => !inners.some((r) => inRect(r, pt, 0.01))).map(at);
+    expect(breaks).toEqual([]);
+    for (const k of roleBlocks(q, 'lawn')) expect(paths.some((p) => inRect(shrink(c.blocks[k].rect, c.config.sidewalk), p.points[1])), `lawn ${k}`).toBe(true);
+  });
+
+  it.each(withAll)('seed %i: trees stand off the paths, out of the lake, clear of every solid and building', (_seed, c, q) => {
+    const lake = lakeWater(c, q);
+    const paths = pathsOf(q);
+    const trees = c.trees.filter((t) => inRect(q.bounds, t));
+    expect(trees.length).toBeGreaterThan(q.blocks.length * 3);
+    const solids = new FootprintIndex([...q.dressing.solids, ...c.buildings.filter((b) => inRect(q.bounds, b)).map(rectFootprint)]);
+    const breaks: string[] = [];
+    for (const t of trees) {
+      if (paths.some((p) => toPath(p.points, t.x, t.z) < p.width / 2 + 0.5)) breaks.push(`on a path at ${at(t)}`);
+      if (shoreDistance(lake, t.x, t.z) > -1) breaks.push(`in the lake at ${at(t)}`);
+      if (solids.hits({ x: t.x, z: t.z, hx: 0.5, hz: 0.5, yaw: 0 })) breaks.push(`on a solid at ${at(t)}`);
+    }
+    expect(breaks).toEqual([]);
+  });
+
+  it.each(withAll)('seed %i: gate pillars and open leaves at every gate, the name wall by the main one; lamps within the glow budget', (_seed, c, q) => {
+    const gates = q.dressing.structures.filter((s) => s.kind === 'parkGate');
+    expect(gates).toHaveLength(q.gates.length);
+    for (const g of q.gates) {
+      const s = gates.find((x) => Math.hypot(x.x - g.x, x.z - g.z) < 1e-6)!;
+      expect(s.footprints).toHaveLength(4);
+      // The opening stays clear: no footprint reaches into the roadway and sidewalk it spans.
+      for (const f of s.footprints) expect(Math.abs((f.x - g.x) * Math.cos(g.yaw) - (f.z - g.z) * Math.sin(g.yaw)) - f.hx).toBeGreaterThan(g.opening / 2 - 0.1);
+    }
+    const wall = q.dressing.structures.filter((s) => s.kind === 'nameWall');
+    expect(wall).toHaveLength(1);
+    const main = mainGate(q);
+    expect(Math.hypot(wall[0].x - main.x, wall[0].z - main.z)).toBeLessThan(20);
+    expect(PARK_NAMES[q.dressing.extra!.name as number]).toBeDefined();
+    expect(kinds(q, 'parkBoard')).toHaveLength(1);
+    const lamps = c.streetProps.filter((p) => p.kind === 'oilLamp' && inRect(q.bounds, p, 1)).length;
+    expect(lamps + 2 * q.gates.length).toBeLessThanOrEqual(MEGAPARK.maxGlow);
+    expect(kinds(q, 'oilLamp').length).toBeGreaterThan(0);
+  });
+
+  it.each(withAll)('seed %i: lawns get beds, picnic tables and benches; a kiosk somewhere', (_seed, _c, q) => {
+    expect(q.dressing.ground.filter((g) => g.kind === 'bed').length).toBeGreaterThanOrEqual(roleBlocks(q, 'lawn').length);
+    expect(kinds(q, 'bench').length).toBeGreaterThan(2);
+    if (roleBlocks(q, 'lawn').length) expect(kinds(q, 'picnicTable').length).toBeGreaterThan(0);
+    expect(kinds(q, 'kiosk').length).toBeLessThanOrEqual(1);
   });
 });

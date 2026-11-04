@@ -11,9 +11,11 @@ import { GeometryBuilder } from '../../world/CityBuilder';
 import { shrink } from '../../world/lots';
 import { groundHeight, type Terrain } from '../../world/Terrain';
 import type { District, GroundPatch, Structure } from '../../world/districts/District';
-import { part } from '../geometry';
+import { drapePolyline, part, upTri } from '../geometry';
 import { rowboat } from '../Landmarks';
+import type { ParkPath } from '../../world/districts/MegaparkLawns';
 import type { DistrictRenderContext, DistrictView } from './index';
+import { parkNamePlate, parkSignMaterial } from './megaparkSigns';
 
 const STONE = 0x9a948a;
 const STONE_DARK = 0x7a756c;
@@ -238,13 +240,6 @@ function bandstand(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeo
 
 // --- Ground: the court, the track, sandpits, the playground's bark, the café's terrace ---
 
-/** Push a flat triangle draped on the ground, facing up. */
-function tri(flat: GeometryBuilder, a: number[], b: number[], c: number[], color: THREE.Color): void {
-  const up = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]);
-  const pts = up >= 0 ? [a, b, c] : [a, c, b];
-  flat.quad([pts[0], pts[1], pts[2], pts[2]], [0, 1, 0], color);
-}
-
 /** The running track: an oval band (lanes, lines, the start) draped `lift` over the ground. */
 function trackGround(flat: GeometryBuilder, s: Structure, terrain: Terrain, snowy: boolean): void {
   const ground = (x: number, z: number) => groundHeight(terrain, x, z);
@@ -267,8 +262,8 @@ function trackGround(flat: GeometryBuilder, s: Structure, terrain: Terrain, snow
     for (let i = 0; i < N; i++) {
       const [a0, b0] = [pt(i, r0), pt(i, r1)], [a1, b1] = [pt(i + 1, r0), pt(i + 1, r1)];
       const v = (p: number[]) => [p[0], ground(p[0], p[1]) + lift, p[1]];
-      tri(flat, v(a0), v(b0), v(b1), color);
-      tri(flat, v(a0), v(b1), v(a1), color);
+      upTri(flat, v(a0), v(b0), v(b1), color);
+      upTri(flat, v(a0), v(b1), v(a1), color);
     }
   };
   const red = new THREE.Color(snowy ? 0xe6eaee : 0xb8553a), line = new THREE.Color(snowy ? 0xc8d0d6 : 0xf2f0ea);
@@ -297,6 +292,87 @@ function courtGround(flat: GeometryBuilder, p: GroundPatch, terrain: Terrain, sn
   flat.drape(r(0, 0, svc * 2, t * 2), 0.1, white, terrain); // the centre service line
 }
 
+
+const IRON = 0x23282a;
+const LANTERN = 0xf2d9a0;
+const GRAVEL = 0xc2b49a;
+const SOIL = 0x5a4130;
+const FLOWERS = [0xd8434a, 0xf0c23a, 0xe88ab8, 0xf4f0ea, 0x8a5ac8, 0xf08a3a];
+
+/** One stone gate pillar with its cap and a lantern on top, local to its centre on the ground. */
+function pillar(snowy: boolean): THREE.BufferGeometry[] {
+  return [
+    part(box(0.9, 2.5, 0.9), STONE, 0, 1.25, 0),
+    part(box(1.1, 0.18, 1.1), STONE_DARK, 0, 2.59, 0),
+    part(box(1.1, 0.06, 1.1), snowy ? SNOW : STONE_DARK, 0, 2.71, 0),
+    part(box(0.12, 0.25, 0.12), IRON, 0, 2.86, 0),
+    part(box(0.34, 0.42, 0.34), LANTERN, 0, 3.2, 0),
+    part(cyl(0.04, 0.3, 0.2, 4), IRON, 0, 3.51, 0),
+  ];
+}
+
+/** An iron gate leaf `len` long: rails top and bottom, bars, finials; local X along it, on the ground. */
+function leaf(len: number): THREE.BufferGeometry[] {
+  const out = [part(box(len, 0.08, 0.06), IRON, 0, 0.25, 0), part(box(len, 0.08, 0.06), IRON, 0, 1.95, 0), part(box(len, 0.06, 0.05), IRON, 0, 1.6, 0)];
+  const n = Math.round(len / 0.16);
+  for (let i = 0; i <= n; i++) {
+    const x = -len / 2 + (len * i) / n;
+    out.push(part(box(0.035, 2.0, 0.035), IRON, x, 1.15, 0));
+    if (i % 2 === 0) out.push(part(cyl(0, 0.05, 0.14, 4), IRON, x, 2.22, 0));
+  }
+  return out;
+}
+
+/** The park gates: the parts are laid from the structure's footprints (pillars, then their leaf). */
+function parkGate(s: Structure, ground: (x: number, z: number) => number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+  for (const f of s.footprints) {
+    const y = ground(f.x, f.z) - 0.05;
+    const parts = f.hz > 0.2 ? pillar(snowy) : leaf(f.hx * 2);
+    place(parts, frameOf(f.x, y, f.z, f.yaw), out);
+  }
+}
+
+/** The low name wall: stone with a coping; the plate goes on its street face (local +Z). */
+function nameWall(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+  const f = s.footprints[0];
+  const w = f.hx * 2, d = f.hz * 2;
+  place([
+    part(box(w, 1.3, d), STONE, 0, 0.65, 0),
+    part(box(w + 0.2, 0.14, d + 0.2), STONE_DARK, 0, 1.37, 0),
+    ...(snowy ? [part(box(w + 0.2, 0.06, d + 0.2), SNOW, 0, 1.47, 0)] : []),
+  ], frameOf(s.x, y, s.z, s.yaw), out);
+}
+
+/** A flower bed: an oval of dark soil, low clumps of flowers in two or three colours (snow: a white mound). */
+function bed(p: GroundPatch, terrain: Terrain, ground: (x: number, z: number) => number, snowy: boolean, flat: GeometryBuilder, out: THREE.BufferGeometry[]): void {
+  const N = 16;
+  const v = (a: number, k: number) => {
+    const x = p.x + Math.cos(a) * (p.w / 2) * k, z = p.z + Math.sin(a) * (p.d / 2) * k;
+    return [x, groundHeight(terrain, x, z) + 0.07, z];
+  };
+  const soil = new THREE.Color(snowy ? SNOW : SOIL), rim = new THREE.Color(snowy ? 0xdde3ea : STONE);
+  const c = [p.x, groundHeight(terrain, p.x, p.z) + 0.07, p.z];
+  for (let i = 0; i < N; i++) {
+    const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
+    upTri(flat, c, v(a0, 0.9), v(a1, 0.9), soil);
+    upTri(flat, v(a0, 0.9), v(a0, 1), v(a1, 1), rim);
+    upTri(flat, v(a0, 0.9), v(a1, 1), v(a1, 0.9), rim);
+  }
+  if (snowy) return;
+  // Rings of clumps, the colour by ring (deterministic from the bed's place).
+  const pick = Math.abs(Math.round(p.x * 7 + p.z * 13));
+  for (let ring = 0; ring < 3; ring++) {
+    const k = 0.75 - ring * 0.28;
+    const n = Math.max(1, Math.round((N * k * Math.max(p.w, p.d)) / 5));
+    const color = FLOWERS[(pick + ring * 2) % FLOWERS.length];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + ring * 0.4;
+      const x = p.x + Math.cos(a) * (p.w / 2) * k, z = p.z + Math.sin(a) * (p.d / 2) * k;
+      out.push(part(box(0.4, 0.22, 0.4), color, x, ground(x, z) + 0.11, z));
+    }
+  }
+}
+
 const SAND = 0xd8c08a;
 
 export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
@@ -306,6 +382,7 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
   const lake = city.water.find((w) => w.kind === 'lake' && Math.abs(w.x - q.bounds.x) <= q.bounds.w / 2 && Math.abs(w.z - q.bounds.z) <= q.bounds.d / 2);
   const surface = (x: number, z: number) => ctx.ground(x, z) + (lake?.depth ?? 0);
   const flat = new GeometryBuilder();
+  const plates: THREE.BufferGeometry[] = [];
   for (const p of q.dressing.ground) {
     if (p.kind === 'court') courtGround(flat, p, city.terrain, snowy);
     else if (p.kind === 'sandpit') {
@@ -318,12 +395,23 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
       }
     } else if (p.kind === 'playground') flat.drape(shrink(p, 0.3), 0.07, new THREE.Color(snowy ? 0xe8ecf0 : 0x8a6a4a), city.terrain); // bark
     else if (p.kind === 'terrace') flat.drape(p, 0.07, new THREE.Color(snowy ? 0xe4e8ec : 0xc8bca4), city.terrain);
+    else if (p.kind === 'bed') bed(p, city.terrain, ctx.ground, snowy, flat, solid);
   }
+  // Gravel paths (trodden snow in the snow).
+  const gravel = new THREE.Color(snowy ? 0xb4bcc4 : GRAVEL);
+  for (const path of (q.dressing.extra?.paths ?? []) as ParkPath[]) drapePolyline(flat, path.points, path.width, 0.065, gravel, city.terrain);
   for (const s of q.dressing.structures) {
     const y = ctx.ground(s.x, s.z);
     if (s.kind === 'track') { trackGround(flat, s, city.terrain, snowy); continue; }
     if (s.kind === 'bleachers') { bleachers(s, y - 0.05, snowy, solid); continue; }
     if (s.kind === 'bandstand') { bandstand(s, y - 0.05, snowy, solid); continue; }
+    if (s.kind === 'parkGate') { parkGate(s, ctx.ground, snowy, solid); continue; }
+    if (s.kind === 'nameWall') {
+      nameWall(s, y - 0.05, snowy, solid);
+      const f = s.footprints[0];
+      plates.push(parkNamePlate(f.hx * 2 - 0.3, 0.62, s.data!.name as number).applyMatrix4(frameOf(s.x, y + 0.75, s.z, s.yaw).multiply(new THREE.Matrix4().makeTranslation(0, 0, f.hz + 0.02))));
+      continue;
+    }
     if (KIT_PARTS[s.kind]) { place(KIT_PARTS[s.kind](), frameOf(s.x, y - 0.02, s.z, s.yaw), solid); continue; }
     if (s.kind === 'island') island(s, y - 0.05, snowy, solid);
     else if (s.kind === 'jetty') jetty(s, y, snowy, solid);
@@ -344,6 +432,7 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
     mesh.castShadow = mesh.receiveShadow = true;
     scene.add(mesh);
   }
+  if (plates.length) scene.add(new THREE.Mesh(mergeGeometries(plates), parkSignMaterial(0.08 + ctx.lampGlow * 0.15)));
   // The fountain jet (not in the snow: the lake is frozen).
   const at = q.dressing.extra?.fountain as { x: number; z: number } | undefined;
   let jet: THREE.Mesh | null = null;
