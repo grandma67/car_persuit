@@ -6,7 +6,7 @@ import { SUNK_BELOW } from '../render/Sea';
 import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
 import { CAR_PASSES, type Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
-import { footprintsOverlap, PROP_SPECS, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp, type WreckKind } from './StreetProps';
+import { footprintsOverlap, LIT_PROPS, PROP_SPECS, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp, type WreckKind } from './StreetProps';
 import type { TreeKind } from './Climate';
 import { signalState, type SignalLight } from './TrafficControl';
 import { groundBase, groundHeight, groundNormal } from './Terrain';
@@ -19,8 +19,7 @@ const OIL_LAMP_HEAD = new THREE.Vector3(0, 3.75, 0); // the lantern's flame, on 
 const DRAGON_LAMP_HEAD = new THREE.Vector3(0, 4.12, 0); // the pagoda lantern's glass
 const JACK_GLOW = new THREE.Vector3(0, 0.22, 0.2); // the candle behind a jack-o'-lantern's face
 const LAMP_HEADS: Partial<Record<PropKind, THREE.Vector3>> = { lamp: LAMP_HEAD, woodLamp: LAMP_HEAD, oilLamp: OIL_LAMP_HEAD, dragonLamp: DRAGON_LAMP_HEAD, jackOLantern: JACK_GLOW };
-/** Props that light up at night: a bulb (or flame) and a pool of light under it. */
-const LIGHTS = new Set<PropKind>(['lamp', 'woodLamp', 'oilLamp', 'dragonLamp', 'jackOLantern']);
+const LIGHTS = LIT_PROPS;
 /** A dragon lamp's banner: hung from the brackets on its street side, edge-on to the kerb. */
 const BANNER = { w: 0.5, h: 1.05, y: 2.45, z: 0.42 };
 const LIGHT_POOL_RADIUS = 7;

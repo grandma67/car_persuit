@@ -250,8 +250,11 @@ caught by tests or screenshots, and to tool friction.
 
 ### After M5 (tooling; before Swamp and Forest)
 
-- `clearOf` returns or counts what it drops: it silently dropped half the fence panels (they sat
-  end to end; panels now 3.0 m apart).
+Done after the branch-2 retrospective: `hash --expect <kind>`, `stats -- odds`, glow use in `stats`
+(it found the pitch floodlights missing from the park's lamp budget), `clearOf` reports drops
+(`dropped`, `CLEAROF=`), a lock per port in `check:browser`, `DISTRICTS_DEV.md` "Night lighting and
+the glow budget", `maxGlow` declared on every def. Still open:
+
 - ~~A shared polyline drape~~ (done in M4: `drapePolyline`; the track could move to it) and a shared `fenceRound` (Slums `chainLink` and `MegaparkGrounds` duplicate it).
 - `district-tour.js`: support `tourKinds=lot:…` and add a `top=1` straight-down view (angled aerials
   misled once, about the jetty). Studio: a props-only scale (lots make small props unreadable).

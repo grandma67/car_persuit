@@ -4,7 +4,7 @@ import { generateCity } from '../CityGenerator';
 import { alone, districtCities } from '../paramsTesting';
 import { inRect, shrink } from '../lots';
 import { onPitch } from '../ParkPieces';
-import { footprintsOverlap, propFootprint } from '../StreetProps';
+import { footprintsOverlap, LIT_PROPS, propFootprint } from '../StreetProps';
 import { FootprintIndex, rectFootprint } from '../StreetProps';
 import { at } from './rules';
 import { gateBlocks, lodgeBlock, mainGate, roleBlocks } from './Megapark';
@@ -261,7 +261,7 @@ describe('Mega-park lawns, paths and gates', () => {
     expect(Math.hypot(wall[0].x - main.x, wall[0].z - main.z)).toBeLessThan(20);
     expect(PARK_NAMES[q.dressing.extra!.name as number]).toBeDefined();
     expect(kinds(q, 'parkBoard')).toHaveLength(1);
-    const lamps = c.streetProps.filter((p) => p.kind === 'oilLamp' && inRect(q.bounds, p, 1)).length;
+    const lamps = c.streetProps.filter((p) => LIT_PROPS.has(p.kind) && inRect(q.bounds, p, 1)).length; // floodlights too
     expect(lamps + 2 * q.gates.length + MEGAPARK.bandstandBulbs).toBeLessThanOrEqual(MEGAPARK.maxGlow);
     expect(kinds(q, 'oilLamp').length).toBeGreaterThan(0);
   });

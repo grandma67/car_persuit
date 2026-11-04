@@ -57,6 +57,9 @@ export interface PropSpec {
   slowdown: number;
 }
 
+/** Props that light up at night: a bulb (or flame) and a pool of light under it (PropSystem). */
+export const LIT_PROPS: ReadonlySet<PropKind> = new Set<PropKind>(['lamp', 'woodLamp', 'oilLamp', 'dragonLamp', 'jackOLantern']);
+
 export const PROP_SPECS: Record<PropKind, PropSpec> = {
   lamp: { hx: 0.15, hz: 0.15, height: 6.2, mass: 120, breakSpeed: 4, slowdown: 0.08 },
   hydrant: { hx: 0.22, hz: 0.22, height: 0.8, mass: 80, breakSpeed: 3, slowdown: 0.1 },

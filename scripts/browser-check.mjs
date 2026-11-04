@@ -26,12 +26,13 @@
 //   --table      a perf-profile.js result as a compact table (with --vs: both sides, Δ%) instead of
 //                the JSON, which goes to --json (default <out-dir>/result.json); other evals print JSON
 //   --json f     also save the full output JSON to f
+//   --wait-lock s  another run holds this port: wait up to s seconds for it (default 900), then give up
 //   --vs ref     the same run on that ref first (worktree in the temp dir, kept for next time; its own
 //                Vite on port + 100), then here, one after the other; prints { vs, sha, base, current },
 //                shots in <out-dir>/base and /current, --profile per side. Delete old worktrees with
 //                `git worktree remove`.
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { perfReport } from './perf-table.mjs';
@@ -44,6 +45,44 @@ const vitePort = Number(args.port ?? 5199);
 const debugPort = vitePort + 1000;
 const [w, h] = (args.size ?? '1280x800').split('x').map(Number);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// One run at a time per port: two runs share Vite's port and Chrome's debugger port and trade pages
+// (shots from one city land in the other's folder). A second run waits for the first (lock file with
+// its pid in the temp dir; a dead pid's lock is taken over), up to --wait-lock s (default 900).
+const lock = join(tmpdir(), `car-pursuit-check-${vitePort}.lock`);
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+for (let waited = 0, said = false; ; waited += 2) {
+  try {
+    writeFileSync(lock, String(process.pid), { flag: 'wx' });
+    break;
+  } catch {
+    const pid = Number(readFileSync(lock, 'utf8'));
+    if (!pid || !alive(pid)) {
+      rmSync(lock, { force: true });
+      continue;
+    }
+    if (waited >= Number(args['wait-lock'] ?? 900)) {
+      process.stderr.write(`port ${vitePort} still busy with run pid ${pid} after ${waited} s: giving up\n`);
+      process.exit(1);
+    }
+    if (!said) process.stderr.write(`port ${vitePort} busy (browser check pid ${pid}): waiting for it…\n`);
+    said = true;
+    await sleep(2000);
+  }
+}
+process.on('exit', () => {
+  try {
+    if (readFileSync(lock, 'utf8') === String(process.pid)) rmSync(lock, { force: true });
+  } catch {}
+});
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
 /** JSON with objects broken into lines `depth` levels down and anything deeper on one line (fewer lines to read). */
 const print = (v, depth, pad = '') =>
   depth && v && typeof v === 'object' && !Array.isArray(v)

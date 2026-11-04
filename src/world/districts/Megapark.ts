@@ -9,7 +9,7 @@ import type { Rng } from '../../core/Rng';
 import { MEGAPARK } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import { propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
+import { LIT_PROPS, propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
 import { emptyDressing, feature, type BlockRole, type District, type DistrictDef, type DistrictDressing, type Gate, type LotLook } from './District';
 import { isJunctionControl } from './apply';
 import { clearOf } from './HarborYard';
@@ -184,6 +184,7 @@ export const MEGAPARK_DEF: DistrictDef = {
   keepZebras: true,
   traffic: { speed: MEGAPARK.speed, speedOn: 'all', density: MEGAPARK.density, heavy: false },
   copSpawnSkip: MEGAPARK.copSpawnSkip,
+  maxGlow: MEGAPARK.maxGlow,
   softGround: { grip: MEGAPARK.lawnGrip, drag: MEGAPARK.lawnDrag },
   roadblockGates: true,
   mapColor: 0x4a9a4a,
@@ -231,7 +232,8 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const controls = city.streetProps.filter((p) => inRect(q.bounds, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
   const taken = [...out.solids, ...controls, ...buildings.map(rectFootprint), ...props.map((p) => propFootprint(p, 0.3))];
   q.dressing = out; // layLawns reads the set pieces laid so far
-  const lawns = layLawns(q, city, lake.water, buildings, taken, out.ground.map((g) => shrink(g, -0.5)), mainGate(q), rng);
+  const lit = [...city.streetProps.filter((p) => inRect(q.bounds, p, 1)), ...props].filter((p) => LIT_PROPS.has(p.kind)).length;
+  const lawns = layLawns(q, city, lake.water, buildings, taken, out.ground.map((g) => shrink(g, -0.5)), mainGate(q), lit, rng);
   out.structures.push(...lawns.structures);
   out.solids.push(...lawns.solids);
   out.ground.push(...lawns.ground);

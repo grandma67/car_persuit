@@ -71,9 +71,10 @@ export interface LawnsLayout {
 /**
  * Everything but the set pieces: paths, beds, trees, tables, benches, lamps, the kiosk, the
  * avenue trees and the gates. `taken` holds what's already laid (solids, buildings, set props);
- * `grounds` the flat set pieces trees and tables keep off (courts, the terrace, the playground…).
+ * `grounds` the flat set pieces trees and tables keep off (courts, the terrace, the playground…);
+ * `litSoFar` the lit props already inside (the path lamps fill the rest of MEGAPARK.maxGlow).
  */
-export function layLawns(q: District, city: CityData, lake: ShallowWater, buildings: Building[], taken: Footprint[], grounds: Rect[], mainGate: Gate, rng: Rng): LawnsLayout {
+export function layLawns(q: District, city: CityData, lake: ShallowWater, buildings: Building[], taken: Footprint[], grounds: Rect[], mainGate: Gate, litSoFar: number, rng: Rng): LawnsLayout {
   const out: LawnsLayout = { paths: [], ground: [], structures: [], solids: [], props: [], trees: [], name: rng.int(0, PARK_NAMES.length - 1) };
   const sw = city.config.sidewalk;
   const busy = new FootprintIndex(taken);
@@ -215,8 +216,8 @@ export function layLawns(q: District, city: CityData, lake: ShallowWater, buildi
   }
 
   // --- Along the paths: benches facing them with a bin by some, lamps on the other side (glow budget) ---
-  const lamps = () => [...city.streetProps, ...out.props].filter((p) => p.kind === 'oilLamp' && inRect(q.bounds, p, 1)).length;
-  let lampRoom = MEGAPARK.maxGlow - lamps() - q.gates.length * 2 - MEGAPARK.bandstandBulbs; // the gate lanterns, the bandstand's bulbs
+  // Everything already lit (the drives' lamps, the pitches' floodlights), the gate lanterns, the bandstand's bulbs.
+  let lampRoom = MEGAPARK.maxGlow - litSoFar - q.gates.length * 2 - MEGAPARK.bandstandBulbs;
   for (const path of out.paths) {
     const pts = path.points;
     let walked = 0, nextBench = rng.range(6, 10), nextLamp = rng.range(4, 8);

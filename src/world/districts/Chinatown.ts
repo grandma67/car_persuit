@@ -134,6 +134,7 @@ export const CHINATOWN_DEF: DistrictDef = {
   keepZebras: true,
   traffic: { speed: CHINATOWN.speed, speedOn: 'mainStreet', density: CHINATOWN.density, heavy: true, weights: { Van: CHINATOWN.vanWeight } },
   copSpawnSkip: 0,
+  maxGlow: CHINATOWN.maxGlow,
   roadblockGates: true,
   mapColor: 0xc8423a,
   dress,

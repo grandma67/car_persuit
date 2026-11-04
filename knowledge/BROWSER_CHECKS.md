@@ -65,8 +65,8 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 
 | Call | Does |
 |---|---|
-| `district(kind?)`, `find(kind)` | a district; a landmark/structure/prop/lot/`park`/`square` position |
-| `view(point,{dist})` | camera on a clear road spot near it (never place the car by hand) |
+| `city()`, `district(kind?)`, `find(kind)` | the `CityData`; a district (its `dressing`, `roles`, `gates`); a landmark/structure/prop/lot/`park`/`square` position. Any `{x, z}` works as a target for `view`/`aerial`/`aim` (a block's `rect`, a structure) |
+| `view(point,{dist,wait})` | camera on a clear road spot near it (never place the car by hand) |
 | `gate(i,{back,speed,lateral,kind})` | car outside gate `i`, facing in |
 | `place(x,z,yaw,speed)`, `road(x,z)` | put the car; nearest road centre point |
 | `near(x,z,r)` | what stands there, nearest first, roadworks included |
@@ -91,6 +91,10 @@ feel to the user.
 
 ## Pitfalls
 
+- **One run at a time per port.** Two runs share Vite's port and Chrome's debugger (port + 1000) and
+  trade pages: one city's shots land in the other's folder and the other hangs. `browser-check.mjs`
+  now waits for a run already on the port (lock file, `--wait-lock`); run checks one after the other,
+  or give a second one its own `--port`.
 - `--make` words without `seed=` start from a random seed: a check that must repeat passes one.
 - Measure `dbg.stats()` **before** any `aerial()` (the overview turns fog off and every material
   recompiles: 35 read as 58; `stats()` warns) and before a drive breaks props (a first break can add one).

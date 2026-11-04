@@ -127,7 +127,7 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
    `cityWords*.test.ts` ([CITY_PARAMS.md](CITY_PARAMS.md)).
 3. Looks: facade styles in `Facades.ts` (+ `CAPS`), roofs in `addRoof`, trims in `addTrims`.
 4. Renderer `render/districts/<Name>.ts` in `DISTRICT_RENDERERS`.
-5. Docs: `DISTRICTS.md` (table row + section, odds line), `plans/PLAN_GAME.md` version line, README mention.
+5. Docs: `DISTRICTS.md` (table row + section, odds line from `npm run stats -- odds`), `plans/PLAN_GAME.md` version line, README mention.
 
 **Every file a new kind touches** (beyond its own `world/districts/<Name>*.ts`, renderer and tests):
 the `DistrictKind` union (`District.ts`); `world/districts/index.ts`; `render/districts/index.ts`;
@@ -159,11 +159,37 @@ looks (optional); new props in `StreetProps.ts` + `PropSystem.ts`. Other distric
 - `drapePolyline` / `upTri` (`render/geometry.ts`): a strip along a polyline on the ground (paths,
   tracks, boardwalk shadows); `GeometryBuilder.drape` for rects.
 - A name board atlas: `farmSigns.ts` / `megaparkSigns.ts` (facade walls' material settings: no program).
-- `clearOf` (`HarborYard.ts`) keeps props off solids and each other, **silently dropping** what doesn't
-  fit: lay what must exist (a gate's board) before the filler, or into the busy index first.
+- `clearOf` (`HarborYard.ts`) keeps props off solids and each other, **dropping** what doesn't fit,
+  earlier props first: lay what must exist (a gate's board) before the filler, or into the busy index
+  first. Why is a prop missing: `CLEAROF=parkBoard node scripts/run-ts.mjs <script>` logs each drop
+  of those kinds (`*` all) and what it hit; a test can pass a `dropped` array.
+- `fireflies(spots, n, seed, scene, ground)` (`render/districts/fireflies.ts`): the Farm's and the
+  Mega-park's; one program for both.
+
+## Night lighting and the glow budget
+
+- **What glows:** lit props (`LIT_PROPS` in `StreetProps.ts`: `lamp`, `woodLamp`, `oilLamp`,
+  `dragonLamp`, `jackOLantern`) get a bulb and a light pool from `PropSystem`. A district's own lights
+  (lanterns, torches, bulb strings) are an `InstancedMesh` of `MeshBasicMaterial({ toneMapped: false })`
+  with a colour per instance, dim by day and `× 1.6` warm at night by `ctx.lampGlow` (Old City
+  `torches`, Mega-park `glows`): the lamp bulbs' program, no light. Lit glass on a name board: the
+  sign atlas's warm swatch (`onWarm`, `farmSignMaterial(2.5)`). Fireflies: `fireflies.ts`.
+  `GlowBatch` is the **cars'** lamp sprites only; never add district lights there. No point lights
+  (one in the scene, shared).
+- **`maxGlow`** (each district's balance block, declared on its def): how many glowing things at night,
+  lit props plus the renderer's own. Lay the lamps last and fill what's left: count everything lit
+  already inside (`LIT_PROPS` on `city.streetProps` in the bounds **and** the set blocks' props not
+  pushed yet, such as a pitch's floodlights), minus what the renderer will add (2 lanterns a gate, the
+  bulbs). Fireflies take what remains.
+- **Sizing it:** a district's streets carry ~8 lamps a block (swapped to its lamp kind), so a 3×3's
+  streets alone hold ~72. `npm run stats -- <kind>` prints `glow`: lit props (average, worst, the
+  worst seed and shape) against `maxGlow`. Size the budget on the worst, with the renderer's lights on top.
 
 ## Pitfalls
 
+- **Seed guard per milestone:** `npm run hash -- --vs HEAD --expect <kind>` fails if anything moved
+  outside cities that hold the district, and says how many of those moved (all of them when it first
+  lands, a few for a tweak). Several kinds: `--expect farm,slums`.
 - **Measure placement rate** (`npm run stats -- <kind>`) after any rule, alone and with all districts
   forced; check rejection reasons if low. A district's position depends on those placed before it.
 - `perimeterWall` opens at *every* street crossing the wall, not just gates (`'mainStreet'` districts

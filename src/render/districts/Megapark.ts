@@ -14,6 +14,7 @@ import type { District, GroundPatch, Structure } from '../../world/districts/Dis
 import { drapePolyline, part, upTri } from '../geometry';
 import { rowboat } from '../Landmarks';
 import type { ParkPath } from '../../world/districts/MegaparkLawns';
+import { LIT_PROPS } from '../../world/StreetProps';
 import type { DistrictRenderContext, DistrictView } from './index';
 import { fireflies } from './fireflies';
 import { parkNamePlate, parkSignMaterial } from './megaparkSigns';
@@ -484,7 +485,7 @@ export function renderMegapark(q: District, city: CityData, scene: THREE.Scene, 
   glows([...lanterns.map((pos) => ({ pos, geo: 'lantern' as const })), ...bulbs.map((pos) => ({ pos, geo: 'bulb' as const }))], scene, ctx.lampGlow);
   // Fireflies over the lawns on warm nights, within the glow budget.
   const warm = ctx.climate.name === 'temperate' || ctx.climate.name === 'beach';
-  const lit = city.streetProps.filter((p) => p.kind === 'oilLamp' && inRect(q.bounds, p, 1)).length + lanterns.length + bulbs.length;
+  const lit = city.streetProps.filter((p) => LIT_PROPS.has(p.kind) && inRect(q.bounds, p, 1)).length + lanterns.length + bulbs.length;
   const lawns = q.blocks.filter((k) => q.roles.get(k) === 'lawn' || q.roles.get(k) === 'bandstand').map((k) => shrink(city.blocks[k].rect, city.config.sidewalk + 4));
   const flies = ctx.night && warm ? fireflies(lawns, Math.max(0, Math.min(MEGAPARK.fireflies, MEGAPARK.maxGlow - lit)), city.seed ^ 0x3e9a, scene, ctx.ground) : null;
   // The fountain jet (not in the snow: the lake is frozen).
