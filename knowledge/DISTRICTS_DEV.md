@@ -89,7 +89,10 @@ there if it holds for all districts; don't repeat it in a district's test.
   ground layers ≥ 2 cm apart or `polygonOffset` on the lower (asphalt 1/1, street cobbles 0.5/0.5,
   markings none).
   Tests catch it: `PropModels.test` (every prop model) and `BuildingZFight.test` (40 rolled cities,
-  every building and its neighbours; `render/coplanar.ts`). Building geometry in the roof mesh is
+  every building and its neighbours; `render/coplanar.ts`, `world/zfight.ts`). To fix one, list them
+  all with where to look: `npm run zfight` (`props`, `only=chinatown`, or city words for a district's
+  own cities). Neighbours in a terrace stand 0.3–0.5 m apart and often share a height, so anything one
+  builds past its walls lands in the other's planes. Building geometry in the roof mesh is
   kept inside `buildingReach` (half the gap to each neighbour): overhangs are cut there, boxes stop
   2 cm short, a jetty grows only that far. A new trim reaching past the walls needs nothing more.
 

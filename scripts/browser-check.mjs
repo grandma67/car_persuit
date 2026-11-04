@@ -49,6 +49,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // One run at a time per port: two runs share Vite's port and Chrome's debugger port and trade pages
 // (shots from one city land in the other's folder). A second run waits for the first (lock file with
 // its pid in the temp dir; a dead pid's lock is taken over), up to --wait-lock s (default 900).
+// A --vs run takes none: its two sides are runs of their own, each taking its port's lock (holding
+// this one, the current side waited on its own parent for the whole --wait-lock).
 const lock = join(tmpdir(), `car-pursuit-check-${vitePort}.lock`);
 const alive = (pid) => {
   try {
@@ -58,7 +60,7 @@ const alive = (pid) => {
     return false;
   }
 };
-for (let waited = 0, said = false; ; waited += 2) {
+for (let waited = 0, said = false; !args.vs; waited += 2) {
   try {
     writeFileSync(lock, String(process.pid), { flag: 'wx' });
     break;

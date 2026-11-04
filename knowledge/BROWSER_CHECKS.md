@@ -94,7 +94,14 @@ feel to the user.
 - **One run at a time per port.** Two runs share Vite's port and Chrome's debugger (port + 1000) and
   trade pages: one city's shots land in the other's folder and the other hangs. `browser-check.mjs`
   now waits for a run already on the port (lock file, `--wait-lock`); run checks one after the other,
-  or give a second one its own `--port`.
+  or give a second one its own `--port`. (`--vs` takes no lock itself: each side's run takes its own.)
+- **Give every run a hard limit**, so a stuck one dies instead of holding the session (macOS has no
+  `timeout`): `perl -e 'alarm 300; exec @ARGV' npm run check:browser -- …`. A run takes ~10 s plus
+  the eval (`--vs` twice that); one that's slow has said why on stderr in its first lines
+  ("port … busy (browser check pid …): waiting"): read them before waiting longer.
+- To frame a spot a test or `npm run zfight` names: `?seed=N` builds the same city as
+  `generateCity({ seed: N })`, so its x/z work in `dbg.aerial([x, z])`; in an eval, find the
+  buildings by `dbg.city().buildings` (district, lot, h) rather than reading coordinates off a log.
 - `--make` words without `seed=` start from a random seed: a check that must repeat passes one.
 - Measure `dbg.stats()` **before** any `aerial()` (the overview turns fog off and every material
   recompiles: 35 read as 58; `stats()` warns) and before a drive breaks props (a first break can add one).

@@ -43,6 +43,9 @@ Each script's header lists its options; the doc named here says when to use it.
 - Seeds to look at: `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`
   (`name:N` at least, `name=N` exactly; counts structures, landmarks, props, ground patches, lots,
   roles; `flat` = no hill/canals). Never write a search script for this.
+- Z-fighting: `npm run zfight -- [seeds=40] [limit=3] [only=<text>] [props] [words…]` lists every
+  coplanar overlap in buildings (the test's sweep, or cities from words) or prop models, with the
+  buildings' lot boxes; `PropModels.test` and `BuildingZFight.test` fail on any. `DISTRICTS_DEV.md`.
 - Seed guard: `npm run hash -- --vs HEAD` (or any ref on/after city params: hashes 120 cities on a temp
   worktree, names those that moved; `--out f` / `--vs f` for a file; `--reload` also proves every dump
   reloads as its city). Older refs need a file baseline. District work: `--expect <kind>` fails on any
@@ -55,7 +58,8 @@ Each script's header lists its options; the doc named here says when to use it.
   Δ inside it is noise; `--diag hits|uturns|recovers`; `COPS_DEV.md`).
   Never write a chase sim for this.
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (`RAPIER.md`).
-- Browser (`BROWSER_CHECKS.md`; ~10 s plus the eval with Vite already on 5199, `check:restart` ~1.5 min;
+- Browser (`BROWSER_CHECKS.md`; always under a hard limit: `perl -e 'alarm 300; exec @ARGV' npm run …`;
+  ~10 s plus the eval with Vite already on 5199, `check:restart` ~1.5 min;
   settle seed and words before the first, run in the background while editing; one at a time per port,
   a second one waits): `npm run check:browser …`;
   `npm run check:restart` after anything that adds to the scene, page or listeners (`LEAKS.md`);

@@ -3,31 +3,15 @@ import { Rng } from '../core/Rng';
 import { generateCity } from './CityGenerator';
 import { buildingGeometry, buildingReach } from './CityBuilder';
 import { ALL_THEMES } from './CityTheme';
-import { CLIMATES, type Climate } from './Climate';
-import type { CityData } from './CityGenerator';
-import type { CityTheme } from './CityTheme';
-import { colourTag, coplanarOverlaps, trianglesOf, type Tri } from '../render/coplanar';
+import { CLIMATES } from './Climate';
+import { trianglesOf, type Tri } from '../render/coplanar';
+import { buildingFights, describeOverlap, sweepLook, trianglesByBuilding } from './zfight';
 
 // Building faces sharing a plane, facing the same way, in different colours or from different
 // buildings: they z-fight. Swept over rolled cities (districts on), every theme and climate in turn.
+// `npm run zfight` lists every overlap with its buildings, for fixing one.
 
 const SEEDS = Array.from({ length: 40 }, (_, k) => k + 1);
-
-/** Every wall and roof triangle, tagged `building:mesh:colour`: built one building at a time with the
- * rng shared in order, which gives the same geometry as building them all at once (tested below). */
-function trianglesByBuilding(city: CityData, theme: CityTheme, climate: Climate, seed: number): Tri[] {
-  const rng = new Rng(seed ^ 0x5eed);
-  const reach = buildingReach(city.buildings); // from the whole city: each building's room next to its neighbours
-  const tris: Tri[] = [];
-  city.buildings.forEach((b, i) => {
-    const { walls, roofs } = buildingGeometry({ ...city, buildings: [b] }, theme, climate, rng, [reach[i]]);
-    for (const [name, g] of [...walls, ['roof', roofs] as const]) {
-      const col = colourTag(g.colors);
-      tris.push(...trianglesOf(g.positions, g.indices, (v) => `${i}:${name}:${col(v)}`));
-    }
-  });
-  return tris;
-}
 
 describe('building geometry z-fighting', () => {
   it('one building at a time builds the same triangles as the whole city', () => {
@@ -40,25 +24,15 @@ describe('building geometry z-fighting', () => {
     expect(new Set(one.map(key))).toEqual(new Set(all.map(key)));
   });
 
-
   it(`no faces fight across ${SEEDS.length} cities`, () => {
     const found = new Map<string, string>();
     for (const seed of SEEDS) {
-      const city = generateCity({ seed });
-      const theme = ALL_THEMES[seed % ALL_THEMES.length];
-      const climate = seed % 2 ? CLIMATES.temperate : CLIMATES.snow;
-      for (const o of coplanarOverlaps(trianglesByBuilding(city, theme, climate, seed))) {
-        const [a, b] = o.tags.map((t) => t.split(':'));
-        const lot = (i: string) => {
-          const q = city.buildings[+i];
-          return q.district ? `${q.district}/${q.lot}` : q.zone;
-        };
-        const meshes = [a[1], b[1]].sort().join('/');
-        const key = a[0] === b[0] ? `${lot(a[0])}: ${meshes}` : `${[lot(a[0]), lot(b[0])].sort().join(' | ')}: ${meshes}`;
-        if (!found.has(key)) found.set(key, `${key} (seed ${seed} ${climate.name}, buildings ${a[0]}/${b[0]} at ${o.at.map((v) => v.toFixed(1))}, ${o.area.toFixed(2)} m²)`);
+      const { theme, climate } = sweepLook(seed);
+      for (const f of buildingFights(generateCity({ seed }), theme, climate, seed)) {
+        if (!found.has(f.key)) found.set(f.key, `${f.key} (seed ${seed} ${climate.name}, buildings ${f.buildings.join('/')}: ${describeOverlap(f.overlap)})`);
       }
     }
-    expect([...found.values()]).toEqual([]);
+    expect([...found.values()], 'npm run zfight lists them all').toEqual([]);
   });
 });
 
