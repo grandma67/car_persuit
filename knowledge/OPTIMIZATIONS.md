@@ -107,9 +107,7 @@ a shot pair through `--vs` if what's drawn changed.
 - One-off stalls at the mission's edges (11-06, Mac; desktop / `--throttle 4` at phone size; a real phone may
   differ). Fixed on `perf/mission-edges`: the touch controls' first layout (~200 ms gap on the throttled phone,
   now behind the splash) and the share card in the end screen's frame (36 / 65 → under 28 / 42 ms; now 1 s
-  later, up to 44 ms on the throttled phone). Left: Enter's `new AudioContext()`, ~70 ms at any CPU speed (time
-  it with `--query`: a `--make` city has its context already; Chrome wants a gesture, so it can't simply move
-  to load). First cop: one 28–41 ms frame on the throttled phone (`director.update` 20 ms, not traced).
+  later, up to 44 ms on the throttled phone). The audio context's ~70 ms moved to loading too (`AUDIO_LIMITS.md`). First cop: one 28–41 ms frame on the throttled phone (`director.update` 20 ms, not traced).
 - Not tried, from how other games do it: KTX2/Basis textures (largest today: 1024×2048 facade atlas
   11 MB, a 1024² canvas 5.6 MB, PMREM 3 MB; ~60 MB in all), impostors or LOD for far props
   (`BatchedMesh` culls per instance), Rapier in a worker.

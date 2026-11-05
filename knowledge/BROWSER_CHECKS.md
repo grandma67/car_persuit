@@ -52,6 +52,7 @@ Each file's header lists its query options and what it returns.
 | `gpu-ab.js` + `&ab=…` | **any GPU question** (a light, the shadow pass, a builder's meshes, a prop model, pixel ratio): switched on and off in one page, alternating; GPU, frame and render ms per state and how many paired rounds "off" won. `ab=pointLights\|spotLights\|shadowPass\|precipitation\|owner:<name>\|props:<prefix>` or `abExpr=<js>`; `at=x,z` or `at=focus` frames that spot first (`dist=`) |
 | `cold-load.js` + `--make` | load time: the run's `cityLoadMs` is cold, the eval returns warm reloads of the same city. Shader compile changes show only cold |
 | `mission-edges.js` + `&touch`, `--size 390x844`, no `--start` | anything on the first frames after Start, the touch controls or the end screen: controls laid out but unhittable until Start, share image built after the screen is up, Share waits for it and shares it, a quick Retry builds none. Pass/fail (`ok`, `failures`) |
+| (not an eval) | `npm run check:audio`: audio start-up with real input. Evals run as gestures and `logs` has only console calls and exceptions, not the browser's own warnings ([AUDIO_LIMITS.md](AUDIO_LIMITS.md)) |
 | `restart.js` | `npm run check:restart`: Retry / New city leaks ([LEAKS.md](LEAKS.md)) |
 | `city-reload.js` | `npm run check:reload`: a dump loads back as the same city, Retry keeps it, New city drops it |
 
