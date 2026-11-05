@@ -185,6 +185,8 @@ features to `check:restart:nature`'s `--make` in `package.json` (`DISTRICTS.max`
 ## Reuse before writing
 
 - `block.park = true` in `roles`: grass ground and the minimap's park colour.
+  Its `mapColor` then sits on the park green, not the land: pick one that stands out from it
+  (`Minimap.test` checks contrast against the ground under the district; the Swamp's dark olive vanished).
 - `ParkPiece.district` for a district's own pond or pitch (`pitchAt`, the park-piece renderer, the ball).
 - `rowboat()` (`render/Landmarks.ts`); Victorian lamps are the Old City's `oilLamp` (glow included).
 - `drapePolyline` / `upTri` (`render/geometry.ts`): a strip along a polyline on the ground (paths,

@@ -149,7 +149,7 @@ export const SWAMP_DEF: DistrictDef = {
   maxGlow: SWAMP.maxGlow,
   softGround: { grip: SWAMP.mudGrip, drag: SWAMP.mudDrag },
   roadblockGates: true,
-  mapColor: 0x4e5e3a,
+  mapColor: 0x5fae96, // bog teal: the old dark olive vanished on the park green its blocks draw as
   dress,
 };
 

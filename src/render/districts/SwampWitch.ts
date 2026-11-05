@@ -31,6 +31,20 @@ const SNOW = 0xe8ecf0;
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 const cyl = (r0: number, r1: number, h: number, n = 8) => new THREE.CylinderGeometry(r0, r1, h, n);
+/** A box without the faces named (BoxGeometry's order: px nx py ny pz nz), for faces never seen. */
+const openBox = (w: number, h: number, d: number, drop: ('px' | 'nx' | 'py' | 'ny' | 'pz' | 'nz')[]) => {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const all = Array.from(g.index!.array);
+  g.setIndex(['px', 'nx', 'py', 'ny', 'pz', 'nz'].flatMap((f, k) => (drop.includes(f as never) ? [] : all.slice(k * 6, k * 6 + 6))));
+  g.clearGroups();
+  return g;
+};
+/**
+ * A deck plank: no front and back faces (the 7 cm edges facing the next plank across a 6 cm gap:
+ * never seen), 8 triangles instead of 12. Its underside stays: the shadow pass draws back faces, so
+ * the plank's shadow comes from it.
+ */
+const plank = (w: number, h: number, d: number) => openBox(w, h, d, ['pz', 'nz']);
 
 /** A glowing pane: where, which way it faces (yaw), its size, round or not, a crooked tilt. */
 export interface Pane {
@@ -197,9 +211,9 @@ export function boardwalk(d: Deck, terrain: Terrain, snowy: boolean, seed: numbe
     const tilt = -Math.atan2(ahead, 0.2);
     const roll = flat ? (rnd() - 0.5) * 0.03 : 0;
     const colour = snowy ? SNOW : [PLANK, PLANK_DARK, ROTTEN][Math.floor(rnd() * 3)];
-    place(box(W - (rnd() * 0.2), 0.07, 0.28).rotateX(tilt).rotateZ(roll), colour, (rnd() - 0.5) * 0.1, y - 0.04, v);
+    place(plank(W - (rnd() * 0.2), 0.07, 0.28).rotateX(tilt).rotateZ(roll), colour, (rnd() - 0.5) * 0.1, y - 0.04, v);
   }
-  // Stringers under the flat run, posts in pairs.
+  // Stringers under the flat run, posts in pairs (no foot face: it stands 30 cm into the mud).
   const v0 = -d.hz + r0, v1 = d.hz - r1;
   const top = deckHeight(d, terrain, 0);
   for (const u of [-1, 1]) place(box(0.14, 0.2, v1 - v0), WOOD_GREY, u * (d.hx - 0.2), top - 0.18, (v0 + v1) / 2);
@@ -207,7 +221,7 @@ export function boardwalk(d: Deck, terrain: Terrain, snowy: boolean, seed: numbe
     for (const u of [-1, 1]) {
       const p = deckPoint(d, u * (d.hx - 0.15), v);
       const foot = groundHeight(terrain, p.x, p.z) - 0.3, head = top - 0.25; // into the mud, up to the stringers
-      place(box(0.16, head - foot, 0.16).rotateZ((rnd() - 0.5) * 0.1), WOOD_GREY, u * (d.hx - 0.15), (head + foot) / 2, v);
+      place(openBox(0.16, head - foot, 0.16, ['ny']).rotateZ((rnd() - 0.5) * 0.1), WOOD_GREY, u * (d.hx - 0.15), (head + foot) / 2, v);
     }
   }
   return g;
