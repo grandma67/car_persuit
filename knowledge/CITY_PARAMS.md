@@ -33,7 +33,7 @@ debugging. Pure data, no Three.js.
   can't stay aligned; accepted: a params city is "the params + its seed for the rest", repeatable.
   If a test needs something to stay put, it gets a field.
 - **No seed moves.** With no pins every seed builds the identical city. `npm run hash -- --vs HEAD`
-  (120 cities) before each commit; `--reload` proves every dump reloads as its city.
+  (120 cities) before each commit (Tools below).
 - **Partial params.** A file has `seed` and only what was pinned; the rest rolls from the seed.
   Dumps are complete; a hand-trimmed file can be a few lines.
 - **Grid units, not metres** (indices, road lines, edge keys `h4,8` / `v6,3`), except the hill (metres
@@ -96,7 +96,8 @@ the rolled ones after the squares roll, so the landmark stream never changes.
   `roadworks=N`, `canalramp`, `time=`, `blocks=`, `<district>=0|1` (forces that roll, others rolled);
   with `debug` only: `city=`, `weather=`, `canals=`, `hill=0|1`. `urlOverrides` is this parser on the
   query string; debug-only words without `debug` are ignored with a note.
-- **Words only:** a bare district name = **exactly** the districts named; `flat` (no hill, no canals);
+- **Words only:** a bare district name = **exactly** the districts named; `nodistricts` (every
+  district forced off: the baseline for on vs off); `flat` (no hill, no canals);
   `canalramps=N`, `ramps=N`, `pond` / `ponds=N`, `pitch` / `pitches=N` (park pieces, exactly N),
   `canalwidth=W`, `startminute=M`, `theme=`. Aliases: `night`/`day`/
   `afternoon`, `rain`/`clear`/`snow` (snow also sets the snow climate), `temperate`/`beach`/`desert`.
@@ -160,9 +161,16 @@ never add a draw to it). Draw order top to bottom.
 - `npm run city -- make <words…> [seed=N] [--full] [--out f]`: the words' params (a few lines; `--full`
   the complete dump). Prints the seed it ended on. `dump <seed> [URL words]`: what `?seed=N&…` builds,
   never moves the seed. `check <file…>`: exit 1 on errors. `show <file | seed | words…>`: ASCII map,
-  legend, one-line summary. `words`: the vocabulary.
-- `npm run find` ends each hit with `npm run city -- dump N blocks=12 <kind>=1 <others>=0` (find builds
-  on the 12-block grid).
+  legend, one-line summary. `focus <file | seed | words…>`: each district's bounds (`kind x,z,w,d`,
+  what `--vs-make` passes as `focus=`). `words`: the vocabulary.
+- `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`: seeds to look
+  at (`name:N` at least, `name=N` exactly; counts structures, landmarks, props, ground patches, lots,
+  roles; `flat` = no hill or canals). Builds on the 12-block grid, so each hit ends with
+  `npm run city -- dump N blocks=12 <kind>=1 <others>=0`. Never write a search script for this.
+- **Seed guard** `npm run hash -- --vs HEAD`: hashes 120 cities on a temp worktree of that ref (any ref
+  on/after city params; older refs need a file baseline: `--out f`, then `--vs f`) and names those that
+  moved. `--reload` also proves every dump reloads as its city. District work: `--expect <kind>`
+  (`DISTRICTS_DEV.md`, Pitfalls).
 - In the game with `?debug`: `dbg.dumpCity(download = true)` → `city.params` text (downloads
   `city-<seed>.json`); `dbg.loadCity(text | object)` restarts in place (errors throw, nothing restarts;
   warnings logged). Loaded params ignore the URL's flags and live in `game.loaded`: Retry keeps them,

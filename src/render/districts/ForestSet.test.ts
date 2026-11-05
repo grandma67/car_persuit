@@ -10,7 +10,7 @@ import { boulder, firePit, gatePosts, logLoader, logStack, logTruck, lookout, st
 
 // The Forest's set pieces (the district mesh: neither PropModels.test nor the building sweep sees
 // them): no coplanar faces of different colours (z-fighting), in and out of the snow, and each
-// within its polygon budget (knowledge/polygons.md). Each piece is built at the origin: at world
+// within its polygon budget (knowledge/POLYGONS.md). Each piece is built at the origin: at world
 // coordinates float32 error in the normals fakes overlaps.
 
 const BUDGET: Record<string, number> = {

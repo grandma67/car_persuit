@@ -89,7 +89,7 @@ scene, local leaderboard, touch controls (optional tilt steering), fullscreen.
 ## URL flags
 
 - Anyone: `?seed=`, `?time=day|afternoon|night`, `?<district>=0|1` (`oldtown`, `chinatown`, `harbor`,
-  `farm`, `slums`), `?roadworks`, `?canalramp`, `?england`, `?blocks=N`, `?touch`.
+  `farm`, `slums`, `megapark`, `swamp`, `forest`), `?roadworks`, `?canalramp`, `?england`, `?blocks=N`, `?touch`.
 - `?debug`: FPS counter; keys C overview, T teleport to destination, Y 3 s left, K +1 star; `?city=`,
   `?weather=`, `?canals=N`, `?hill=0|1`; `window.game` and `window.dbg` (`BROWSER_CHECKS.md`), including
   `dbg.dumpCity()` / `dbg.loadCity(json)` (`CITY_PARAMS.md`).

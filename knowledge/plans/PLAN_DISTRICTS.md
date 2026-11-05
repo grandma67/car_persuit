@@ -2,9 +2,9 @@
 
 What each district is: `DISTRICTS.md`. How they are built: `DISTRICTS_DEV.md`. Open work: `TASKS.md`.
 
-**Status:** Q0 (framework), Old City, Chinatown, Harbor, Farm and Slums built and merged; their
-ambience audio skipped. Next: park pieces, Mega-park, Swamp, Forest ([PLAN_NATURE.md](PLAN_NATURE.md)). Effort: Q0 ~5–6 h, Old City ~9–11 h, Chinatown ~12–14 h, Harbor, Farm, Slums
-~12–15 h each.
+**Status:** framework and all eight districts merged; ambience audio skipped. This file: the framework
+and the five urban districts; Mega-park, Swamp, Forest: [PLAN_NATURE.md](PLAN_NATURE.md). Planned effort:
+framework ~5–6 h, Old City ~9–11 h, Chinatown ~12–14 h, Harbor, Farm, Slums ~12–15 h each.
 
 ## Design intent worth keeping (beyond what the code shows)
 

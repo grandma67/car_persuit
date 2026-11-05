@@ -5,7 +5,7 @@ import { witchPool } from '../../world/districts/Swamp';
 import { districtCities } from '../../world/paramsTesting';
 import { boardwalk, witchHouse, witchIsland } from './SwampWitch';
 
-// The Swamp's set pieces keep the polygon budgets (knowledge/polygons.md): the witch house and its
+// The Swamp's set pieces keep the polygon budgets (knowledge/POLYGONS.md): the witch house and its
 // island one landmark (<= 1 500), the boardwalks by the metre (planks without their hidden edges).
 
 const tris = (gs: THREE.BufferGeometry[]) => gs.reduce((n, g) => n + (g.index ? g.index.count : g.getAttribute('position').count) / 3, 0);

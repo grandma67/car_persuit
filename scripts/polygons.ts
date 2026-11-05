@@ -1,4 +1,4 @@
-// Triangle counts per prop model, building kind and vehicle, for knowledge/polygons.md.
+// Triangle counts per prop model, building kind and vehicle, for knowledge/POLYGONS.md.
 //   npm run polygons -- [seeds=20] [props|buildings|cars]
 // Props: triangles of one instance of each model (plain look), and how many a rolled city places on
 // average (`city.streetProps` only: park trees and umbrellas come from the build, see the browser eval),
