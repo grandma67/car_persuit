@@ -1259,7 +1259,7 @@ export class Game {
         run: { map: map.el, ...run },
         share: {
           text: won ? `I beat this city in ${time}, can you?` : `I reached ${reached} in this city before it got me, can you beat it?`,
-          image: map.image(won ? `BEAT IT IN ${time}` : title, `City #${this.city.seed} · ${won ? this.difficulty.label : reached} · ${run.stats}`, won),
+          image: () => map.image(won ? `BEAT IT IN ${time}` : title, `City #${this.city.seed} · ${won ? this.difficulty.label : reached} · ${run.stats}`, won),
         },
       },
       () => this.retry(),
