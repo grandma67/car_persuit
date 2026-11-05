@@ -17,6 +17,7 @@ import { layPools, layWitchPool, poolArea } from './SwampPools';
 import { layWitch } from './SwampWitch';
 import { layBoardwalks, layLanding } from './SwampSet';
 import { swampStreets } from './SwampStreet';
+import { layWoods } from './SwampWoods';
 import { clearOf } from './HarborYard';
 import { propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
 import { shuffle } from './place';
@@ -194,9 +195,15 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const street = swampStreets(q, city, mouths, out.solids, rng);
   out.ground.push(...street.ground);
   out.soft.push(...street.soft);
-  // Props clear of the solids, the buildings, the junction controls and each other (what must exist first).
+  // The growth: trees, snags, reeds, logs, lily pads (last: it fills round everything else).
+  const deckFootprints = out.decks.map((d) => ({ x: d.x, z: d.z, hx: d.hx, hz: d.hz, yaw: d.yaw }));
+  const woods = layWoods(q, city, look, swampPools(city, q), [...out.solids, ...deckFootprints.map((f) => ({ ...f, hx: f.hx + 0.6 })), ...buildings.map(rectFootprint)], rng);
+  out.structures.push(...woods.structures);
+  out.solids.push(...woods.solids);
+  city.parkPieces.push(...woods.pieces);
+  // Props clear of the solids, the decks, the buildings, the junction controls and each other (what must exist first).
   const controls = city.streetProps.filter((p) => inRect(q.bounds, p, 2) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
-  out.props = clearOf([...out.props, ...walks.props, ...street.props], [...out.solids, ...controls, ...buildings.map(rectFootprint)],
+  out.props = clearOf([...out.props, ...walks.props, ...street.props, ...woods.props], [...out.solids, ...deckFootprints, ...controls, ...buildings.map(rectFootprint)],
     city.streetProps.filter((p) => inRect(q.bounds, p, 2)).map((p) => propFootprint(p, 0.1)));
   out.extra = { look, wisps, boardwalks: walks.decks.length };
   return out;

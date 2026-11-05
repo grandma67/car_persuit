@@ -151,7 +151,8 @@ describe('Swamp witch house', () => {
       if (footprintsOverlap(propFootprint(p), solid) || inDeck(d, p.x, p.z, 0.3)) breaks.push(`${p.kind} on the house or boardwalk at ${at(p)}`);
     }
     const foot = deckPoint(d, 0, -d.hz);
-    const loose = c.streetProps.filter((p) => !isJunctionControl(p) && Math.hypot(p.x - foot.x, p.z - foot.z) < d.hx + 0.5 + c.config.sidewalk);
+    const own = new Set(q.dressing.props);
+    const loose = c.streetProps.filter((p) => !own.has(p) && !isJunctionControl(p) && Math.hypot(p.x - foot.x, p.z - foot.z) < d.hx + 0.5 + c.config.sidewalk);
     breaks.push(...loose.map((p) => `${p.kind} at the boardwalk's mouth ${at(p)}`));
     expect(breaks).toEqual([]);
   });
@@ -284,5 +285,36 @@ describe('Swamp causeways', () => {
   it.each(placed)('seed %i: night glow stays within the cap (lamps, lanterns, the windows and the brew)', (_seed, c, q) => {
     const lit = c.streetProps.filter((p) => LIT_PROPS.has(p.kind) && inRect(q.bounds, p, 1)).length;
     expect(lit + 5 + 1).toBeLessThanOrEqual(SWAMP.maxGlow);
+  });
+});
+
+describe('Swamp growth', () => {
+  it.each(placed)('seed %i: cypress and snags in the swamp, willows in the marsh; nothing on a deck, the island or a building', (_seed, c, q) => {
+    const trees = q.dressing.props.filter((p) => p.kind === 'tree');
+    const look = swampLook(q);
+    const kinds = new Set(trees.map((t) => t.tree));
+    expect(kinds.has(look === 'swamp' ? 'cypress' : 'willow')).toBe(true);
+    expect(kinds.has(look === 'swamp' ? 'willow' : 'cypress')).toBe(false);
+    const w = witchPool(c, q)!;
+    const breaks: string[] = [];
+    for (const p of [...trees, ...q.dressing.props.filter((x) => x.kind === 'reeds')]) {
+      if ((q.dressing.decks ?? []).some((d) => inDeck(d, p.x, p.z, 0.3))) breaks.push(`${p.kind} on a deck at ${at(p)}`);
+      if (Math.hypot(p.x - w.x, p.z - w.z) < SWAMP.witchIsland) breaks.push(`${p.kind} on the island at ${at(p)}`);
+      if (p.tree === 'willow' && swampPools(c, q).some((x) => inWater(x, p.x, p.z, 0.5))) breaks.push(`willow in the water at ${at(p)}`);
+    }
+    expect(breaks).toEqual([]);
+  });
+
+  it.each(placed)('seed %i: logs lie well out in the water, clear of the decks; lily pads on open water', (_seed, c, q) => {
+    const pools = swampPools(c, q);
+    const breaks: string[] = [];
+    for (const s of q.dressing.structures.filter((x) => x.kind === 'log')) {
+      if (!pools.some((w) => inWater(w, s.x, s.z, 1))) breaks.push(`log on the bank at ${at(s)}`);
+      if ((q.dressing.decks ?? []).some((d) => footprintsOverlap(deckFootprint(d), s.footprints[0]))) breaks.push(`log under a deck at ${at(s)}`);
+    }
+    for (const piece of c.parkPieces.filter((p) => p.district === 'swamp')) {
+      for (const pad of piece.pads ?? []) if (!inWater(piece.water!, pad.x, pad.z, pad.r)) breaks.push(`pad off the water at ${at(pad)}`);
+    }
+    expect(breaks).toEqual([]);
   });
 });

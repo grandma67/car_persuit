@@ -291,3 +291,11 @@ the glow budget", `maxGlow` declared on every def. Still open:
   red). No new facade styles, no new prop kinds (rails reuse `fence` `style: 'rail'`). Features
   `boardwalks` (int) and `airboat`. Night-only features rolled on by themselves no longer warn when
   a dump reloads by day (`rolledFeatures`; Farm's harvest and Chinatown's festival had the same gap).
+- **M4** (growth, traffic, police): `SwampWoods.ts`. Three new `TreeKind`s (`cypress` with moss
+  strands, `snag`, `willow`; models in `PropSystem.swampTrees`, specs in `TREE_SPECS`) laid as the
+  district's own tree props: cypress also stand in the water, willows keep to the banks. Reed clumps
+  on the rims, a half-sunk log in half the blocks (solid), lily pads as `ParkPiece`s with
+  `district: 'swamp'` (the pond renderer's pads, no rim). Everything goes through `clearOf` against
+  the decks' exact outlines (padded outlines would drop the boardwalk rails). Tussocks and duckweed
+  dropped (the pads and reeds carry it). `SwampTraffic.test.ts`: civilians, runtime rules, and NavGrid
+  crossing a pool block on its boardwalk or round by the streets, never wading.

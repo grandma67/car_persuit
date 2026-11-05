@@ -260,3 +260,16 @@ export function airboat(s: Structure, y: number, frozen: boolean): THREE.BufferG
   const m = frameOf(s.x, y + (frozen ? 0.05 : -0.12), s.z, s.yaw);
   return g.map((p) => p.applyMatrix4(m));
 }
+
+/** A half-sunk log: a long trunk lying in the water, one end lower, a stub of a branch, the cut end pale. */
+export function sunkLog(s: Structure, y: number): THREE.BufferGeometry[] {
+  const L = s.data!.length as number, sink = s.data!.sink as number;
+  const tilt = 0.08;
+  const g = [
+    part(cyl(0.32, 0.38, L, 8).rotateX(Math.PI / 2 + tilt), WOOD_DARK, 0, 0.38 - sink, 0),
+    part(cyl(0.3, 0.3, 0.03, 8).rotateX(Math.PI / 2 + tilt), 0xb89a72, 0, 0.38 - sink + Math.sin(tilt) * (L / 2), L / 2 + 0.01),
+    part(cyl(0.06, 0.11, 0.8, 5).rotateZ(0.9), WOOD_DARK, 0.35, 0.6 - sink, -L / 5),
+  ];
+  const m = frameOf(s.x, y, s.z, s.yaw);
+  return g.map((p) => p.applyMatrix4(m));
+}

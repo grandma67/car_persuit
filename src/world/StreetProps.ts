@@ -182,6 +182,9 @@ const TREE_SPECS: Record<TreeKind, Partial<PropSpec>> = {
   palm: { hx: 0.26, hz: 0.26, height: 6.5, mass: 200, breakSpeed: 6, slowdown: 0.2 },
   cactus: { hx: 0.42, hz: 0.42, height: 3.4, mass: 150, breakSpeed: 3, slowdown: 0.1 },
   fruit: { hx: 0.3, hz: 0.3, height: 4, mass: 180, breakSpeed: 5, slowdown: 0.18 },
+  cypress: { hx: 0.45, hz: 0.45, height: 7 }, // the flared foot
+  snag: { hx: 0.28, hz: 0.28, height: 5.2, mass: 150, breakSpeed: 4, slowdown: 0.15 }, // dead wood: snaps easier
+  willow: { hx: 0.38, hz: 0.38, height: 4.5 },
 };
 
 /** The spec for this particular prop: trees vary by kind and size. */

@@ -281,12 +281,55 @@ function treeModels(look: Greenery): Record<`tree-${TreeKind}`, THREE.BufferGeom
     ]),
     'tree-palm': mergeGeometries([part(cyl(0.16, 0.26, 6.5, 6), 0x8a6a48, 0, 3.25), ...fronds]),
     'tree-fruit': fruitTree(look, 0xc8302a),
+    ...swampTrees(look),
     'tree-cactus': mergeGeometries([
       part(cyl(0.38, 0.42, 3.4, 7), cactus, 0, 1.7),
       part(cyl(0.22, 0.22, 0.9, 7).rotateZ(Math.PI / 2), cactus, 0.75, 1.5),
       part(cyl(0.22, 0.22, 1.3, 7), cactus, 1.15, 2.05),
       part(cyl(0.2, 0.2, 0.7, 7).rotateZ(Math.PI / 2), cactus, -0.65, 2.2),
       part(cyl(0.2, 0.2, 1.0, 7), cactus, -0.95, 2.6),
+    ]),
+  };
+}
+
+/**
+ * The Swamp's trees: a bald cypress (a flared foot, a tall trunk, flat layered crowns hung with grey
+ * moss), a dead snag (a bare grey trunk, its top snapped, a few broken limbs), a weeping willow (a
+ * dome with long fronds hanging nearly to the ground). Bare in the snow but for the moss.
+ */
+function swampTrees(look: Greenery): Record<'tree-cypress' | 'tree-snag' | 'tree-willow', THREE.BufferGeometry> {
+  const cyl = (top: number, bottom: number, h: number, seg: number) => new THREE.CylinderGeometry(top, bottom, h, seg);
+  const bark = 0x5a4a3c, dead = 0x7a7266, moss = 0x8a9a7a;
+  const crown = look.snowy ? [] : [
+    part(new THREE.IcosahedronGeometry(1.9, 0).scale(1, 0.4, 1), 0x3e5a34, 0, 6.6),
+    part(new THREE.IcosahedronGeometry(1.4, 0).scale(1, 0.4, 1), 0x46623a, 0.5, 7.5),
+    part(new THREE.IcosahedronGeometry(1.2, 0).scale(1, 0.45, 1), 0x3e5a34, -0.6, 5.7),
+  ];
+  const strands = Array.from({ length: 8 }, (_, k) => {
+    const a = (k / 8) * Math.PI * 2 + 0.3, r = 1.1 + (k % 3) * 0.25, len = 1.2 + (k % 4) * 0.35;
+    return part(new THREE.BoxGeometry(0.28, len, 0.06).rotateY(-a), moss, Math.cos(a) * r, 6.3 - len / 2, Math.sin(a) * r);
+  });
+  const limbs = [0.6, 2.4, 4.3].map((a, k) => part(cyl(0.05, 0.1, 1.4 - k * 0.2, 5).translate(0, 0.7, 0).rotateZ(0.9).rotateY(a), dead, 0, 2.6 + k * 0.9));
+  const fronds = Array.from({ length: 14 }, (_, k) => {
+    const a = (k / 14) * Math.PI * 2;
+    return part(new THREE.BoxGeometry(0.3, 2.6, 0.05).rotateY(-a), look.snowy ? 0x8a7a5a : 0x7a9a4a, Math.cos(a) * 2.2, 2.9, Math.sin(a) * 2.2);
+  });
+  return {
+    'tree-cypress': mergeGeometries([
+      part(cyl(0.3, 0.75, 1.4, 7), bark, 0, 0.7),
+      part(cyl(0.18, 0.3, 5.6, 6), bark, 0, 4.2),
+      ...crown,
+      ...strands,
+    ]),
+    'tree-snag': mergeGeometries([
+      part(cyl(0.12, 0.3, 5.2, 6).rotateZ(0.06), dead, -0.15, 2.6),
+      part(cyl(0.02, 0.12, 0.5, 5).rotateZ(0.5), dead, -0.45, 5.35),
+      ...limbs,
+    ]),
+    'tree-willow': mergeGeometries([
+      part(cyl(0.25, 0.4, 2.8, 6), bark, 0, 1.4),
+      ...(look.snowy ? [] : [part(new THREE.IcosahedronGeometry(2.4, 1).scale(1, 0.65, 1), 0x6a8a42, 0, 4.0)]),
+      ...fronds,
     ]),
   };
 }

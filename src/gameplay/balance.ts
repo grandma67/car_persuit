@@ -485,6 +485,12 @@ export const SWAMP = {
   airboatChance: 0.7,
   guardRailStep: [3.2, 6] as [number, number], // kerb guard rail sections, this far apart
   signs: 2, // "Mind the bog" signs inside the gates, at most
+  /** Per block: trees (cypress in the swamp, willows in the marsh), snags, reed clumps per pool, lily pads per pool. */
+  woods: {
+    swamp: { trees: [6, 10], snags: [2, 4], reeds: [2, 4], pads: 8 },
+    marsh: { trees: [1, 3], snags: [0, 2], reeds: [6, 10], pads: 12 },
+  } as Record<'swamp' | 'marsh', { trees: [number, number]; snags: [number, number]; reeds: [number, number]; pads: number }>,
+  logChance: 0.5, // a half-sunk log in a block's first pool
 };
 
 /** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */
