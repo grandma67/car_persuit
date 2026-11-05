@@ -10,7 +10,7 @@
 // each aerial from N angles round it (`<kind>-air-<i>`) instead of one (`<kind>-air`).
 (async () => {
   const params = new URLSearchParams(location.search);
-  const kinds = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums', 'megapark', 'swamp'];
+  const kinds = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums', 'megapark', 'swamp', 'forest'];
   const kind = kinds.find((k) => params.get(k) === '1');
   const q = dbg.district(kind);
   const pick = params.get('tourKinds')?.split(',');

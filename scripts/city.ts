@@ -39,7 +39,7 @@ export function summary(city: CityData): string {
   ].filter(Boolean).join(' · ');
 }
 
-const DISTRICT_CHAR: Record<string, string> = { oldtown: 'o', chinatown: 'c', harbor: 'h', farm: 'f', slums: 's', megapark: 'p', swamp: 'w' };
+const DISTRICT_CHAR: Record<string, string> = { oldtown: 'o', chinatown: 'c', harbor: 'h', farm: 'f', slums: 's', megapark: 'p', swamp: 'w', forest: 't' };
 
 /**
  * The grid as text, j = 0 at the top: a block is 3 characters (zone D M R I, lower case a park; then
@@ -95,7 +95,7 @@ export function asciiMap(city: CityData): string {
   return rows.map((r) => r.join('').trimEnd()).join('\n');
 }
 
-const LEGEND = 'blocks: D M R I zone (lower case: park), o c h f s p district, * square · + junction, ~ canal, = bridge, # plaza · ' +
+const LEGEND = 'blocks: D M R I zone (lower case: park), o c h f s p w t district, * square · + junction, ~ canal, = bridge, # plaza · ' +
   '@ spawn, 1-5 destinations, R ramp, r canal ramp, X x roadworks (junction, street)';
 
 /** --out f / --flag → removed from args. */
