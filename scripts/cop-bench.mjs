@@ -10,10 +10,10 @@
 //                                      (also uturns, recovers)
 // Options: --seeds 24 --secs 120 --maxBlocks 12 --stars N --ghost --verbose (per-city lines).
 // Each run is scripts/cop-bench.ts through run-ts; all run in parallel (~2 min for a comparison).
-import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, symlinkSync, copyFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
+import { copyFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { tempWorktree } from './temp-worktree.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const argv = process.argv.slice(2);
@@ -26,10 +26,15 @@ const flag = (name, fallback) => {
 const common = ['seeds', 'secs', 'maxBlocks'].flatMap((k) => (flag(k) ? [`${k}=${flag(k)}`] : []));
 if (flag('verbose')) common.push('verbose');
 
+const runs = new Set();
+process.on('exit', () => runs.forEach((c) => c.kill())); // none outlives this run or its worktree
+
 /** One bench run in `dir` (a checkout); resolves with its stdout. */
 function bench(dir, args, stream = false) {
   return new Promise((done, fail) => {
     const child = spawn('node', [join(dir, 'scripts/run-ts.mjs'), join(dir, 'scripts/cop-bench.ts'), ...args], { cwd: dir });
+    runs.add(child);
+    child.on('close', () => runs.delete(child));
     let out = '';
     child.stdout.on('data', (d) => {
       out += d;
@@ -57,14 +62,12 @@ const CONFIGS = [
   ['ghost 3★', ['stars=3', 'ghost']],
 ];
 const ref = flag('vs');
-let refDir = null;
+const worktree = ref ? tempWorktree(ref) : null;
+const refDir = worktree?.dir ?? null;
 if (ref) {
-  refDir = mkdtempSync(join(tmpdir(), 'cop-bench-'));
-  execFileSync('git', ['worktree', 'add', '--detach', '-q', refDir, ref], { cwd: root });
-  symlinkSync(join(root, 'node_modules'), join(refDir, 'node_modules'));
   // Today's benchmark against that ref's game code.
   copyFileSync(join(root, 'scripts/cop-bench.ts'), join(refDir, 'scripts/cop-bench.ts'));
-  if (!existsSync(join(refDir, 'scripts/run-ts.mjs'))) copyFileSync(join(root, 'scripts/run-ts.mjs'), join(refDir, 'scripts/run-ts.mjs'));
+  copyFileSync(join(root, 'scripts/run-ts.mjs'), join(refDir, 'scripts/run-ts.mjs'));
 }
 try {
   const samples = Math.max(1, Number(flag('samples', 1)));
@@ -99,8 +102,5 @@ try {
   console.log(''.padEnd(14) + CONFIGS.map(([name]) => name.padStart(w)).join(''));
   for (const k of keys) console.log(k.padEnd(14) + CONFIGS.map((_, i) => cell(i, k).padStart(w)).join(''));
 } finally {
-  if (refDir) {
-    execFileSync('git', ['worktree', 'remove', '--force', refDir], { cwd: root });
-    rmSync(refDir, { recursive: true, force: true });
-  }
+  worktree?.remove();
 }

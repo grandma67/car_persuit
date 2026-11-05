@@ -14,6 +14,9 @@ const server = await createServer({ server: { middlewareMode: true, hmr: false }
 let code = 0;
 try {
   const mod = await server.ssrLoadModule(resolve(file));
+  // Vite's signal-exit listens for these, and a listener can't run during a long synchronous script,
+  // so Ctrl+C would wait for it to finish. Without one, the signal ends the process at once.
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGALRM']) process.removeAllListeners(sig);
   await mod.default?.(rest);
 } catch (e) {
   console.error(e);

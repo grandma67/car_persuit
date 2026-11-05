@@ -23,8 +23,8 @@ npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-di
   CPU, not its GPU); `&touch` in the query for the game's phone settings (1024² shadow map, car
   shadows culled, half the precipitation, touch controls): the size alone keeps the desktop ones; `--profile f.json` adds CPU and heap sampling profiles (top self time and bytes
   per function; the line is the function's first line).
-- **Before/after: `--vs <ref>`** runs the same check on that ref first (its own worktree in the temp
-  dir, kept for next time, and its own Vite on port + 100), then here; prints `{ vs, sha, base, current }`,
+- **Before/after: `--vs <ref>`** runs the same check on that ref first (a temporary worktree, removed
+  at the end or on Ctrl+C, and its own Vite on port + 100), then here; prints `{ vs, sha, base, current }`,
   shots in `<out-dir>/base` and `/current`. Use it for every before/after: a baseline from the server
   you're editing against picks up your edits as Vite hot-reloads them. An eval run on an older ref must
   cope with `dbg` helpers it lacks (`dbg.x?.()`).

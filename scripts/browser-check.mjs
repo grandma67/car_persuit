@@ -31,15 +31,15 @@
 //                sides get `focus=x,z,w,d` in the query (the --make city's first district, or
 //                --focus-kind's): `dbg.focus()`, which district-tour, perf-profile and gpu-ab look at
 //   --wait-lock s  another run holds this port: wait up to s seconds for it (default 900), then give up
-//   --vs ref     the same run on that ref first (worktree in the temp dir, kept for next time; its own
+//   --vs ref     the same run on that ref first (a temporary worktree, removed at the end; its own
 //                Vite on port + 100), then here, one after the other; prints { vs, sha, base, current },
-//                shots in <out-dir>/base and /current, --profile per side. Delete old worktrees with
-//                `git worktree remove`.
+//                shots in <out-dir>/base and /current, --profile per side.
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { perfReport } from './perf-table.mjs';
+import { tempWorktree } from './temp-worktree.mjs';
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((pairs, a, i, all) => (a.startsWith('--') ? [...pairs, [a.slice(2), all[i + 1] === undefined || all[i + 1].startsWith('--') ? 'true' : all[i + 1]]] : pairs), []),
@@ -138,11 +138,7 @@ if (args.make) {
 // --vs: run this same check on a ref (in a worktree, its own Vite), then here, and print both.
 if (args.vs) {
   const sha = execFileSync('git', ['rev-parse', '--short', args.vs], { encoding: 'utf8' }).trim();
-  const tree = join(tmpdir(), `cp-vs-${sha}`);
-  if (!existsSync(tree)) {
-    execFileSync('git', ['worktree', 'add', '--detach', tree, sha], { stdio: 'ignore' });
-    symlinkSync(resolve('node_modules'), join(tree, 'node_modules'));
-  }
+  const tree = tempWorktree(sha).dir; // goes when this process exits
   const basePort = vitePort + 100;
   try {
     await fetch(`http://localhost:${basePort}/`);

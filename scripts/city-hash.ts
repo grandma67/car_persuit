@@ -14,10 +14,10 @@
 // --reload also writes each city's dump, reads it back and builds it: same hash, same dump (the
 // suite does this for 20 of the seeds; run it with the hash at each milestone).
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { tempWorktree } from './temp-worktree.mjs';
 import { cityDestinations, generateCity, type CityData } from '../src/world/CityGenerator';
 import { pickTheme, startHourAt } from '../src/world/CityTheme';
 import { CLIMATES } from '../src/world/Climate';
@@ -50,21 +50,21 @@ export function runHash(city: CityData): string {
 /** The hash lines of a git ref: a temporary worktree, this script first, the ref's own if this one fails there. */
 function refLines(ref: string, seeds: number): string {
   const root = resolve(import.meta.dirname, '..');
-  const dir = mkdtempSync(join(tmpdir(), 'city-hash-'));
-  const out = join(dir, 'hash.txt');
-  const tree = join(dir, 'tree');
-  execFileSync('git', ['worktree', 'add', '--detach', '-q', tree, ref], { cwd: root });
+  const worktree = tempWorktree(ref);
+  const tree = worktree.dir;
+  const out = join(tree, 'hash.txt');
   try {
-    symlinkSync(join(root, 'node_modules'), join(tree, 'node_modules'));
     copyFileSync(join(root, 'scripts/run-ts.mjs'), join(tree, 'scripts/run-ts.mjs'));
     const own = join(tree, 'scripts/city-hash.ts');
     const theirs = existsSync(own) ? readFileSync(own, 'utf8') : null;
     const run = () => execFileSync('node', ['scripts/run-ts.mjs', 'scripts/city-hash.ts', '--out', out, `seeds=${seeds}`], { cwd: tree, stdio: 'pipe' });
     copyFileSync(join(root, 'scripts/city-hash.ts'), own);
+    copyFileSync(join(root, 'scripts/temp-worktree.mjs'), join(tree, 'scripts/temp-worktree.mjs')); // this script imports it
     const why = (e: unknown) => String((e as { stderr?: Buffer }).stderr ?? e).trim().split('\n').filter((l) => /error/i.test(l) && !/WebSocket/.test(l)).slice(0, 3).join('\n  ');
     try {
       run();
     } catch (e) {
+      if ((e as { signal?: string }).signal) process.exit(130); // stopped (Ctrl+C), not a script that can't run there
       if (theirs === null) throw new Error(`can't hash ${ref} (it has no city-hash.ts of its own):\n  ${why(e)}`);
       console.log(`(this script can't run on ${ref}; hashing with ${ref}'s own)`);
       writeFileSync(own, theirs);
@@ -76,8 +76,7 @@ function refLines(ref: string, seeds: number): string {
     }
     return readFileSync(out, 'utf8');
   } finally {
-    execFileSync('git', ['worktree', 'remove', '--force', tree], { cwd: root });
-    rmSync(dir, { recursive: true, force: true });
+    worktree.remove();
   }
 }
 
