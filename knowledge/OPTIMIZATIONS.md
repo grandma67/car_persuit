@@ -1,7 +1,7 @@
 # Optimizations
 
 Where the frame goes, what was done and learned, how to measure, what's open. Triangles per model:
-[polygons.md](polygons.md). Tools in full: [BROWSER_CHECKS.md](BROWSER_CHECKS.md). The rules these
+[POLYGONS.md](POLYGONS.md). Tools in full: [BROWSER_CHECKS.md](BROWSER_CHECKS.md). The rules these
 fixes left behind (one material per mesh kind, manual matrices, one point light, vehicle state reads)
 are in `CLAUDE.md`, Architecture.
 
@@ -23,7 +23,7 @@ at `--throttle 4`: a mid-range phone's CPU, not its GPU. Each column against the
 | JS heap after GC / geometry kept in it | 107–123 / 31 MB | | | 101 / 30 | 87 / 16 |
 | Cold load of a new look (`loadCity`) | | | | 645 ms | 622 ms |
 
-Then `perf/polygons` (merged `1549da4`): scene 924 k → 746 k triangles (`polygons.md`). 5★ chase phone
+Then `perf/polygons` (merged `1549da4`): scene 924 k → 746 k triangles (`POLYGONS.md`). 5★ chase phone
 frame after M3: 7.1 ms. Physics is not the cost: `world.step` ~1 ms on a phone ([RAPIER.md](RAPIER.md)).
 Rapier held 136 bodies and 1 937 colliders at the start; memory is not a problem.
 
@@ -98,7 +98,7 @@ a shot pair through `--vs` if what's drawn changed.
 
 ## Open
 
-- Triangles: fences, roofs and trims, sidewalks and paint (`polygons.md`, "Where to cut next").
+- Triangles: fences, roofs and trims, sidewalks and paint (`POLYGONS.md`, "Where to cut next").
 - Fewer civilians on phones: the frame is at ~40 % of budget, and it's a gameplay call. No quality tier
   exists; `carShadowCull` already detects phones.
 - Static shadows in a rarely updated map: only if the shadow pass becomes a top item again (usually

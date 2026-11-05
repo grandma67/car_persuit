@@ -1,14 +1,14 @@
 # Districts: looks, budgets and night glow
 
 Read before adding a district's buildings, props, set pieces or lights. Framework and rules:
-[DISTRICTS_DEV.md](DISTRICTS_DEV.md); triangle counts and model budgets: [polygons.md](polygons.md).
+[DISTRICTS_DEV.md](DISTRICTS_DEV.md); triangle counts and model budgets: [POLYGONS.md](POLYGONS.md).
 
 ## Budgets (read before designing a milestone: found late, they cost rework)
 
 - ≤ 3 new facade styles; **no new shader programs** (`renderer.info.programs`, on vs off).
 - Merged walls + roofs < ~60k triangles; build time within ~50 ms of district off (`npm run budget -- <kind>`).
 - Props: placed in hundreds ≤ 64 tris, in tens ≤ 300, a district's tree ≤ ~250, a set piece ≤ 1 500
-  (`polygons.md`).
+  (`POLYGONS.md`).
 - `maxGlow` sized from `npm run stats -- <kind>` (below).
 - Minimap colour must stand out from the park green (`Minimap.test`, contrast > 2.2: dark green or olive fails).
 - Phone FPS on vs off within noise.

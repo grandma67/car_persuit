@@ -16,7 +16,7 @@ destinations, cops, civilian traffic, themed districts.
 | `knowledge/BROWSER_CHECKS.md` | a browser run: `check:browser`, evals, `window.dbg`, pitfalls | tracked |
 | `knowledge/LEAKS.md` | touching `dispose()` or anything Retry rebuilds: `check:restart`, `gpuTrace` | tracked |
 | `knowledge/OPTIMIZATIONS.md` | perf work: where the frame goes, what was done and learned, how to measure, what's open | tracked |
-| `knowledge/polygons.md` | adding or changing a model: triangles per prop/building/car, budgets | tracked |
+| `knowledge/POLYGONS.md` | adding or changing a model: triangles per prop/building/car, budgets | tracked |
 | `knowledge/RAPIER.md` | a Rapier upgrade (we stay on 0.18.2) | tracked |
 | `knowledge/plans/PLAN_DISTRICTS.md`, `PLAN_NATURE.md`, `PLAN_CITY_PARAMS.md` | revisiting a decision: why, what was dropped, where the build bent | tracked |
 | `knowledge/TASKS.md` | starting work: current branch, milestones, open items | **local, never commit** |
@@ -42,7 +42,7 @@ Each script's header lists its options; the doc named says when to use it.
 - Seed guard: `npm run hash -- --vs HEAD [--reload] [--expect <kind>]` (`CITY_PARAMS.md`, `DISTRICTS_DEV.md`).
 - District numbers: `npm run stats -- <kind>|odds`, `npm run budget -- <kind>`, `npm run zfight`,
   `CLEAROF=<kind>` on any run-ts script (`DISTRICTS_DEV.md`, `DISTRICTS_LOOKS.md`).
-- Triangles: `npm run polygons -- [props|buildings|cars]`; scene by owner `scripts/evals/polygons.js` (`polygons.md`).
+- Triangles: `npm run polygons -- [props|buildings|cars]`; scene by owner `scripts/evals/polygons.js` (`POLYGONS.md`).
 - Cop driving: `npm run cops -- --vs main [--samples 2] [--diag hits]` (~2 min, `COPS_DEV.md`). Never
   write a chase sim for this.
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (`RAPIER.md`).

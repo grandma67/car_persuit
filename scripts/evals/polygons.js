@@ -1,5 +1,5 @@
 // The whole scene's triangles by owner (Game.owned tags; untagged roots are cars), visible or not,
-// for knowledge/polygons.md: what each builder costs a city before culling (instanced: tris × count).
+// for knowledge/POLYGONS.md: what each builder costs a city before culling (instanced: tris × count).
 // Also the street props by model (tris × instances) and the biggest meshes of each owner.
 //   npm run check:browser -- --query "seed=9&debug&oldtown=1&chinatown=1&harbor=1" --start 2000 --no-final \
 //     --eval-file scripts/evals/polygons.js

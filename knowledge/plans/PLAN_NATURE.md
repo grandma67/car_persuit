@@ -2,7 +2,7 @@
 
 Park pieces, Mega-park, Swamp, Forest: why, and where the build bent from the plan of 2026-11-03. What
 they are: `DISTRICTS.md`, `PLAN_GAME.md` (World). How to build on them: `DISTRICTS_DEV.md`, Building
-blocks. Numbers for the branches' look and cost: `polygons.md` log.
+blocks. Numbers for the branches' look and cost: `POLYGONS.md` log.
 
 **Status:** all merged: `parks/pond-pitch` (cdf5416), `districts/megapark` (097355d), `districts/swamp`
 (6863863), `districts/forest` (948aeea). The Zoo from `TODO.md` #17 is not planned.
