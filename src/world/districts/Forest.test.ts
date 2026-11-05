@@ -14,7 +14,8 @@ import { footprintsOverlap, rectFootprint } from '../StreetProps';
 import { isJunctionControl } from './apply';
 import { forestTrees, trackDistance } from './ForestWoods';
 import { DISTRICT_DEFS } from './index';
-import { propSpec } from '../StreetProps';
+import { LIT_PROPS, propSpec } from '../StreetProps';
+import { joinRunDressing } from './runtime';
 import { widestBody } from '../../vehicles/VehicleSpecs';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
@@ -306,6 +307,29 @@ describe('Forest set pieces', () => {
       expect(q.dressing.structures.some((s) => s.kind === 'lookout'), `seed ${seed}`).toBe(true);
       expect(q.dressing.structures.some((s) => s.kind === 'firePit'), `seed ${seed}`).toBe(true);
       expect(c.streetProps.filter((p) => inRect(q.bounds, p) && isJunctionControl(p)).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('Forest night and climate', () => {
+  it.each(placed)('seed %i: at night only the yard lamps, the campfire and the lookout\'s windows glow, within maxGlow', (_seed, c, q) => {
+    const lit = c.streetProps.filter((p) => LIT_PROPS.has(p.kind) && inRect(q.bounds, p, 1));
+    const own = new Set(q.dressing.props);
+    expect(lit.filter((p) => !own.has(p)).map(at)).toEqual([]); // no street lamps left
+    const renderer = q.dressing.structures.filter((s) => s.kind === 'firePit').length + q.dressing.structures.filter((s) => s.kind === 'lookout').length * 4;
+    expect(lit.length + renderer).toBeLessThanOrEqual(FOREST.maxGlow);
+  });
+
+  it('trees by climate: all pine in the snow, palms by the beach, snags and cacti in the desert; no ferns in either', () => {
+    const want: Record<string, string[]> = { temperate: ['pine', 'round'], snow: ['pine'], beach: ['palm', 'pine'], desert: ['cactus', 'snag'] };
+    for (const [climate, kinds] of Object.entries(want)) {
+      const [[, c, q]] = districtCities('forest', [climate], [11]);
+      joinRunDressing(c, { night: false, climate });
+      const trees = forestTrees(q);
+      expect([...new Set(trees.map((t) => t.tree))].sort(), climate).toEqual(kinds);
+      const ferns = q.dressing.props.filter((p) => p.kind === 'fern').length;
+      if (climate === 'desert' || climate === 'snow') expect(ferns).toBe(0);
+      else expect(ferns).toBeGreaterThan(0);
     }
   });
 });

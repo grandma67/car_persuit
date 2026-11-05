@@ -20,7 +20,7 @@ destinations, cops, civilian traffic, themed districts.
 | `knowledge/RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
 | `knowledge/plans/PLAN_DISTRICTS.md` | district decisions, dropped ideas | tracked |
 | `knowledge/plans/PLAN_CITY_PARAMS.md` | city params decisions, what changed from the plan | tracked |
-| `knowledge/plans/PLAN_NATURE.md` | park pond/pitch, shallow water, Mega-park, Swamp, Forest (planned) | tracked |
+| `knowledge/plans/PLAN_NATURE.md` | park pond/pitch, shallow water, Mega-park, Swamp, Forest | tracked |
 | `knowledge/TASKS.md` | current branch and milestones, open items | **local, never commit** |
 | `knowledge/TODO.md` | the user's task list | **local, never commit** |
 | `knowledge/STAGE2_IDEAS.md` | future gameplay ideas | **local, never commit** |

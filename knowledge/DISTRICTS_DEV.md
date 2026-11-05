@@ -28,6 +28,7 @@ block keeps its zone).
 | Slums | `Slums`, `SlumsSet` (ruins, overpass, junkyard, camp), `SlumsStreet` (street dressing, last on the stream; `climateDressing`) | `Slums`, `slumsGraffiti`, `slumsSigns` |
 | Mega-park | `Megapark`, `MegaparkLake`, `MegaparkGrounds`, `MegaparkLawns` | `Megapark`, `megaparkSigns` |
 | Swamp | `Swamp` (roles, lots, `fits`: low ground), `SwampPools`, `SwampWitch`, `SwampSet` (boardwalks, landing), `SwampStreet` (verges, rails, lamps, signs), `SwampWoods` (trees, reeds, logs, pads) | `Swamp`, `SwampWitch` (house, boardwalk, jetty, airboat, log) |
+| Forest | `Forest` (roles, lots, dress, climate swaps), `ForestWoods` (tracks, clearings, trees, the floor), `ForestSet` (log arch, posts, lumber yard, lookout, campsite; `sideFrame`) | `Forest` (floor, tracks, glows), `ForestSet` (stacks, truck, loader, tower, tents, fire pit, floor pieces) |
 
 **Placement:** roll a shape, try every rectangle of it (both orientations) in `rings` meeting
 `minShare`/`minCore`, shuffled; else other shapes largest first; else drop (a district only shrinks).
@@ -165,7 +166,7 @@ the `DistrictKind` union (`District.ts`); `world/districts/index.ts`; `render/di
 and `district-drive.js`; `NUMBERS` in `paramsTesting.ts` for an `'int'` feature; `CityTheme` climate
 looks (optional); new props in `StreetProps.ts` + `PropSystem.ts`. Other districts' tests use
 `alone(kind…)` / `everyDistrict()` (`paramsTesting.ts`), so they need no edit. `check:restart` runs
-two cities (`:core`, five districts; `:nature`, Mega-park and Swamp): add a new kind and its
+two cities (`:core`, five districts; `:nature`, Mega-park, Swamp and Forest): add a new kind and its
 features to `check:restart:nature`'s `--make` in `package.json` (`DISTRICTS.max` is 5 a city).
 
 ## Conventions
@@ -208,6 +209,14 @@ features to `check:restart:nature`'s `--make` in `package.json` (`DISTRICTS.max`
   `mangrove` beside the climates' kinds).
 - `rolledFeatures(q)`: each feature's roll before pins (a dump records every feature as a pin; the
   night-only warning uses it so a feature that rolled on by itself reloads by day without a warning).
+- **`dressing.thicket`** (`rects`, `paths`): ground NavGrid blocks except along its paths (a polyline
+  and width; one point is a round clearing). The Forest's woods: cops route only along its tracks.
+  `pathDistance` (`ai/NavGrid.ts`) is the distance to such a path.
+- A named board over a street: `ranchGateAt(q, city, gate, rng, names)` (Farm) with your own names
+  list (≤ 8), drawn by `ranchGate(s, snowy, solid, signs, wheels)` and `farmSignMaterial(glow, names)`
+  (one atlas per names list, built on first use): the Forest's log arch.
+- `sideFrame(inner, side)` / `gateSide` (`ForestSet.ts`): a block's street side as a (u along, v in)
+  frame with `at`, `rect` and the yaw laying a footprint along it.
 - `fireflies(spots, n, seed, scene, ground, look?)` (`render/districts/fireflies.ts`): the Farm's, the
   Mega-park's and the Swamp's wisps (`look`: colour, size); one program for all.
 

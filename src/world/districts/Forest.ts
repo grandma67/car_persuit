@@ -17,6 +17,7 @@ import { layCampsite, layGates, layLookout, layYard, rangerRect, sawmillRect, ya
 import { clearOf } from './HarborYard';
 import { frontMask } from './Megapark';
 import { propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
+import type { RunDressing } from './runtime';
 
 /** The tracks a dressed forest laid. */
 export const forestTracks = (q: District): Track[] => (q.dressing.extra?.tracks as Track[] | undefined) ?? [];
@@ -174,7 +175,13 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   // Cops route through the woods only along the tracks and across the clearings.
   const woods = q.blocks.filter((k) => !open.has(k)).map((k) => shrink(city.blocks[k].rect, sw));
   out.thicket = { rects: woods, paths: [...tracks.map((t) => ({ points: t.points, width: t.width })), ...clearings.map((c) => ({ points: [{ x: c.x, z: c.z }], width: c.r * 2 }))] };
-  out.extra = { tracks, clearings };
+  // By climate: all pine in the snow (the ferns under it), palms by the beach, a dry woodland of snags and cacti in the desert (no ferns).
+  const byClimate: Record<string, RunDressing> = {
+    snow: { trees: { round: 'pine' }, drop: ['fern'] },
+    beach: { trees: { round: 'palm' } },
+    desert: { trees: { pine: 'snag', round: 'cactus' }, drop: ['fern'] },
+  };
+  out.extra = { tracks, clearings, byClimate };
   return out;
 }
 

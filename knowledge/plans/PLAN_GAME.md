@@ -55,7 +55,7 @@ in `dispose()` (`npm run check:restart`, [LEAKS.md](../LEAKS.md)).
   roadworks; lamps, hydrants, signs, fences, trees and more are breakable.
 - Parks with no centrepiece may get a fish pond (shallow water you wade through, never drown in;
   ice in the snow) or a 7-a-side soccer pitch (goals, floodlights, a ball that rolls and adds no heat).
-- Districts (Old City, Chinatown, Harbor, Farm, Slums, Mega-park, Swamp) overlay themed blocks.
+- Districts (Old City, Chinatown, Harbor, Farm, Slums, Mega-park, Swamp, Forest) overlay themed blocks.
 
 ## Police
 
@@ -122,3 +122,4 @@ No git tags; grouped by day of work.
 - **v0.13 (11-03):** shallow water; park fish ponds and soccer pitches.
 - **v0.14 (11-04):** the Mega-park.
 - **v0.15 (11-05):** the Swamp (the witch house, drivable boardwalks).
+- **v0.16 (11-05):** the Forest (woods cops can't cut through, dirt tracks, lumber yard, lookout, campsite).

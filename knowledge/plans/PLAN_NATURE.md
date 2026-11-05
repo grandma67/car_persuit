@@ -337,3 +337,42 @@ Time went to reading for reuse points, rework caught by tests, and tool friction
 - `joinRunDressing` adds a climate's `props` (they were silently dropped; nothing used it yet).
 - `DISTRICTS_DEV.md`: facade styles (`boards` is barn red), the clutter rule measures by radius,
   programs to expect per climate and with shallow water or fireflies.
+
+## Branch 4 status (`districts/forest`): done, waiting for the user's approval to merge (2026-11-05)
+
+- **M1** (placement, roles, tracks, trees): `Forest.ts`, `ForestWoods.ts`. Edge, residential +
+  industrial, shapes 2×2 to 3×4 (4×4 never fits an edge); forced 97 %, natural 22 %, any Forest 23 %
+  in the odds. Roles: `lumberyard` beside the main gate, `lookout` deepest in, `campsite` (both on a
+  block with two street sides, the campsite off the main gate's blocks), the rest `woods`. Tracks: a
+  straight 4 m lead-in from the sidewalk line, then a cubic curve to the opposite side (or a side
+  street: a bend), 4.6 m wide, in ~85 % of woods blocks and always through a special block's
+  clearing. Trees by dart throwing, each claiming a disc (3.4–6 m apart), off tracks and clearings.
+  New shared piece: **`dressing.thicket`**: NavGrid blocks the woods except along the tracks and
+  clearings, so cops really follow the tracks (without it, routes cut straight through 4–7 m spacing).
+- **M2** (measure first): no LOD needed. Trees are the city's instanced tree props, drawn short of
+  the fog; a 4×3 forest +49 k tris in view, calls unchanged; GPU A/B hiding the tree meshes on phone
+  settings −1 % (2/4 rounds, noise). So density went up instead (~75–80 trees a block).
+- **M3** (set pieces): `ForestSet.ts` (data and render). The log arch is the Farm's ranch gate with
+  its own names (`ranchGateAt(…, names)`, `ranchGate(…, wheels)`, `farmSignMaterial(glow, names)`);
+  timber posts at the other gates. Lumber yard: apron (truck and loader parked at its street edge),
+  rows of log stacks with 5 m corridors and a 6 m aisle (drivable rects), four yard lamps, the sawmill
+  lot at the back. Lookout on four legs beside the track in its clearing (windows glow at night).
+  Campsite: fire pit (glows day and night) and tents round it on the roomier side, picnic tables.
+  Ranger station lot by the main gate.
+- **M4** (floor, traffic, police): ferns (new prop `fern`, 60 tris, breakable, soft in NavGrid),
+  fallen logs, boulders, stumps (solid structures). `ForestTraffic.test.ts`.
+- **M5**: climate (`RunDressing.trees`): snow all pine, beach palms, desert snags and cacti; no ferns
+  in the snow or the desert. Floor, tracks and yard coloured per climate. `maxGlow` 16 (4 yard lamps,
+  the fire, 4 windows; worst 4 lit props).
+- **Numbers:** gen +11 ms; programs unchanged (temperate 32, snow 32, desert 31 both sides); perf on vs
+  off (seed 23768, 3×3): frame ±2 %, GPU 0 to +4 %, 60 fps, +30–40 k tris, +6 calls, +10 MB textures
+  (the board atlas, the lots' facades). No z-fighting. `check:restart` ok.
+
+### Where branch 4 bent from the plan
+
+- **Shapes up to 3×4:** a 4×4 never fits an edge with the zone share.
+- **Log trucks in traffic dropped:** the district keeps heavies out, and a new body is a new car mesh.
+- **Line of sight through trees not done:** `lineOfSight` doesn't read props (a `STAGE2_IDEAS.md` note).
+- **No pond:** a Forest pond (a `pond` count) wasn't built; the clearings carry the open spaces.
+- **Undergrowth is ferns only** (no bushes): ferns and floor logs carry it; the trees are dense enough.
+- **The arch reuses the Farm's ranch gate** (no new structure), without the wagon wheels and mailbox.

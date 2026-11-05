@@ -4,24 +4,24 @@ Themed areas laid over a rectangle of blocks, each rolled per seed on its own st
 (`world/districts/`). Roads, the road graph and lanes never change: character comes from buildings,
 props, ground patches, overhead pieces and gates. How they are built: [DISTRICTS_DEV.md](DISTRICTS_DEV.md).
 
-Odds per seed (300 seeds): none 2%, one 17% (Old City 5%, Chinatown 3%, Harbor 3%, Slums 2%, Mega-park
-1%, Swamp 1%, Farm 1%), two 31%, three 30%, four 16%, five 5% (`DISTRICTS.max`). Any one: Old City 52%,
-Chinatown 48%, Harbor 41%, Farm 36%, Swamp 29%, Slums 27%, Mega-park 21%. `?<kind>=0|1` forces one off or on.
+Odds per seed (300 seeds): none 2%, one 14% (Old City 5%, Chinatown 2%, Slums 2%, Harbor 2%, Mega-park
+1%, Farm 1%, Swamp 1%, Forest 0%), two 22%, three 36%, four 17%, five 8% (`DISTRICTS.max`). Any one: Old
+City 52%, Chinatown 48%, Harbor 41%, Farm 36%, Swamp 29%, Slums 26%, Forest 23%, Mega-park 20%. `?<kind>=0|1` forces one off or on.
 
-| | Old City | Chinatown | Harbor | Farm | Slums | Mega-park | Swamp |
-|---|---|---|---|---|---|---|---|
-| `kind` / URL | `oldtown` | `chinatown` | `harbor` | `farm` | `slums` | `megapark` | `swamp` |
-| Roll chance | 0.55 | 0.5 | 0.45 | 0.4 | 0.35 | 0.3 | 0.3 |
-| Site | inland (off the 2 outer rows) | inland | coast: outer rows, long side on the sea | edge: outer rows, touching the island edge | inland | inland | edge, on low flat ground (the hill varies ≤ 3 m) |
-| Shapes (rolled) | 2×2 / 3×3 / 4×4 | same | same | same | 2×2 / 3×3 (4×4 can't meet the share) | 2×2 / 2×3 / 3×3 (3×3 rarely fits) | 2×2 / 2×3 / 3×3 |
-| Zones | ≥ ½ downtown + midtown | same | industrial + residential, ≥ ½ industrial | residential + industrial, ≥ ½ residential | midtown + residential + industrial, ≥ ½ residential + industrial | midtown + residential, ≥ ½ residential | residential + industrial |
-| Gates | all (gatehouses) | main street + ≤ 1 (paifang) | all; one terminal gate | main street (ranch gate) + ≤ 1 (cattle grid) | all; rail overpass on the main-street gate | all (iron gates on stone pillars; name wall and lodge at the main one) | all ("Mind the bog" signs inside the first two) |
-| Speed cap | 30 km/h everywhere | 40 km/h main street | none | none | none (potholes jolt) | 30 km/h everywhere | none |
-| Traffic | 0.5× | 1.3× | 0.9× | 0.4× | 0.6× | 0.5× | 0.4× |
-| Buses / trucks | out | in; vans ↑ | in; box trucks ↑ | in; pickups, tractors ↑ | out; pickups, vans ↑ | out | out; pickups ↑ |
-| Cop spawns skipped inside | 0.6 | 0 | 0 | 0.4 | 0.5 | 0.5 | 0.4 |
-| Zebras | removed | kept | removed | removed | removed (worn) | kept | removed |
-| Map colour | stone | red | steel blue | wheat gold | rust brown | park green | moss green |
+| | Old City | Chinatown | Harbor | Farm | Slums | Mega-park | Swamp | Forest |
+|---|---|---|---|---|---|---|---|---|
+| `kind` / URL | `oldtown` | `chinatown` | `harbor` | `farm` | `slums` | `megapark` | `swamp` | `forest` |
+| Roll chance | 0.55 | 0.5 | 0.45 | 0.4 | 0.35 | 0.3 | 0.3 | 0.3 |
+| Site | inland (off the 2 outer rows) | inland | coast: outer rows, long side on the sea | edge: outer rows, touching the island edge | inland | inland | edge, on low flat ground (the hill varies ≤ 3 m) | edge |
+| Shapes (rolled) | 2×2 / 3×3 / 4×4 | same | same | same | 2×2 / 3×3 (4×4 can't meet the share) | 2×2 / 2×3 / 3×3 (3×3 rarely fits) | 2×2 / 2×3 / 3×3 | 2×2 / 2×3 / 3×3 / 3×4 (4×4 never fits) |
+| Zones | ≥ ½ downtown + midtown | same | industrial + residential, ≥ ½ industrial | residential + industrial, ≥ ½ residential | midtown + residential + industrial, ≥ ½ residential + industrial | midtown + residential, ≥ ½ residential | residential + industrial | residential + industrial |
+| Gates | all (gatehouses) | main street + ≤ 1 (paifang) | all; one terminal gate | main street (ranch gate) + ≤ 1 (cattle grid) | all; rail overpass on the main-street gate | all (iron gates on stone pillars; name wall and lodge at the main one) | all ("Mind the bog" signs inside the first two) | all (log arch with the forest's name over the main street; timber posts) |
+| Speed cap | 30 km/h everywhere | 40 km/h main street | none | none | none (potholes jolt) | 30 km/h everywhere | none | none |
+| Traffic | 0.5× | 1.3× | 0.9× | 0.4× | 0.6× | 0.5× | 0.4× | 0.5× |
+| Buses / trucks | out | in; vans ↑ | in; box trucks ↑ | in; pickups, tractors ↑ | out; pickups, vans ↑ | out | out; pickups ↑ | out; pickups ↑ |
+| Cop spawns skipped inside | 0.6 | 0 | 0 | 0.4 | 0.5 | 0.5 | 0.4 | 0.5 |
+| Zebras | removed | kept | removed | removed | removed (worn) | kept | removed | removed |
+| Map colour | stone | red | steel blue | wheat gold | rust brown | park green | moss green | fresh needle green |
 
 Every district: 4★+ roadblocks prefer its gates, ≤ 1 mission destination inside, a minimap outline,
 no start toast. Respect: neutral real glyphs in Chinatown (福 春 茶 飯店), no caricature; made-up names
@@ -140,3 +140,20 @@ Reeds round the rims, lily pads, half-sunk logs (solid). Night: will-o'-the-wisp
 some nights. Climate: frozen pools, bare trees and white verges in the snow (the cauldron still glows);
 a dried salt marsh in the desert (pale cracked ground, every tree a dead snag); mangroves on arching
 roots by the beach. Fairy-tale only: no figure, no animals, no real occult symbols.
+
+## Forest
+
+Dense woods on the island's edge (2×2 to 3×4), the one district cops can't cut through. Its streets
+stay streets, with no street lamps inside (the darkest district: headlights matter); every block is
+woods, pine and broadleaf trees 3.4–6 m apart on a soft forest floor with ferns (breakable), fallen
+logs, boulders and stumps (solid). A winding dirt track crosses most blocks street to street (≥ the
+widest car + 1 m): the player's way through, and the only one cops route along (NavGrid treats the
+woods as a thicket). A log arch with a made-up forest name spans the main street where it comes in from
+town, a green ranger station beside it; timber posts mark the other gates. Special blocks, each a
+feature: a **lumber yard** by the main gate (rows of log stacks with corridors and an aisle to drive,
+a log loader and a parked log truck on the apron, a sawmill shed at the back, four yard lamps), a fire
+**lookout** tower deepest in the woods in a clearing on its track (lit windows at night), and a
+**campsite** in a clearing (tents round a fire pit that glows day and night, picnic tables). Climate:
+all pine in the snow, palms by the beach, a dry woodland of dead snags and cacti in the desert (no ferns
+in the snow or the desert). No animals, no people.
+
