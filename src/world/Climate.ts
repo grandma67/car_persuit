@@ -8,8 +8,8 @@ import type { TimeOfDay } from './CityTheme';
 
 export type ClimateName = 'temperate' | 'snow' | 'beach' | 'desert';
 export type WeatherName = 'clear' | 'rain' | 'snow';
-/** The climates' kinds, and the Swamp's own (cypress with moss, a dead snag, a weeping willow). */
-export type TreeKind = 'round' | 'pine' | 'palm' | 'cactus' | 'fruit' | 'cypress' | 'snag' | 'willow';
+/** The climates' kinds, and the Swamp's own (cypress with moss, a dead snag, a weeping willow, a mangrove on its roots by the beach). */
+export type TreeKind = 'round' | 'pine' | 'palm' | 'cactus' | 'fruit' | 'cypress' | 'snag' | 'willow' | 'mangrove';
 
 export interface Climate {
   name: ClimateName;

@@ -26,6 +26,8 @@ block keeps its zone).
 | Harbor | `Harbor`, `HarborGate`, `HarborQuay`, `HarborYard` | `Harbor`, `HarborGate`, `HarborQuay`, `containers`, `harborLights`, `harborSigns` |
 | Farm | `Farm`, `FarmFields`, `FarmGate`, `FarmNight` | `Farm`, `farmCrops`, `farmSigns` |
 | Slums | `Slums`, `SlumsSet` (ruins, overpass, junkyard, camp), `SlumsStreet` (street dressing, last on the stream; `climateDressing`) | `Slums`, `slumsGraffiti`, `slumsSigns` |
+| Mega-park | `Megapark`, `MegaparkLake`, `MegaparkGrounds`, `MegaparkLawns` | `Megapark`, `megaparkSigns` |
+| Swamp | `Swamp` (roles, lots, `fits`: low ground), `SwampPools`, `SwampWitch`, `SwampSet` (boardwalks, landing), `SwampStreet` (verges, rails, lamps, signs), `SwampWoods` (trees, reeds, logs, pads) | `Swamp`, `SwampWitch` (house, boardwalk, jetty, airboat, log) |
 
 **Placement:** roll a shape, try every rectangle of it (both orientations) in `rings` meeting
 `minShare`/`minCore`, shuffled; else other shapes largest first; else drop (a district only shrinks).
@@ -173,8 +175,20 @@ looks (optional); new props in `StreetProps.ts` + `PropSystem.ts`. Other distric
   earlier props first: lay what must exist (a gate's board) before the filler, or into the busy index
   first. Why is a prop missing: `CLEAROF=parkBoard node scripts/run-ts.mjs <script>` logs each drop
   of those kinds (`*` all) and what it hit; a test can pass a `dropped` array.
-- `fireflies(spots, n, seed, scene, ground)` (`render/districts/fireflies.ts`): the Farm's and the
-  Mega-park's; one program for both.
+- **Raised drivable decks** (`world/Deck.ts`, `dressing.decks`): a boardwalk or ramp-ended platform
+  a car drives up onto. Colliders (a box and two hull wedges) in `CityBuilder`, firm ground over water
+  (`softGround` checks decks first), NavGrid ground at the off-road cost; `deckHeight` for the render.
+  Rails beside one are props just outside its outline: keep them out of `clearOf`'s solids by passing
+  the deck's exact outline. `Deck.test.ts` drives a player and a patrol car over one both ways.
+- `ShallowWater.island`: a dry round island in the middle of a pool (the witch house's).
+- `DistrictDef.fits(bounds, city)`: a ground rule for a candidate rect (the Swamp turns down a hill).
+- `RunDressing.trees`: tree kinds swapped per climate inside the district (the Swamp's desert snags,
+  beach mangroves). District tree props carry their own `tree` kind (`cypress`, `snag`, `willow`,
+  `mangrove` beside the climates' kinds).
+- `rolledFeatures(q)`: each feature's roll before pins (a dump records every feature as a pin; the
+  night-only warning uses it so a feature that rolled on by itself reloads by day without a warning).
+- `fireflies(spots, n, seed, scene, ground, look?)` (`render/districts/fireflies.ts`): the Farm's, the
+  Mega-park's and the Swamp's wisps (`look`: colour, size); one program for all.
 
 ## Night lighting and the glow budget
 

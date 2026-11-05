@@ -154,6 +154,10 @@ words or a district not rolled place it.
 | `signal-right-old` | 246 | 0.0 | 0 |
 | `tree-cactus` | 118 | 0.0 | 0 |
 | `rubble` | 109 | 0.0 | 0 |
+| `tree-cypress` | 196 | 9.8 | 1911 |
+| `tree-willow` | 266 | 1.6 | 412 |
+| `tree-snag` | 100 | 5.0 | 505 |
+| `tree-mangrove` | 263 | 0.0 | 0 |
 | `tree-palm` | 108 | 0.0 | 0 |
 | `signal-right` | 90 | 0.0 | 0 |
 | `sign-square-old` | 88 | 0.0 | 0 |
@@ -275,3 +279,4 @@ Use these when adding a model (so the total only goes down):
 |---|---|---|---:|---:|---:|
 | 2026-11-05 | `ca16fef` | first measurement | 924 k | 546 k | 38.5 k |
 | 2026-11-05 | `perf/polygons` | buried faces dropped from props, 6-sided thin poles, flat ground cells merged, sea coarse past 80 m and along its far strips, Chinatown lantern/joint cuts | 746 k | 506 k | 38.5 k |
+| 2026-11-05 | `districts/swamp` | the Swamp: cypress 196, willow 266, snag 100, mangrove 263 (roots 3×5 tori; 501 before); reed clumps thinned (2 a clump); a swamp city on seed 11 +70–90 k in view vs no district | — | — | — |

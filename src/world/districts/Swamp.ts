@@ -18,6 +18,7 @@ import { layWitch } from './SwampWitch';
 import { layBoardwalks, layLanding } from './SwampSet';
 import { swampStreets } from './SwampStreet';
 import { layWoods } from './SwampWoods';
+import type { RunDressing } from './runtime';
 import { clearOf } from './HarborYard';
 import { propFootprint, rectFootprint, type StreetProp } from '../StreetProps';
 import { shuffle } from './place';
@@ -205,6 +206,8 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const controls = city.streetProps.filter((p) => inRect(q.bounds, p, 2) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
   out.props = clearOf([...out.props, ...walks.props, ...street.props, ...woods.props], [...out.solids, ...deckFootprints, ...controls, ...buildings.map(rectFootprint)],
     city.streetProps.filter((p) => inRect(q.bounds, p, 2)).map((p) => propFootprint(p, 0.1)));
-  out.extra = { look, wisps, boardwalks: walks.decks.length };
+  // By climate: dead in the desert (a dried salt marsh), mangroves by the beach.
+  const byClimate: Record<string, RunDressing> = { desert: { trees: { cypress: 'snag', willow: 'snag' } }, beach: { trees: { cypress: 'mangrove' } } };
+  out.extra = { look, wisps, boardwalks: walks.decks.length, byClimate };
   return out;
 }

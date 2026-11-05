@@ -58,7 +58,7 @@ export function layWoods(q: District, city: CityData, look: SwampLook, pools: Sh
       const rim = rimPoints(w, 48);
       for (let c = rng.int(T.reeds[0], T.reeds[1]); c > 0; c--) {
         const at = rng.int(0, rim.length - 1);
-        for (let r = 0; r < 3; r++) {
+        for (let r = 0; r < 2; r++) {
           const p = rim[(at + r) % rim.length];
           const x = p.x + rng.range(-0.5, 0.5), z = p.z + rng.range(-0.5, 0.5);
           if (!inRect(inner, { x, z }) || onIsland(x, z)) continue;

@@ -165,11 +165,11 @@ export function witchHouse(s: Structure, y: number, snowy: boolean): WitchParts 
   return { solid: g, panes, cauldron: new THREE.Vector3(ca.x, ca.y + 0.62, ca.z).applyMatrix4(m) };
 }
 
-/** The island: a mud disc over the grass (patch lift), roots poking out round its shore. */
+/** The island: a mud disc over the bog (2 cm above its patch), roots poking out round its shore. */
 export function witchIsland(x: number, z: number, y: number, snowy: boolean, seed: number): THREE.BufferGeometry[] {
   const I = SWAMP.witchIsland;
   const rnd = stream(seed ^ 0x51);
-  const g = [part(new THREE.CircleGeometry(I + 0.2, 28).rotateX(-Math.PI / 2), snowy ? SNOW : MUD, x, y + 0.07, z)];
+  const g = [part(new THREE.CircleGeometry(I, 28).rotateX(-Math.PI / 2), snowy ? SNOW : MUD, x, y + 0.09, z)];
   for (let k = 0; k < 14; k++) {
     const a = (k / 14) * Math.PI * 2 + rnd() * 0.3;
     const root = cyl(0.06, 0.12, 1.4, 5).rotateZ(1.1).rotateY(-a);

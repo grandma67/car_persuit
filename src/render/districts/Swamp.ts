@@ -8,8 +8,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { SWAMP } from '../../gameplay/balance';
 import type { CityData, Rect } from '../../world/CityGenerator';
 import type { District } from '../../world/districts/District';
-import { swampPools, witchPool } from '../../world/districts/Swamp';
-import { inRect } from '../../world/lots';
+import { swampLook, swampPools, witchPool } from '../../world/districts/Swamp';
+import { inRect, shrink } from '../../world/lots';
 import { LIT_PROPS } from '../../world/StreetProps';
 import { fireflies } from './fireflies';
 import type { DistrictRenderContext, DistrictView } from './index';
@@ -61,6 +61,11 @@ export function renderSwamp(q: District, city: CityData, scene: THREE.Scene, ctx
   const flat = new GeometryBuilder();
   const mud = new THREE.Color(snowy ? 0xdfe4e8 : 0x5a4c38);
   for (const p of q.dressing.ground) if (p.kind === 'verge') flat.drape(p, 0.07, mud, city.terrain);
+  // The blocks' ground: dark moss in the swamp, rank yellow-green grass in the marsh, cracked salt in
+  // the desert, lusher by the beach, snow in the snow (over the park grass, a patch's lift).
+  const look = swampLook(q);
+  const bog = new THREE.Color(snowy ? 0xe4e8ec : ctx.climate.name === 'desert' ? 0xd6ccb4 : ctx.climate.name === 'beach' ? 0x557a3c : look === 'swamp' ? 0x4c5a32 : 0x7c8a4a);
+  for (const k of q.blocks) flat.drape(shrink(city.blocks[k].rect, city.config.sidewalk), 0.07, bog, city.terrain);
   if (flat.positions.length) {
     const mesh = new THREE.Mesh(flat.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
     mesh.receiveShadow = true;

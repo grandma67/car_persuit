@@ -10,7 +10,7 @@ import { CanalWater } from './CanalWater';
 
 const SEGMENTS = 40; // round the rim
 const RINGS = 7; // from the rim to the middle
-export const RIM_LIFT = 0.08; // the rim's height over the ground (park grass sits at 0.05)
+export const RIM_LIFT = 0.09; // the rim's height over the ground (park grass sits at 0.05, the Swamp's bog patch at 0.07)
 
 /** The merged surface geometry: position, normal (up), uv.x = metres from the shore. */
 export function shallowWaterGeometry(waters: ShallowWater[], terrain: Terrain): THREE.BufferGeometry {

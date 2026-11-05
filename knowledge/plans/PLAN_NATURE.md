@@ -262,7 +262,7 @@ the glow budget", `maxGlow` declared on every def. Still open:
 - **Planning:** a 10–15 h branch takes 3–4 sessions. Hand off at milestone boundaries with
   `TASKS.md` and this plan's status section, so the next session doesn't re-read the code.
 
-## Branch 3 status (`districts/swamp`)
+## Branch 3 status (`districts/swamp`): done, waiting for the user's approval to merge (2026-11-05)
 
 - **M1** (placement, roles, pools): `Swamp.ts`, `SwampPools.ts`. `DistrictDef.fits` (new, optional)
   rejects a rect whose hill varies > `SWAMP.maxRise` (3 m); edge blocks rarely sit on the hill, so
@@ -299,3 +299,26 @@ the glow budget", `maxGlow` declared on every def. Still open:
   the decks' exact outlines (padded outlines would drop the boardwalk rails). Tussocks and duckweed
   dropped (the pads and reeds carry it). `SwampTraffic.test.ts`: civilians, runtime rules, and NavGrid
   crossing a pool block on its boardwalk or round by the streets, never wading.
+- **M5** (looks, climate, perf, docs): a bog ground patch per block (0.07; dark moss in the swamp,
+  yellow-green in the marsh, pale salt in the desert, lush by the beach); the water's rim lift 0.08 →
+  0.09 (2 cm over the bog), the witch island's mud at 0.09 ending at its shore. `RunDressing.trees`
+  swaps tree kinds per climate: desert cypress and willows become snags, beach cypress a new
+  `mangrove` on arching roots. Snow: frozen pools, bare cypress (the moss stays), white verges and
+  boardwalks. Reed clumps thinned to two (the reeds model is 240 tris).
+- **Numbers:** forced 99 %, natural 33 %; odds: any Swamp 29 %. Programs: +1 in a city with no canals
+  (the canal water's program for the first shallow water, accepted for ponds), +1 on wisp nights (the
+  fireflies'). Perf on vs off (seed 11): frame 3.5 vs 3.6 ms, GPU 1.44 vs 1.25 ms, +~20 calls,
+  +70–90 k tris in view, 60 fps. Build: walls+roofs ≤ 2.9 k tris, ≤ +22 ms worst. Glow avg 14 of 60.
+  `check:restart` ok.
+
+### Where branch 3 bent from the plan
+
+- **Pools ~35–60 %, not 40–70 %:** wobbly ellipses don't pack a square block; the marsh is only a few
+  points wetter (its character comes from reeds and willows instead).
+- **The island is dry ground, not solid:** a car can wade to it; the house (porch included) is solid.
+- **Boardwalks are raised decks with ramps** (0.6 m, a new shared `Deck`), so a car really drives them.
+- **No mist** (it would need a new transparent program); **no dark water** (one shallow-water mesh
+  shares the canal shader's colours city-wide); **no tussocks or duckweed** (reeds and lily pads carry
+  it). The "gator crossing" sign is a yellow diamond reading "MIND THE BOG". The stick totem is the
+  Farm's scarecrow. Rails (boardwalk and kerb) reuse the split-rail `fence`.
+- **No new facade styles:** shacks and the bait shop are `siding` (`boards` is barn red).

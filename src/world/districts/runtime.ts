@@ -1,5 +1,6 @@
 // What the game's systems need from the placed districts: speed caps and no-go streets for
 // traffic, spawn weights, cop spawn skips, roadblock gates, destination zoning. Pure data.
+import type { TreeKind } from '../Climate';
 import type { CityData } from '../CityGenerator';
 import type { Footprint, PropKind, StreetProp } from '../StreetProps';
 import { inRect } from '../lots';
@@ -77,6 +78,7 @@ export interface RunDressing {
   drop?: PropKind[];
   ground?: GroundPatch[]; // flat patches (the Slums' slush and dust drifts)
   tint?: { kinds: PropKind[]; toward: number; by: number }; // props weathered towards a colour (bleached, salt-rusted wrecks)
+  trees?: Partial<Record<TreeKind, TreeKind>>; // tree kinds swapped inside the district (the Swamp's cypress dead in the desert)
 }
 
 /** Mix two 0xRRGGBB colours, `by` of the way from a to b. */
@@ -101,6 +103,12 @@ export function joinRunDressing(city: CityData, run: { night: boolean; climate: 
         const weather = (p: StreetProp) => (kinds.includes(p.kind) && p.color !== undefined && inRect(q.bounds, p, 2) ? { ...p, color: mixHex(p.color, toward, by) } : p);
         q.dressing.props = q.dressing.props.map(weather);
         city.streetProps = city.streetProps.map(weather);
+      }
+      if (d.trees) {
+        const swap = d.trees;
+        const grow = (p: StreetProp) => (p.kind === 'tree' && p.tree && swap[p.tree] && inRect(q.bounds, p, 2) ? { ...p, tree: swap[p.tree] } : p);
+        q.dressing.props = q.dressing.props.map(grow);
+        city.streetProps = city.streetProps.map(grow);
       }
       if (d.drop?.length) {
         const gone = new Set<PropKind>(d.drop);

@@ -297,7 +297,7 @@ function treeModels(look: Greenery): Record<`tree-${TreeKind}`, THREE.BufferGeom
  * moss), a dead snag (a bare grey trunk, its top snapped, a few broken limbs), a weeping willow (a
  * dome with long fronds hanging nearly to the ground). Bare in the snow but for the moss.
  */
-function swampTrees(look: Greenery): Record<'tree-cypress' | 'tree-snag' | 'tree-willow', THREE.BufferGeometry> {
+function swampTrees(look: Greenery): Record<'tree-cypress' | 'tree-snag' | 'tree-willow' | 'tree-mangrove', THREE.BufferGeometry> {
   const cyl = (top: number, bottom: number, h: number, seg: number) => new THREE.CylinderGeometry(top, bottom, h, seg);
   const bark = 0x5a4a3c, dead = 0x7a7266, moss = 0x8a9a7a;
   const crown = look.snowy ? [] : [
@@ -325,6 +325,13 @@ function swampTrees(look: Greenery): Record<'tree-cypress' | 'tree-snag' | 'tree
       part(cyl(0.12, 0.3, 5.2, 6).rotateZ(0.06), dead, -0.15, 2.6),
       part(cyl(0.02, 0.12, 0.5, 5).rotateZ(0.5), dead, -0.45, 5.35),
       ...limbs,
+    ]),
+    // A mangrove (the beach's swamp): a short trunk on a cage of arching roots, a low broad crown.
+    'tree-mangrove': mergeGeometries([
+      ...Array.from({ length: 7 }, (_, k) => part(new THREE.TorusGeometry(0.75, 0.06, 3, 5, Math.PI).rotateY((k / 7) * Math.PI), bark, 0, 0.15)),
+      part(cyl(0.16, 0.24, 2.2, 6), bark, 0, 1.9),
+      part(new THREE.IcosahedronGeometry(2.0, 0).scale(1.2, 0.55, 1.2), 0x3f6a34, 0, 3.4),
+      part(new THREE.IcosahedronGeometry(1.4, 0).scale(1.1, 0.55, 1.1), 0x4a7a3a, 0.7, 3.9),
     ]),
     'tree-willow': mergeGeometries([
       part(cyl(0.25, 0.4, 2.8, 6), bark, 0, 1.4),

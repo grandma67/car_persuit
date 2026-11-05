@@ -185,6 +185,7 @@ const TREE_SPECS: Record<TreeKind, Partial<PropSpec>> = {
   cypress: { hx: 0.45, hz: 0.45, height: 7 }, // the flared foot
   snag: { hx: 0.28, hz: 0.28, height: 5.2, mass: 150, breakSpeed: 4, slowdown: 0.15 }, // dead wood: snaps easier
   willow: { hx: 0.38, hz: 0.38, height: 4.5 },
+  mangrove: { hx: 0.6, hz: 0.6, height: 4 }, // the root cage
 };
 
 /** The spec for this particular prop: trees vary by kind and size. */
