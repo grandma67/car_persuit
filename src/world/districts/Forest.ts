@@ -1,5 +1,5 @@
 // The Forest: dense woods on the island's edge, the one district cops can't cut through. Its
-// streets stay streets; the blocks between them are woods (trees 4–7 m apart) with dirt tracks
+// streets stay streets; the blocks between them are woods (trees 3.4–6 m apart) with dirt tracks
 // winding through most of them street to street, the way through a car can take and cops have to
 // follow. Special blocks: a lumber yard by the main gate, a fire lookout in a clearing, a campsite.
 // No street lamps inside (the darkest district), light traffic, pickups, no buses or trucks, fewer

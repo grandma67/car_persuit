@@ -100,7 +100,7 @@ describe('Forest tracks and trees', () => {
     expect(woods.filter(Boolean).length / woods.length).toBeGreaterThan(FOREST.trackChance - 0.12);
   });
 
-  it.each(placed)('seed %i: trees 4–7 m apart, inside the sidewalk line, off the tracks and out of the clearings; none in the yard', (_seed, c, q) => {
+  it.each(placed)('seed %i: trees 3.4–6 m apart, inside the sidewalk line, off the tracks and out of the clearings; none in the yard', (_seed, c, q) => {
     const trees = forestTrees(q);
     const breaks: string[] = [];
     const tracks = forestTracks(q);
@@ -124,7 +124,7 @@ describe('Forest tracks and trees', () => {
     }
     expect(breaks).toEqual([]);
     // Dense: a woods block holds a good many.
-    for (const k of roleBlocks(q, 'woods')) expect(trees.filter((t) => inRect(c.blocks[k].rect, t)).length).toBeGreaterThan(30);
+    for (const k of roleBlocks(q, 'woods')) expect(trees.filter((t) => inRect(c.blocks[k].rect, t)).length).toBeGreaterThan(50);
   });
 
   it.each(placed.slice(0, 8))('seed %i: no street lamps, benches or hydrants; nothing of the city\'s left inside the blocks; track mouths clear', (_seed, c, q) => {

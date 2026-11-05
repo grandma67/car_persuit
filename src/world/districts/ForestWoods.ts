@@ -1,6 +1,6 @@
 // The Forest's woods: dirt tracks winding through the blocks street to street (the one way through
 // that a car, and so a cop, can take), clearings in the special blocks, and the trees packed round
-// them 4–7 m apart (each tree claims a disc; two discs never overlap). Pure data on the district's
+// them 3.4–6 m apart (each tree claims a disc; two discs never overlap). Pure data on the district's
 // stream; the trees are ordinary breakable tree props with their own kind (pine and round here,
 // swapped per climate at run time by `RunDressing.trees`).
 import type { Rng } from '../../core/Rng';
@@ -132,7 +132,7 @@ export function layTrees(q: District, city: CityData, tracks: Track[], clearings
     const room = shrink(city.blocks[k].rect, city.config.sidewalk + FOREST.edge);
     const mine = tracks.filter((t) => t.block === k);
     const glades = clearings.filter((c) => c.block === k);
-    const tries = Math.round((room.w * room.d) / (Math.PI * lo * lo)) * 3;
+    const tries = Math.round((room.w * room.d) / (Math.PI * lo * lo)) * 5;
     for (let t = 0; t < tries; t++) {
       const x = room.x + rng.range(-room.w / 2, room.w / 2), z = room.z + rng.range(-room.d / 2, room.d / 2);
       const r = rng.range(lo, hi);

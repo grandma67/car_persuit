@@ -502,8 +502,8 @@ export const FOREST = {
   floorGrip: 0.85, // tyre grip multiplier on the forest floor (the tracks included)
   floorDrag: 1, // extra rolling drag there, m/s²
   maxGlow: 70, // at night: the lumber yard's lights, the campfire, the gate's lanterns (no street lamps inside)
-  /** Trees: each claims a disc of this radius (two stand at least the sum apart: 4–7 m). */
-  spacing: [2, 3.5] as [number, number],
+  /** Trees: each claims a disc of this radius (two stand at least the sum apart: 3.4–6 m). */
+  spacing: [1.7, 3] as [number, number],
   pineShare: 0.55, // of the trees in temperate woods (the rest round)
   edge: 1, // trees keep this far inside the sidewalk line
   trackChance: 0.85, // a woods block with a track through it
