@@ -131,14 +131,15 @@ export function parseCityParams(input: string | unknown): { params: CityParams |
 export function serializeCityParams(params: CityParams): string {
   const ordered: Obj = {};
   for (const k of CITY_KEYS) if ((params as unknown as Obj)[k] !== undefined) ordered[k] = (params as unknown as Obj)[k];
-  const out = (v: unknown, indent: string, top = false): string => {
+  // `lead`: what stands before the value on its line past the indent (its key).
+  const out = (v: unknown, indent: string, top = false, lead = 0): string => {
     const flat = JSON.stringify(v);
     if (flat === undefined) return 'null';
-    if (typeof v !== 'object' || v === null || (!top && flat.length + indent.length <= 100)) return flat;
+    if (typeof v !== 'object' || v === null || (!top && indent.length + lead + flat.length <= 100)) return flat;
     const inner = indent + '  ';
     if (Array.isArray(v)) return `[\n${v.map((x) => inner + out(x, inner)).join(',\n')}\n${indent}]`;
     const entries = Object.entries(v as Obj).filter(([, x]) => x !== undefined);
-    return `{\n${entries.map(([k, x]) => `${inner}${JSON.stringify(k)}: ${out(x, inner)}`).join(',\n')}\n${indent}}`;
+    return `{\n${entries.map(([k, x]) => `${inner}${JSON.stringify(k)}: ${out(x, inner, false, JSON.stringify(k).length + 2)}`).join(',\n')}\n${indent}}`;
   };
   return out(ordered, '', true) + '\n';
 }

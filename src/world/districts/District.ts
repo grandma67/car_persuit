@@ -13,11 +13,12 @@ import { pin, type FeatureValue } from '../CityParams';
 export type { LotStyle } from '../lots';
 
 /** Grows with the registry (world/districts/index.ts). */
-export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums' | 'megapark';
+export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums' | 'megapark' | 'swamp';
 
 /** What a special (unfilled) block is for; the district's dressing fills it. */
 export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'camp' | 'junkyard'
-  | 'lake' | 'sports' | 'track' | 'playground' | 'bandstand' | 'lawn';
+  | 'lake' | 'sports' | 'track' | 'playground' | 'bandstand' | 'lawn'
+  | 'pools' | 'witch' | 'landing';
 
 // --- Building looks (rendered by CityBuilder's addBuilding through the facade pipeline) ---
 
@@ -158,6 +159,8 @@ export interface DistrictDef {
   /** Least share of blocks per zone, e.g. { midtown: 0.5 }; zones joined by '+' count together ({ 'residential+industrial': 0.5 }). */
   minShare?: Partial<Record<Zone | `${Zone}+${Zone}`, number>>;
   minCore?: number; // least share of downtown + midtown blocks
+  /** Why the ground under `bounds` (the blocks' union) doesn't suit it, or nothing (the Swamp wants low, flat ground). */
+  fits?(bounds: Rect, city: CityData): string | undefined;
   gates: 'all' | 'mainStreet';
   extraGates?: number; // with 'mainStreet': up to this many more
   minMainStreet?: number; // the main street's least length in edges (default 1)

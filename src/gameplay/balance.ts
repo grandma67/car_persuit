@@ -446,6 +446,27 @@ export const MEGAPARK = {
   picnicTables: [2, 4] as [number, number],
 };
 
+/** The Swamp: low wet ground on the island's edge, causeway streets between pools (world/districts/Swamp.ts). */
+export const SWAMP = {
+  chance: 0.3,
+  swampChance: 0.6, // the wooded swamp; otherwise the open reed marsh
+  maxRise: 3, // metres the hill may vary under it, at most (low, flat ground)
+  density: 0.4,
+  copSpawnSkip: 0.4,
+  pickupWeight: 3,
+  mudGrip: 0.8, // tyre grip multiplier on the banks
+  mudDrag: 1.5, // extra rolling drag there, m/s²
+  maxGlow: 60, // at night: one lamp a junction, the witch house's windows and cauldron, the wisps
+  poolDepth: 0.35, // the water's surface over the ground
+  bank: 2, // dry bank kept inside the sidewalk line
+  poolGap: 2, // dry ground between two pools
+  /** Share of an ordinary block under water: swamp, marsh. */
+  cover: { swamp: [0.4, 0.6], marsh: [0.55, 0.7] } as Record<'swamp' | 'marsh', [number, number]>,
+  bigPool: [14, 26] as [number, number], // the first pool's long half-axis, metres (sized from the share, shrunk to fit)
+  smallPool: [5, 11] as [number, number], // the others'
+  witchPool: [21, 24] as [number, number], // the witch house's pool (shrunk to fit its block)
+};
+
 /** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */
 export const WATER = {
   grip: 0.7, // tyre grip multiplier in the water

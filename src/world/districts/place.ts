@@ -64,6 +64,11 @@ export function rectRules(def: DistrictDef, { i0, j0, w, h }: GridRect, grid: Di
     const onCol = i0 === 0 || i0 + w === n;
     if (w > h ? !onRow : h > w ? !onCol : !(onRow || onCol)) site = "coast: its long side on the island's outer row or column";
   }
+  if (!site && def.fits) {
+    const rw = city.config.roadWidth;
+    const x0 = grid.line(i0) + rw / 2, x1 = grid.line(i0 + w) - rw / 2, z0 = grid.line(j0) + rw / 2, z1 = grid.line(j0 + h) - rw / 2;
+    site = def.fits({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0 }, city);
+  }
   const zones: Zone[] = [];
   for (let j = j0; j < j0 + h; j++) for (let i = i0; i < i0 + w; i++) zones.push(city.blocks[j * n + i].zone);
   const out: string[] = [];

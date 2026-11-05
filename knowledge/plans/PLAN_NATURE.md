@@ -261,3 +261,14 @@ the glow budget", `maxGlow` declared on every def. Still open:
 - `check:restart`: also cover districts past the five-district `--make` (a second city).
 - **Planning:** a 10–15 h branch takes 3–4 sessions. Hand off at milestone boundaries with
   `TASKS.md` and this plan's status section, so the next session doesn't re-read the code.
+
+## Branch 3 status (`districts/swamp`)
+
+- **M1** (placement, roles, pools): `Swamp.ts`, `SwampPools.ts`. `DistrictDef.fits` (new, optional)
+  rejects a rect whose hill varies > `SWAMP.maxRise` (3 m); edge blocks rarely sit on the hill, so
+  forced placement is 99 %, natural 33 %. Roles: `landing` beside the main gate, `witch` the block
+  farthest from it, the rest `pools`. Pools: the witch's laid first (one, the biggest), then per
+  block a big pool sized from the rolled share plus smaller ones; ~35–57 % under water (ellipses
+  pack poorly in a square, so the plan's 70 % isn't reached; marsh ~5 points wetter). Banks are soft
+  mud. No buildings yet. `serializeCityParams` now counts the key in its 100-column rule (the swamp's
+  six roles were the first one-line value to pass it).

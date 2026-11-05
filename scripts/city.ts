@@ -39,7 +39,7 @@ export function summary(city: CityData): string {
   ].filter(Boolean).join(' · ');
 }
 
-const DISTRICT_CHAR: Record<string, string> = { oldtown: 'o', chinatown: 'c', harbor: 'h', farm: 'f', slums: 's', megapark: 'p' };
+const DISTRICT_CHAR: Record<string, string> = { oldtown: 'o', chinatown: 'c', harbor: 'h', farm: 'f', slums: 's', megapark: 'p', swamp: 'w' };
 
 /**
  * The grid as text, j = 0 at the top: a block is 3 characters (zone D M R I, lower case a park; then

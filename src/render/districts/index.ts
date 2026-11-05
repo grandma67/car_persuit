@@ -14,6 +14,7 @@ import { renderHarbor } from './Harbor';
 import { renderMegapark } from './Megapark';
 import { renderOldCity } from './OldCity';
 import { renderSlums } from './Slums';
+import { renderSwamp } from './Swamp';
 
 export interface DistrictRenderContext {
   theme: CityTheme;
@@ -51,6 +52,7 @@ export const DISTRICT_RENDERERS: Partial<Record<DistrictKind, DistrictRenderer>>
   farm: renderFarm,
   slums: renderSlums,
   megapark: renderMegapark,
+  swamp: renderSwamp,
 };
 
 /** Draw every placed district's structures, overhead pieces and ground patches. */
