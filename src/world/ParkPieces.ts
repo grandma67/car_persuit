@@ -5,6 +5,7 @@
 import { Rng } from '../core/Rng';
 import { PARKS } from '../gameplay/balance';
 import type { Block, CityConfig } from './CityGenerator';
+import type { DistrictKind } from './districts/District';
 import type { Landmark } from './Landmarks';
 import { footprintsOverlap, propFootprint, type StreetProp } from './StreetProps';
 import { onGround, type Terrain } from './Terrain';
@@ -21,6 +22,8 @@ export interface LilyPad {
 
 export interface ParkPiece {
   kind: ParkPieceKind;
+  /** Laid by a district (the Mega-park's lake and pitches), not rolled for a park: not counted by `ponds` / `pitches`. */
+  district?: DistrictKind;
   block: [number, number]; // grid cell (i, j)
   x: number;
   z: number;
@@ -197,6 +200,17 @@ export function layPitch(block: Block, k: number, n: number, config: CityConfig,
   const at = (u: number, v: number) => (alongX ? { x: cx + u, z: cz + v } : { x: cx + v, z: cz + u });
   const corners = [[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([a, b]) => at(a * reachU, b * reachV));
   if (corners.some((c) => !onGround(terrain, c.x, c.z, 1))) return null;
+  return pitchAt(cx, cz, alongX, [k % n, Math.floor(k / n)], rng);
+}
+
+/**
+ * A pitch centred at (cx, cz), its long side along X or Z, from `rng` (the dugouts' side, the
+ * ball): its goals, fences, flags, floodlights, benches and ball. Its footprint (`onPitch`) must be clear.
+ */
+export function pitchAt(cx: number, cz: number, alongX: boolean, block: [number, number], rng: Rng): { piece: ParkPiece; props: StreetProp[] } {
+  const L = PARKS.pitchLength;
+  const W = PARKS.pitchWidth;
+  const at = (u: number, v: number) => (alongX ? { x: cx + u, z: cz + v } : { x: cx + v, z: cz + u });
   const facing = (p: { x: number; z: number }, to: { x: number; z: number }) => Math.atan2(to.x - p.x, to.z - p.z);
   const centre = { x: cx, z: cz };
   const props: StreetProp[] = [];
@@ -223,8 +237,7 @@ export function layPitch(block: Block, k: number, n: number, config: CityConfig,
   }
   const spot = at(rng.range(-0.5, 0.5), rng.range(-0.5, 0.5));
   props.push({ kind: 'ball', ...spot, yaw: rng.range(0, Math.PI * 2) });
-  const [i, j] = [k % n, Math.floor(k / n)];
-  return { piece: { kind: 'pitch', block: [i, j], x: cx, z: cz, yaw: alongX ? 0 : Math.PI / 2, alongX, length: L, width: W }, props };
+  return { piece: { kind: 'pitch', block, x: cx, z: cz, yaw: alongX ? 0 : Math.PI / 2, alongX, length: L, width: W }, props };
 }
 
 /** Whether (x, z) lies within `margin` of a pitch's footprint (run-off included). */

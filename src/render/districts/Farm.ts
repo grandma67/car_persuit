@@ -15,6 +15,7 @@ import { buildCrops } from './farmCrops';
 import type { PivotData } from '../../world/districts/FarmNight';
 import { FARM } from '../../gameplay/balance';
 import { farmSignMaterial, namePlate, onWarm } from './farmSigns';
+import { fireflies } from './fireflies';
 import { WINDMILL } from '../Landmarks';
 import { groundBase } from '../../world/Terrain';
 import type { DistrictRenderContext, DistrictView } from './index';
@@ -226,44 +227,10 @@ function pivot(s: Structure, city: CityData, out: THREE.BufferGeometry[]): void 
   out.push(...g.map((p) => p.applyMatrix4(m)));
 }
 
-/** Fireflies drifting low over the fields at night, each blinking on its own phase (in the shader). */
-function fireflies(q: District, city: CityData, fields: { rect: { x: number; z: number; w: number; d: number } }[], scene: THREE.Scene, ground: (x: number, z: number) => number): { value: number } {
-  // Within the glow budget: what the district already lights (timber lamps, jack-o'-lanterns, the lantern).
+/** Fireflies over the fields, within the glow budget: what the district already lights (timber lamps, jack-o'-lanterns, the lantern). */
+function farmFireflies(q: District, city: CityData, fields: { rect: { x: number; z: number; w: number; d: number } }[], scene: THREE.Scene, ground: (x: number, z: number) => number): { value: number } {
   const lit = city.streetProps.filter((p) => (p.kind === 'woodLamp' || p.kind === 'jackOLantern') && Math.abs(p.x - q.bounds.x) <= q.bounds.w / 2 && Math.abs(p.z - q.bounds.z) <= q.bounds.d / 2).length + 1;
-  const n = Math.max(0, Math.min(FARM.fireflies, FARM.maxGlow - lit));
-  const time = { value: 0 };
-  if (!n || !fields.length) return time;
-  const pos = new Float32Array(n * 3), phase = new Float32Array(n);
-  let seed = city.seed % 2147483647 || 1;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < n; i++) {
-    const f = fields[i % fields.length].rect;
-    const x = f.x + (rnd() - 0.5) * f.w, z = f.z + (rnd() - 0.5) * f.d;
-    pos.set([x, ground(x, z) + 0.6 + rnd() * 1.6, z], i * 3);
-    phase[i] = rnd();
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
-  const mat = new THREE.PointsMaterial({ color: 0xd8ff6a, size: 0.35, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = time;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nattribute float aPhase;\nvarying float vBlink;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-transformed.x += sin(uTime * 0.5 + aPhase * 7.0) * 0.8;
-transformed.z += cos(uTime * 0.43 + aPhase * 11.0) * 0.8;
-transformed.y += sin(uTime * 0.7 + aPhase * 5.0) * 0.3;
-vBlink = smoothstep(0.55, 1.0, sin(uTime * 1.6 + aPhase * 6.2832));`);
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vBlink;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vBlink;');
-  };
-  mat.customProgramCacheKey = () => 'farmFireflies';
-  const points = new THREE.Points(geo, mat);
-  points.frustumCulled = false;
-  scene.add(points);
-  return time;
+  return fireflies(fields.map((f) => f.rect), Math.max(0, Math.min(FARM.fireflies, FARM.maxGlow - lit)), city.seed, scene, ground);
 }
 
 export function renderFarm(q: District, city: CityData, scene: THREE.Scene, ctx: DistrictRenderContext): DistrictView {
@@ -345,7 +312,7 @@ export function renderFarm(q: District, city: CityData, scene: THREE.Scene, ctx:
   const look = snowy ? { dry: true, corn: 0xffffff, wheat: 0xe8e0c8 } : climate === 'desert' ? { dry: false, corn: 0xe8e0b0, wheat: 0xf8f0d8 } : climate === 'beach' ? { dry: false, corn: 0xe0ffd8, wheat: 0xffffff } : { dry: false, corn: 0xffffff, wheat: 0xffffff };
   const crops = buildCrops(q, city, fields, scene, ctx.ground, look);
   // Fireflies over the fields on warm nights: blinking in the shader, within the glow budget.
-  const flies = ctx.night && (climate === 'temperate' || climate === 'beach') ? fireflies(q, city, fields, scene, ctx.ground) : null;
+  const flies = ctx.night && (climate === 'temperate' || climate === 'beach') ? farmFireflies(q, city, fields, scene, ctx.ground) : null;
   const trees = q.dressing.props.filter((p) => p.kind === 'tree' && p.tree === 'fruit');
   if (trees.length && !snowy) {
     const per = 4;

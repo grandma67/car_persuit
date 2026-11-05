@@ -263,14 +263,32 @@ export function yardFence(block: Rect, yard: Yard): StreetProp[] {
   return out;
 }
 
-/** Drop props that would stand on a footprint or another prop already taken. */
-export function clearOf(props: StreetProp[], solids: Footprint[], taken: Footprint[] = []): StreetProp[] {
+/** What `clearOf` dropped, and on what: a solid (`solids`) or a prop (`taken`, or one kept before it). */
+export interface Dropped {
+  prop: StreetProp;
+  on: 'solid' | 'prop';
+}
+
+/** Kinds whose drops `clearOf` logs: `CLEAROF=parkBoard,kiosk node scripts/run-ts.mjs …` (`*` for all). */
+const LOG_DROPS = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.CLEAROF?.split(',');
+
+/**
+ * Drop props that would stand on a footprint or another prop already taken, earlier props first.
+ * Silent by design (filler that doesn't fit just goes): lay what must exist first, pass `dropped` to
+ * see what went, or set CLEAROF=<kinds> to log it.
+ */
+export function clearOf(props: StreetProp[], solids: Footprint[], taken: Footprint[] = [], dropped?: Dropped[]): StreetProp[] {
   const kept: StreetProp[] = [];
   const hard = new FootprintIndex(solids);
   const busy = new FootprintIndex(taken);
   for (const p of props) {
     const fp = propFootprint(p, 0.05);
-    if (hard.hits(fp) || busy.hits(fp)) continue;
+    const on = hard.hits(fp) ? 'solid' : busy.hits(fp) ? 'prop' : null;
+    if (on) {
+      dropped?.push({ prop: p, on });
+      if (LOG_DROPS && (LOG_DROPS.includes('*') || LOG_DROPS.includes(p.kind))) console.log(`clearOf dropped ${p.kind} at (${p.x.toFixed(1)}, ${p.z.toFixed(1)}): on a ${on}`);
+      continue;
+    }
     busy.add(propFootprint(p));
     kept.push(p);
   }

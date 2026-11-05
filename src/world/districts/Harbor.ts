@@ -185,6 +185,7 @@ export const HARBOR_DEF: DistrictDef = {
   keepZebras: false,
   traffic: { density: HARBOR.density, heavy: true, weights: { 'Box truck': HARBOR.boxTruckWeight, Van: HARBOR.vanWeight } },
   copSpawnSkip: 0,
+  maxGlow: HARBOR.maxGlow,
   roadblockGates: true,
   mapColor: 0x4a78a8,
   dress,

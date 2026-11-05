@@ -90,7 +90,7 @@ One grand city park over a rectangle of blocks, its interior streets turned into
 - **Blocks** (roles, each a feature): one **lake** block (a big shallow-water lake 35–45 m with an
   island and a footbridge, rowboats at a boathouse, a fountain jet; `lake` always), one or two
   **sports** blocks (soccer pitch from branch 1, tennis courts behind chain-link, a running track loop;
-  `sports=N`), a **playground** (swings, slide, climbing frame, sandpit: solid structures, low fence),
+  `sports=N`), a **playground** (swings, slide, climbing frame, sandpit: breakable props, low fence),
   a **bandstand** lawn (octagonal bandstand, deck chairs breakable), the rest **lawns** (soft grass,
   winding paths, scattered trees, flower beds, picnic tables). A café pavilion with a terrace on one
   block edge (lot with a facade style; ≤ 3 new styles).
@@ -204,3 +204,60 @@ Woods on the island edge, the one district cops can't cut through.
   met tries the next seed). Park pieces are not read-only `landmarks` (a landmark is solid).
 - Seed guard vs main: exactly the cities with a pond or pitch moved (95 of 120 before the pond
   chance came down); `city-hash` skips empty `water` / `parkPieces` lists.
+
+## Branch 2 status (`districts/megapark`): done, waiting for the user's approval to merge (2026-11-04)
+
+- **Committed:** M1 placement, roles, lots (4fbdca6); M2 lake block (9169656); M3 sports, track,
+  playground, bandstand, café terrace, 9 new props (c758b46); M4 lawns, paths, gates, name wall,
+  traffic and police tests (649776e); M5 night, desert beds, perf, docs. Seed guard after each
+  moved only Mega-park cities (M4: 44 of 120).
+- **M4/M5 as built:** `layLawns` runs at the end of `Megapark.dress` (reads the set pieces through
+  `q.dressing = out`); gates, the name wall and its board are laid before the filler. Paths render
+  with `drapePolyline` (`render/geometry.ts`), the name plate from `megaparkSigns.ts`. Night: gate
+  lanterns and 16 bandstand bulbs are glow instances (the lamp bulbs' program), fireflies over the
+  lawns share the Farm's (`render/districts/fireflies.ts`). Desert beds are cactus gardens; snow
+  paths a darker grey to show on the snow.
+- **Numbers:** placed naturally on 20 % of seeds (forced 70 %), +2 ms generation; programs unchanged
+  by day (34 = 34), +1 on warm nights in a city without a Farm (the fireflies' program, as the
+  pond's water); perf on vs off within noise (frame ~3.4 vs 3.3 ms, GPU ~2.4 both, 60 fps),
+  +70 calls, +15 MB textures; `check:restart` on a Mega-park city ok; every gate driven at speed.
+- **`maxGlow` 90 → 130:** a 3×3's drives alone carry 72 oil lamps, which left no path lamps once the
+  bulbs were reserved (Farm 110, Harbor 140).
+- **Bent from the plan:** shapes 2×2 / 2×3 / 3×3 (3×3 rarely fits inland: 70 % placement when forced);
+  no new facade styles (café stucco and storefront, lodge ashlar, boathouse siding); the lodge has no
+  porch; Victorian lamps are the Old City's `oilLamp`; the island is solid (a folly on it); the lake
+  is ~40 m across, sized to fit its block.
+
+### Before finishing M4 (done: `DISTRICTS_DEV.md` files list, conventions, reuse; `alone` / `everyDistrict`)
+
+From the branch-2 retrospective: this session's time went to reading code for reuse points, to rework
+caught by tests or screenshots, and to tool friction.
+- **`DISTRICTS_DEV.md`: the full list of files a new district touches.** `DistrictKind` union,
+  `districts/index.ts`, `render/districts/index.ts`, `scripts/city.ts` (`DISTRICT_CHAR` + legend),
+  the kind lists in `evals/district-tour.js` and `evals/district-drive.js`, `NUMBERS` in
+  `paramsTesting.ts` for an int feature, the force objects in every other district's tests,
+  `CityTheme` climate looks (optional), and a separate `check:restart` run (its `--make` already
+  names five districts, and `DISTRICTS.max` is 5).
+- **`DISTRICTS_DEV.md`: a conventions section.** Footprint yaw (local X `(cos, −sin)`, local Z
+  `(sin, cos)`); a prop's local +Z is its front; `Structure` yaw; `Water` local frame
+  (`yaw = atan2(−nz, nx)` points local +X along `(nx, nz)`); `Building.street` bits (1 +Z, 2 −Z,
+  4 +X, 8 −X); ground lifts (sidewalk 0.03, grass 0.05, patches 0.07, lines 0.09).
+- **Reuse notes.** `block.park = true` in `roles` gives grass and the minimap colour;
+  `ParkPiece.district` for a district's pond or pitch (`pitchAt`, the park-piece renderer);
+  `rowboat()` is exported; Victorian lamps are `oilLamp` (glow included).
+- **`alone(kind)` helper in `paramsTesting.ts`** (force every other `DISTRICT_DEFS` kind off),
+  replacing the hand-written `{…, slums: false}` objects in the district tests.
+
+### After M5 (tooling; before Swamp and Forest)
+
+Done after the branch-2 retrospective: `hash --expect <kind>`, `stats -- odds`, glow use in `stats`
+(it found the pitch floodlights missing from the park's lamp budget), `clearOf` reports drops
+(`dropped`, `CLEAROF=`), a lock per port in `check:browser`, `DISTRICTS_DEV.md` "Night lighting and
+the glow budget", `maxGlow` declared on every def. Still open:
+
+- ~~A shared polyline drape~~ (done in M4: `drapePolyline`; the track could move to it) and a shared `fenceRound` (Slums `chainLink` and `MegaparkGrounds` duplicate it).
+- `district-tour.js`: support `tourKinds=lot:…` and add a `top=1` straight-down view (angled aerials
+  misled once, about the jetty). Studio: a props-only scale (lots make small props unreadable).
+- `check:restart`: also cover districts past the five-district `--make` (a second city).
+- **Planning:** a 10–15 h branch takes 3–4 sessions. Hand off at milestone boundaries with
+  `TASKS.md` and this plan's status section, so the next session doesn't re-read the code.

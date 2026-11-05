@@ -8,7 +8,9 @@ import { inWater, shoreDistance, waterReach } from './Water';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
 const cities = SEEDS.map((seed) => generateCity({ seed }));
-const ponds = (c: CityData) => c.parkPieces.filter((p) => p.kind === 'pond');
+/** The parks' own pieces (not a district's: the Mega-park's lake and pitches). */
+const parkPieces = (c: CityData) => c.parkPieces.filter((p) => !p.district);
+const ponds = (c: CityData) => parkPieces(c).filter((p) => p.kind === 'pond');
 const blockOf = (c: CityData, [i, j]: [number, number]) => c.blocks[j * c.config.blocks + i];
 
 describe('park pieces: rolls', () => {
@@ -35,7 +37,7 @@ describe('park pieces: rolls', () => {
   it('only in parks with no centrepiece and outside the districts; some seeds have ponds', () => {
     const breaks: string[] = [];
     for (const c of cities) {
-      for (const p of c.parkPieces) {
+      for (const p of parkPieces(c)) {
         const b = blockOf(c, p.block);
         if (!b.park || b.district || b.square) breaks.push(`${c.seed} ${p.block}: not an ordinary park`);
         if (c.landmarks.some((l) => l.x === b.rect.x && l.z === b.rect.z)) breaks.push(`${c.seed} ${p.block}: has a centrepiece`);
@@ -119,7 +121,7 @@ describe('park pieces: the pond', () => {
     const breaks: string[] = [];
     let loose = 0;
     for (const c of cities) {
-      for (const p of c.parkPieces) {
+      for (const p of parkPieces(c)) {
         const { rect } = blockOf(c, p.block);
         const benches = c.streetProps.filter((q) => q.kind === 'bench' && Math.abs(q.x - rect.x) <= rect.w / 2 && Math.abs(q.z - rect.z) <= rect.d / 2);
         for (const q of benches) {
@@ -152,7 +154,7 @@ describe('park pieces: the pond', () => {
 });
 
 describe('park pieces: the pitch', () => {
-  const pitches = (c: CityData) => c.parkPieces.filter((p) => p.kind === 'pitch');
+  const pitches = (c: CityData) => parkPieces(c).filter((p) => p.kind === 'pitch');
 
   it('fits inside its park\'s fence on dry ground; some seeds have one', () => {
     const breaks: string[] = [];

@@ -1,10 +1,13 @@
 // Guard for refactors that must not move any seed: hashes every city the game would build for 60
 // seeds (i * 7919 + 11), with the defaults and with every district forced on, plus the run's look
 // (climate, weather, time, theme, start hour) and its destinations.
-//   npm run hash -- [--out f.txt] [--vs <git ref | f.txt>] [--reload] [seeds=60]
+//   npm run hash -- [--out f.txt] [--vs <git ref | f.txt>] [--expect <kind,…>] [--reload] [seeds=60]
 // --out writes one line per city; --vs compares with a git ref (HEAD, main…: hashed on a temporary
 // worktree of it, with this script, or the ref's own when this one can't run there) or with a file
 // --out wrote, and names the cities that moved.
+// --expect <kind[,kind…]> (with --vs): the change may move only cities that hold one of those districts
+// (on this tree). Lists any other moved city and fails; also says how many expected cities did move
+// (all of them for a new district's first milestone, a few for a later tweak).
 // --reload also writes each city's dump, reads it back and builds it: same hash, same dump (the
 // suite does this for 20 of the seeds; run it with the hash at each milestone).
 import { execFileSync } from 'node:child_process';
@@ -86,9 +89,14 @@ export default function (args: string[]): void {
   const t0 = performance.now();
   const reload = args.includes('--reload');
   const unlike: string[] = [];
+  const expectKinds = flag('--expect')?.split(',');
+  const bad = expectKinds?.filter((k) => !DISTRICT_DEFS.some((d) => d.kind === k));
+  if (bad?.length) throw new Error(`--expect: no district ${bad.join(', ')} (kinds: ${DISTRICT_DEFS.map((d) => d.kind).join(', ')})`);
+  const expected = new Set<string>();
   const add = (name: string, city: CityData) => {
     const hash = runHash(city);
     lines.push(`${name} ${hash}`);
+    if (expectKinds && city.districts.some((q) => expectKinds.includes(q.kind))) expected.add(name);
     if (!reload) return;
     const file = serializeCityParams(city.params);
     const { params, errors } = parseCityParams(file);
@@ -108,8 +116,17 @@ export default function (args: string[]): void {
     const text = existsSync(vs) ? readFileSync(vs, 'utf8') : refLines(vs, n);
     const ref = new Map(text.trim().split('\n').map((l) => [l.split(' ').slice(0, 2).join(' '), l]));
     const moved = lines.filter((l) => ref.get(l.split(' ').slice(0, 2).join(' ')) !== l);
-    console.log(moved.length ? `MOVED (${moved.length} of ${lines.length}):\n${moved.join('\n')}` : `identical: ${lines.length} cities`);
-    if (moved.length) process.exitCode = 1;
+    const key = (l: string) => l.split(' ').slice(0, 2).join(' ');
+    if (expectKinds) {
+      const stray = moved.filter((l) => !expected.has(key(l)));
+      const inside = moved.length - stray.length;
+      console.log(`expected (${expectKinds.join(', ')}): ${expected.size} cities hold it, ${inside} of them moved`);
+      console.log(stray.length ? `MOVED OUTSIDE (${stray.length}):\n${stray.join('\n')}` : `nothing else moved (${lines.length - expected.size} cities)`);
+      if (stray.length) process.exitCode = 1;
+    } else {
+      console.log(moved.length ? `MOVED (${moved.length} of ${lines.length}):\n${moved.join('\n')}` : `identical: ${lines.length} cities`);
+      if (moved.length) process.exitCode = 1;
+    }
   } else if (!out) console.log(lines.join('\n'));
   if (reload) console.log(unlike.length ? `RELOADS DIFFERENTLY (${unlike.length}):\n${unlike.join('\n')}` : `every dump reloads as its city`);
   if (unlike.length) process.exitCode = 1;

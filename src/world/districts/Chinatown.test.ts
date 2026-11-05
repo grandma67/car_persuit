@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateCity } from '../CityGenerator';
-import { districtCities } from '../paramsTesting';
+import { districtCities, alone } from '../paramsTesting';
 import { inRect } from '../lots';
 import { CHINATOWN, CHINATOWN_GATES, DISTRICTS } from '../../gameplay/balance';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
@@ -97,15 +97,15 @@ describe('Chinatown lots', () => {
 });
 
 describe('Chinatown with the Old City (no Harbor)', () => {
-  const alone = (seed: number, kind: 'oldtown' | 'chinatown') =>
-    generateCity(seed, undefined, { force: { oldtown: kind === 'oldtown', chinatown: kind === 'chinatown', harbor: false, farm: false, slums: false } });
+  const soloCity = (seed: number, kind: 'oldtown' | 'chinatown') =>
+    generateCity(seed, undefined, { force: alone(kind) });
 
-  const pairs = SEEDS.map((seed) => [seed, generateCity(seed, undefined, { force: { oldtown: true, chinatown: true, harbor: false, farm: false, slums: false } })] as const);
+  const pairs = SEEDS.map((seed) => [seed, generateCity(seed, undefined, { force: alone('oldtown', 'chinatown') })] as const);
 
   it.each(pairs)('seed %i: the first placed sits as alone, the second keeps clear or drops cleanly', (seed, both) => {
     expect(both.districts.length).toBeGreaterThan(0);
     const [first, second] = both.districts; // placement order
-    const solo = alone(seed, first.kind as 'oldtown' | 'chinatown');
+    const solo = soloCity(seed, first.kind as 'oldtown' | 'chinatown');
     // The later one never moves the first.
     expect(first.grid).toEqual(solo.districts[0]?.grid);
     if (!second) {

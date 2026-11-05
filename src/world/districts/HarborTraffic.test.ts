@@ -2,6 +2,7 @@
 // on its streets or the seafront road under the cranes, heavies come in; NavGrid drives the yard's
 // corridors and never through a stack; three districts together place the same way every time.
 import { beforeAll, describe, expect, it } from 'vitest';
+import { alone } from '../paramsTesting';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { HARBOR } from '../../gameplay/balance';
 import { TRAFFIC } from '../../ai/CivilianTraffic';
@@ -14,7 +15,7 @@ import { inDistrict } from './apply';
 import { carFootprint, cityWorld, DT, flatCities, simulate } from './trafficSim';
 
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 7919 + 11);
-const ALONE = { harbor: true, oldtown: false, chinatown: false, farm: false, slums: false };
+const ALONE = alone('harbor');
 
 function solidSim(seed: number, city: CityData, q: District) {
   const world = cityWorld(city);

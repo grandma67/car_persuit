@@ -210,6 +210,7 @@ export const FARM_DEF: DistrictDef = {
   keepZebras: false,
   traffic: { density: FARM.density, heavy: true, weights: { Pickup: FARM.pickupWeight, Tractor: FARM.tractorWeight }, edge: { Tractor: FARM.tractorEdge } },
   copSpawnSkip: FARM.copSpawnSkip,
+  maxGlow: FARM.maxGlow,
   softGround: { grip: FARM.fieldGrip, drag: FARM.fieldDrag },
   roadblockGates: true,
   mapColor: 0xd8b04a,

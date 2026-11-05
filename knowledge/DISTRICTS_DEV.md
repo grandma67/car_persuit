@@ -88,6 +88,16 @@ there if it holds for all districts; don't repeat it in a district's test.
 - **No z-fighting:** never overlap coplanar faces. Butt-join exactly or stand one part 2–3 cm proud;
   ground layers ≥ 2 cm apart or `polygonOffset` on the lower (asphalt 1/1, street cobbles 0.5/0.5,
   markings none).
+  Tests catch it: `PropModels.test` (every prop model) and `BuildingZFight.test` (40 rolled cities,
+  every building and its neighbours; `render/coplanar.ts`, `world/zfight.ts`). To fix one, list them
+  all with where to look: `npm run zfight` (`props`, `only=chinatown`, or city words for a district's
+  own cities). Neighbours in a terrace stand 0.3–0.5 m apart and often share a height, so anything one
+  builds past its walls lands in the other's planes. Building geometry in the roof mesh is
+  kept inside `buildingReach` (half the gap to each neighbour): overhangs are cut there, boxes stop
+  2 cm short, a jetty grows only that far. A new trim reaching past the walls needs nothing more.
+  Fix z-fighting in the geometry, not the camera: a chase camera `near` of 0.5 (5x the depth
+  precision far off) was tried and dropped. Nothing changed visibly at range, and it cut the
+  rain and snow nearest the lens, the streaks that sell it.
 
 ## Looks and performance
 
@@ -127,10 +137,69 @@ buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 
    `cityWords*.test.ts` ([CITY_PARAMS.md](CITY_PARAMS.md)).
 3. Looks: facade styles in `Facades.ts` (+ `CAPS`), roofs in `addRoof`, trims in `addTrims`.
 4. Renderer `render/districts/<Name>.ts` in `DISTRICT_RENDERERS`.
-5. Docs: `DISTRICTS.md` (table row + section, odds line), `plans/PLAN_GAME.md` version line, README mention.
+5. Docs: `DISTRICTS.md` (table row + section, odds line from `npm run stats -- odds`), `plans/PLAN_GAME.md` version line, README mention.
+
+**Every file a new kind touches** (beyond its own `world/districts/<Name>*.ts`, renderer and tests):
+the `DistrictKind` union (`District.ts`); `world/districts/index.ts`; `render/districts/index.ts`;
+`scripts/city.ts` (`DISTRICT_CHAR`); the kind lists in `scripts/evals/district-tour.js`
+and `district-drive.js`; `NUMBERS` in `paramsTesting.ts` for an `'int'` feature; `CityTheme` climate
+looks (optional); new props in `StreetProps.ts` + `PropSystem.ts`. Other districts' tests use
+`alone(kind…)` / `everyDistrict()` (`paramsTesting.ts`), so they need no edit. `check:restart`'s
+`--make` names five districts and `DISTRICTS.max` is 5: a sixth and later kind gets its own run.
+
+## Conventions
+
+- **Footprint yaw:** local X is `(cos yaw, −sin yaw)`, local Z `(sin yaw, cos yaw)` (three's rotation
+  about Y, so `frameOf(x, y, z, f.yaw)` lays a part on its footprint). A `Structure`'s yaw is the same.
+- **A prop's local +Z is its front** (a bench's seat, a board's face, a kiosk's hatch).
+- **`ShallowWater`:** `yaw = atan2(−nz, nx)` points local X along `(nx, nz)`; `rx`/`rz` the half
+  extents; `shoreDistance` > 0 in the water, < 0 on the bank.
+- **`Building.street` bits:** 1 = +Z side, 2 = −Z, 4 = +X, 8 = −X (`Megapark`'s `SIDES`).
+- **`Gate`:** `x, z` on the wall line (the block's sidewalk line), `yaw` heading in, `opening` = road +
+  both sidewalks; anything beside it stands past `opening / 2`.
+- **Ground lifts** (no z-fighting): sidewalk 0.03, grass 0.05, paths 0.065, patches 0.07, lines 0.09–0.1.
+- **Reading the dressing while laying it:** `q.dressing` is assigned after `dress` returns; a helper
+  that reads the pieces laid so far gets `q.dressing = out` first (`Megapark.dress`).
+
+## Reuse before writing
+
+- `block.park = true` in `roles`: grass ground and the minimap's park colour.
+- `ParkPiece.district` for a district's own pond or pitch (`pitchAt`, the park-piece renderer, the ball).
+- `rowboat()` (`render/Landmarks.ts`); Victorian lamps are the Old City's `oilLamp` (glow included).
+- `drapePolyline` / `upTri` (`render/geometry.ts`): a strip along a polyline on the ground (paths,
+  tracks, boardwalk shadows); `GeometryBuilder.drape` for rects.
+- A name board atlas: `farmSigns.ts` / `megaparkSigns.ts` (facade walls' material settings: no program).
+- `clearOf` (`HarborYard.ts`) keeps props off solids and each other, **dropping** what doesn't fit,
+  earlier props first: lay what must exist (a gate's board) before the filler, or into the busy index
+  first. Why is a prop missing: `CLEAROF=parkBoard node scripts/run-ts.mjs <script>` logs each drop
+  of those kinds (`*` all) and what it hit; a test can pass a `dropped` array.
+- `fireflies(spots, n, seed, scene, ground)` (`render/districts/fireflies.ts`): the Farm's and the
+  Mega-park's; one program for both.
+
+## Night lighting and the glow budget
+
+- **What glows:** lit props (`LIT_PROPS` in `StreetProps.ts`: `lamp`, `woodLamp`, `oilLamp`,
+  `dragonLamp`, `jackOLantern`) get a bulb and a light pool from `PropSystem`. A district's own lights
+  (lanterns, torches, bulb strings) are an `InstancedMesh` of `MeshBasicMaterial({ toneMapped: false })`
+  with a colour per instance, dim by day and `× 1.6` warm at night by `ctx.lampGlow` (Old City
+  `torches`, Mega-park `glows`): the lamp bulbs' program, no light. Lit glass on a name board: the
+  sign atlas's warm swatch (`onWarm`, `farmSignMaterial(2.5)`). Fireflies: `fireflies.ts`.
+  `GlowBatch` is the **cars'** lamp sprites only; never add district lights there. No point lights
+  (one in the scene, shared).
+- **`maxGlow`** (each district's balance block, declared on its def): how many glowing things at night,
+  lit props plus the renderer's own. Lay the lamps last and fill what's left: count everything lit
+  already inside (`LIT_PROPS` on `city.streetProps` in the bounds **and** the set blocks' props not
+  pushed yet, such as a pitch's floodlights), minus what the renderer will add (2 lanterns a gate, the
+  bulbs). Fireflies take what remains.
+- **Sizing it:** a district's streets carry ~8 lamps a block (swapped to its lamp kind), so a 3×3's
+  streets alone hold ~72. `npm run stats -- <kind>` prints `glow`: lit props (average, worst, the
+  worst seed and shape) against `maxGlow`. Size the budget on the worst, with the renderer's lights on top.
 
 ## Pitfalls
 
+- **Seed guard per milestone:** `npm run hash -- --vs HEAD --expect <kind>` fails if anything moved
+  outside cities that hold the district, and says how many of those moved (all of them when it first
+  lands, a few for a tweak). Several kinds: `--expect farm,slums`.
 - **Measure placement rate** (`npm run stats -- <kind>`) after any rule, alone and with all districts
   forced; check rejection reasons if low. A district's position depends on those placed before it.
 - `perimeterWall` opens at *every* street crossing the wall, not just gates (`'mainStreet'` districts

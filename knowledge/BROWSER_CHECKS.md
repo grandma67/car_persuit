@@ -65,8 +65,8 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 
 | Call | Does |
 |---|---|
-| `district(kind?)`, `find(kind)` | a district; a landmark/structure/prop/lot/`park`/`square` position |
-| `view(point,{dist})` | camera on a clear road spot near it (never place the car by hand) |
+| `city()`, `district(kind?)`, `find(kind)` | the `CityData`; a district (its `dressing`, `roles`, `gates`); a landmark/structure/prop/lot/`park`/`square` position. Any `{x, z}` works as a target for `view`/`aerial`/`aim` (a block's `rect`, a structure) |
+| `view(point,{dist,wait})` | camera on a clear road spot near it (never place the car by hand) |
 | `gate(i,{back,speed,lateral,kind})` | car outside gate `i`, facing in |
 | `place(x,z,yaw,speed)`, `road(x,z)` | put the car; nearest road centre point |
 | `near(x,z,r)` | what stands there, nearest first, roadworks included |
@@ -91,6 +91,17 @@ feel to the user.
 
 ## Pitfalls
 
+- **One run at a time per port.** Two runs share Vite's port and Chrome's debugger (port + 1000) and
+  trade pages: one city's shots land in the other's folder and the other hangs. `browser-check.mjs`
+  now waits for a run already on the port (lock file, `--wait-lock`); run checks one after the other,
+  or give a second one its own `--port`. (`--vs` takes no lock itself: each side's run takes its own.)
+- **Give every run a hard limit**, so a stuck one dies instead of holding the session (macOS has no
+  `timeout`): `perl -e 'alarm 300; exec @ARGV' npm run check:browser -- …`. A run takes ~10 s plus
+  the eval (`--vs` twice that); one that's slow has said why on stderr in its first lines
+  ("port … busy (browser check pid …): waiting"): read them before waiting longer.
+- To frame a spot a test or `npm run zfight` names: `?seed=N` builds the same city as
+  `generateCity({ seed: N })`, so its x/z work in `dbg.aerial([x, z])`; in an eval, find the
+  buildings by `dbg.city().buildings` (district, lot, h) rather than reading coordinates off a log.
 - `--make` words without `seed=` start from a random seed: a check that must repeat passes one.
 - Measure `dbg.stats()` **before** any `aerial()` (the overview turns fog off and every material
   recompiles: 35 read as 58; `stats()` warns) and before a drive breaks props (a first break can add one).

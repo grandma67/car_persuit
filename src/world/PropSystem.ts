@@ -6,7 +6,7 @@ import { SUNK_BELOW } from '../render/Sea';
 import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
 import { CAR_PASSES, type Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
-import { footprintsOverlap, PROP_SPECS, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp, type WreckKind } from './StreetProps';
+import { footprintsOverlap, LIT_PROPS, PROP_SPECS, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp, type WreckKind } from './StreetProps';
 import type { TreeKind } from './Climate';
 import { signalState, type SignalLight } from './TrafficControl';
 import { groundBase, groundHeight, groundNormal } from './Terrain';
@@ -19,8 +19,7 @@ const OIL_LAMP_HEAD = new THREE.Vector3(0, 3.75, 0); // the lantern's flame, on 
 const DRAGON_LAMP_HEAD = new THREE.Vector3(0, 4.12, 0); // the pagoda lantern's glass
 const JACK_GLOW = new THREE.Vector3(0, 0.22, 0.2); // the candle behind a jack-o'-lantern's face
 const LAMP_HEADS: Partial<Record<PropKind, THREE.Vector3>> = { lamp: LAMP_HEAD, woodLamp: LAMP_HEAD, oilLamp: OIL_LAMP_HEAD, dragonLamp: DRAGON_LAMP_HEAD, jackOLantern: JACK_GLOW };
-/** Props that light up at night: a bulb (or flame) and a pool of light under it. */
-const LIGHTS = new Set<PropKind>(['lamp', 'woodLamp', 'oilLamp', 'dragonLamp', 'jackOLantern']);
+const LIGHTS = LIT_PROPS;
 /** A dragon lamp's banner: hung from the brackets on its street side, edge-on to the kerb. */
 const BANNER = { w: 0.5, h: 1.05, y: 2.45, z: 0.42 };
 const LIGHT_POOL_RADIUS = 7;
@@ -91,7 +90,7 @@ export const modelKey = (p: StreetProp): ModelKey => {
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
 /** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale', 'dumpster', 'couch', 'wreck']);
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale', 'dumpster', 'couch', 'wreck', 'deckChair', 'cafeTable']);
 /**
  * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
  * standing on its rim or a round bale on its side (the axle along local X).
@@ -208,6 +207,14 @@ export function debrisParts(def: StreetProp): DebrisPart[] {
         { x: 0.225, y: 1.0, z: 0, hx: 3.4, hy: 0.06, hz: 0.06, carPasses: true }, // arm
         { x: 3.4, y: 0.49, z: 0, hx: 0.15, hy: 0.49, hz: 0.06, carPasses: true }, // fork
       ];
+    case 'tennisNet':
+      // The net and its far post: cars pass through them lying on the court (the near post is the intact collider's).
+      return [
+        { x: 0, y: 0.68, z: 0, hx: 6.2, hy: 0.62, hz: 0.03, carPasses: true }, // net
+        { x: 6.35, y: 0.72, z: 0, hx: 0.05, hy: 0.72, hz: 0.05, carPasses: true },
+      ];
+    case 'cafeTable':
+      return [{ x: 0, y: 2.15, z: 0, hx: 1.2, hy: 0.25, hz: 1.2, round: true }]; // the parasol
     default:
       return [];
   }
@@ -327,7 +334,9 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
   const bench = mergeGeometries([
     ...[-0.17, 0, 0.17].map((z) => part(box(1.8, 0.05, 0.14), wood, 0, 0.45, z)),
     ...[0.62, 0.82].map((y) => part(box(1.8, 0.12, 0.05), wood, 0, y, -0.27)),
-    ...[-0.8, 0.8].flatMap((x) => [part(box(0.06, 0.45, 0.5), iron, x, 0.22), part(box(0.06, 0.55, 0.05), iron, x, 0.7, -0.27)]),
+    // The back uprights are deeper than the rails and enclose them (z -0.33..-0.23 round -0.295..-0.245)
+    // and start 1 cm above the slats' underside: with shared faces they z-fought.
+    ...[-0.8, 0.8].flatMap((x) => [part(box(0.06, 0.45, 0.5), iron, x, 0.22), part(box(0.06, 0.54, 0.1), iron, x, 0.705, -0.28)]),
   ]);
   const fence = mergeGeometries([
     ...[-1.35, 1.35].map((x) => part(box(0.1, 1.0, 0.1), white, x, 0.5)),
@@ -399,6 +408,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     ...farmModels(),
     ...slumsModels(),
     ...parkModels(),
+    ...megaparkModels(),
     'tree-fruit-pear': fruitTree(look, 0xc8c43a),
   };
 }
@@ -425,7 +435,7 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
     part(new THREE.SphereGeometry(0.3, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0x4f7a3a, 0, 0.55), // a shrub
   ]);
   const cart = mergeGeometries([
-    part(box(1.3, 0.1, 2.0), oak, 0, 0.75, 0.2),
+    part(box(1.24, 0.1, 1.96), oak, 0, 0.75, 0.2), // inside the side boards: flush ends z-fought
     ...[-0.62, 0.62].map((x) => part(box(0.06, 0.45, 2.0), oakDark, x, 1.0, 0.2)),
     part(box(1.3, 0.45, 0.06), oakDark, 0, 1.0, 1.18),
     ...[-0.75, 0.75].map((x) => part(cyl(0.55, 0.55, 0.08, 10).rotateZ(Math.PI / 2), oakDark, x, 0.55, 0.1)),
@@ -436,7 +446,7 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
   const stall = mergeGeometries([
     ...[-1.2, 1.2].flatMap((x) => [-0.8, 0.8].map((z) => part(box(0.09, 2.5, 0.09), oak, x, 1.25, z))),
     part(box(2.5, 0.08, 1.2), oak, 0, 0.9, 0.2),
-    part(box(2.4, 0.8, 0.05), oakDark, 0, 0.5, 0.78),
+    part(box(2.4, 0.8, 0.05), oakDark, 0, 0.5, 0.77), // its back clear of the posts' (z-fighting)
     part(box(2.7, 0.06, 2.0).rotateX(-0.18), 0xffffff, 0, 2.55),
     part(box(2.7, 0.3, 0.03), 0xffffff, 0, 2.3, 1.02),
     ...[-0.8, -0.25, 0.3, 0.85].map((x, k) => part(box(0.4, 0.25, 0.35), [0xd04a2a, 0xe8b23a, 0x6f9a3a, 0xa83a5a][k], x, 1.07, 0.3)),
@@ -456,7 +466,7 @@ function oldCityModels(): Record<'amphora' | 'pot' | 'cart' | 'stall' | 'barrels
     part(box(1.8, 0.15, 0.7), oakDark, 0, 0.07),
     part(box(0.18, 2.1, 0.18), oak, 0, 1.05),
     part(box(1.4, 0.35, 0.16), oak, 0, 1.75),
-    ...[-0.4, 0, 0.4].map((x) => part(cyl(0.06, 0.06, 0.18).rotateX(Math.PI / 2), 0x1a1a1a, x, 1.75)),
+    ...[-0.4, 0, 0.4].map((x) => part(cyl(0.06, 0.06, 0.17).rotateX(Math.PI / 2), 0x1a1a1a, x, 1.75)), // inside the post's faces
   ]);
   const haybale = mergeGeometries([
     part(box(1.15, 1.0, 1.15), straw, 0, 0.5),
@@ -688,7 +698,7 @@ function harborModels(): Record<HarborKind | 'fence-chainlink', THREE.BufferGeom
     part(box(0.6, 0.35, 0.5), dark, -3.4, 1.0), // the motor housing
     ...arm,
     part(box(0.08, 0.95, 0.08), steel, 3.4, 0.47),
-    part(box(0.3, 0.06, 0.12), steel, 3.4, 0.95),
+    part(box(0.3, 0.06, 0.16), steel, 3.4, 0.95), // deeper than the arm: same depth z-fought
   ]);
   // A level-crossing post: two white boards with red edges crossed in an X, facing +Z.
   const board = (rot: number) => [part(box(1.3, 0.22, 0.03).rotateZ(rot), 0xc8202a, 0, 2.55, 0.06), part(box(1.2, 0.14, 0.035).rotateZ(rot), 0xf2f2ee, 0, 2.55, 0.06)];
@@ -784,7 +794,8 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
   // A roadside stand: a plank counter of pumpkin crates under a little roof, a price board.
   const farmStand = mergeGeometries([
     part(box(2.6, 0.9, 1.0), timber, 0, 0.45),
-    ...[-1.2, 1.2].flatMap((x) => [-0.45, 0.45].map((z) => part(box(0.1, 2.3, 0.1), 0x6a4e30, x, 1.15, z))),
+    // Posts 1 cm proud of the counter and sunk 1 cm: flush with it they z-fought.
+    ...[-1.2, 1.2].flatMap((x) => [-0.46, 0.46].map((z) => part(box(0.1, 2.3, 0.1), 0x6a4e30, x, 1.14, z))),
     part(box(2.9, 0.08, 1.4).rotateX(0.18), red, 0, 2.3),
     ...[-0.8, 0, 0.8].map((x) => part(new THREE.SphereGeometry(0.22, 8, 6).scale(1, 0.75, 1), 0xe0741a, x, 1.05, 0.1)),
     part(box(0.9, 0.6, 0.04), 0xf2ecd8, 0.9, 1.7, 0.55),
@@ -901,20 +912,22 @@ function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball', THREE.Bu
   // back to z = -0.5 and the net as an opaque grid of cords (no transparency: no new program).
   const white = 0xf2f2ee;
   const cord = 0xd8dcd8;
-  const post = (x: number) => part(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 6), white, x, 1.0, 0.5);
+  const post = (x: number) => part(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 6), white, x, 0.99, 0.5); // sunk 1 cm (z-fighting)
   const net: THREE.BufferGeometry[] = [];
-  for (let k = 0; k <= 20; k++) net.push(part(new THREE.BoxGeometry(0.015, 2.0, 0.015), cord, -2.5 + k * 0.25, 1.0, -0.5)); // back
+  // Uprights stop inside the roof cords and the base bars sit inside the cords' ends, sunk 1 cm:
+  // ends flush with the frame's z-fought.
+  for (let k = 0; k <= 20; k++) net.push(part(new THREE.BoxGeometry(0.015, 1.995, 0.015), cord, -2.5 + k * 0.25, 0.9975, -0.5)); // back
   for (let k = 0; k <= 8; k++) net.push(part(new THREE.BoxGeometry(5.0, 0.015, 0.015), cord, 0, 0.05 + k * 0.245, -0.5));
   for (const x of [-2.5, 2.5]) {
     for (let k = 0; k <= 8; k++) net.push(part(new THREE.BoxGeometry(0.015, 0.015, 1.0), cord, x, 0.05 + k * 0.245, 0)); // sides
-    for (let k = 0; k <= 4; k++) net.push(part(new THREE.BoxGeometry(0.015, 2.0, 0.015), cord, x, 1.0, -0.5 + k * 0.25));
+    for (let k = 0; k <= 4; k++) net.push(part(new THREE.BoxGeometry(0.015, 1.995, 0.015), cord, x, 0.9975, -0.5 + k * 0.25));
   }
   for (let k = 0; k <= 20; k++) net.push(part(new THREE.BoxGeometry(0.015, 0.015, 1.0), cord, -2.5 + k * 0.25, 2.0, 0)); // roof
   const goal = mergeGeometries([
     post(-2.5), post(2.5),
     part(new THREE.CylinderGeometry(0.06, 0.06, 5.12, 6).rotateZ(Math.PI / 2), white, 0, 2.0, 0.5),
-    ...[-2.5, 2.5].map((x) => part(new THREE.BoxGeometry(0.06, 0.06, 1.0), white, x, 0.03, 0)), // base bars
-    part(new THREE.BoxGeometry(5.0, 0.06, 0.06), white, 0, 0.03, -0.5),
+    ...[-2.5, 2.5].map((x) => part(new THREE.BoxGeometry(0.06, 0.06, 0.98), white, x, 0.02, 0)), // base bars
+    part(new THREE.BoxGeometry(4.98, 0.06, 0.06), white, 0, 0.02, -0.5),
     ...net,
   ]);
   const cornerFlag = mergeGeometries([
@@ -932,6 +945,152 @@ function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball', THREE.Bu
     }),
   ]);
   return { reeds: mergeGeometries([...blades, ...heads]), goal, cornerFlag, ball };
+}
+
+type MegaparkKind = 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard'
+  | 'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw';
+/** The Mega-park's breakables (local +Z is the front: a deck chair's seat faces it, the net runs along X). */
+function megaparkModels(): Record<MegaparkKind, THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (r0: number, r1: number, h: number, n = 8) => new THREE.CylinderGeometry(r0, r1, h, n);
+  const wood = 0x8a6040, woodLight = 0xb08a5a, iron = 0x2a2d33, white = 0xf2f2ee, green = 0x2f5a3a;
+  // Tennis net: two posts, the tape along the top, the mesh as a grid of cords (opaque, like the goal's).
+  // Taller than a real one (0.91 m) so it reads at the cars' scale.
+  const net: THREE.BufferGeometry[] = [
+    ...[-6.35, 6.35].map((x) => part(cyl(0.05, 0.05, 1.45, 6), iron, x, 0.725, 0)),
+    part(box(12.7, 0.07, 0.04), white, 0, 1.32, 0),
+    part(box(0.05, 1.29, 0.03), white, 0, 0.645, 0), // the centre strap (top clear of the cords')
+  ];
+  for (let k = 0; k <= 50; k++) net.push(part(box(0.012, 1.24, 0.012), 0x1a1c1e, -6.25 + k * 0.25, 0.68, 0));
+  for (let k = 0; k <= 10; k++) net.push(part(box(12.5, 0.012, 0.012), 0x1a1c1e, 0, 0.08 + k * 0.12, 0));
+  // Deck chair: a wooden frame leaning back, the striped canvas tinted per chair (white here).
+  const deckChair = mergeGeometries([
+    ...[-0.27, 0.27].flatMap((x) => [
+      part(box(0.04, 0.04, 1.1).rotateX(-0.55), woodLight, x, 0.45, 0.05),
+      part(box(0.04, 0.04, 0.9).rotateX(0.7), woodLight, x, 0.3, 0.25),
+    ]),
+    part(box(0.5, 0.02, 1.0).rotateX(-0.6), 0xffffff, 0, 0.47, 0.0),
+    part(box(0.56, 0.04, 0.04), woodLight, 0, 0.78, -0.42),
+  ]);
+  // Café table: a round top on a pedestal, two chairs, the parasol tinted per table.
+  const chair = (x: number) => [
+    part(box(0.42, 0.04, 0.42), iron, x, 0.46, 0),
+    part(box(0.04, 0.42, 0.4), iron, x + Math.sign(x) * 0.2, 0.68, 0),
+    ...[-0.18, 0.18].flatMap((z) => [-0.18, 0.18].map((dx) => part(cyl(0.015, 0.015, 0.46, 4), iron, x + dx, 0.23, z))),
+  ];
+  const cafeTable = mergeGeometries([
+    part(cyl(0.4, 0.4, 0.04, 12), white, 0, 0.74),
+    part(cyl(0.03, 0.03, 0.72, 6), iron, 0, 0.37),
+    part(cyl(0.25, 0.25, 0.03, 10), iron, 0, 0.015),
+    ...chair(-0.6), ...chair(0.6),
+    part(cyl(0.025, 0.025, 2.2, 6), white, 0, 1.4),
+    part(new THREE.ConeGeometry(1.15, 0.45, 8), 0xffffff, 0, 2.2),
+  ]);
+  // Flower planter: a stone urn on a plinth, full of blooms.
+  const blooms = [0xd83a5a, 0xf2c23a, 0xe86a9a, 0xf4f0ee].flatMap((c, k) =>
+    [0, 1, 2].map((m) => part(new THREE.IcosahedronGeometry(0.11, 0), c, Math.cos(k * 1.6 + m * 2.1) * 0.28, 0.98 + (m % 2) * 0.06, Math.sin(k * 1.6 + m * 2.1) * 0.28)));
+  const flowerPlanter = mergeGeometries([
+    part(box(0.7, 0.25, 0.7), 0xa8a296, 0, 0.125),
+    part(cyl(0.18, 0.18, 0.25, 8), 0xa8a296, 0, 0.37),
+    part(cyl(0.48, 0.3, 0.38, 10), 0xb4aea2, 0, 0.68),
+    part(new THREE.SphereGeometry(0.42, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0x3f7a34, 0, 0.84),
+    ...blooms,
+  ]);
+  // Ice-cream cart: a white box on two wheels, a striped canopy on poles, a cone on top.
+  const iceCreamCart = mergeGeometries([
+    part(box(1.0, 0.9, 1.6), white, 0, 0.75),
+    part(box(1.02, 0.18, 1.62), 0x7ac8e0, 0, 1.0),
+    ...[-0.55, 0.55].map((x) => part(cyl(0.3, 0.3, 0.06, 12).rotateZ(Math.PI / 2), iron, x, 0.3, -0.3)),
+    part(box(0.06, 0.06, 0.6), iron, 0, 0.6, 1.05), // the handle
+    ...[-0.45, 0.45].flatMap((x) => [-0.7, 0.7].map((z) => part(cyl(0.02, 0.02, 1.0, 4), white, x, 1.7, z))),
+    part(box(1.3, 0.08, 1.9), 0xe8586a, 0, 2.22),
+    ...[-0.4, 0, 0.4].map((x) => part(box(0.2, 0.085, 1.92), white, x, 2.225, 0)), // past the canopy's ends
+    part(new THREE.ConeGeometry(0.16, 0.4, 8).rotateX(Math.PI), 0xd8a868, 0, 1.45, 0.4),
+    part(new THREE.SphereGeometry(0.17, 8, 6), 0xf0c8d8, 0, 1.7, 0.4),
+  ]);
+  // Ice-cream kiosk: a little booth, serving hatch to the front under an awning, a big cone sign.
+  const kiosk = mergeGeometries([
+    part(box(2.5, 2.4, 1.9), 0xf4eee2, 0, 1.2),
+    part(box(1.6, 0.8, 0.06), 0x2a3036, 0, 1.45, 0.96), // the hatch
+    part(box(2.0, 0.1, 0.1), white, 0, 1.0, 1.0), // the counter
+    part(box(2.7, 0.08, 0.9).rotateX(0.25), 0x7ac8e0, 0, 2.1, 1.25),
+    part(box(2.7, 0.1, 2.1), 0xe8586a, 0, 2.45),
+    part(new THREE.ConeGeometry(0.3, 0.8, 10).rotateX(Math.PI), 0xd8a868, 0, 2.95),
+    part(new THREE.SphereGeometry(0.34, 10, 6), 0xf0c8d8, 0, 3.4),
+  ]);
+  // Picnic table: a plank top and two benches on A-frame legs.
+  const picnicTable = mergeGeometries([
+    part(box(1.8, 0.06, 0.75), woodLight, 0, 0.74),
+    ...[-0.65, 0.65].map((z) => part(box(1.8, 0.05, 0.28), woodLight, 0, 0.44, z)),
+    ...[-0.7, 0.7].flatMap((x) => [
+      part(box(0.07, 0.07, 1.6), wood, x, 0.4, 0),
+      part(box(0.07, 0.85, 0.07).rotateX(0.5), wood, x, 0.38, 0.22),
+      part(box(0.07, 0.85, 0.07).rotateX(-0.5), wood, x, 0.38, -0.22),
+    ]),
+  ]);
+  // Litter bin: a green slatted drum on a post.
+  const litterBin = mergeGeometries([
+    part(cyl(0.05, 0.05, 0.9, 6), iron, 0, 0.45),
+    part(cyl(0.22, 0.2, 0.6, 10), green, 0, 0.55),
+    part(cyl(0.23, 0.23, 0.05, 10), iron, 0, 0.86),
+  ]);
+  // Notice board: a green framed board on two posts, a painted map of paths and a lake on it.
+  const parkBoard = mergeGeometries([
+    ...[-0.7, 0.7].map((x) => part(box(0.09, 2.2, 0.08), green, x, 1.1, 0)), // fronts behind the paper's
+    part(box(1.5, 1.0, 0.06), green, 0, 1.55, 0),
+    part(box(1.36, 0.86, 0.02), 0xe8e0c4, 0, 1.55, 0.035),
+    part(box(0.5, 0.3, 0.01), 0x6aa0c8, 0.2, 1.5, 0.05),
+    // The paths stand 1 cm proud of the lake and lawn they cross, their backs inside the paper.
+    part(box(0.9, 0.05, 0.03), 0xb89a6a, -0.1, 1.72, 0.05),
+    part(box(0.05, 0.6, 0.03), 0xb89a6a, -0.3, 1.5, 0.05),
+    part(box(0.3, 0.25, 0.01), 0x6a9a4a, -0.45, 1.3, 0.05),
+    part(box(1.7, 0.12, 0.3).rotateX(0.1), green, 0, 2.12, 0), // the little roof
+  ]);
+  return { tennisNet: mergeGeometries(net), deckChair, cafeTable, flowerPlanter, iceCreamCart, kiosk, picnicTable, litterBin, parkBoard, ...playgroundKit() };
+}
+
+/** The playground's steel kit (local X along its first size, as `PROP_SPECS`). */
+function playgroundKit(): Record<'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw', THREE.BufferGeometry> {
+  const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (r0: number, r1: number, h: number, n = 8) => new THREE.CylinderGeometry(r0, r1, h, n);
+  const red = 0xd8402e, yellow = 0xf0c02a, blue = 0x2f6ac8, green = 0x3a9a4a, steel = 0x6a7076;
+  // Swings: an A-frame at each end (legs splayed at the ground, meeting under the bar), two seats on chains.
+  const swings = [part(cyl(0.07, 0.07, 4.6, 8).rotateZ(Math.PI / 2), blue, 0, 2.4, 0)];
+  for (const x of [-2.2, 2.2]) for (const z of [-1, 1]) swings.push(part(cyl(0.06, 0.06, 2.6, 6).rotateX(-z * 0.42), blue, x, 1.2, z * 0.5));
+  for (const x of [-1, 1]) {
+    for (const dx of [-0.22, 0.22]) swings.push(part(box(0.02, 1.8, 0.02), 0x8a8e94, x + dx, 1.5, 0));
+    swings.push(part(box(0.5, 0.05, 0.22), red, x, 0.58, 0));
+  }
+  // A slide: a ladder up to a railed deck at -Z, the chute down to +Z.
+  const slide = [part(box(1.2, 0.1, 1.2), yellow, 0, 1.6, -1.8)];
+  for (const x of [-0.55, 0.55]) for (const z of [-2.35, -1.25]) slide.push(part(box(0.08, 2.5, 0.08), blue, x, 1.25, z));
+  for (let k = 0; k < 5; k++) slide.push(part(box(1.0, 0.05, 0.05), blue, 0, 0.3 + k * 0.3, -2.4));
+  for (const x of [-0.55, 0.55]) slide.push(part(box(0.05, 0.05, 1.1), blue, x, 2.4, -1.8));
+  const len = Math.hypot(3.4, 1.55), tilt = Math.atan2(1.55, 3.4);
+  slide.push(part(box(0.7, 0.06, len).rotateX(tilt), red, 0, 0.85, 0.5));
+  for (const x of [-0.37, 0.37]) slide.push(part(box(0.06, 0.25, len).rotateX(tilt), red, x, 0.98, 0.5));
+  // A climbing frame: a cube of bars with a deck.
+  const climber: THREE.BufferGeometry[] = [];
+  for (const x of [-1.5, 0, 1.5]) for (const z of [-1.5, 0, 1.5]) climber.push(part(cyl(0.05, 0.05, 2.2, 6), green, x, 1.1, z));
+  for (const y of [0.7, 1.4, 2.1]) {
+    for (const z of [-1.5, 0, 1.5]) climber.push(part(cyl(0.04, 0.04, 3.0, 6).rotateZ(Math.PI / 2), yellow, 0, y, z));
+    for (const x of [-1.5, 0, 1.5]) climber.push(part(cyl(0.04, 0.04, 3.0, 6).rotateX(Math.PI / 2), yellow, x, y, 0));
+  }
+  climber.push(part(box(1.44, 0.06, 1.44), red, 0.75, 1.42, 0.75)); // inside the frame: the bars' end caps z-fought
+  // A roundabout: a turntable on a hub, four handles.
+  const roundabout = [part(cyl(1.3, 1.3, 0.12, 16), red, 0, 0.32), part(cyl(0.15, 0.2, 0.3, 8), steel, 0, 0.15)];
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2;
+    roundabout.push(part(cyl(0.03, 0.03, 0.6, 6), yellow, Math.cos(a) * 1.0, 0.68, Math.sin(a) * 1.0));
+    roundabout.push(part(cyl(0.03, 0.03, 1.0, 6).rotateZ(Math.PI / 2).rotateY(-a), yellow, Math.cos(a) * 0.5, 0.98, Math.sin(a) * 0.5));
+  }
+  // A seesaw along Z, tipped one way.
+  const seesaw = [
+    part(box(0.4, 0.5, 0.3), blue, 0, 0.25, 0),
+    part(box(0.35, 0.08, 4.2).rotateX(0.18), yellow, 0, 0.52, 0),
+    ...[-1.8, 1.8].map((z) => part(box(0.5, 0.06, 0.06), red, 0, 0.62 - z * 0.18, z)),
+  ];
+  return { swings: mergeGeometries(swings), slide: mergeGeometries(slide), climber: mergeGeometries(climber), roundabout: mergeGeometries(roundabout), seesaw: mergeGeometries(seesaw) };
 }
 
 type SlumsKind = 'rubble' | 'dumpster' | 'trashBags' | 'shoppingCart' | 'mattress' | 'couch' | 'tyres' | 'burnBarrel' | 'payphone' | 'brokenLamp'
@@ -988,8 +1147,9 @@ function slumsModels(): Record<SlumsKind, THREE.BufferGeometry> {
   // A sagging couch (tinted per instance).
   const couch = mergeGeometries([
     part(box(1.6, 0.4, 0.75), 0xffffff, 0, 0.3),
-    part(box(1.6, 0.5, 0.2), 0xe0e0e0, 0, 0.65, -0.3).rotateX(-0.1),
-    ...[-1, 1].map((sx) => part(box(0.2, 0.55, 0.75), 0xe0e0e0, sx * 0.72, 0.38, 0)),
+    // Back ends inside the arms, arms 2 cm proud of the base front and back: flush they z-fought.
+    part(box(1.56, 0.5, 0.2), 0xe0e0e0, 0, 0.65, -0.3).rotateX(-0.1),
+    ...[-1, 1].map((sx) => part(box(0.2, 0.55, 0.79), 0xe0e0e0, sx * 0.72, 0.38, 0)),
     part(box(0.6, 0.15, 0.6).rotateZ(0.2), 0xd0d0d0, -0.35, 0.56, 0.05), // a cushion askew
   ]);
   // A stack of four bald tyres.
@@ -1339,7 +1499,9 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
-  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball']);
+  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball',
+  'tennisNet', 'deckChair', 'cafeTable', 'flowerPlanter', 'iceCreamCart', 'kiosk', 'picnicTable', 'litterBin', 'parkBoard',
+  'swings', 'slide', 'climber', 'roundabout', 'seesaw']);
 
 /**
  * Copy the props in `list` lying within `radius` of (x, z) (their matrices' translation) from
@@ -1586,6 +1748,11 @@ export class PropSystem {
 
   private addCollider(p: PropState): void {
     const spec = propSpec(p.def);
+    if (p.def.kind === 'tennisNet') {
+      // Only the posts stand solid (it still breaks on its whole footprint): a net across the court is no wall.
+      for (const x of [-6.35, 6.35]) this.world.createCollider(RAPIER.ColliderDesc.cuboid(0.06, 0.72, 0.06).setTranslation(x, 0.72, 0).setMass(spec.mass / 2).setFriction(0.6), p.body!);
+      return;
+    }
     if (p.def.kind === 'boomGate') {
       // Only the post is solid while it stands (it still breaks on its whole footprint, see
       // checkVehicle); knocked loose, the arm and fork rest on the ground (debrisParts).

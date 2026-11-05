@@ -105,6 +105,7 @@ export const OLD_CITY_DEF: DistrictDef = {
   keepZebras: false,
   traffic: { speed: OLD_CITY.speed, speedOn: 'all', density: OLD_CITY.density, heavy: false },
   copSpawnSkip: OLD_CITY.copSpawnSkip,
+  maxGlow: OLD_CITY.maxGlow,
   roadblockGates: true,
   mapColor: 0xb3a68c,
   dress,

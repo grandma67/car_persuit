@@ -18,7 +18,8 @@
     "budget": "node scripts/run-ts.mjs scripts/district-budget.ts",
     "cops": "node scripts/cop-bench.mjs",
     "hash": "node scripts/run-ts.mjs scripts/city-hash.ts",
-    "city": "node scripts/run-ts.mjs scripts/city.ts"
+    "city": "node scripts/run-ts.mjs scripts/city.ts",
+    "zfight": "node scripts/run-ts.mjs scripts/zfight.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.18.2",

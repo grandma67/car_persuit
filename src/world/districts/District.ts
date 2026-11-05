@@ -13,10 +13,11 @@ import { pin, type FeatureValue } from '../CityParams';
 export type { LotStyle } from '../lots';
 
 /** Grows with the registry (world/districts/index.ts). */
-export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums';
+export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums' | 'megapark';
 
 /** What a special (unfilled) block is for; the district's dressing fills it. */
-export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'camp' | 'junkyard';
+export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'camp' | 'junkyard'
+  | 'lake' | 'sports' | 'track' | 'playground' | 'bandstand' | 'lawn';
 
 // --- Building looks (rendered by CityBuilder's addBuilding through the facade pipeline) ---
 
@@ -169,6 +170,8 @@ export interface DistrictDef {
   keepZebras: boolean;
   traffic: DistrictTraffic;
   copSpawnSkip: number; // 0..1 chance a cop spawn try inside is re-rolled
+  /** Glowing things at night, at most (`<DISTRICT>.maxGlow`): lit props plus what the renderer lights. For `npm run stats`. */
+  maxGlow?: number;
   /** How its `dressing.soft` ground drives: tyre grip multiplier and extra rolling drag (m/s²). */
   softGround?: { grip: number; drag: number };
   roadblockGates: boolean; // 4★+ roadblocks prefer a gate edge

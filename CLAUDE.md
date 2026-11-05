@@ -43,17 +43,25 @@ Each script's header lists its options; the doc named here says when to use it.
 - Seeds to look at: `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`
   (`name:N` at least, `name=N` exactly; counts structures, landmarks, props, ground patches, lots,
   roles; `flat` = no hill/canals). Never write a search script for this.
+- Z-fighting: `npm run zfight -- [seeds=40] [limit=3] [only=<text>] [props] [words…]` lists every
+  coplanar overlap in buildings (the test's sweep, or cities from words) or prop models, with the
+  buildings' lot boxes; `PropModels.test` and `BuildingZFight.test` fail on any. `DISTRICTS_DEV.md`.
 - Seed guard: `npm run hash -- --vs HEAD` (or any ref on/after city params: hashes 120 cities on a temp
   worktree, names those that moved; `--out f` / `--vs f` for a file; `--reload` also proves every dump
-  reloads as its city). Older refs need a file baseline.
-- District numbers: `npm run stats -- <kind> [seeds=100]` (placement rate, shapes, gates, counts, gen ms
-  on vs off). Building budget: `npm run budget -- <kind> [seeds=20]`. `DISTRICTS_DEV.md`.
+  reloads as its city). Older refs need a file baseline. District work: `--expect <kind>` fails on any
+  city moved without that district (never diff the list by hand).
+- District numbers: `npm run stats -- <kind> [seeds=100]` (placement rate, shapes, gates, counts, lit
+  props vs `maxGlow`, gen ms on vs off); `npm run stats -- odds` (the `DISTRICTS.md` odds line). Building
+  budget: `npm run budget -- <kind> [seeds=20]`. A prop that went missing: `CLEAROF=<kind>` on any
+  `run-ts` script logs what `clearOf` dropped and why. `DISTRICTS_DEV.md`.
 - Cop driving: `npm run cops -- --vs main` (~2 min; `--samples 2` adds the noise band, ±% per cell: a
   Δ inside it is noise; `--diag hits|uturns|recovers`; `COPS_DEV.md`).
   Never write a chase sim for this.
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (`RAPIER.md`).
-- Browser (`BROWSER_CHECKS.md`; ~10 s plus the eval with Vite already on 5199, `check:restart` ~1.5 min;
-  settle seed and words before the first, run in the background while editing): `npm run check:browser …`;
+- Browser (`BROWSER_CHECKS.md`; always under a hard limit: `perl -e 'alarm 300; exec @ARGV' npm run …`;
+  ~10 s plus the eval with Vite already on 5199, `check:restart` ~1.5 min;
+  settle seed and words before the first, run in the background while editing; one at a time per port,
+  a second one waits): `npm run check:browser …`;
   `npm run check:restart` after anything that adds to the scene, page or listeners (`LEAKS.md`);
   `npm run check:reload` after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or `city.params`.
 - Before/after in the browser: `npm run check:browser -- --vs <ref> …` (that ref in its own worktree and

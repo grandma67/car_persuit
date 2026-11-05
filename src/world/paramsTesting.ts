@@ -37,9 +37,16 @@ export function districtCities(kind: DistrictKind, words: string[], seeds = [11,
   });
 }
 
+/** A force map with `kinds` on and every other district off: `generateCity(seed, undefined, { force: alone('farm') })`. */
+export const alone = (...kinds: DistrictKind[]): Partial<Record<DistrictKind, boolean>> =>
+  Object.fromEntries(DISTRICT_DEFS.map((d) => [d.kind, kinds.includes(d.kind)]));
+
+/** A force map with every district on (a new district joins without editing other tests). */
+export const everyDistrict = (): Partial<Record<DistrictKind, boolean>> => Object.fromEntries(DISTRICT_DEFS.map((d) => [d.kind, true]));
+
 /** Values for the words that take a number. */
 const NUMBERS: Record<string, string[]> = {
-  roadworks: ['0', '2'], blocks: ['6'], canalramps: ['1'], ramps: ['0', '2'], canalwidth: ['30'], startminute: ['7'], yards: ['1'], ponds: ['0', '2'], pitches: ['0', '2'],
+  roadworks: ['0', '2'], blocks: ['6'], canalramps: ['1'], ramps: ['0', '2'], canalwidth: ['30'], startminute: ['7'], yards: ['1'], sports: ['1', '2'], ponds: ['0', '2'], pitches: ['0', '2'],
 };
 
 /** Each word as it is used: bare, !name for an on/off feature, each named value, a sample count. */
@@ -74,8 +81,8 @@ function promise(word: string, city: CityData): void {
   else if (name === 'england') expect(city.driveSide).toBe('left');
   else if (name === 'canals') expect(city.terrain.canals.length).toBe(Number(v));
   else if (name === 'blocks') expect(city.blocks.length).toBe(Number(v) ** 2);
-  else if (name === 'pond' || name === 'ponds') expect(city.water.length).toBe(v === undefined ? 1 : Number(v));
-  else if (name === 'pitch' || name === 'pitches') expect(city.streetProps.filter((q) => q.kind === 'goal').length).toBe(2 * (v === undefined ? 1 : Number(v)));
+  else if (name === 'pond' || name === 'ponds') expect(city.water.filter((w) => w.kind === 'pond').length).toBe(v === undefined ? 1 : Number(v));
+  else if (name === 'pitch' || name === 'pitches') expect(city.streetProps.filter((q) => q.kind === 'goal' && !city.districts.some((d) => Math.abs(q.x - d.bounds.x) <= d.bounds.w / 2 && Math.abs(q.z - d.bounds.z) <= d.bounds.d / 2)).length).toBe(2 * (v === undefined ? 1 : Number(v))); // the parks' own (not the Mega-park's)
   else if (isFeature(name)) {
     const [kind, f] = name.includes('.') ? name.split('.') : [DISTRICT_DEFS.find((d) => name in d.features)!.kind, name];
     const q = city.districts.find((x) => x.kind === kind);
