@@ -22,7 +22,7 @@ export type PropKind =
   // Park pieces
   | 'reeds' | 'goal' | 'cornerFlag' | 'ball'
   // Forest
-  | 'fern' | 'tent'
+  | 'fern' | 'tent' | 'log'
   // Mega-park
   | 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard'
   | 'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw';
@@ -41,7 +41,7 @@ export interface StreetProp {
   phase?: number; // signals: junction cycle offset, seconds
   armRight?: boolean; // signals: arm reaches to the driver's right (pole on the left kerb, left-hand traffic)
   tree?: TreeKind; // trees
-  scale?: number; // trees, reeds: size multiplier
+  scale?: number; // trees, reeds, logs: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
   style?: 'old' | 'chainlink' | 'rail' | 'pear' | 'torn' | 'transformer'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
@@ -124,6 +124,9 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   fern: { hx: 0.5, hz: 0.5, height: 0.8, mass: 3, breakSpeed: 0.5, slowdown: 0.01 },
   // A campsite's ridge tent (its door at local +Z): canvas and poles, knocked flying at a crawl.
   tent: { hx: 1.1, hz: 1.4, height: 1.4, mass: 20, breakSpeed: 1, slowdown: 0.02 },
+  // A fallen log along local X (5 m at scale 1, scaled by its length): heavy, solid to a crawl,
+  // rolled aside by a real hit at a good cost in speed.
+  log: { hx: 2.5, hz: 0.32, height: 0.64, mass: 250, breakSpeed: 3.5, slowdown: 0.2 },
   // A 7-a-side goal: a 5 m frame and its net (local +Z is the mouth). Light, but wide.
   goal: { hx: 2.6, hz: 0.5, height: 2.1, mass: 60, breakSpeed: 3, slowdown: 0.05 },
   cornerFlag: { hx: 0.05, hz: 0.05, height: 1.5, mass: 2, breakSpeed: 0.5, slowdown: 0 },
@@ -200,6 +203,10 @@ export function propSpec(p: StreetProp): PropSpec {
   if (p.kind === 'wreck') {
     if (SOLID_WRECKS.has(p.wreck ?? 'burnt')) return { ...base, breakSpeed: Infinity };
     return p.wreck === 'crushed' ? { ...base, height: 0.8 } : base;
+  }
+  if (p.kind === 'log') {
+    const s = p.scale ?? 1;
+    return { ...base, hx: base.hx * s, hz: base.hz * s, height: base.height * s, mass: base.mass * s ** 3 };
   }
   if (p.kind !== 'tree') return base;
   const s = p.scale ?? 1;

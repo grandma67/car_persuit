@@ -169,8 +169,8 @@ export function layTrees(q: District, city: CityData, tracks: Track[], clearings
 export const forestTrees = (q: District) => q.dressing.props.filter((p) => p.kind === 'tree');
 
 export interface FloorLayout {
-  props: StreetProp[]; // ferns
-  structures: Structure[]; // fallen logs, boulders, stumps
+  props: StreetProp[]; // ferns, fallen logs
+  structures: Structure[]; // boulders, stumps
   solids: Footprint[];
 }
 
@@ -208,7 +208,12 @@ export function layFloor(q: District, city: CityData, tracks: Track[], clearings
     };
     for (let i = rng.int(F.logs[0], F.logs[1]); i > 0; i--) {
       const len = rng.range(4, 7);
-      solid('fallenLog', spot(len / 2, 0.35, FOREST.trackClear), { length: len, r: rng.range(0.28, 0.38), seed: rng.int(1, 1e6) });
+      const fp = spot(len / 2, 0.35, FOREST.trackClear);
+      rng.range(0, 1), rng.int(1, 1e6); // the old radius and model seed: kept so the floor after them stays put
+      if (!fp) continue;
+      // A prop: a car hard enough into it rolls it aside (PROP_SPECS.log).
+      out.props.push({ kind: 'log', x: fp.x, z: fp.z, yaw: fp.yaw, scale: len / 5 });
+      taken.add({ ...fp, hx: fp.hx + 0.4, hz: fp.hz + 0.4 });
     }
     for (let i = rng.int(F.boulders[0], F.boulders[1]); i > 0; i--) {
       const r = rng.range(0.7, 1.3);

@@ -156,9 +156,12 @@ describe('Forest floor', () => {
     const breaks: string[] = [];
     const tracks = forestTracks(q);
     const clearings = forestClearings(q);
-    const pieces = q.dressing.structures.filter((s) => ['fallenLog', 'boulder', 'stump'].includes(s.kind));
-    for (const s of pieces) {
-      const f = s.footprints[0];
+    const pieces = [
+      ...q.dressing.structures.filter((s) => ['boulder', 'stump'].includes(s.kind)).map((s) => ({ kind: s.kind, f: s.footprints[0] })),
+      ...q.dressing.props.filter((p) => p.kind === 'log').map((p) => ({ kind: p.kind, f: propFootprint(p) })),
+    ];
+    for (const { kind, f } of pieces) {
+      const s = { kind };
       const k = q.blocks.find((b) => inRect(c.blocks[b].rect, f));
       if (k === undefined || q.roles.get(k) === 'lumberyard') breaks.push(`${s.kind} at ${at(f)} outside the woods`);
       for (const t of tracks) if (trackDistance(t, f) < t.width / 2 + FOREST.trackClear) breaks.push(`${s.kind} at ${at(f)} on a track`);
@@ -169,7 +172,10 @@ describe('Forest floor', () => {
     expect(breaks).toEqual([]);
     const woods = roleBlocks(q, 'woods').length;
     expect(ferns.length).toBeGreaterThanOrEqual(woods * 5);
-    expect(pieces.filter((s) => s.kind === 'fallenLog').length).toBeGreaterThanOrEqual(woods * 0.5);
+    const logs = q.dressing.props.filter((p) => p.kind === 'log');
+    expect(logs.length).toBeGreaterThanOrEqual(woods * 0.5);
+    // A log is a prop a car can roll aside (heavy: it takes a real hit), not a solid structure.
+    for (const p of logs) expect(propSpec(p).breakSpeed).toBeLessThan(Infinity);
   });
 });
 

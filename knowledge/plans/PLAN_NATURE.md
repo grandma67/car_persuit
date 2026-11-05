@@ -153,7 +153,7 @@ Woods on the island edge, the one district cops can't cut through.
 - **Blocks:** dense woods (trees spaced 4–7 m, climate kinds: pine in snow, round + pine temperate,
   palms and undergrowth by the beach, sparse dry woodland with dead snags and cactus in the desert).
   Dirt **tracks** wind through most blocks, street to street (≥ widest body + 1 m, soft), so the
-  player has a way through that cops have to follow. Undergrowth, fallen logs (solid), stumps,
+  player has a way through that cops have to follow. Undergrowth, fallen logs (a heavy prop: rolled aside by a hard hit), stumps,
   boulders (solid), ferns (breakable).
 - **Special blocks (features):** a **lumber yard** at the main-street gate (sawmill shed, log stacks in
   rows with corridors, a log loader, a parked log truck: merged vertex-coloured, no `buildCarMesh`;
@@ -360,7 +360,7 @@ Time went to reading for reuse points, rework caught by tests, and tool friction
   Campsite: fire pit (glows day and night) and tents round it on the roomier side, picnic tables.
   Ranger station lot by the main gate.
 - **M4** (floor, traffic, police): ferns (new prop `fern`, 60 tris, breakable, soft in NavGrid),
-  fallen logs, boulders, stumps (solid structures). `ForestTraffic.test.ts`.
+  fallen logs, boulders, stumps (solid structures; logs later a `log` prop). `ForestTraffic.test.ts`.
 - **M5**: climate (`RunDressing.trees`): snow all pine, beach palms, desert snags and cacti; no ferns
   in the snow or the desert. Floor, tracks and yard coloured per climate. `maxGlow` 16 (4 yard lamps,
   the fire, 4 windows; worst 4 lit props).

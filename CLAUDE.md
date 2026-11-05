@@ -116,6 +116,12 @@ Each script's header lists its options; the doc named here says when to use it.
   never drop or move signals or `stop`/`priority`/`speed*` signs (`isJunctionControl`).
 - Tuning → `gameplay/balance.ts`; generation config → `DEFAULT_CITY`; URL city flags → `urlOverrides`
   (`world/makeCityParams.ts`; `Game` never reads the URL for city choices).
+- **Props move.** Anything new a car can reach (clutter, set dressing, logs, tents) is a prop (`PropKind`
+  + `PROP_SPECS`), not a solid structure: a hard enough hit knocks it loose. Tune it, don't freeze it:
+  `breakSpeed` (below it, it stands like a wall and the crash damages the car), `slowdown` (speed the
+  hit costs), `mass`; heavy things (logs, bales) take a real hit. Solid structures only for built
+  things (walls, sheds, stacks, buildings); a prop that must never budge gets `breakSpeed: Infinity`
+  and a comment saying why.
 - Buildings: one merged mesh per facade style, one shared roof mesh; never give a lot its own mesh or material.
 - A material is drawn by one kind of mesh only: plain, instanced, or instanced with `instanceColor`
   (give every instanced user colours, or each kind a `.clone()`); otherwise three switches programs every

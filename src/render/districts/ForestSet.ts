@@ -3,6 +3,7 @@
 // lookout tower, the fire pit and timber gate posts. Each is laid in its structure's frame
 // (local +Z its front) on the ground at its middle.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { FOREST } from '../../gameplay/balance';
 import { Rng } from '../../core/Rng';
 import type { Structure } from '../../world/districts/District';
@@ -197,14 +198,17 @@ export function gatePosts(s: Structure, ground: (x: number, z: number) => number
   }
 }
 
-/** A fallen log along local X, half sunk in the leaf litter, a stub of a branch, moss along its top. */
-export function fallenLog(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
-  const len = (s.data?.length as number) ?? 5, r = (s.data?.r as number) ?? 0.32;
-  const rng = new Rng((s.data?.seed as number) ?? 1);
-  const g = [...log(len, r, 0, r * 0.75, 0)];
-  g.push(part(box(len * 0.7, 0.05, r * 0.9), snowy ? SNOW : 0x4a6a2a, rng.range(-0.3, 0.3), r * 1.72, 0)); // moss (snow) along the top
-  g.push(part(cyl(0.07, 0.1, 0.9, 5).rotateZ(-0.9), BARK, len * rng.range(-0.25, 0.25), r * 1.4, r * 0.6)); // a branch stub
-  place(g, frameOf(s.x, y, s.z, s.yaw), out);
+/**
+ * The fallen log prop (`log`) at scale 1: 5 m along local X lying on the ground, moss along its
+ * top (snow in the snow), a stub of a branch. The prop's instance scale sets its length.
+ */
+export function fallenLogModel(snowy: boolean): THREE.BufferGeometry {
+  const len = 5, r = 0.32;
+  return mergeGeometries([
+    ...log(len, r, 0, r, 0),
+    part(box(len * 0.7, 0.05, r * 0.9), snowy ? SNOW : 0x4a6a2a, 0.1, r * 1.97, 0), // moss (snow) along the top
+    part(cyl(0.06, 0.09, 0.4, 5).rotateZ(-0.9), BARK, len * 0.15, r * 1.6, r * 0.45), // a branch stub, short: it sinks into the ground as the log rolls
+  ]);
 }
 
 /** A mossy boulder: a squashed, roughly faceted stone. */

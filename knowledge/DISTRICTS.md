@@ -146,7 +146,7 @@ roots by the beach. Fairy-tale only: no figure, no animals, no real occult symbo
 Dense woods on the island's edge (2×2 to 3×4), the one district cops can't cut through. Its streets
 stay streets, with no street lamps inside (the darkest district: headlights matter); every block is
 woods, pine and broadleaf trees 3.4–6 m apart on a soft forest floor with ferns (breakable), fallen
-logs, boulders and stumps (solid). A winding dirt track crosses most blocks street to street (≥ the
+logs (heavy: a hard hit rolls them aside), boulders and stumps (solid). A winding dirt track crosses most blocks street to street (≥ the
 widest car + 1 m): the player's way through, and the only one cops route along (NavGrid treats the
 woods as a thicket). A log arch with a made-up forest name spans the main street where it comes in from
 town, a green ranger station beside it; timber posts mark the other gates. Special blocks, each a

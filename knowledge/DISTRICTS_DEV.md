@@ -84,8 +84,9 @@ there if it holds for all districts; don't repeat it in a district's test.
   mouths and fence holes. The rule (`clutterOnCentreLine`) measures a prop by its **radius**
   (`hypot(hx, hz)`) whichever way it faces: a 2.9 m rail section along the kerb counts 1.45 m of reach,
   so it stands ≥ 6.5 m off the centre line (the Swamp's rails at `rw/2 + 0.65`).
-- **Solid vs breakable:** structures (walls, columns, legs, stacks, lions, bollards) solid, unbreakable,
-  off the roadway; smaller things are breakable props that add heat. Long or wide breakables get a small
+- **Solid vs breakable:** structures only for built things (walls, columns, legs, stacks, lions,
+  bollards), solid, unbreakable, off the roadway; anything a car could shove (clutter, tents, fallen
+  logs) is a prop, tuned by `breakSpeed`/`slowdown`/`mass` (CLAUDE.md, "Props move"). Long or wide breakables get a small
   collider (a 7 m boom arm thrown ahead jammed a straddle carrier's gap like a wall).
 - **Glow:** cap emissive instances (`<DISTRICT>.maxGlow`); flicker/blink via shader uniforms, never per-light JS.
 - **Corridors and gaps** (yards, junkyard, orchard aisles, carrier legs): ≥ widest body + 1 m and
