@@ -5,88 +5,62 @@ destinations, cops, civilian traffic, themed districts.
 
 ## Docs (read the one the task needs)
 
-| File | What | Git |
+| File | Read before | Git |
 |---|---|---|
-| `knowledge/plans/PLAN_GAME.md` | the game: rules, tech, world, police, URL flags, versions | tracked |
-| `knowledge/CITY_PARAMS.md` | **read before adding a roll, feature or word**: pipeline, rules, schema, words, roll audit | tracked |
+| `knowledge/plans/PLAN_GAME.md` | anything about the game itself: rules, tech, world, police, URL flags, versions | tracked |
+| `knowledge/CITY_PARAMS.md` | adding a roll, feature or word: pipeline, rules, schema, words, roll audit | tracked |
 | `knowledge/DISTRICTS.md` | what each district is (table + descriptions) | tracked |
-| `knowledge/DISTRICTS_DEV.md` | **read before district work**: framework, files, rules, budgets, pitfalls, tests | tracked |
-| `knowledge/COPS_DEV.md` | **read before cop AI work**: brain, tuning and why, pitfalls, `npm run cops` metrics | tracked |
-| `knowledge/BROWSER_CHECKS.md` | **read before a browser run**: `check:browser`, evals, `window.dbg`, pitfalls | tracked |
-| `knowledge/LEAKS.md` | **read before touching `dispose()` or anything Retry rebuilds**: `check:restart`, `gpuTrace`, leak causes | tracked |
-| `knowledge/OPTIMIZATIONS.md` | **read before perf work**: techniques, measured costs, ranked fixes, `perf-profile.js` | tracked |
-| `knowledge/OPTIMIZATION_TASKS.md` | perf tasks step by step: baseline, milestones M1–M4, checks per task | tracked |
-| `knowledge/polygons.md` | **read before adding or changing a model**: triangles per prop, building, car; scene by owner; budgets | tracked |
-| `knowledge/RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
-| `knowledge/plans/PLAN_DISTRICTS.md` | district decisions, dropped ideas | tracked |
-| `knowledge/plans/PLAN_CITY_PARAMS.md` | city params decisions, what changed from the plan | tracked |
-| `knowledge/plans/PLAN_NATURE.md` | park pond/pitch, shallow water, Mega-park, Swamp, Forest | tracked |
-| `knowledge/TASKS.md` | current branch and milestones, open items | **local, never commit** |
+| `knowledge/DISTRICTS_DEV.md` | district work: framework, rules, adding one, building blocks, pitfalls, tests | tracked |
+| `knowledge/DISTRICTS_LOOKS.md` | a district's looks: facades, programs, budgets, z-fighting, night glow | tracked |
+| `knowledge/COPS_DEV.md` | cop AI work: brain, tuning and why, pitfalls, `npm run cops` | tracked |
+| `knowledge/BROWSER_CHECKS.md` | a browser run: `check:browser`, evals, `window.dbg`, pitfalls | tracked |
+| `knowledge/LEAKS.md` | touching `dispose()` or anything Retry rebuilds: `check:restart`, `gpuTrace` | tracked |
+| `knowledge/OPTIMIZATIONS.md` | perf work: where the frame goes, what was done and learned, how to measure, what's open | tracked |
+| `knowledge/polygons.md` | adding or changing a model: triangles per prop/building/car, budgets | tracked |
+| `knowledge/RAPIER.md` | a Rapier upgrade (we stay on 0.18.2) | tracked |
+| `knowledge/plans/PLAN_DISTRICTS.md`, `PLAN_NATURE.md`, `PLAN_CITY_PARAMS.md` | revisiting a decision: why, what was dropped, where the build bent | tracked |
+| `knowledge/TASKS.md` | starting work: current branch, milestones, open items | **local, never commit** |
 | `knowledge/TODO.md` | the user's task list | **local, never commit** |
-| `knowledge/STAGE2_IDEAS.md` | future gameplay ideas | **local, never commit** |
+| `knowledge/STAGE2_IDEAS.md` | future gameplay ideas (losing the cops) | **local, never commit** |
 
 ## Commands
 
-Each script's header lists its options; the doc named here says when to use it.
+Each script's header lists its options; the doc named says when to use it.
 
 - Type check `npx tsc --noEmit`; build `npm run build`.
-- Tests: `npm run t` (failures + summary only, the first 6 items of each failing break list, `T_ITEMS=`;
-  ~26–35 s wall, ~250 s CPU; killed after 300 s, `T_LIMIT=`).
-  Area: `npm run t -- src/world/districts`, `-t "name"`. Never pipe vitest through `grep`/`tail` without
-  a limit. Suite time: `npm run t -- --times [save]` (CPU and wall s, slowest files, Δ% vs the saved run):
-  judge by CPU (wall swings by a third with load); don't rerun the suite to time it.
-- One-off TS: `node scripts/run-ts.mjs <file.ts> [args]` (default export gets args), for numbers instead
-  of scratch tests (vitest swallows `console.log`). In the scratchpad it needs absolute `src/` imports
-  and `node_modules` symlinked next to it.
-- City from words: `npm run city -- make <words…> seed=N` (e.g. `flat night chinatown festival`; may
-  move to a later seed and says which; without `seed=` it starts from a random one, so checks and tests
-  always pass it), `dump <seed> [URL words]`, `check <file…>`, `show <file | seed | words…>` (ASCII map),
-  `focus <file | seed | words…>` (each district's bounds), `words`. `CITY_PARAMS.md`.
-- Seeds to look at: `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`
-  (`name:N` at least, `name=N` exactly; counts structures, landmarks, props, ground patches, lots,
-  roles; `flat` = no hill/canals). Never write a search script for this.
-- Z-fighting: `npm run zfight -- [seeds=40] [limit=3] [only=<text>] [props] [words…]` lists every
-  coplanar overlap in buildings (the test's sweep, or cities from words) or prop models, with the
-  buildings' lot boxes; `PropModels.test` and `BuildingZFight.test` fail on any. `DISTRICTS_DEV.md`.
-- Seed guard: `npm run hash -- --vs HEAD` (or any ref on/after city params: hashes 120 cities on a temp
-  worktree, names those that moved; `--out f` / `--vs f` for a file; `--reload` also proves every dump
-  reloads as its city). Older refs need a file baseline. District work: `--expect <kind>` fails on any
-  city moved without that district (never diff the list by hand); every-district cities whose
-  placement order alone moved are proven so and listed apart.
-- District numbers: `npm run stats -- <kind> [seeds=100]` (placement rate, shapes, gates, counts, lit
-  props vs `maxGlow`, gen ms on vs off); `npm run stats -- odds` (the `DISTRICTS.md` odds line). Building
-  budget: `npm run budget -- <kind> [seeds=20]`. A prop that went missing: `CLEAROF=<kind>` on any
-  `run-ts` script logs what `clearOf` dropped and why. `DISTRICTS_DEV.md`.
-- Cop driving: `npm run cops -- --vs main` (~2 min; `--samples 2` adds the noise band, ±% per cell: a
-  Δ inside it is noise; `--diag hits|uturns|recovers`; `COPS_DEV.md`).
-  Never write a chase sim for this.
-- Triangles per prop, building kind, car: `npm run polygons -- [seeds=20] [props|buildings|cars]`; the whole
-  scene by owner: `scripts/evals/polygons.js` (`polygons.md`; update its tables and log after a model change).
+- Tests: `npm run t` (failures + summary, first 6 items of each failing break list, `T_ITEMS=`; ~30 s
+  wall, ~250 s CPU; killed after 300 s, `T_LIMIT=`). Area: `npm run t -- src/world/districts`,
+  `-t "name"`. Never pipe vitest through `grep`/`tail` without a limit. Suite time:
+  `npm run t -- --times [save]` (CPU/wall, slowest files, Δ% vs saved; judge by CPU, don't rerun to time).
+- One-off TS: `node scripts/run-ts.mjs <file.ts> [args]` (default export gets args) for numbers instead
+  of scratch tests (vitest swallows `console.log`). In the scratchpad: absolute `src/` imports and
+  `node_modules` symlinked next to it.
+- City from words: `npm run city -- make|dump|check|show|focus|words` (`CITY_PARAMS.md`). Always pass
+  `seed=` in checks and tests (without it the start seed is random).
+- Seeds with something: `npm run find -- harbor straddle:2 ship=container [seeds=60] [flat]`. Never
+  write a search script for this.
+- Seed guard: `npm run hash -- --vs HEAD [--reload] [--expect <kind>]` (`CITY_PARAMS.md`, `DISTRICTS_DEV.md`).
+- District numbers: `npm run stats -- <kind>|odds`, `npm run budget -- <kind>`, `npm run zfight`,
+  `CLEAROF=<kind>` on any run-ts script (`DISTRICTS_DEV.md`, `DISTRICTS_LOOKS.md`).
+- Triangles: `npm run polygons -- [props|buildings|cars]`; scene by owner `scripts/evals/polygons.js` (`polygons.md`).
+- Cop driving: `npm run cops -- --vs main [--samples 2] [--diag hits]` (~2 min, `COPS_DEV.md`). Never
+  write a chase sim for this.
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (`RAPIER.md`).
-- Browser (`BROWSER_CHECKS.md`; always under a hard limit: `perl -e 'alarm 300; exec @ARGV' npm run …`;
-  ~10 s plus the eval with Vite already on 5199, `check:restart` ~3 min (two cities: `:core`, `:nature`);
-  settle seed and words before the first, run in the background while editing; one at a time per port,
-  a second one waits): `npm run check:browser …`;
-  `npm run check:restart` after anything that adds to the scene, page or listeners (`LEAKS.md`);
-  `npm run check:reload` after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or `city.params`.
-- District on vs off in the browser: `npm run check:browser -- --vs-make "nodistricts <words>" --make "<kind> <words>" …`
-  (same tree and port, one after the other; `--table` for perf; both sides look at the district's
-  spot, `focus=` / `dbg.focus()`). A GPU question about one prop model there: `gpu-ab.js` with
-  `&at=focus&ab=props:tree-`. Driving a district's off-road tracks: `dbg.follow(points)` (`district-drive.js` does).
-- Before/after in the browser: `npm run check:browser -- --vs <ref> …` (that ref in its own worktree and
-  server, then here; never a baseline from the server you're editing against). Shots:
-  `node scripts/png-diff.mjs a.png b.png`. Perf: `--table` (perf-profile as a Δ% table), `--throttle 4`
-  with `&touch` (the phone path), `--profile f.json`; evals `perf-profile.js`, `tri-breakdown.js`,
-  `gpu-ab.js` (a GPU question: on/off in one page), `cold-load.js`; `dbg.sceneBreakdown()` (measure
-  before choosing what to optimize). Never measure while `npm run cops` or tests run.
+- Browser (`BROWSER_CHECKS.md`): always under a hard limit, `perl -e 'alarm 300; exec @ARGV' npm run …`;
+  ~10 s plus the eval with Vite on 5199; one run at a time per port; settle seed and words first, run in
+  the background while editing. `npm run check:browser …` (`--vs <ref>` before/after, `--vs-make
+  "nodistricts <words>" --make "<kind> <words>"` district on/off, `--table` perf);
+  `npm run check:restart` (~3 min, `:core` / `:nature`) after anything that adds to the scene, page or
+  listeners (`LEAKS.md`); `npm run check:reload` after a change to `Game`'s setup,
+  `dbg.loadCity`/`dumpCity` or `city.params`. Never measure while `npm run cops` or tests run.
 
 ## Working rules (from the user)
 
 - **Git:** commit per milestone, short subject + bulleted body (what and why). Never push without asking.
-- **Branches** (districts and other multi-milestone work): one branch each (`districts/<kind>`). Within
-  a branch do all milestones without asking; at branch end **stop for the user's approval**, then merge
-  to main and branch the next from main. Keep `knowledge/TASKS.md` ticked (it tells the next session
-  where things stand).
+- **Branches** (districts and other multi-milestone work): one each (`districts/<kind>`, `perf/<topic>`).
+  Within a branch do all milestones without asking; at branch end **stop for the user's approval**,
+  then merge to main and branch the next from main. Keep `knowledge/TASKS.md` ticked (it tells the next
+  session where things stand); hand off at milestone boundaries.
 - **Storage:** the origin is shared; touch only the game's own localStorage/IndexedDB keys.
 - **Tests ship with the code.** Never commit part of a milestone without the tests for what it adds.
 - **Testing split:** Claude owns logic (unit tests + headless browser checks: no errors, draw calls,
@@ -97,9 +71,10 @@ Each script's header lists its options; the doc named here says when to use it.
 
 - **Zone:** distance ring of a block: `downtown | midtown | residential | industrial` (`Zone`,
   `block.zone`, `ZONE_STYLE`, `theme.facades[zone]`).
-- **District:** themed area over a rectangle of blocks: `oldtown`, `chinatown`, `harbor`, `farm`, `slums`
-  (`District`, `DistrictDef`, `block.district`, `building.district` + `building.lot`, `city.districts`,
-  `DISTRICTS` in balance, `?<kind>=0|1`). A district block keeps its zone. In old commits "district" meant zone.
+- **District:** themed area over a rectangle of blocks (`oldtown`, `chinatown`, `harbor`, `farm`,
+  `slums`, `megapark`, `swamp`, `forest`; `District`, `DistrictDef`, `block.district`,
+  `building.district` + `building.lot`, `city.districts`, `DISTRICTS` in balance, `?<kind>=0|1`). A
+  district block keeps its zone. In old commits "district" meant zone.
 
 ## Architecture
 
@@ -130,15 +105,15 @@ Each script's header lists its options; the doc named here says when to use it.
   Rapier getters (each allocates); change its velocity from outside the step with `push`/`setVelocity`
   (never `body.applyImpulse`/`setLinvel`), or `vel` goes stale.
 - New hooks: optional constructor params defaulting to "no district", so tests and seeds don't move.
-- Anything a run adds to the page or scene must be freed by `Game.dispose()` (Retry/New city restart in place).
-  A builder adding to the scene goes through `Game.owned('<name>', …)`, which tags its objects for
-  `dbg.sceneBreakdown` and `gpu-ab.js` (`ab=owner:<name>`).
+- Anything a run adds to the page or scene must be freed by `Game.dispose()` (Retry/New city restart in
+  place). A builder adding to the scene goes through `Game.owned('<name>', …)`, which tags its objects
+  for `dbg.sceneBreakdown` and `gpu-ab.js` (`ab=owner:<name>`).
 - Matrices: the scene root, the city's and props' meshes and every car part are manual
   (`matrixAutoUpdate = false`); `Game.frame` updates the scene once before the glows and the render.
-  `dbg.staleMatrices()` (in `perf-profile` and `check:restart`) lists frozen objects moved without it.
-  Moving one of those (a car part outside `syncMesh`, a city mesh) needs `updateMatrix()`. District,
-  landmark and roadworks objects stay automatic. The city's merged meshes also drop their vertex
-  arrays once uploaded (`releaseAfterUpload`): read city geometry at build time only.
+  Moving one of those (a car part outside `syncMesh`, a city mesh) needs `updateMatrix()`;
+  `dbg.staleMatrices()` lists any that moved without it. District, landmark and roadworks objects stay
+  automatic. The city's merged meshes drop their vertex arrays once uploaded (`releaseAfterUpload`):
+  read city geometry at build time only.
 - Lights: one point light in the scene, shared by the siren and a blast (`Sirens`); a new light is
   ~4 % of the GPU frame even at intensity 0, and the count must never change at run time.
 - Big files (`CityBuilder`, `CivilianController`, `CopDirector`, `PropSystem`, `Game`): `grep -n`, read slices.
@@ -163,4 +138,3 @@ Each script's header lists its options; the doc named here says when to use it.
 - Shared test helpers that import vitest live in `src/` as plain `.ts` (`world/paramsTesting.ts`,
   `districts/trafficSim.ts`). `src/` can't import from `scripts/`: `tsc` covers `src` only and has no
   Node types (`node:fs`, `node:crypto`), so a script helper a test needs moves to `src/`.
-- District tests and rules: `DISTRICTS_DEV.md`.

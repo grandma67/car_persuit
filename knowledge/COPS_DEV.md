@@ -59,6 +59,9 @@ either car is off the road. A moving cop on the road ignores a grid path that st
 - Most U-turns come from crashes: hit something, stop, reverse out, carry on the other way. Fix the
   crash, not the U-turn logic.
 - Cops ram the suspect by design: the probe's `ignore` skips the suspect's collider.
+- Dense props don't stop a route (trees 4–7 m apart are a slalom): ground they must not cross is
+  `dressing.thicket`, which the NavGrid blocks except along its paths (the Forest's tracks). Shallow water
+  is a costly cell: cops go round. Trees don't block sight (`staticLineOfSight` reads static colliders only).
 
 ## Benchmark: `npm run cops`
 

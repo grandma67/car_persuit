@@ -121,13 +121,13 @@
     out.at = f ? await dbg.view(f, { dist: 25 }) : null;
   }
   out.stats = dbg.stats();
-  out.mixedMaterials = dbg.mixedMaterials?.(); // expected empty (OPTIMIZATION_TASKS 1.1)
+  out.mixedMaterials = dbg.mixedMaterials?.(); // expected empty (OPTIMIZATIONS.md)
   out.idle = await sample(3000);
   dbg.police(false);
   const drive = dbg.hold('KeyW', 7000);
   await sleep(1500);
   out.cruise = await sample(5000);
-  // Garbage budget while cruising (OPTIMIZATION_TASKS M1: 30 → 16 MB/s on seed 9, + ~30%). Most of
+  // Garbage budget while cruising (OPTIMIZATIONS.md M1: 30 → 16 MB/s on seed 9, + ~30%). Most of
   // what's left is three's WebGL uniform calls (per draw) and Rapier's getters (per car per step).
   out.staleMatrices = window.dbg.staleMatrices?.() ?? []; // frozen objects moved without updateMatrix (expected empty)
   out.budget = { allocMBperSec: out.cruise.allocMBperSec <= 21, mixedMaterials: !out.mixedMaterials?.length, staleMatrices: !out.staleMatrices.length };

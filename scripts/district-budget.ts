@@ -1,4 +1,4 @@
-// A district's building-mesh budget over many seeds (knowledge/DISTRICTS_DEV.md):
+// A district's building-mesh budget over many seeds (knowledge/DISTRICTS_LOOKS.md):
 //   npm run budget -- <kind> [seeds=20]
 // Per seed that places it: its buildings' merged walls + roofs triangles (budget < ~60k) and
 // generation + building geometry ms forced on vs off (budget: within ~50 ms; the first 3 seeds are

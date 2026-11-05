@@ -1,5 +1,5 @@
 // Every z-fighting overlap in building and prop geometry, with where to look (the tests stop at the
-// first per kind; this lists them all). knowledge/DISTRICTS_DEV.md, "No z-fighting".
+// first per kind; this lists them all). knowledge/DISTRICTS_LOOKS.md, "No z-fighting".
 //   npm run zfight -- [seeds=40] [from=1] [limit=3] [only=<text>] [props] [words…]
 // Buildings: the test's sweep (rolled cities, seeds from..from+seeds-1, a theme and climate per seed),
 // or cities made from words (`chinatown snow`: makeCity, so a seed may move on, and says so).

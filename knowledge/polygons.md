@@ -1,8 +1,8 @@
 # Polygons
 
 Triangle counts per prop, building and vehicle, so we can see where the triangles go and push the
-total down. Measured on branch `perf/polygons` (2026-11-05), after the first round of cuts (see the log). Re-measure after any model change and update the
-tables (and the log at the end).
+total down. Measured 2026-11-05 after the first round of cuts (see the log). Re-measure after any model change
+and update the tables and the log.
 
 ## How to measure
 
@@ -42,10 +42,10 @@ Seed 9 with `oldtown=1&chinatown=1&harbor=1` (the perf reference city), day, no 
 
 ## Props (per instance)
 
-Sorted by what they cost a rolled city (tris × mean count over 20 rolled cities, no district forced).
-District props show small means because few rolled cities have that district; a city that has it
-pays more (dragonLamp: 57 in the seed-9 Chinatown = 31 k). A 0 count means only park builds,
-words or a district not rolled place it.
+The 20 biggest by what they cost a rolled city (tris × mean count over 20 rolled cities, no district
+forced), all 5 164 street props **506 k**. District props show small means because few cities have
+that district; a city that has it pays more (dragonLamp: 57 in the seed-9 Chinatown = 31 k).
+Every model: `npm run polygons -- props`.
 
 | Model | Tris | Mean count / city | Tris / city |
 |---|---:|---:|---:|
@@ -69,106 +69,8 @@ words or a district not rolled place it.
 | `pumpkin` | 326 | 12.7 | 4124 |
 | `sign-octagon` | 32 | 123.8 | 3960 |
 | `drums` | 192 | 13.9 | 2669 |
-| `goal` | 892 | 2.9 | 2587 |
-| `pot` | 122 | 20.4 | 2483 |
-| `amphora` | 208 | 11.4 | 2382 |
-| `woodLamp` | 88 | 18.3 | 1610 |
-| `signal-old` | 246 | 6.4 | 1574 |
-| `cart` | 160 | 7.7 | 1224 |
-| `reeds` | 240 | 4.7 | 1128 |
-| `sign-triangle` | 27 | 41.5 | 1121 |
-| `cableReel` | 200 | 4.7 | 940 |
-| `mahjongTable` | 216 | 4.0 | 853 |
-| `boomGate` | 138 | 5.3 | 731 |
-| `cannonballs` | 264 | 2.6 | 700 |
-| `stall` | 142 | 4.8 | 675 |
-| `haybale` | 36 | 18.3 | 657 |
-| `lifebuoy` | 188 | 3.5 | 649 |
-| `sign-round-old` | 116 | 5.2 | 597 |
-| `roundBale` | 140 | 3.9 | 539 |
-| `lanternStand` | 351 | 1.5 | 527 |
-| `milkChurn` | 180 | 2.9 | 522 |
-| `dimSumCart` | 352 | 1.4 | 493 |
-| `produceStall` | 172 | 2.9 | 490 |
-| `forklift` | 294 | 1.6 | 456 |
-| `crates` | 46 | 9.4 | 435 |
-| `fishCrate` | 55 | 7.9 | 435 |
-| `scarecrow` | 242 | 1.6 | 399 |
-| `sign-diamond-old` | 88 | 4.3 | 383 |
-| `ball` | 261 | 1.4 | 378 |
-| `menuBoard` | 46 | 7.1 | 327 |
-| `crossbuck` | 96 | 3.2 | 307 |
-| `hayWagon` | 560 | 0.5 | 280 |
-| `cafeTable` | 278 | 1.0 | 278 |
-| `sign-octagon-old` | 92 | 2.9 | 262 |
-| `parkedTractor` | 362 | 0.7 | 253 |
-| `brokenLamp` | 100 | 2.5 | 245 |
-| `parkedVan` | 288 | 0.8 | 245 |
-| `firecrackerCrate` | 130 | 1.8 | 228 |
-| `hayRake` | 424 | 0.5 | 191 |
-| `flowerPlanter` | 364 | 0.5 | 182 |
-| `cornerFlag` | 30 | 5.8 | 174 |
-| `fence-torn` | 214 | 0.7 | 150 |
-| `fruitBin` | 122 | 1.2 | 146 |
-| `tennisNet` | 660 | 0.2 | 132 |
-| `dumpster` | 182 | 0.7 | 127 |
-| `deckChair` | 72 | 1.8 | 126 |
-| `picnicTable` | 108 | 1.1 | 113 |
-| `shoppingCart` | 224 | 0.5 | 112 |
-| `climber` | 444 | 0.3 | 111 |
-| `tyres` | 268 | 0.4 | 107 |
-| `trashBags` | 140 | 0.8 | 105 |
-| `signpost` | 46 | 2.0 | 94 |
-| `farmStand` | 334 | 0.3 | 84 |
-| `litterBin` | 94 | 0.8 | 75 |
-| `iceCreamCart` | 298 | 0.3 | 75 |
-| `baler` | 132 | 0.5 | 66 |
-| `utilityPole` | 76 | 0.8 | 65 |
-| `seedDrill` | 214 | 0.3 | 64 |
-| `wreck-burnt` | 214 | 0.3 | 64 |
-| `roundabout` | 256 | 0.3 | 64 |
-| `pillory` | 98 | 0.7 | 64 |
-| `utilityPole-transformer` | 108 | 0.6 | 59 |
-| `burnBarrel` | 144 | 0.4 | 58 |
-| `slide` | 172 | 0.3 | 43 |
-| `swings` | 168 | 0.3 | 42 |
-| `kiosk` | 154 | 0.3 | 39 |
-| `toolRack` | 128 | 0.3 | 38 |
-| `wreck-stripped` | 180 | 0.2 | 36 |
-| `wheelbarrow` | 116 | 0.3 | 35 |
-| `plough` | 116 | 0.3 | 35 |
-| `wreck-flipped` | 214 | 0.1 | 32 |
-| `parkBoard` | 98 | 0.3 | 25 |
-| `couch` | 58 | 0.4 | 23 |
-| `mailbox` | 66 | 0.3 | 20 |
-| `wreck-crushed` | 174 | 0.1 | 17 |
-| `feedSacks` | 48 | 0.3 | 14 |
-| `seesaw` | 48 | 0.3 | 12 |
-| `waterTrough` | 36 | 0.3 | 11 |
-| `wreck-bricks` | 84 | 0.1 | 8 |
-| `payphone` | 56 | 0.1 | 8 |
-| `mattress` | 34 | 0.1 | 3 |
-| `dragonFloat` | 1338 | 0.0 | 0 |
-| `jackOLantern` | 358 | 0.0 | 0 |
-| `lionDance` | 354 | 0.0 | 0 |
-| `signal-right-old` | 246 | 0.0 | 0 |
-| `tree-cactus` | 118 | 0.0 | 0 |
-| `rubble` | 109 | 0.0 | 0 |
-| `tree-cypress` | 196 | 9.8 | 1911 |
-| `tree-willow` | 266 | 1.6 | 412 |
-| `tree-snag` | 87 | 4.7 | 405 |
-| `tree-mangrove` | 263 | 0.0 | 0 |
-| `tree-palm` | 108 | 0.0 | 0 |
-| `signal-right` | 90 | 0.0 | 0 |
-| `sign-square-old` | 88 | 0.0 | 0 |
-| `sign-triangle-old` | 87 | 0.0 | 0 |
-| `tree-pine` | 43 | 0.0 | 0 |
-| `fern` | 60 | 0.0 | 0 |
-| `tent` | 21 | 0.0 | 0 |
-| `log` | 57 | 2.1 | 120 |
-| `tree-round` | 35 | 0.0 | 0 |
-| `umbrella` | 31 | 0.0 | 0 |
-| **all street props** | | **5 164** | **506 k** |
+
+Other models at 300+ tris each: `dragonFloat` 1338, `goal` 892, `tennisNet` 660, `hayWagon` 560, `climber` 444, `hayRake` 424, `flowerPlanter` 364, `parkedTractor` 362, `jackOLantern` 358, `lionDance` 354, `dimSumCart` 352, `lanternStand` 351, `farmStand` 334.
 
 ## Buildings (per building)
 
