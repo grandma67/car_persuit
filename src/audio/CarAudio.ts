@@ -1,6 +1,7 @@
 // Procedural game audio with Web Audio — no sound files. Owns the context, the continuous engine,
 // tyre and siren sounds and the music; one-shot sounds live in SoundEffects. Browsers only allow
-// audio after a user gesture, so the context is created on the first key/pointer press.
+// audio after a user gesture: the context is made while loading (slow, knowledge/AUDIO_LIMITS.md) and
+// stays empty and suspended; the first key/tap builds the sounds and resumes it.
 import { MenuMusic, WIN_SONG } from './MenuMusic';
 import { SeaAudio, type WaterSound } from './SeaAudio';
 import { SoundEffects } from './SoundEffects';
@@ -27,6 +28,11 @@ function createNoiseBuffer(ctx: AudioContext): AudioBuffer {
   return buffer;
 }
 
+/** A real gesture is in progress (browsers without the API: assume so). */
+function hasActivation(): boolean {
+  return !navigator.userActivation || navigator.userActivation.isActive;
+}
+
 export interface CarSoundState {
   speed: number; // signed m/s
   throttle: number; // 0..1
@@ -36,7 +42,8 @@ export interface CarSoundState {
 }
 
 export class CarAudio {
-  private ctx: AudioContext | null = null;
+  private ctx: AudioContext | null = null; // set once the sounds are built: the guard for all of them
+  private early: AudioContext | null = null; // made by prepare(), still empty
   private master!: GainNode;
   private noise!: AudioBuffer;
   private engineOscs!: OscillatorNode[]; // two detuned saws
@@ -68,33 +75,55 @@ export class CarAudio {
   private paused = false;
 
   constructor() {
-    // Chrome lets audio start only on a real activation: Escape or a lone modifier key is not one, and
-    // a context made then stays suspended (a console warning per source). Skip those and keep listening
-    // until the context is actually running.
+    // Chrome lets audio start only on a real activation: Escape, a lone modifier key or a touch's
+    // pointerdown is not one (a touch activates on pointerup). Skip those and keep listening until the
+    // context is actually running.
     const done = () => {
       window.removeEventListener('keydown', onGesture);
       window.removeEventListener('pointerdown', onGesture);
+      window.removeEventListener('pointerup', onGesture);
     };
     const onGesture = () => {
-      if (navigator.userActivation && !navigator.userActivation.isActive) return;
+      if (!hasActivation()) return;
       this.unlock();
-      const ctx = this.ctx!;
+      const ctx = this.ctx;
+      if (!ctx) return;
       if (ctx.state === 'running') done();
       else void ctx.resume().then(() => ctx.state === 'running' && done(), () => {});
     };
     window.addEventListener('keydown', onGesture);
     window.addEventListener('pointerdown', onGesture);
+    window.addEventListener('pointerup', onGesture);
   }
 
-  /** Create the audio context now, or resume one the browser left suspended (call from a user gesture). */
+  /**
+   * Make the audio context now, while loading: `new AudioContext()` blocks ~70 ms at any CPU speed.
+   * Empty, it starts suspended without a console warning. If it fails, init tries again.
+   */
+  prepare(): void {
+    if (this.ctx || this.early) return;
+    try {
+      this.early = new AudioContext();
+    } catch {
+      this.early = null;
+    }
+  }
+
+  /**
+   * Build the sounds now and resume a context the browser left suspended. Starting sources without an
+   * activation logs a warning per source, so that waits for the next real gesture (the constructor's
+   * listeners).
+   */
   unlock(): void {
+    if (!this.ctx && !hasActivation()) return;
     this.init();
     if (this.ctx!.state === 'suspended' && !this.paused) void this.ctx!.resume();
   }
 
   private init(): void {
     if (this.ctx) return;
-    const ctx = (this.ctx = new AudioContext());
+    const ctx = (this.ctx = this.early ?? new AudioContext());
+    this.early = null;
     this.noise = createNoiseBuffer(ctx);
 
     this.master = ctx.createGain();

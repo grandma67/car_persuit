@@ -3,6 +3,8 @@
 import { fullscreenSupported, homeScreenHintWanted, isFullscreen, onFullscreenChange, toggleFullscreen } from './fullscreen';
 import { HOME_SCREEN_HINT } from './homeScreenHint';
 
+const SHARE_IMAGE_DELAY_MS = 1000;
+
 export interface EndScreenInfo {
   won: boolean;
   title: string;
@@ -14,7 +16,7 @@ export interface EndScreenInfo {
   /** The run traced on the city map, its legend (HTML) and a stats line. */
   run?: { map: HTMLElement; legend: string; stats: string };
   /** Share this result: the brag (the city's link is appended) and the run map as an image. */
-  share?: { text: string; image: Promise<Blob | null> };
+  share?: { text: string; image: () => Promise<Blob | null> };
 }
 
 export type SteerMode = 'buttons' | 'tilt';
@@ -38,6 +40,7 @@ export interface MenuInfo {
 export class Screens {
   private el: HTMLElement;
   private unlisten: () => void;
+  private shareTimer = 0; // the end screen's delayed share image
 
   constructor(parent: HTMLElement, private uiSound: (kind: 'hover' | 'click') => void = () => {}) {
     this.el = document.createElement('div');
@@ -48,6 +51,7 @@ export class Screens {
   }
 
   dispose(): void {
+    window.clearTimeout(this.shareTimer);
     this.unlisten();
     this.el.remove();
   }
@@ -82,6 +86,7 @@ export class Screens {
   }
 
   private show(html: string, actions: Record<string, () => void>, cardClass = ''): void {
+    window.clearTimeout(this.shareTimer);
     this.el.innerHTML = `<div class="screen-card ${cardClass}">${html}</div>`;
     this.el.hidden = false;
     for (const [action, fn] of Object.entries(actions)) {
@@ -95,6 +100,7 @@ export class Screens {
   }
 
   hide(): void {
+    window.clearTimeout(this.shareTimer);
     this.el.hidden = true;
   }
 
@@ -246,11 +252,8 @@ export class Screens {
   end(info: EndScreenInfo, onRetry: () => void, onNewCity: () => void): void {
     const { run, share } = info;
     const actions: Record<string, () => void> = { retry: onRetry, new: onNewCity };
-    if (share) {
-      let image: Blob | null = null;
-      void share.image.then((blob) => (image = blob));
-      actions['share-result'] = () => void this.shareResult(info.seed, share.text, image);
-    }
+    let image: Blob | null = null;
+    if (share) actions['share-result'] = () => void this.shareResult(info.seed, share.text, image);
     this.show(
       `
       ${run ? `<div class="screen-run"><div data-slot="map"></div>${run.legend}</div><div class="screen-summary">` : ''}
@@ -277,5 +280,17 @@ export class Screens {
       run ? 'with-run' : '',
     );
     if (run) this.el.querySelector('[data-slot="map"]')?.replaceWith(run.map);
+    const shareButton = this.el.querySelector<HTMLButtonElement>('[data-action="share-result"]');
+    if (share && shareButton) {
+      // The image is 20–30 ms of work: after the screen is up, not in the frame that shows it. It must
+      // be ready before the click, for the share sheet to open within it, so the button waits for it.
+      shareButton.disabled = true;
+      this.shareTimer = window.setTimeout(() => {
+        void share.image().then((blob) => {
+          image = blob;
+          shareButton.disabled = false;
+        });
+      }, SHARE_IMAGE_DELAY_MS);
+    }
   }
 }

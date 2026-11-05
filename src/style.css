@@ -295,6 +295,11 @@ kbd {
   background: #3a414d;
 }
 
+.screen button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .screen button.icon {
   display: inline-grid;
   place-items: center;
@@ -1072,8 +1077,11 @@ kbd {
   touch-action: none;
 }
 
+/* Laid out while hidden: their first layout (fallback fonts for the arrows) costs ~170 ms on a slow
+   phone, so it falls behind the splash and not on the first frames after Start. */
 .touch[hidden] {
-  display: none;
+  display: block;
+  visibility: hidden;
 }
 
 .touch button {

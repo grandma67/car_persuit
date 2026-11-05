@@ -104,13 +104,10 @@ a shot pair through `--vs` if what's drawn changed.
 - Static shadows in a rarely updated map: only if the shadow pass becomes a top item again (usually
   small gains on phones).
 - Audit district and landmark meshes for `releaseAfterUpload`.
-- One-off stalls at the mission's edges, none while driving (11-06, Mac; desktop / `--throttle 4` at phone
-  size; a real phone may differ). Time Enter with `--query`: a `--make` city has its audio context already.
-  Enter: `new AudioContext()` ~70 ms at any CPU speed (`CarAudio.init`, also on an earlier menu gesture).
-  Touch controls' first paint: 45 / ~170 ms of the browser's rendering, no game code; not the blur; ~3/4 gone
-  with their text at size 0 (fallback fonts for the arrows? one run). Unhiding them on the menu moved all of
-  it there. End screen, 36 / 65 ms: `RunMap.image`, the share card, 21 / 32 ms of it, built even if unused.
-  First cop: one 28–41 ms frame on the throttled phone (`director.update` 20 ms, `create` 2 ms, rest not traced).
+- One-off stalls at the mission's edges (11-06, Mac; desktop / `--throttle 4` at phone size; a real phone may
+  differ). Fixed on `perf/mission-edges`: the touch controls' first layout (~200 ms gap on the throttled phone,
+  now behind the splash) and the share card in the end screen's frame (36 / 65 → under 28 / 42 ms; now 1 s
+  later, up to 44 ms on the throttled phone). The audio context's ~70 ms moved to loading too (`AUDIO_LIMITS.md`). First cop: one 28–41 ms frame on the throttled phone (`director.update` 20 ms, not traced).
 - Not tried, from how other games do it: KTX2/Basis textures (largest today: 1024×2048 facade atlas
   11 MB, a 1024² canvas 5.6 MB, PMREM 3 MB; ~60 MB in all), impostors or LOD for far props
   (`BatchedMesh` culls per instance), Rapier in a worker.

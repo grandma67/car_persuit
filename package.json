@@ -13,6 +13,7 @@
     "check:restart": "npm run check:restart:core && npm run check:restart:nature",
     "check:restart:core": "node scripts/browser-check.mjs --query \"debug&gputrace&restarts=10\" --make \"oldtown chinatown harbor farm slums festival harvest square banquet temple maze junkyard camp silo tankFarm tug night rain seed=9\" --start 1500 --no-final --eval-file scripts/evals/restart.js",
     "check:restart:nature": "node scripts/browser-check.mjs --query \"debug&gputrace&restarts=10\" --make \"megapark swamp forest sports=2 track fountain wisps airboat boardwalks=2 lumberyard lookout campsite night temperate seed=10\" --start 1500 --no-final --eval-file scripts/evals/restart.js",
+    "check:audio": "node scripts/audio-check.mjs",
     "check:reload": "node scripts/browser-check.mjs --query \"seed=9&debug&oldtown=1&chinatown=1&harbor=1&farm=1&slums=1&time=night&weather=rain\" --out-dir node_modules/.cache/check-reload --no-final --eval-file scripts/evals/city-reload.js",
     "t": "node scripts/test.mjs",
     "stats": "node scripts/run-ts.mjs scripts/district-stats.ts",

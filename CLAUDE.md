@@ -17,6 +17,7 @@ destinations, cops, civilian traffic, themed districts.
 | `knowledge/LEAKS.md` | touching `dispose()` or anything Retry rebuilds: `check:restart`, `gpuTrace` | tracked |
 | `knowledge/OPTIMIZATIONS.md` | perf work: where the frame goes, what was done and learned, how to measure, what's open | tracked |
 | `knowledge/POLYGONS.md` | adding or changing a model: triangles per prop/building/car, budgets | tracked |
+| `knowledge/AUDIO_LIMITS.md` | audio start-up, gestures, autoplay warnings: what browsers allow and cost, `check:audio` | tracked |
 | `knowledge/RAPIER.md` | a Rapier upgrade (we stay on 0.18.2) | tracked |
 | `knowledge/plans/PLAN_DISTRICTS.md`, `PLAN_NATURE.md`, `PLAN_CITY_PARAMS.md` | revisiting a decision: why, what was dropped, where the build bent | tracked |
 | `knowledge/TASKS.md` | starting work: current branch, milestones, open items | **local, never commit** |
@@ -50,6 +51,7 @@ Each script's header lists its options; the doc named says when to use it.
   ~10 s plus the eval with Vite on 5199; one run at a time per port; settle seed and words first, run in
   the background while editing. `npm run check:browser …` (`--vs <ref>` before/after, `--vs-make
   "nodistricts <words>" --make "<kind> <words>"` district on/off, `--table` perf);
+  `npm run check:audio` (~1 min, real input, after any change to audio start-up: `AUDIO_LIMITS.md`);
   `npm run check:restart` (~3 min, `:core` / `:nature`) after anything that adds to the scene, page or
   listeners (`LEAKS.md`); `npm run check:reload` after a change to `Game`'s setup,
   `dbg.loadCity`/`dumpCity` or `city.params`. Never measure while `npm run cops` or tests run.

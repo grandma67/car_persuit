@@ -135,6 +135,7 @@ async function start(): Promise<void> {
   // GPU leak hunting: window.gpuTrace names what the renderer still holds (see knowledge/LEAKS.md).
   if (new URLSearchParams(window.location.search).has('gputrace')) (await import('./core/gpuTrace')).installGpuTrace();
   await stage('Starting physics engine', 25);
+  shell.audio.prepare();
   await RAPIER.init();
   game = await build(seed);
   dismissSplash(game);
