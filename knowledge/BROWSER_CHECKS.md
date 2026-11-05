@@ -30,7 +30,10 @@ npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-di
   cope with `dbg` helpers it lacks (`dbg.x?.()`).
 - **District on vs off: `--vs-make "<words>"`** runs the same check on a city made from those words
   first (`nodistricts …`: the same city without districts), then on `--make`'s, on this tree and port;
-  printed like `--vs` (with `--table`, a Δ% table).
+  printed like `--vs` (with `--table`, a Δ% table). Both sides get `focus=x,z,w,d` in the query: the
+  `--make` city's first district (`--focus-kind <kind>` for another; `npm run city -- focus <words>`
+  prints them). `dbg.focus()` reads it, and `district-tour`, `perf-profile` and `gpu-ab` (`at=focus`)
+  start there, so the city without the district is measured and shot in the same place, not at its spawn.
 - **Compare two shots:** `node scripts/png-diff.mjs a.png b.png [--threshold 24] [--out diff.png]`:
   pixels that differ, their share and bounding box, the differences in red over a dimmed copy (exit 1
   when any differ). Traffic, rain and the HUD always differ a little: judge by where the box falls.
@@ -42,11 +45,11 @@ Each file's header lists its query options and what it returns.
 | Eval | Use it for |
 |---|---|
 | `district-tour.js` + `?<kind>=1` | a milestone's look: stats + FPS first, then a road and an aerial shot of each structure kind and an overview. `&orbit=4` for gates and anything sized to its road; `&tourKinds=park,statue` tours city things with no district |
-| `district-drive.js` + `?<kind>=1` | a district's driving: 5★ chase in under the first overhead gate (stuck cops listed), every gate at 30 m/s, each off-road drivable rect end to end (`hit` = stopped inside, `exit` = past it, `stuck` = never moved). Use it instead of hand-written drive evals |
+| `district-drive.js` + `?<kind>=1` | a district's driving: 5★ chase in under the first overhead gate (stuck cops listed), every gate at 30 m/s (one with no road behind it, on the island's edge, listed as skipped), each off-road drivable rect end to end (`hit` = stopped inside, `exit` = past it, `stuck` = never moved), up to 3 of `extra.tracks` steered end to end (`reached`, `strayed`). Use it instead of hand-written drive evals |
 | `studio.js` + `?studio=…` | every new prop, vehicle, landmark or look, alone on a grey floor, before placing it (prop keys, `wreck-` prefixes, `~tint`, `lot:`, `mark:`, `car:`, `zone:`). Compiles its own programs: take `dbg.stats()` in another run |
 | `perf-profile.js` | **after anything in the frame loop**: ms per system per frame, GPU ms, heap churn, calls, triangles, memory (`geometryHeapMB`: vertex copies still in the JS heap) over idle, cruise and a 5★ chase. `budget` must be all true. Reference: seed 9 `oldtown=1&chinatown=1&harbor=1`, with `--vs` ([OPTIMIZATIONS.md](OPTIMIZATIONS.md)) |
 | `tri-breakdown.js` | **before choosing what to cull, merge or tile**: one cruising frame's calls and triangles per pass, and the meshes in view, biggest first |
-| `gpu-ab.js` + `&ab=…` | **any GPU question** (a light, the shadow pass, a builder's meshes, pixel ratio): switched on and off in one page, alternating; GPU, frame and render ms per state and how many paired rounds "off" won. `ab=pointLights\|spotLights\|shadowPass\|precipitation\|owner:<name>` or `abExpr=<js>` |
+| `gpu-ab.js` + `&ab=…` | **any GPU question** (a light, the shadow pass, a builder's meshes, a prop model, pixel ratio): switched on and off in one page, alternating; GPU, frame and render ms per state and how many paired rounds "off" won. `ab=pointLights\|spotLights\|shadowPass\|precipitation\|owner:<name>\|props:<prefix>` or `abExpr=<js>`; `at=x,z` or `at=focus` frames that spot first (`dist=`) |
 | `cold-load.js` + `--make` | load time: the run's `cityLoadMs` is cold, the eval returns warm reloads of the same city. Shader compile changes show only cold |
 | `restart.js` | `npm run check:restart`: Retry / New city leaks ([LEAKS.md](LEAKS.md)) |
 | `city-reload.js` | `npm run check:reload`: a dump loads back as the same city, Retry keeps it, New city drops it |
@@ -86,6 +89,9 @@ below (`dbg.drive` already samples a drive and reports what stopped it):
 | `cop(i)`, `wreckCop(i)` | the i-th nearest cop on duty as a point (+ dist, state) for `view`/`aim`; blow it up (fireball, flash) |
 | `mixedMaterials()` | materials drawn by more than one kind of mesh (plain, instanced, instanced with colours), shadow pass included: each switches program every draw. Must be `[]` |
 | `programLookups(ms)` | shader program lookups per frame by material; `[]` while driving, else `mixedMaterials()` usually says why |
+| `focus(kind?)` | where a check should look: the URL's `focus=x,z,w,d` (`--vs-make` sets it), else the district's bounds |
+| `follow(points,{speed,ms,ahead})` | drive along an off-road polyline (a track, a corridor), steering for a point `ahead` m on: `reached`, `strayed` (m off the line at worst), `trail`, `hit`. `drive` can't: it starts on the nearest road |
+| `propMeshes(prefix)` | the props' instanced meshes whose model key starts with it (`tree-`, `fern`): what `gpu-ab`'s `ab=props:` hides |
 | `dumpCity(download?)`, `loadCity(file)` | this run's params as text; restart in place with a params file ([CITY_PARAMS.md](CITY_PARAMS.md)) |
 
 ## What to check per milestone
@@ -128,3 +134,6 @@ feel to the user.
 - A drive "stopping" is usually traffic, a 5★ roadblock or a building past the end of the line: check
   `hit.near` and a shot before suspecting the district. Use `police(false)` unless testing cops.
 - Read screenshots one at a time and only those that answer a question; aerials answer more.
+- **`EVAL RETURNED NOTHING` in `logs`:** the eval gave back no value and threw nothing (a lost page
+  context, a dropped promise, a missing `return`). The run proves nothing: rerun it (once a full
+  `check:restart:nature` came back like this and passed on the rerun).

@@ -28,6 +28,7 @@ block keeps its zone).
 | Slums | `Slums`, `SlumsSet` (ruins, overpass, junkyard, camp), `SlumsStreet` (street dressing, last on the stream; `climateDressing`) | `Slums`, `slumsGraffiti`, `slumsSigns` |
 | Mega-park | `Megapark`, `MegaparkLake`, `MegaparkGrounds`, `MegaparkLawns` | `Megapark`, `megaparkSigns` |
 | Swamp | `Swamp` (roles, lots, `fits`: low ground), `SwampPools`, `SwampWitch`, `SwampSet` (boardwalks, landing), `SwampStreet` (verges, rails, lamps, signs), `SwampWoods` (trees, reeds, logs, pads) | `Swamp`, `SwampWitch` (house, boardwalk, jetty, airboat, log) |
+| Forest | `Forest` (roles, lots, dress, climate swaps), `ForestWoods` (tracks, clearings, trees, the floor), `ForestSet` (log arch, posts, lumber yard, lookout, campsite; `sideFrame`) | `Forest` (floor, tracks, glows), `ForestSet` (stacks, truck, loader, tower, fire pit, floor pieces; `ForestSet.test`: no z-fighting, tri budgets); the tents are a prop (`tent`) |
 
 **Placement:** roll a shape, try every rectangle of it (both orientations) in `rings` meeting
 `minShare`/`minCore`, shuffled; else other shapes largest first; else drop (a district only shrinks).
@@ -83,8 +84,9 @@ there if it holds for all districts; don't repeat it in a district's test.
   mouths and fence holes. The rule (`clutterOnCentreLine`) measures a prop by its **radius**
   (`hypot(hx, hz)`) whichever way it faces: a 2.9 m rail section along the kerb counts 1.45 m of reach,
   so it stands ≥ 6.5 m off the centre line (the Swamp's rails at `rw/2 + 0.65`).
-- **Solid vs breakable:** structures (walls, columns, legs, stacks, lions, bollards) solid, unbreakable,
-  off the roadway; smaller things are breakable props that add heat. Long or wide breakables get a small
+- **Solid vs breakable:** structures only for built things (walls, columns, legs, stacks, lions,
+  bollards), solid, unbreakable, off the roadway; anything a car could shove (clutter, tents, fallen
+  logs) is a prop, tuned by `breakSpeed`/`slowdown`/`mass` (CLAUDE.md, "Props move"). Long or wide breakables get a small
   collider (a 7 m boom arm thrown ahead jammed a straddle carrier's gap like a wall).
 - **Glow:** cap emissive instances (`<DISTRICT>.maxGlow`); flicker/blink via shader uniforms, never per-light JS.
 - **Corridors and gaps** (yards, junkyard, orchard aisles, carrier legs): ≥ widest body + 1 m and
@@ -94,7 +96,9 @@ there if it holds for all districts; don't repeat it in a district's test.
   ground layers ≥ 2 cm apart or `polygonOffset` on the lower (asphalt 1/1, street cobbles 0.5/0.5,
   markings none).
   Tests catch it: `PropModels.test` (every prop model) and `BuildingZFight.test` (40 rolled cities,
-  every building and its neighbours; `render/coplanar.ts`, `world/zfight.ts`). To fix one, list them
+  every building and its neighbours; `render/coplanar.ts`, `world/zfight.ts`). Neither sees a
+  district's own merged set pieces: test those per piece, built at the origin (at world coordinates
+  float32 normals fake overlaps), as `render/districts/ForestSet.test.ts` does. To fix one, list them
   all with where to look: `npm run zfight` (`props`, `only=chinatown`, or city words for a district's
   own cities). Neighbours in a terrace stand 0.3–0.5 m apart and often share a height, so anything one
   builds past its walls lands in the other's planes. Building geometry in the roof mesh is
@@ -142,6 +146,13 @@ there if it holds for all districts; don't repeat it in a district's test.
 
 ## Adding a district
 
+**Before designing a milestone, read its budgets** (they cost rework when found by a failing test):
+the minimap colour must stand out from the park green (`Minimap.test`, contrast > 2.2: a dark
+green or olive fails); a prop placed in hundreds ≤ 64 tris, a district's tree ≤ ~250
+(`polygons.md` "Budgets for new things"); `maxGlow` sized from `npm run stats`; corridors ≥
+`widestBody({ offRoad: true })` + 1 m; ≤ 3 new facade styles, no new programs. Run `stats`,
+`zfight` and `polygons` before the first browser tour, not after.
+
 One branch per district; each step is a `TASKS.md` milestone (placement + lots, signature structures,
 buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 1–2 make it playable).
 
@@ -165,7 +176,7 @@ the `DistrictKind` union (`District.ts`); `world/districts/index.ts`; `render/di
 and `district-drive.js`; `NUMBERS` in `paramsTesting.ts` for an `'int'` feature; `CityTheme` climate
 looks (optional); new props in `StreetProps.ts` + `PropSystem.ts`. Other districts' tests use
 `alone(kind…)` / `everyDistrict()` (`paramsTesting.ts`), so they need no edit. `check:restart` runs
-two cities (`:core`, five districts; `:nature`, Mega-park and Swamp): add a new kind and its
+two cities (`:core`, five districts; `:nature`, Mega-park, Swamp and Forest): add a new kind and its
 features to `check:restart:nature`'s `--make` in `package.json` (`DISTRICTS.max` is 5 a city).
 
 ## Conventions
@@ -208,6 +219,14 @@ features to `check:restart:nature`'s `--make` in `package.json` (`DISTRICTS.max`
   `mangrove` beside the climates' kinds).
 - `rolledFeatures(q)`: each feature's roll before pins (a dump records every feature as a pin; the
   night-only warning uses it so a feature that rolled on by itself reloads by day without a warning).
+- **`dressing.thicket`** (`rects`, `paths`): ground NavGrid blocks except along its paths (a polyline
+  and width; one point is a round clearing). The Forest's woods: cops route only along its tracks.
+  `pathDistance` (`ai/NavGrid.ts`) is the distance to such a path.
+- A named board over a street: `ranchGateAt(q, city, gate, rng, names)` (Farm) with your own names
+  list (≤ 8), drawn by `ranchGate(s, snowy, solid, signs, wheels)` and `farmSignMaterial(glow, names)`
+  (one atlas per names list, built on first use): the Forest's log arch.
+- `sideFrame(inner, side)` / `gateSide` (`ForestSet.ts`): a block's street side as a (u along, v in)
+  frame with `at`, `rect` and the yaw laying a footprint along it.
 - `fireflies(spots, n, seed, scene, ground, look?)` (`render/districts/fireflies.ts`): the Farm's, the
   Mega-park's and the Swamp's wisps (`look`: colour, size); one program for all.
 
@@ -232,9 +251,17 @@ features to `check:restart:nature`'s `--make` in `package.json` (`DISTRICTS.max`
 
 ## Pitfalls
 
+- **Edge blocks may have fewer than two street sides** (a corner on the island's edge, a removed
+  plaza): `streetSidesOf(k, city)`. Anything that runs street to street (a track, a boardwalk)
+  picks its block among those with two or more.
+- **Dense props don't stop cops.** NavGrid blocks ~0.5 m round a footprint and penalises ~1.6 m:
+  trees 4–7 m apart are a slalom a route takes. Ground cops must not cross goes in `dressing.thicket`.
 - **Seed guard per milestone:** `npm run hash -- --vs HEAD --expect <kind>` fails if anything moved
   outside cities that hold the district, and says how many of those moved (all of them when it first
-  lands, a few for a tweak). Several kinds: `--expect farm,slums`.
+  lands, a few for a tweak). Several kinds: `--expect farm,slums`. An every-district city that moved
+  without holding it is rebuilt with the kind forced off: if it then hashes as before, only the
+  placement order moved (the kind rolled on, joined the shuffle, found no room) and it is listed
+  as "placement order only", accepted; anything else fails.
 - **Measure placement rate** (`npm run stats -- <kind>`; it also prints shallow water's share per block) after any rule, alone and with all districts
   forced; check rejection reasons if low. A district's position depends on those placed before it.
 - `perimeterWall` opens at *every* street crossing the wall, not just gates (`'mainStreet'` districts

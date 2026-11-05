@@ -153,7 +153,7 @@ Woods on the island edge, the one district cops can't cut through.
 - **Blocks:** dense woods (trees spaced 4–7 m, climate kinds: pine in snow, round + pine temperate,
   palms and undergrowth by the beach, sparse dry woodland with dead snags and cactus in the desert).
   Dirt **tracks** wind through most blocks, street to street (≥ widest body + 1 m, soft), so the
-  player has a way through that cops have to follow. Undergrowth, fallen logs (solid), stumps,
+  player has a way through that cops have to follow. Undergrowth, fallen logs (a heavy prop: rolled aside by a hard hit), stumps,
   boulders (solid), ferns (breakable).
 - **Special blocks (features):** a **lumber yard** at the main-street gate (sawmill shed, log stacks in
   rows with corridors, a log loader, a parked log truck: merged vertex-coloured, no `buildCarMesh`;
@@ -337,3 +337,61 @@ Time went to reading for reuse points, rework caught by tests, and tool friction
 - `joinRunDressing` adds a climate's `props` (they were silently dropped; nothing used it yet).
 - `DISTRICTS_DEV.md`: facade styles (`boards` is barn red), the clutter rule measures by radius,
   programs to expect per climate and with shallow water or fireflies.
+
+## Branch 4 status (`districts/forest`): done, waiting for the user's approval to merge (2026-11-05)
+
+- **M1** (placement, roles, tracks, trees): `Forest.ts`, `ForestWoods.ts`. Edge, residential +
+  industrial, shapes 2×2 to 3×4 (4×4 never fits an edge); forced 97 %, natural 22 %, any Forest 23 %
+  in the odds. Roles: `lumberyard` beside the main gate, `lookout` deepest in, `campsite` (both on a
+  block with two street sides, the campsite off the main gate's blocks), the rest `woods`. Tracks: a
+  straight 4 m lead-in from the sidewalk line, then a cubic curve to the opposite side (or a side
+  street: a bend), 4.6 m wide, in ~85 % of woods blocks and always through a special block's
+  clearing. Trees by dart throwing, each claiming a disc (3.4–6 m apart), off tracks and clearings.
+  New shared piece: **`dressing.thicket`**: NavGrid blocks the woods except along the tracks and
+  clearings, so cops really follow the tracks (without it, routes cut straight through 4–7 m spacing).
+- **M2** (measure first): no LOD needed. Trees are the city's instanced tree props, drawn short of
+  the fog; a 4×3 forest +49 k tris in view, calls unchanged; GPU A/B hiding the tree meshes on phone
+  settings −1 % (2/4 rounds, noise). So density went up instead (~75–80 trees a block).
+- **M3** (set pieces): `ForestSet.ts` (data and render). The log arch is the Farm's ranch gate with
+  its own names (`ranchGateAt(…, names)`, `ranchGate(…, wheels)`, `farmSignMaterial(glow, names)`);
+  timber posts at the other gates. Lumber yard: apron (truck and loader parked at its street edge),
+  rows of log stacks with 5 m corridors and a 6 m aisle (drivable rects), four yard lamps, the sawmill
+  lot at the back. Lookout on four legs beside the track in its clearing (windows glow at night).
+  Campsite: fire pit (glows day and night) and tents round it on the roomier side, picnic tables.
+  Ranger station lot by the main gate.
+- **M4** (floor, traffic, police): ferns (new prop `fern`, 60 tris, breakable, soft in NavGrid),
+  fallen logs, boulders, stumps (solid structures; logs later a `log` prop). `ForestTraffic.test.ts`.
+- **M5**: climate (`RunDressing.trees`): snow all pine, beach palms, desert snags and cacti; no ferns
+  in the snow or the desert. Floor, tracks and yard coloured per climate. `maxGlow` 16 (4 yard lamps,
+  the fire, 4 windows; worst 4 lit props).
+- **Numbers:** gen +11 ms; programs unchanged (temperate 32, snow 32, desert 31 both sides); perf on vs
+  off (seed 23768, 3×3): frame ±2 %, GPU 0 to +4 %, 60 fps, +30–40 k tris, +6 calls, +10 MB textures
+  (the board atlas, the lots' facades). No z-fighting. `check:restart` ok.
+
+### Where branch 4 bent from the plan
+
+- **Shapes up to 3×4:** a 4×4 never fits an edge with the zone share.
+- **Log trucks in traffic dropped:** the district keeps heavies out, and a new body is a new car mesh.
+- **Line of sight through trees not done:** `lineOfSight` doesn't read props (a `STAGE2_IDEAS.md` note).
+- **No pond:** a Forest pond (a `pond` count) wasn't built; the clearings carry the open spaces.
+- **Undergrowth is ferns only** (no bushes): ferns and floor logs carry it; the trees are dense enough.
+- **The arch reuses the Farm's ranch gate** (no new structure), without the wagon wheels and mailbox.
+
+### After M5 (tooling from the branch-4 retrospective)
+
+Time went to browser runs one after another (~15, some redone), reading for reuse points, rework from
+two documented budgets applied late (the minimap colour, the 64-tri prop budget), and tool gaps. Done:
+- `--vs-make` passes the "on" city's district bounds to both sides (`focus=`, `dbg.focus()`,
+  `npm run city -- focus`); `district-tour`, `perf-profile` and `gpu-ab` start there, so the side
+  without the district is measured in the same place (it once had to be rerun with hand-passed x/z).
+- `gpu-ab.js`: `ab=props:<prefix>` (hide one prop model, `dbg.propMeshes`) and `at=x,z | at=focus`.
+- `hash --expect` proves every-district cities moved by the placement order alone (rebuilt with the
+  kind off, they hash as before) and lists them apart, instead of 24 "moved outside" to sort by hand.
+- `district-drive.js`: an edge gate with no road behind it is skipped, not a false hit; tracks
+  (`extra.tracks`) are steered end to end with the new `dbg.follow(points)`.
+- `browser-check.mjs` logs `EVAL RETURNED NOTHING` instead of printing an empty result that reads
+  like a pass.
+- `DISTRICTS_DEV.md`: read the budgets before designing (colour contrast, prop tris, glow,
+  corridors); edge blocks with fewer than two street sides; dense props don't stop cops (`thicket`).
+- **Planning:** this branch ran in one session against the 3–4-session note above; hand off at
+  milestone boundaries, `TASKS.md` and this status section carrying the state.

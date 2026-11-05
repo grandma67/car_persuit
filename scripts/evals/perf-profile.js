@@ -3,7 +3,8 @@
 // GPU/heap memory estimate, over idle, a police-off cruise and a 5★ chase. See knowledge/OPTIMIZATIONS.md.
 //   npm run check:browser -- --query "seed=9&debug&oldtown=1&chinatown=1&harbor=1" --start 2000 --no-final \
 //     --eval-file scripts/evals/perf-profile.js        (phone: --size 390x844)
-// Wraps private members by name: a renamed member just drops out of `per`.
+// Wraps private members by name: a renamed member just drops out of `per`. With `focus=` in the query
+// (--vs-make adds it) or `&at=focus`, it starts at the district (dbg.focus) instead of the spawn.
 (async () => {
   const g = window.game;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -112,6 +113,13 @@
   };
 
   const out = {};
+  // `focus=…` in the URL (--vs-make passes it) or `at=focus`: idle, cruise and chase start at the
+  // district (the same spot with it on and off), not at the run's spawn.
+  const params = new URLSearchParams(location.search);
+  if (params.has('focus') || params.get('at') === 'focus') {
+    const f = dbg.focus?.();
+    out.at = f ? await dbg.view(f, { dist: 25 }) : null;
+  }
   out.stats = dbg.stats();
   out.mixedMaterials = dbg.mixedMaterials?.(); // expected empty (OPTIMIZATION_TASKS 1.1)
   out.idle = await sample(3000);

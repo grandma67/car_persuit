@@ -118,6 +118,8 @@ Each district declares `features` (`'bool'`, `'int'` or a list of names; night-o
 | Farm | `steelSilos` (the silos' look; there are always 1–3), `waterTower`, `maze`, `harvest` (night) | `FarmGate.yardPieces`; `Farm.dress` | 0.5, `*Chance` |
 | Slums | `camp`, `junkyard` (roles; junkyard `false` when no block is spare) | `Slums.roles` | `campChance`, `junkyardChance` (drawn only below 9 blocks) |
 | Mega-park | `sports` (count of sports blocks, 1–2), `track` (one of them a running track), `fountain` (a jet in the lake) | `Megapark.roles`; `Megapark.dress` | `int(MEGAPARK.sports)`, `trackChance`, `fountainChance` |
+| Swamp | `look` (swamp/marsh), `wisps` (night), `boardwalks` (count), `airboat` | `Swamp.roles`; `Swamp.dress` | `swampChance`, `wispChance`, `int(SWAMP.boardwalks)`, `airboatChance` |
+| Forest | `lumberyard`, `lookout`, `campsite` (roles; lookout and campsite need a block a track can cross) | `Forest.roles` | `*Chance` |
 
 Not features: Old City ruins (per-lot `ruinShare`, i.e. props); `SLUMS.trainChance` (read nowhere, no
 train exists); per-street rolls (`dumpsterChance`, `driftChance`, `gateClutter`, lot shares).

@@ -493,6 +493,41 @@ export const SWAMP = {
   logChance: 0.5, // a half-sunk log in a block's first pool
 };
 
+/** The Forest: dense woods on the island's edge, dirt tracks through them (world/districts/Forest.ts). */
+export const FOREST = {
+  chance: 0.3,
+  density: 0.5,
+  copSpawnSkip: 0.5,
+  pickupWeight: 3,
+  floorGrip: 0.85, // tyre grip multiplier on the forest floor (the tracks included)
+  floorDrag: 1, // extra rolling drag there, m/s²
+  maxGlow: 16, // at night: the lumber yard's 4 lamps, the campfire, the lookout's 4 windows (no street lamps inside)
+  /** Trees: each claims a disc of this radius (two stand at least the sum apart: 3.4–6 m). */
+  spacing: [1.7, 3] as [number, number],
+  pineShare: 0.55, // of the trees in temperate woods (the rest round)
+  edge: 1, // trees keep this far inside the sidewalk line
+  trackChance: 0.85, // a woods block with a track through it
+  track: 4.6, // a track's width: ≥ widest off-road body + 1 m, with a little to spare
+  trackClear: 1.4, // trunks keep this far off a track's edge
+  trackLead: 4, // each end runs straight in from the sidewalk line this far
+  trackWobble: 9, // how far a track's middle swings off the straight line, metres (at most)
+  bendShare: 0.35, // tracks that leave by a side street (a bend) rather than straight across
+  clearing: [12.5, 14.5] as [number, number], // a special block's clearing, radius
+  lumberyardChance: 0.75, // the lumber yard by the main gate
+  lookoutChance: 0.6, // the fire lookout tower in a clearing
+  campsiteChance: 0.6,
+  lotInset: 1, // lots stand this far in from the sidewalk line
+  sawmill: { size: [24, 12] as [number, number], h: 7 }, // long side along the yard's back
+  ranger: { size: [10, 7] as [number, number], h: 4.5 }, // the ranger station by the main gate
+  /** The lumber yard, out from its street (the main gate's): an open apron (the truck and loader parked along its first `parked` m), rows of log stacks with corridors between, an aisle up the middle. */
+  yard: { apron: 9, parked: 3.2, row: 2.8, corridor: 5, aisle: 6, stack: 7, stackGap: 0.5, rows: 3, stackH: [1.8, 2.6] as [number, number], lamps: 4 },
+  lookout: { cabin: 14, legs: 2.2, leg: 0.3 }, // cabin floor height; legs ± this from the middle at the foot
+  camp: { tents: [3, 5] as [number, number], pit: 0.9, pitOut: 3.4, ring: 3.6, tables: 2 },
+  post: 0.3, // a timber gate post's footprint, half side
+  /** The forest floor per woods block: fern clumps, fallen logs, boulders, stumps. */
+  floor: { ferns: [10, 18] as [number, number], logs: [1, 2] as [number, number], boulders: [0, 2] as [number, number], stumps: [2, 4] as [number, number] },
+};
+
 /** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */
 export const WATER = {
   grip: 0.7, // tyre grip multiplier in the water

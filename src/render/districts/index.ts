@@ -10,6 +10,7 @@ import type { PropKind } from '../../world/StreetProps';
 import type { GroundHeight } from '../../world/Terrain';
 import { renderChinatown } from './Chinatown';
 import { renderFarm } from './Farm';
+import { renderForest } from './Forest';
 import { renderHarbor } from './Harbor';
 import { renderMegapark } from './Megapark';
 import { renderOldCity } from './OldCity';
@@ -53,6 +54,7 @@ export const DISTRICT_RENDERERS: Partial<Record<DistrictKind, DistrictRenderer>>
   slums: renderSlums,
   megapark: renderMegapark,
   swamp: renderSwamp,
+  forest: renderForest,
 };
 
 /** Draw every placed district's structures, overhead pieces and ground patches. */

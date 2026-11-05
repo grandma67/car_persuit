@@ -1,4 +1,4 @@
-// The Farm's lettering: the ranch gate's name board, carved-and-painted, one cell per made-up farm
+// The Farm's lettering (and the Forest's, on its log arch): the ranch gate's name board, carved-and-painted, one cell per made-up farm
 // name. One canvas atlas drawn at load; plates carry white vertex colours and use the facade walls'
 // material settings (vertex colours and four maps), so they add no shader program.
 import * as THREE from 'three';
@@ -9,7 +9,7 @@ const CELL_H = 128;
 const H = 1056; // eight names, and a strip below them for the swatch
 const SERIF = 'Georgia, "Times New Roman", serif';
 
-let atlas: THREE.Texture | null = null;
+const atlases = new Map<readonly string[], THREE.Texture>();
 const SWATCH = { x: 0, y: 1032, s: 16 };
 
 /** A box (or anything) all on the warm swatch, white vertex colours: glows with the plates' material. */
@@ -22,15 +22,17 @@ export function onWarm(geo: THREE.BufferGeometry): THREE.BufferGeometry {
   return geo;
 }
 
-function farmAtlas(): THREE.Texture {
-  if (atlas) return atlas;
+/** The board atlas for one list of (at most eight) names: the Farm's, the Forest's. Drawn once, on first use. */
+function farmAtlas(names: readonly string[]): THREE.Texture {
+  const done = atlases.get(names);
+  if (done) return done;
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const g = canvas.getContext('2d')!;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  FARM_NAMES.forEach((name, i) => {
+  names.forEach((name, i) => {
     const y = i * CELL_H;
     // Weathered planks, a darker border, the name in cream letters.
     g.fillStyle = '#5a3e26';
@@ -49,15 +51,16 @@ function farmAtlas(): THREE.Texture {
   // A warm swatch for lit glass (the barn lantern), below the names.
   g.fillStyle = '#ffd898';
   g.fillRect(SWATCH.x, SWATCH.y, SWATCH.s, SWATCH.s);
-  atlas = new THREE.CanvasTexture(canvas);
+  const atlas = new THREE.CanvasTexture(canvas);
   atlas.colorSpace = THREE.SRGBColorSpace;
   atlas.anisotropy = 4;
+  atlases.set(names, atlas);
   return atlas;
 }
 
 /** The plates' material: the facade walls' settings (vertex colours, map, emissive, roughness and metalness maps). */
-export function farmSignMaterial(glow: number): THREE.MeshStandardMaterial {
-  const map = farmAtlas();
+export function farmSignMaterial(glow: number, names: readonly string[] = FARM_NAMES): THREE.MeshStandardMaterial {
+  const map = farmAtlas(names);
   const surface = new THREE.DataTexture(new Uint8Array([0, 230, 0, 255]), 1, 1);
   surface.needsUpdate = true;
   return new THREE.MeshStandardMaterial({

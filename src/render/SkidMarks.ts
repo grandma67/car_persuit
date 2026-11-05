@@ -4,6 +4,12 @@ const MAX_SEGMENTS = 3000;
 const MARK_WIDTH = 0.28;
 const MIN_SEGMENT_LENGTH = 0.3;
 const UP = new THREE.Vector3(0, 1, 0);
+/**
+ * A mark's height over the physics ground (flat at y=0). Sidewalks and paving are drawn up to 0.06,
+ * district overlays higher (the Forest's dirt tracks at 0.11): the marks test depth, so anything
+ * drawn over them hides them. Keep this over every ground overlay (`SkidMarks.test`).
+ */
+export const MARK_LIFT = 0.13;
 
 // Tyre marks as a ring buffer of quads in one mesh; the oldest marks are overwritten first.
 export class SkidMarks {
@@ -74,9 +80,7 @@ export class SkidMarks {
 
     this.dir.subVectors(point, last).normalize();
     this.side.crossVectors(this.dir, UP).multiplyScalar(MARK_WIDTH / 2);
-    // The physics ground is flat at y=0, but sidewalks, plazas and landmark paving are drawn up
-    // to 0.06 above it; stay above all of them or the marks vanish under those surfaces.
-    const lift = 0.07;
+    const lift = MARK_LIFT;
     const s = this.next;
     this.next = (this.next + 1) % MAX_SEGMENTS;
     const p = this.positions;

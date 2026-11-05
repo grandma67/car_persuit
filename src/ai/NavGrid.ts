@@ -21,7 +21,7 @@ const TIGHT = 1.6;
 const NEAR = 3;
 const PENALTY = { core: 190, tight: 70, near: 10 };
 /** Props a car can plough through at a cost (they break): the route may cross them if it must. */
-const SOFT: Set<PropKind> = new Set(['fence', 'cone', 'umbrella', 'sign', 'bench', 'boomGate', 'crossbuck', 'pumpkin', 'scarecrow', 'mailbox', 'milkChurn', 'feedSacks', 'wheelbarrow', 'trashBags', 'shoppingCart', 'mattress', 'tyres', 'rubble', 'reeds', 'goal', 'cornerFlag', 'ball']);
+const SOFT: Set<PropKind> = new Set(['fence', 'cone', 'umbrella', 'sign', 'bench', 'boomGate', 'crossbuck', 'pumpkin', 'scarecrow', 'mailbox', 'milkChurn', 'feedSacks', 'wheelbarrow', 'trashBags', 'shoppingCart', 'mattress', 'tyres', 'rubble', 'reeds', 'fern', 'goal', 'cornerFlag', 'ball']);
 const DIAG = Math.SQRT2;
 const NEIGHBOURS: [number, number, number][] = [
   [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
@@ -118,6 +118,15 @@ export class NavGrid {
         } else if (d <= TIGHT) penalty[k] = Math.max(penalty[k], PENALTY.tight);
         else if (d <= NEAR) penalty[k] = Math.max(penalty[k], PENALTY.near);
       });
+    }
+    // Thickets (the Forest's woods): no way through but along their paths.
+    for (const t of city.districts.flatMap((q) => (q.dressing.thicket ? [q.dressing.thicket] : []))) {
+      for (const r of t.rects) {
+        this.eachCellIn(r.x - r.w / 2, r.z - r.d / 2, r.x + r.w / 2, r.z + r.d / 2, (k, x, z) => {
+          if (Math.abs(x - r.x) > r.w / 2 || Math.abs(z - r.z) > r.d / 2) return;
+          if (!t.paths.some((p) => pathDistance(p.points, x, z) <= p.width / 2)) blocked[k] = 1;
+        });
+      }
     }
     for (let k = 0; k < cells; k++) {
       this.cost[k] = blocked[k] ? 0 : Math.min(255, base[k] + penalty[k] + (wet[k] ? WATER.navPenalty : 0));
@@ -310,6 +319,20 @@ export class NavGrid {
 }
 
 /** Distance from a point to an oriented rectangle's edge (0 inside). */
+/** Distance from (x, z) to a polyline (one point: to that point). */
+export function pathDistance(points: P[], x: number, z: number): number {
+  if (points.length === 1) return Math.hypot(x - points[0].x, z - points[0].z);
+  let d = Infinity;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i];
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const l2 = dx * dx + dz * dz;
+    const t = l2 ? Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / l2)) : 0;
+    d = Math.min(d, Math.hypot(x - a.x - t * dx, z - a.z - t * dz));
+  }
+  return d;
+}
+
 export function footprintDistance(f: Footprint, x: number, z: number): number {
   const c = Math.cos(f.yaw);
   const s = Math.sin(f.yaw);

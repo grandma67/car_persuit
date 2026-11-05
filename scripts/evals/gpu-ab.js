@@ -4,9 +4,11 @@
 //   npm run check:browser -- --query "seed=9&debug&oldtown=1&ab=pointLights" --start 2000 --no-final \
 //     --eval-file scripts/evals/gpu-ab.js                  (phone: --size 390x844 and &touch)
 // Query options:
-//   ab=pointLights | spotLights | shadowPass | precipitation | owner:<name>   what "off" turns off
+//   ab=pointLights | spotLights | shadowPass | precipitation | owner:<name> | props:<prefix>   what "off" turns off
 //      (owner: anything a builder tagged, see dbg.sceneBreakdown: city, props, districts, landmarks,
-//      roadworks, sea, sky…; also player, cops, traffic)
+//      roadworks, sea, sky…; also player, cops, traffic. props: the prop models whose key starts
+//      with it, e.g. props:tree- for every tree, props:fern)
+//   at=x,z | at=focus   frame that spot first (dbg.view; `focus`: the district, or --vs-make's focus), dist=25
 //   abExpr=<js>   instead: a function body run with `on` (true/false) and `game`, e.g.
 //      abExpr=game.renderer.setPixelRatio(on%3F1%3A0.75)   (URL-encode ? and :)
 //   rounds=4  ms=2500  drive=1 (hold W: cruising; default a still camera, the steadiest GPU number)
@@ -42,6 +44,10 @@
     set = (on) => ((sm.autoUpdate = on), (sm.needsUpdate = false));
   } else if (ab === 'precipitation') {
     set = visibleAll(g.scene.children.filter((o) => ownerOf(o) === 'precipitation'));
+  } else if (ab?.startsWith('props:')) {
+    const list = dbg.propMeshes(ab.slice(6)).map((m) => m.mesh);
+    if (!list.length) return { error: `no prop model starts with "${ab.slice(6)}"` };
+    set = visibleAll(list);
   } else if (ab?.startsWith('owner:')) {
     const name = ab.slice(6);
     const list = g.scene.children.filter((o) => ownerOf(o) === name);
@@ -87,6 +93,14 @@
   };
 
   dbg.police(false);
+  // Where to look: `at=x,z`, or `at=focus` (the district, or --vs-make's focus); default where the run starts.
+  const at = q.get('at');
+  if (at) {
+    const t = at === 'focus' ? dbg.focus() : (([x, z]) => ({ x, z }))(at.split(',').map(Number));
+    if (!t) return { error: 'at=focus: no district and no focus in the URL' };
+    if (!(await dbg.view(t, { dist: Number(q.get('dist') ?? 25) }))) return { error: `no road spot sees ${at}` };
+    await sleep(1000);
+  }
   const driving = q.get('drive') === '1' ? dbg.hold('KeyW', rounds * 2 * (ms + settle + 200) + 1000) : null;
   const runs = { on: [], off: [] };
   for (let i = 0; i < rounds; i++) {

@@ -173,3 +173,23 @@ describe("the Mega-park's set props", () => {
     expect(Math.max(...at('tennisNet').map((v) => v.y))).toBeGreaterThan(1.3);
   });
 });
+
+describe("the Forest's fallen log", () => {
+  const log = (scale: number): StreetProp => ({ kind: 'log', x: 0, z: 0, yaw: 0, scale });
+
+  it('rolls on a collider that wraps its model: a cylinder along local X', () => {
+    const s = propSpec(log(1));
+    const r = s.height / 2;
+    for (const v of vertices(log(1))) {
+      expect(Math.abs(v.x)).toBeLessThanOrEqual(s.hx + 0.01);
+      expect(Math.hypot(v.y - r, v.z)).toBeLessThanOrEqual(r + 0.1); // the moss and the branch stub
+    }
+  });
+
+  it('takes a real hit to move, and grows heavier with its length', () => {
+    expect(propSpec(log(1)).breakSpeed).toBeGreaterThan(propSpec({ kind: 'tent', x: 0, z: 0, yaw: 0 }).breakSpeed);
+    expect(propSpec(log(1)).breakSpeed).toBeLessThan(Infinity);
+    expect(propSpec(log(1.4)).mass).toBeGreaterThan(propSpec(log(0.8)).mass * 2);
+    expect(propSpec(log(1.4)).hx).toBeCloseTo(3.5);
+  });
+});

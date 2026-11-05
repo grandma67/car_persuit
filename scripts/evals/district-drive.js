@@ -7,12 +7,15 @@
 // `&gateSpeed=`), gates under an overhead first. (3) Each off-road drivable rect (corridors, lots,
 // fields; at most `&drives=6`) end to end along its long side from just inside. The car is repaired
 // before every drive. Per drive: top speed, and `hit` (what stood there) if it stopped inside what
-// it was testing, `exit` if it only stopped past the end, `stuck` if it never got going. Shots:
+// it was testing, `exit` if it only stopped past the end, `stuck` if it never got going. A gate with
+// no road behind it (on the island's edge) is listed as skipped. (4) Off-road tracks
+// (`extra.tracks`; at most `&tracks=3`, `&trackSpeed=9` m/s) steered end to end with dbg.follow:
+// `reached`, `strayed` (m off the centre line at worst), `hit`. Shots:
 // `chase`, and `hit-<n>` where each drive stopped. Stops on traffic or a 5★ roadblock are expected:
 // read `near` before blaming the district.
 (async () => {
   const params = new URLSearchParams(location.search);
-  const kinds = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums', 'megapark', 'swamp'];
+  const kinds = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums', 'megapark', 'swamp', 'forest'];
   const kind = kinds.find((k) => params.get(k) === '1');
   const q = dbg.district(kind);
   if (!q) return { error: `no ${kind ?? 'district'} placed on this seed` };
@@ -77,10 +80,17 @@
     const ix = Math.sin(g.yaw), iz = Math.cos(g.yaw);
     // The longest run-up that still starts on the gate's own street (not round a corner on the ring road).
     // and clear of roadworks.
+    // The snapped start must really lie that far back: past the island's edge (a gate on the ring
+    // road side of an edge district) the nearest road is the junction at the gate itself.
     const back = [70, 50, 35, 20].find((b) => {
       const p = dbg.road(g.x - ix * b, g.z - iz * b);
-      return Math.abs((p.x - g.x) * iz - (p.z - g.z) * ix) < 3 && !dbg.near(p.x, p.z, 8).some((n) => n.what.startsWith('roadworks:'));
-    }) ?? 20;
+      const behind = (g.x - p.x) * ix + (g.z - p.z) * iz;
+      return Math.abs((p.x - g.x) * iz - (p.z - g.z) * ix) < 3 && behind > b - 8 && !dbg.near(p.x, p.z, 8).some((n) => n.what.startsWith('roadworks:'));
+    });
+    if (back === undefined) {
+      out.gates.push({ what: `gate ${i}${over ? ` (under ${over})` : ''}: skipped, no road behind it (on the island's edge)` });
+      continue;
+    }
     const r = await dbg.drive({ from: { x: g.x - ix * back, z: g.z - iz * back }, yaw: g.yaw, speed, ms: 4500 });
     // A stop counts until 40 m in past the gate line.
     out.gates.push(await report(`gate ${i}${over ? ` (under ${over})` : ''}, ${back} m run-up`, r, (p) => (p.x - g.x) * ix + (p.z - g.z) * iz < 40));
@@ -94,6 +104,19 @@
     const res = await dbg.drive({ from, yaw: alongX ? Math.PI / 2 : 0, speed: 15, ms: Math.min(8000, (len / 18) * 1000 + 1500), snap: false });
     const inside = (p) => Math.abs(p.x - r.x) <= r.w / 2 - 1 && Math.abs(p.z - r.z) <= r.d / 2 - 1;
     out.drivable.push(await report(`${Math.round(r.w)}x${Math.round(r.d)} at ${Math.round(r.x)},${Math.round(r.z)}`, res, inside));
+  }
+
+  // (4) Off-road tracks (`dressing.extra.tracks`, the Forest's), steered end to end (dbg.follow).
+  const tracks = q.dressing.extra?.tracks ?? [];
+  if (tracks.length) {
+    out.tracks = [];
+    for (const t of tracks.slice(0, Number(params.get('tracks') ?? 3))) {
+      const r = await dbg.follow(t.points, { speed: Number(params.get('trackSpeed') ?? 9) });
+      const row = { from: `${Math.round(t.points[0].x)},${Math.round(t.points[0].z)}`, reached: r.reached, strayed: r.strayed };
+      if (r.hit) (row.hit = { at: r.hit.at, speedBefore: r.hit.speedBefore, near: near(r.hit) }), await shot(`track-${shots++}`);
+      row.health = dbg.repair();
+      out.tracks.push(row);
+    }
   }
   return out;
 })()

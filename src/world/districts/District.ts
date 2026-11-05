@@ -14,12 +14,13 @@ import type { Deck } from '../Deck';
 export type { LotStyle } from '../lots';
 
 /** Grows with the registry (world/districts/index.ts). */
-export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums' | 'megapark' | 'swamp';
+export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums' | 'megapark' | 'swamp' | 'forest';
 
 /** What a special (unfilled) block is for; the district's dressing fills it. */
 export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'camp' | 'junkyard'
   | 'lake' | 'sports' | 'track' | 'playground' | 'bandstand' | 'lawn'
-  | 'pools' | 'witch' | 'landing';
+  | 'pools' | 'witch' | 'landing'
+  | 'woods' | 'lumberyard' | 'lookout' | 'campsite';
 
 // --- Building looks (rendered by CityBuilder's addBuilding through the facade pipeline) ---
 
@@ -96,6 +97,11 @@ export interface DistrictDressing {
   drivable: Rect[]; // off-road areas a car may use (yard corridors, fields)
   soft?: Rect[]; // ground with less grip and more rolling drag (fields; wired in FM4)
   decks?: Deck[]; // raised drivable decks (the Swamp's boardwalks): colliders, firm ground, NavGrid ground
+  /**
+   * Ground cops never route across (the Forest's woods: trees too close for a chase) except along
+   * `paths` (a polyline and its width; one point is a round clearing `width` across). NavGrid only.
+   */
+  thicket?: { rects: Rect[]; paths: { points: { x: number; z: number }[]; width: number }[] };
   extra?: Record<string, unknown>; // district-specific data (festival, night market …)
 }
 
