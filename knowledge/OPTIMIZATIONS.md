@@ -105,9 +105,10 @@ a shot pair through `--vs` if what's drawn changed.
   small gains on phones).
 - Audit district and landmark meshes for `releaseAfterUpload`.
 - One-off stalls at the mission's edges, none while driving (11-06; desktop, and `--throttle 4` at phone size):
-  the end screen, 36 / 65 ms, 2 s after a wreck, `showEndScreen` 26 / 48 ms of it; Enter on a throttled
-  phone, ~120 ms in the handler then a ~200 ms gap with the game's frame only ~25 ms of it (cause not
-  found). Neither broken down yet.
+  the end screen, 36 / 65 ms, 2 s after a wreck, `showEndScreen` 26 / 46 ms of it. Enter, in two parts:
+  ~80 ms in the handler on both (only on a city from the URL, as players load it; a `--make` city is
+  already past it, ~1 ms), and on the throttled phone only a ~200 ms gap after it, the game's frame ~25 ms
+  of it. Neither broken down yet. Time Enter with `--query`, not `--make`.
 - Not tried, from how other games do it: KTX2/Basis textures (largest today: 1024×2048 facade atlas
   11 MB, a 1024² canvas 5.6 MB, PMREM 3 MB; ~60 MB in all), impostors or LOD for far props
   (`BatchedMesh` culls per instance), Rapier in a worker.
