@@ -105,7 +105,7 @@ a shot pair through `--vs` if what's drawn changed.
   small gains on phones).
 - Audit district and landmark meshes for `releaseAfterUpload`.
 - One-off stalls at the mission's edges (11-06, Mac; desktop / `--throttle 4` at phone size; a real phone may
-  differ). Fixed on `perf/mission-edges`: the touch controls' first layout (~200 ms gap on the throttled phone,
+  differ). Fixed (`perf/mission-edges`): the touch controls' first layout (~200 ms gap on the throttled phone,
   now behind the splash) and the share card in the end screen's frame (36 / 65 → under 28 / 42 ms; now 1 s
   later, up to 44 ms on the throttled phone). The audio context's ~70 ms moved to loading too (`AUDIO_LIMITS.md`). First cop: one 28–41 ms frame on the throttled phone (`director.update` 20 ms, not traced).
 - Not tried, from how other games do it: KTX2/Basis textures (largest today: 1024×2048 facade atlas
