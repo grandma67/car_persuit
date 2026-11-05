@@ -201,6 +201,15 @@ export const WORDS: Word[] = [
     check: (c) => (c.terrain.hill || c.terrain.canals.length ? 'not flat' : undefined),
   },
   {
+    name: 'nodistricts', help: 'every district forced off (the baseline for a district on vs off)',
+    apply: (d, _v, mode) => {
+      if (mode === 'url') return 'not a URL flag';
+      if (d.exact.size) return 'nodistricts names no district: drop the district words';
+      for (const def of DISTRICT_DEFS) d.force[def.kind] = false;
+    },
+    check: (c) => (c.districts.length ? `${c.districts.map((q) => q.kind).join(', ')} placed` : undefined),
+  },
+  {
     name: 'canalramps', value: 'N', help: 'N canal ramps',
     apply: (d, v, mode, w) => {
       const n = int(v, 0, 10, mode);

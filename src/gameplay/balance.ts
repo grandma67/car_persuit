@@ -446,6 +446,53 @@ export const MEGAPARK = {
   picnicTables: [2, 4] as [number, number],
 };
 
+/** The Swamp: low wet ground on the island's edge, causeway streets between pools (world/districts/Swamp.ts). */
+export const SWAMP = {
+  chance: 0.3,
+  swampChance: 0.6, // the wooded swamp; otherwise the open reed marsh
+  maxRise: 3, // metres the hill may vary under it, at most (low, flat ground)
+  density: 0.4,
+  copSpawnSkip: 0.4,
+  pickupWeight: 3,
+  mudGrip: 0.8, // tyre grip multiplier on the banks
+  mudDrag: 1.5, // extra rolling drag there, m/s²
+  maxGlow: 60, // at night: one lamp a junction, the witch house's windows and cauldron, the wisps
+  poolDepth: 0.35, // the water's surface over the ground
+  bank: 2, // dry bank kept inside the sidewalk line
+  poolGap: 2, // dry ground between two pools
+  /** Share of an ordinary block under water: swamp, marsh. */
+  cover: { swamp: [0.4, 0.6], marsh: [0.55, 0.7] } as Record<'swamp' | 'marsh', [number, number]>,
+  bigPool: [14, 26] as [number, number], // the first pool's long half-axis, metres (sized from the share, shrunk to fit)
+  smallPool: [5, 11] as [number, number], // the others'
+  witchPool: [21, 24] as [number, number], // the witch house's pool (shrunk to fit its block)
+  witchIsland: 8.5, // the dry island in its middle, radius
+  /** The witch house: width, depth (without the porch), the porch's depth, stilts' height, wall height; set back from the island's middle. */
+  house: { w: 7.5, d: 6.5, porch: 2, stilts: 1.2, h: 6.4, back: 1.5 },
+  deck: { width: 4, top: 0.6 }, // a boardwalk: ≥ widest body + 1 m; its surface over the ground (the water stands 0.35)
+  deckRamps: [3.5, 3] as [number, number], // street end, island end
+  pumpkins: [6, 10] as [number, number],
+  wispChance: 0.75, // will-o'-the-wisps over the water at night
+  wisps: 18,
+  boardwalks: [1, 2] as [number, number], // boardwalks across pool blocks, street to street (as many as fit)
+  boardwalkRamps: [3.5, 3.5] as [number, number],
+  railGaps: 0.15, // share of a boardwalk's rail sections missing
+  shacks: [1, 2] as [number, number], // stilt shacks per pool block
+  shack: { long: [6.5, 8.5] as [number, number], short: [5, 6] as [number, number], h: [4, 5] as [number, number] },
+  baitShop: { size: [10, 7] as [number, number], h: 5 },
+  lotInset: 1, // in from the sidewalk line
+  jetty: [2.4, 8] as [number, number], // width, length out from the bait shop's back
+  jettyHeight: 0.65,
+  airboatChance: 0.7,
+  guardRailStep: [3.2, 6] as [number, number], // kerb guard rail sections, this far apart
+  signs: 2, // "Mind the bog" signs inside the gates, at most
+  /** Per block: trees (cypress in the swamp, willows in the marsh), snags, reed clumps per pool, lily pads per pool. */
+  woods: {
+    swamp: { trees: [6, 10], snags: [2, 4], reeds: [1, 3], pads: 8 },
+    marsh: { trees: [1, 3], snags: [0, 2], reeds: [4, 7], pads: 12 }, // reed clumps of two: the model is 240 tris
+  } as Record<'swamp' | 'marsh', { trees: [number, number]; snags: [number, number]; reeds: [number, number]; pads: number }>,
+  logChance: 0.5, // a half-sunk log in a block's first pool
+};
+
 /** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */
 export const WATER = {
   grip: 0.7, // tyre grip multiplier in the water

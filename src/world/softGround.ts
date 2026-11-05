@@ -6,6 +6,7 @@ import type { SoftPatch } from '../vehicles/Vehicle';
 import type { CityData, Rect } from './CityGenerator';
 import type { DistrictDef } from './districts/District';
 import { inWater, waterReach } from './Water';
+import { inDeck } from './Deck';
 
 export type SoftGround = { at: (x: number, z: number) => SoftPatch | null };
 
@@ -23,9 +24,11 @@ export function softGroundOf(city: CityData, defs: DistrictDef[], frozen: boolea
     const patch = defs.find((d) => d.kind === q.kind)?.softGround;
     return patch && q.dressing.soft?.length ? [{ bounds: q.bounds, rects: q.dressing.soft, patch }] : [];
   });
+  const decks = city.districts.flatMap((q) => q.dressing.decks ?? []);
   if (!water.length && !soft.length) return null;
   return {
     at: (x, z) => {
+      for (const d of decks) if (inDeck(d, x, z)) return null; // firm boards over the water
       for (const { w, reach } of water) {
         if (Math.abs(x - w.x) <= reach && Math.abs(z - w.z) <= reach && inWater(w, x, z)) return wet;
       }

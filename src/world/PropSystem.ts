@@ -56,10 +56,11 @@ const SIGN_SHAPE: Record<SignVariant, SignShape> = {
   pedestrian: 'square',
   busStop: 'square',
   noFishing: 'round',
+  bogCrossing: 'diamond',
 };
 const SIGN_VARIANTS = Object.keys(SIGN_SHAPE) as SignVariant[];
 /** Sign faces built only in a city that has such a sign (newer ones: no cost elsewhere). */
-const LAZY_FACES = new Set<SignVariant>(['noFishing']);
+const LAZY_FACES = new Set<SignVariant>(['noFishing', 'bogCrossing']);
 /** Plate geometry per shape. Circle-based so UVs map the square texture straight on. */
 const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   switch (shape) {
@@ -280,12 +281,74 @@ function treeModels(look: Greenery): Record<`tree-${TreeKind}`, THREE.BufferGeom
     ]),
     'tree-palm': mergeGeometries([part(cyl(0.16, 0.26, 6.5, 6), 0x8a6a48, 0, 3.25), ...fronds]),
     'tree-fruit': fruitTree(look, 0xc8302a),
+    ...swampTrees(look),
     'tree-cactus': mergeGeometries([
       part(cyl(0.38, 0.42, 3.4, 7), cactus, 0, 1.7),
       part(cyl(0.22, 0.22, 0.9, 7).rotateZ(Math.PI / 2), cactus, 0.75, 1.5),
       part(cyl(0.22, 0.22, 1.3, 7), cactus, 1.15, 2.05),
       part(cyl(0.2, 0.2, 0.7, 7).rotateZ(Math.PI / 2), cactus, -0.65, 2.2),
       part(cyl(0.2, 0.2, 1.0, 7), cactus, -0.95, 2.6),
+    ]),
+  };
+}
+
+/**
+ * The Swamp's trees: a bald cypress (a flared foot, a tall trunk, flat layered crowns hung with grey
+ * moss), a dead snag (a bare grey trunk, its top snapped, a few broken limbs), a weeping willow (a
+ * dome with long fronds hanging nearly to the ground). In the snow the cypress crowns carry snow and the
+ * willow turns to bare twigs: every limb, strand and frond stays attached to the tree.
+ */
+function swampTrees(look: Greenery): Record<'tree-cypress' | 'tree-snag' | 'tree-willow' | 'tree-mangrove', THREE.BufferGeometry> {
+  const cyl = (top: number, bottom: number, h: number, seg: number) => new THREE.CylinderGeometry(top, bottom, h, seg);
+  const bark = 0x5a4a3c, dead = 0x7a7266, moss = 0x8a9a7a;
+  // In the snow the crowns stay, snow-laden: the moss hangs from them (bare, it would float).
+  const [pad, pad2] = look.snowy ? [0xdfe4e8, 0xcfd6dc] : [0x3e5a34, 0x46623a];
+  const crown = [
+    part(new THREE.IcosahedronGeometry(1.9, 0).scale(1, 0.4, 1), pad, 0, 6.6),
+    part(new THREE.IcosahedronGeometry(1.4, 0).scale(1, 0.4, 1), pad2, 0.5, 7.5),
+    part(new THREE.IcosahedronGeometry(1.2, 0).scale(1, 0.45, 1), pad, -0.6, 5.7),
+  ];
+  const strands = Array.from({ length: 8 }, (_, k) => {
+    const a = (k / 8) * Math.PI * 2 + 0.3, r = 1.1 + (k % 3) * 0.25, len = 1.2 + (k % 4) * 0.35;
+    return part(new THREE.BoxGeometry(0.28, len, 0.06).rotateY(-a), moss, Math.cos(a) * r, 6.3 - len / 2, Math.sin(a) * r);
+  });
+  // The snag's trunk leans (0.06 rad about Z, its foot at x = -0.15 + its lean): limbs and the
+  // snapped top root on its axis at their height, so each base sits buried inside the trunk.
+  const LEAN = 0.06;
+  const snagAxis = (y: number) => -0.15 - Math.tan(LEAN) * (y - 2.6);
+  const limbs = [0.6, 2.4, 4.3].map((a, k) => {
+    const len = 1.4 - k * 0.2, y = 2.6 + k * 0.9;
+    return part(cyl(0.05, 0.1, len, 5).translate(0, len / 2, 0).rotateZ(0.9).rotateY(a), dead, snagAxis(y), y);
+  });
+  // In the snow the willow is bare twigs: its dome stays, twig-coloured, for the fronds to hang from.
+  const willowLeaf = look.snowy ? 0x8a7a5a : 0x7a9a4a;
+  const fronds = Array.from({ length: 14 }, (_, k) => {
+    const a = (k / 14) * Math.PI * 2;
+    return part(new THREE.BoxGeometry(0.3, 2.6, 0.05).rotateY(-a), willowLeaf, Math.cos(a) * 2.2, 2.9, Math.sin(a) * 2.2);
+  });
+  return {
+    'tree-cypress': mergeGeometries([
+      part(cyl(0.3, 0.75, 1.4, 7), bark, 0, 0.7),
+      part(cyl(0.18, 0.3, 5.6, 6), bark, 0, 4.2),
+      ...crown,
+      ...strands,
+    ]),
+    'tree-snag': mergeGeometries([
+      part(cyl(0.12, 0.3, 5.2, 6).rotateZ(LEAN), dead, -0.15, 2.6),
+      part(cyl(0.02, 0.12, 0.5, 5).translate(0, 0.25, 0).rotateZ(0.5), dead, snagAxis(5.08), 5.08),
+      ...limbs,
+    ]),
+    // A mangrove (the beach's swamp): a short trunk on a cage of arching roots, a low broad crown.
+    'tree-mangrove': mergeGeometries([
+      ...Array.from({ length: 7 }, (_, k) => part(new THREE.TorusGeometry(0.75, 0.06, 3, 5, Math.PI).rotateY((k / 7) * Math.PI), bark, 0, 0.15)),
+      part(cyl(0.16, 0.24, 2.2, 6), bark, 0, 1.9),
+      part(new THREE.IcosahedronGeometry(2.0, 0).scale(1.2, 0.55, 1.2), 0x3f6a34, 0, 3.4),
+      part(new THREE.IcosahedronGeometry(1.4, 0).scale(1.1, 0.55, 1.1), 0x4a7a3a, 0.7, 3.9),
+    ]),
+    'tree-willow': mergeGeometries([
+      part(cyl(0.25, 0.4, 2.8, 6), bark, 0, 1.4),
+      part(new THREE.IcosahedronGeometry(2.4, 1).scale(1, 0.65, 1), look.snowy ? 0x7a6a4e : 0x6a8a42, 0, 4.0),
+      ...fronds,
     ]),
   };
 }
@@ -1392,6 +1455,20 @@ function signTexture(variant: SignVariant): THREE.Texture {
         ringSign(g, s, BLUE);
         text(g, 'P', c, c + 6, s * 0.46, '#ffffff');
         prohibit(g, s);
+        break;
+      case 'bogCrossing':
+        // A made-up warning: a yellow diamond in a white border, black rim, two lines of text.
+        g.fillStyle = '#ffffff';
+        regular(g, c, c, 4, Math.PI / 2);
+        g.fill();
+        g.fillStyle = '#111111';
+        regular(g, c, c * 0.9, 4, Math.PI / 2);
+        g.fill();
+        g.fillStyle = '#f5c400';
+        regular(g, c, c * 0.84, 4, Math.PI / 2);
+        g.fill();
+        text(g, 'MIND', c, c - s * 0.08, s * 0.13, '#111111');
+        text(g, 'THE BOG', c, c + s * 0.1, s * 0.11, '#111111');
         break;
       case 'noFishing': {
         ringSign(g, s);

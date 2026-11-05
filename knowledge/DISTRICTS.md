@@ -4,24 +4,24 @@ Themed areas laid over a rectangle of blocks, each rolled per seed on its own st
 (`world/districts/`). Roads, the road graph and lanes never change: character comes from buildings,
 props, ground patches, overhead pieces and gates. How they are built: [DISTRICTS_DEV.md](DISTRICTS_DEV.md).
 
-Odds per seed (300 seeds): none 3%, one 21% (Old City 7%, Chinatown 5%, Harbor 3%, Slums 3%, Farm 2%,
-Mega-park 2%), two 37%, three 26%, four 11%, five 2% (`DISTRICTS.max`). Any one: Old City 52%,
-Chinatown 48%, Harbor 42%, Farm 36%, Slums 27%, Mega-park 22%. `?<kind>=0|1` forces one off or on.
+Odds per seed (300 seeds): none 2%, one 17% (Old City 5%, Chinatown 3%, Harbor 3%, Slums 2%, Mega-park
+1%, Swamp 1%, Farm 1%), two 31%, three 30%, four 16%, five 5% (`DISTRICTS.max`). Any one: Old City 52%,
+Chinatown 48%, Harbor 41%, Farm 36%, Swamp 29%, Slums 27%, Mega-park 21%. `?<kind>=0|1` forces one off or on.
 
-| | Old City | Chinatown | Harbor | Farm | Slums | Mega-park |
-|---|---|---|---|---|---|---|
-| `kind` / URL | `oldtown` | `chinatown` | `harbor` | `farm` | `slums` | `megapark` |
-| Roll chance | 0.55 | 0.5 | 0.45 | 0.4 | 0.35 | 0.3 |
-| Site | inland (off the 2 outer rows) | inland | coast: outer rows, long side on the sea | edge: outer rows, touching the island edge | inland | inland |
-| Shapes (rolled) | 2×2 / 3×3 / 4×4 | same | same | same | 2×2 / 3×3 (4×4 can't meet the share) | 2×2 / 2×3 / 3×3 (3×3 rarely fits) |
-| Zones | ≥ ½ downtown + midtown | same | industrial + residential, ≥ ½ industrial | residential + industrial, ≥ ½ residential | midtown + residential + industrial, ≥ ½ residential + industrial | midtown + residential, ≥ ½ residential |
-| Gates | all (gatehouses) | main street + ≤ 1 (paifang) | all; one terminal gate | main street (ranch gate) + ≤ 1 (cattle grid) | all; rail overpass on the main-street gate | all (iron gates on stone pillars; name wall and lodge at the main one) |
-| Speed cap | 30 km/h everywhere | 40 km/h main street | none | none | none (potholes jolt) | 30 km/h everywhere |
-| Traffic | 0.5× | 1.3× | 0.9× | 0.4× | 0.6× | 0.5× |
-| Buses / trucks | out | in; vans ↑ | in; box trucks ↑ | in; pickups, tractors ↑ | out; pickups, vans ↑ | out |
-| Cop spawns skipped inside | 0.6 | 0 | 0 | 0.4 | 0.5 | 0.5 |
-| Zebras | removed | kept | removed | removed | removed (worn) | kept |
-| Map colour | stone | red | steel blue | wheat gold | rust brown | park green |
+| | Old City | Chinatown | Harbor | Farm | Slums | Mega-park | Swamp |
+|---|---|---|---|---|---|---|---|
+| `kind` / URL | `oldtown` | `chinatown` | `harbor` | `farm` | `slums` | `megapark` | `swamp` |
+| Roll chance | 0.55 | 0.5 | 0.45 | 0.4 | 0.35 | 0.3 | 0.3 |
+| Site | inland (off the 2 outer rows) | inland | coast: outer rows, long side on the sea | edge: outer rows, touching the island edge | inland | inland | edge, on low flat ground (the hill varies ≤ 3 m) |
+| Shapes (rolled) | 2×2 / 3×3 / 4×4 | same | same | same | 2×2 / 3×3 (4×4 can't meet the share) | 2×2 / 2×3 / 3×3 (3×3 rarely fits) | 2×2 / 2×3 / 3×3 |
+| Zones | ≥ ½ downtown + midtown | same | industrial + residential, ≥ ½ industrial | residential + industrial, ≥ ½ residential | midtown + residential + industrial, ≥ ½ residential + industrial | midtown + residential, ≥ ½ residential | residential + industrial |
+| Gates | all (gatehouses) | main street + ≤ 1 (paifang) | all; one terminal gate | main street (ranch gate) + ≤ 1 (cattle grid) | all; rail overpass on the main-street gate | all (iron gates on stone pillars; name wall and lodge at the main one) | all ("Mind the bog" signs inside the first two) |
+| Speed cap | 30 km/h everywhere | 40 km/h main street | none | none | none (potholes jolt) | 30 km/h everywhere | none |
+| Traffic | 0.5× | 1.3× | 0.9× | 0.4× | 0.6× | 0.5× | 0.4× |
+| Buses / trucks | out | in; vans ↑ | in; box trucks ↑ | in; pickups, tractors ↑ | out; pickups, vans ↑ | out | out; pickups ↑ |
+| Cop spawns skipped inside | 0.6 | 0 | 0 | 0.4 | 0.5 | 0.5 | 0.4 |
+| Zebras | removed | kept | removed | removed | removed (worn) | kept | removed |
+| Map colour | stone | red | steel blue | wheat gold | rust brown | park green | moss green |
 
 Every district: 4★+ roadblocks prefer its gates, ≤ 1 mission destination inside, a minimap outline,
 no start toast. Respect: neutral real glyphs in Chinatown (福 春 茶 飯店), no caricature; made-up names
@@ -119,3 +119,24 @@ the park's made-up name stand by the main gate. Night: oil lamps along the drive
 lanterns, a string of bulbs round the bandstand, fireflies on warm nights. Climate: a frozen lake and
 snowy lawns in the snow; sand, palms and cacti, and cactus gardens in the beds, in the desert (the lake
 kept as an oasis); palms by the beach.
+
+## Swamp
+
+Low wet ground on the island's edge (2×2 to 3×3, on flat ground: never up a hill's flank). Its streets
+stay streets, causeways between pools: the sidewalks are muddy verges (soft), split-rail guard rails
+line the kerbs, one wooden lamp stands by each junction (it's dark out here), and a made-up "Mind the
+bog" sign stands inside the first gates. Every block is ~35–60 % shallow pools (wading, never
+drowning) with dry banks; one block is the witch house's: a crooked two-storey stilt house on a dry
+island in the biggest pool (a leaning upper storey, a bent and patched shingle roof, a twisting chimney,
+round and crooked windows lit green at night, a porch hung with bottles and herb bundles, a broom by the
+door, a bubbling cauldron), a pumpkin patch, jack-o'-lanterns at the steps and a stick totem, reached by
+a rickety boardwalk the car can drive from the street up to the porch. One block by the main gate is the
+landing: a bait shop with a rotting jetty out into the pool, an airboat and a rowboat moored alongside.
+The other blocks hold stilt shacks on their street sides, and one or two are crossed by a railed
+boardwalk on stilts from street to street (cops use it, or go round: they never wade). Two looks, rolled:
+the wooded swamp (bald cypress with hanging moss, some standing in the water, dead snags, dark moss
+ground) or the open marsh (weeping willows on the banks, far more reeds, rank yellow-green grass).
+Reeds round the rims, lily pads, half-sunk logs (solid). Night: will-o'-the-wisps over the water on
+some nights. Climate: frozen pools, bare trees and white verges in the snow (the cauldron still glows);
+a dried salt marsh in the desert (pale cracked ground, every tree a dead snag); mangroves on arching
+roots by the beach. Fairy-tale only: no figure, no animals, no real occult symbols.

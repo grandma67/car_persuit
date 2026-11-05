@@ -9,15 +9,17 @@ import type { LotStyle } from '../lots';
 import type { Footprint, PropKind, StreetProp } from '../StreetProps';
 import type { FacadeStyle } from '../../render/Facades';
 import { pin, type FeatureValue } from '../CityParams';
+import type { Deck } from '../Deck';
 
 export type { LotStyle } from '../lots';
 
 /** Grows with the registry (world/districts/index.ts). */
-export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums' | 'megapark';
+export type DistrictKind = 'oldtown' | 'chinatown' | 'harbor' | 'farm' | 'slums' | 'megapark' | 'swamp';
 
 /** What a special (unfilled) block is for; the district's dressing fills it. */
 export type BlockRole = 'square' | 'yard' | 'field' | 'farmyard' | 'vacant' | 'camp' | 'junkyard'
-  | 'lake' | 'sports' | 'track' | 'playground' | 'bandstand' | 'lawn';
+  | 'lake' | 'sports' | 'track' | 'playground' | 'bandstand' | 'lawn'
+  | 'pools' | 'witch' | 'landing';
 
 // --- Building looks (rendered by CityBuilder's addBuilding through the facade pipeline) ---
 
@@ -93,6 +95,7 @@ export interface DistrictDressing {
   solids: Footprint[]; // everything solid off the road, for colliders and NavGrid
   drivable: Rect[]; // off-road areas a car may use (yard corridors, fields)
   soft?: Rect[]; // ground with less grip and more rolling drag (fields; wired in FM4)
+  decks?: Deck[]; // raised drivable decks (the Swamp's boardwalks): colliders, firm ground, NavGrid ground
   extra?: Record<string, unknown>; // district-specific data (festival, night market …)
 }
 
@@ -124,9 +127,16 @@ export interface District {
 /** A feature's type: on/off, a count, or one of some names. */
 export type FeatureKind = 'bool' | 'int' | readonly string[];
 
+/** Each district's features as they rolled, before any pin (kept off the district: city hashes stay put). */
+const ROLLED = new WeakMap<District, Record<string, FeatureValue>>();
+/** What a district's features rolled, pins aside (a dump records every feature as a pin). */
+export const rolledFeatures = (q: District): Record<string, FeatureValue> => ROLLED.get(q) ?? {};
+
 /** A district's named roll, pinned or as rolled (the roll is drawn either way), and recorded on it. */
 export function feature<T extends FeatureValue>(q: District | undefined, name: string, rolled: T): T {
   if (!q) return rolled;
+  if (!ROLLED.has(q)) ROLLED.set(q, {});
+  ROLLED.get(q)![name] = rolled;
   const value = pin(q.pins?.[name] as T | undefined, rolled);
   q.features[name] = value;
   return value;
@@ -158,6 +168,8 @@ export interface DistrictDef {
   /** Least share of blocks per zone, e.g. { midtown: 0.5 }; zones joined by '+' count together ({ 'residential+industrial': 0.5 }). */
   minShare?: Partial<Record<Zone | `${Zone}+${Zone}`, number>>;
   minCore?: number; // least share of downtown + midtown blocks
+  /** Why the ground under `bounds` (the blocks' union) doesn't suit it, or nothing (the Swamp wants low, flat ground). */
+  fits?(bounds: Rect, city: CityData): string | undefined;
   gates: 'all' | 'mainStreet';
   extraGates?: number; // with 'mainStreet': up to this many more
   minMainStreet?: number; // the main street's least length in edges (default 1)

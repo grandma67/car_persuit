@@ -11,7 +11,7 @@ const VIEW_RADIUS = 230; // metres from the player to the map edge
 export const BASE_SCALE = 1; // pixels per metre in the pre-drawn city
 const SEA_MARGIN = 300; // metres of sea drawn around the island
 
-const COLORS = {
+export const COLORS = {
   sea: '#1a5f78',
   land: '#1b1f27',
   promenade: '#3a404b',

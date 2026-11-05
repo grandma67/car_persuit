@@ -3,7 +3,7 @@ import { alone } from '../paramsTesting';
 import { generateCity, type Rect } from '../CityGenerator';
 import { inRect } from '../lots';
 import { HARBOR, HARBOR_QUAY } from '../../gameplay/balance';
-import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
+import { widestBody } from '../../vehicles/VehicleSpecs';
 import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint } from '../StreetProps';
 import { HARBOR_DEF, backRows, quayRow, yardBlocks } from './Harbor';
 import { containersOf, type StraddleData } from './HarborYard';
@@ -17,9 +17,9 @@ const placed = SEEDS.flatMap((seed) => {
   const q = c.districts.find((d) => d.kind === 'harbor');
   return q ? [[seed, c, q] as const] : [];
 });
-const widest = Math.max(...ALL_SPECS.map((s) => s.halfExtents.x)) * 2;
+const widest = widestBody();
 /** Widest that ever leaves the road (the ramp truck is road traffic only): the armoured truck, the bus. */
-const offRoadWidest = Math.max(...ALL_SPECS.filter((s) => s.body !== 'ramptruck').map((s) => s.halfExtents.x)) * 2;
+const offRoadWidest = widestBody({ offRoad: true });
 const touches = (a: Rect, b: Rect) => Math.abs(a.x - b.x) <= (a.w + b.w) / 2 && Math.abs(a.z - b.z) <= (a.d + b.d) / 2;
 
 // Shared rules (solids off the paving, junction controls, prop spacing, kerb offset, overhead

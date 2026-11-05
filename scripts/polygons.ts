@@ -15,7 +15,7 @@ import { PROP_LOOKS, sweepLook } from '../src/world/zfight';
 import { ALL_SPECS } from '../src/vehicles/VehicleSpecs';
 import { buildCarMesh } from '../src/vehicles/carMesh';
 
-const DISTRICT_KINDS = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums', 'megapark'];
+const DISTRICT_KINDS = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums', 'megapark', 'swamp'];
 const trisOf = (g: THREE.BufferGeometry) => (g.index ? g.index.count : g.attributes.position.count) / 3;
 const pad = (s: string | number, n: number) => String(s).padStart(n);
 

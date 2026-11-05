@@ -3,8 +3,11 @@
 import * as THREE from 'three';
 import type { Rect } from '../../world/CityGenerator';
 
-/** `n` fireflies scattered over `spots` (round robin), placed from `seed`; returns the time uniform to tick. */
-export function fireflies(spots: Rect[], n: number, seed: number, scene: THREE.Scene, ground: (x: number, z: number) => number): { value: number } {
+/**
+ * `n` fireflies scattered over `spots` (round robin), placed from `seed`; returns the time uniform to
+ * tick. `look`: another colour and size (the Swamp's will-o'-the-wisps; same program).
+ */
+export function fireflies(spots: Rect[], n: number, seed: number, scene: THREE.Scene, ground: (x: number, z: number) => number, look: { color: number; size: number } = { color: 0xd8ff6a, size: 0.35 }): { value: number } {
   const time = { value: 0 };
   if (!n || !spots.length) return time;
   const pos = new Float32Array(n * 3), phase = new Float32Array(n);
@@ -19,7 +22,7 @@ export function fireflies(spots: Rect[], n: number, seed: number, scene: THREE.S
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
-  const mat = new THREE.PointsMaterial({ color: 0xd8ff6a, size: 0.35, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const mat = new THREE.PointsMaterial({ color: look.color, size: look.size, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = time;
     shader.vertexShader = shader.vertexShader

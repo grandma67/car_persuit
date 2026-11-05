@@ -30,7 +30,8 @@ destinations, cops, civilian traffic, themed districts.
 Each script's header lists its options; the doc named here says when to use it.
 
 - Type check `npx tsc --noEmit`; build `npm run build`.
-- Tests: `npm run t` (failures + summary only; ~26–35 s wall, ~250 s CPU; killed after 300 s, `T_LIMIT=`).
+- Tests: `npm run t` (failures + summary only, the first 6 items of each failing break list, `T_ITEMS=`;
+  ~26–35 s wall, ~250 s CPU; killed after 300 s, `T_LIMIT=`).
   Area: `npm run t -- src/world/districts`, `-t "name"`. Never pipe vitest through `grep`/`tail` without
   a limit. Suite time: `npm run t -- --times [save]` (CPU and wall s, slowest files, Δ% vs the saved run):
   judge by CPU (wall swings by a third with load); don't rerun the suite to time it.
@@ -62,11 +63,13 @@ Each script's header lists its options; the doc named here says when to use it.
   scene by owner: `scripts/evals/polygons.js` (`polygons.md`; update its tables and log after a model change).
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (`RAPIER.md`).
 - Browser (`BROWSER_CHECKS.md`; always under a hard limit: `perl -e 'alarm 300; exec @ARGV' npm run …`;
-  ~10 s plus the eval with Vite already on 5199, `check:restart` ~1.5 min;
+  ~10 s plus the eval with Vite already on 5199, `check:restart` ~3 min (two cities: `:core`, `:nature`);
   settle seed and words before the first, run in the background while editing; one at a time per port,
   a second one waits): `npm run check:browser …`;
   `npm run check:restart` after anything that adds to the scene, page or listeners (`LEAKS.md`);
   `npm run check:reload` after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or `city.params`.
+- District on vs off in the browser: `npm run check:browser -- --vs-make "nodistricts <words>" --make "<kind> <words>" …`
+  (same tree and port, one after the other; `--table` for perf).
 - Before/after in the browser: `npm run check:browser -- --vs <ref> …` (that ref in its own worktree and
   server, then here; never a baseline from the server you're editing against). Shots:
   `node scripts/png-diff.mjs a.png b.png`. Perf: `--table` (perf-profile as a Δ% table), `--throttle 4`

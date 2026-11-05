@@ -28,6 +28,9 @@ npm run check:browser -- --query "seed=11&debug&oldtown=1" --start 2000 --out-di
   shots in `<out-dir>/base` and `/current`. Use it for every before/after: a baseline from the server
   you're editing against picks up your edits as Vite hot-reloads them. An eval run on an older ref must
   cope with `dbg` helpers it lacks (`dbg.x?.()`).
+- **District on vs off: `--vs-make "<words>"`** runs the same check on a city made from those words
+  first (`nodistricts …`: the same city without districts), then on `--make`'s, on this tree and port;
+  printed like `--vs` (with `--table`, a Δ% table).
 - **Compare two shots:** `node scripts/png-diff.mjs a.png b.png [--threshold 24] [--out diff.png]`:
   pixels that differ, their share and bounding box, the differences in red over a dimmed copy (exit 1
   when any differ). Traffic, rain and the HUD always differ a little: judge by where the box falls.
@@ -48,7 +51,8 @@ Each file's header lists its query options and what it returns.
 | `restart.js` | `npm run check:restart`: Retry / New city leaks ([LEAKS.md](LEAKS.md)) |
 | `city-reload.js` | `npm run check:reload`: a dump loads back as the same city, Retry keeps it, New city drops it |
 
-Write a custom eval (in the scratchpad) only for drives and chases:
+Write a custom eval (in the scratchpad) only for drives and chases, from the helpers in the `window.dbg` table
+below (`dbg.drive` already samples a drive and reports what stopped it):
 
 ```js
 (async () => {
@@ -75,6 +79,7 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 | `aim(point,{dist,height,from,look})` / `aim(false)` | the game's own camera (fog and far plane as in play), for what's drawn far off or past the fog. `look` defaults to 20 m up: close up pass `look: 1` |
 | `studio(names)` / `studioShot({focus,from,height,dist})` / `studio(false)` | model studio, HUD hidden |
 | `hold(code,ms)`, `stars(n)`, `police(on)`, `repair()`, `sleep(ms)` | input, wanted level, cops on/off, full health |
+| `ground(x,z)` | ground height there (a car's height over it: `game.player.position.y - dbg.ground(x, z)`) |
 | `car()`, `stats()`, `fps(ms)` | position/speed; programs, calls, triangles, static triangles; FPS (capped at 60, shows only drops) |
 | `sceneBreakdown()` | the scene by owner (`Game.owned` tags: city, props, districts…; player, cops, traffic): objects, how many three recomposes per frame (`auto`), meshes, instanced, shadow casters, and visible lights by type. First stop for a matrix, draw or light cost |
 | `staleMatrices()` | frozen objects (`matrixAutoUpdate` off) moved without `updateMatrix()`, drawn where they were. Must be `[]` (in `perf-profile`'s budget and `check:restart`) |
@@ -85,8 +90,9 @@ Write a custom eval (in the scratchpad) only for drives and chases:
 
 ## What to check per milestone
 
-On and off (`?<kind>=1` / `=0`, same seed): views, `dbg.stats()` (programs must not grow), empty
-console; perf at phone size with `dbg.fps()`. Stills can't show flicker or feel: verify geometry, leave
+On and off in one command: `--vs-make "nodistricts <same words>" --make "<kind> <same words>"`
+(`?<kind>=0` alone lets the other districts roll in, so the two sides differ by more than the
+district): views, `dbg.stats()` (programs must not grow), empty console; perf at phone size with `dbg.fps()`. Stills can't show flicker or feel: verify geometry, leave
 feel to the user.
 
 ## Pitfalls

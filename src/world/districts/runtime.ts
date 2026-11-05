@@ -1,5 +1,6 @@
 // What the game's systems need from the placed districts: speed caps and no-go streets for
 // traffic, spawn weights, cop spawn skips, roadblock gates, destination zoning. Pure data.
+import type { TreeKind } from '../Climate';
 import type { CityData } from '../CityGenerator';
 import type { Footprint, PropKind, StreetProp } from '../StreetProps';
 import { inRect } from '../lots';
@@ -73,10 +74,11 @@ export function nightProps(city: CityData): StreetProp[] {
 export interface RunDressing {
   structures?: Structure[];
   solids?: Footprint[];
-  props?: StreetProp[];
+  props?: StreetProp[]; // a climate's are added by joinRunDressing; a night's go in `extra.nightProps`
   drop?: PropKind[];
   ground?: GroundPatch[]; // flat patches (the Slums' slush and dust drifts)
   tint?: { kinds: PropKind[]; toward: number; by: number }; // props weathered towards a colour (bleached, salt-rusted wrecks)
+  trees?: Partial<Record<TreeKind, TreeKind>>; // tree kinds swapped inside the district (the Swamp's cypress dead in the desert)
 }
 
 /** Mix two 0xRRGGBB colours, `by` of the way from a to b. */
@@ -87,11 +89,18 @@ const mixHex = (a: number, b: number, by: number) =>
  * Join the run's extra dressing into the city before it is built: on a night run each district's
  * `extra.night` (the Farm's harvest-night bale pyramid), and the climate's `extra.byClimate[name]`
  * (the desert's irrigator, no pumpkins in the snow). Generation itself never depends on either.
+ * Props: a climate's join the city's street props here; a night's travel in `extra.nightProps`
+ * (Game adds those first, `nightProps`), so `extra.night.props` is not added again.
  */
 export function joinRunDressing(city: CityData, run: { night: boolean; climate: string }): void {
   for (const q of city.districts) {
     const extra = q.dressing.extra as { night?: RunDressing; byClimate?: Record<string, RunDressing> } | undefined;
-    for (const d of [run.night ? extra?.night : undefined, extra?.byClimate?.[run.climate]]) {
+    const climate = extra?.byClimate?.[run.climate];
+    if (climate?.props?.length) {
+      q.dressing.props.push(...climate.props);
+      city.streetProps.push(...climate.props);
+    }
+    for (const d of [run.night ? extra?.night : undefined, climate]) {
       if (!d) continue;
       q.dressing.structures.push(...(d.structures ?? []));
       q.dressing.solids.push(...(d.solids ?? []));
@@ -101,6 +110,12 @@ export function joinRunDressing(city: CityData, run: { night: boolean; climate: 
         const weather = (p: StreetProp) => (kinds.includes(p.kind) && p.color !== undefined && inRect(q.bounds, p, 2) ? { ...p, color: mixHex(p.color, toward, by) } : p);
         q.dressing.props = q.dressing.props.map(weather);
         city.streetProps = city.streetProps.map(weather);
+      }
+      if (d.trees) {
+        const swap = d.trees;
+        const grow = (p: StreetProp) => (p.kind === 'tree' && p.tree && swap[p.tree] && inRect(q.bounds, p, 2) ? { ...p, tree: swap[p.tree] } : p);
+        q.dressing.props = q.dressing.props.map(grow);
+        city.streetProps = city.streetProps.map(grow);
       }
       if (d.drop?.length) {
         const gone = new Set<PropKind>(d.drop);

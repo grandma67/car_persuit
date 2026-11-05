@@ -7,7 +7,7 @@ import { FootprintIndex, footprintsOverlap, propFootprint, rectFootprint, type F
 import type { District } from './District';
 import { FARM, FARM_FIELDS, FARM_GATE } from '../../gameplay/balance';
 import { joinRunDressing } from './runtime';
-import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
+import { widestBody } from '../../vehicles/VehicleSpecs';
 import { gapLane } from './FarmFields';
 import { CROPS, cropCap, farmFields, farmyardBlock, fenceGaps, ranchGate } from './Farm';
 import type { RanchGateData } from './FarmGate';
@@ -161,7 +161,7 @@ describe('Farm ranch gate, yard pieces and fences', () => {
 
 describe('Farm crops, equipment and props', () => {
   /** Widest that ever leaves the road (the ramp truck is road traffic only). */
-  const offRoadWidest = Math.max(...ALL_SPECS.filter((sp) => sp.body !== 'ramptruck').map((sp) => sp.halfExtents.x)) * 2;
+  const offRoadWidest = widestBody({ offRoad: true });
   const mazes = placed.filter(([, , q]) => farmFields(q).some((f) => f.maze));
 
   it('the maze roll comes up on some seeds, not all', () => {

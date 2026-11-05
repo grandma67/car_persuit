@@ -261,3 +261,79 @@ the glow budget", `maxGlow` declared on every def. Still open:
 - `check:restart`: also cover districts past the five-district `--make` (a second city).
 - **Planning:** a 10–15 h branch takes 3–4 sessions. Hand off at milestone boundaries with
   `TASKS.md` and this plan's status section, so the next session doesn't re-read the code.
+
+## Branch 3 status (`districts/swamp`): done, waiting for the user's approval to merge (2026-11-05)
+
+- **M1** (placement, roles, pools): `Swamp.ts`, `SwampPools.ts`. `DistrictDef.fits` (new, optional)
+  rejects a rect whose hill varies > `SWAMP.maxRise` (3 m); edge blocks rarely sit on the hill, so
+  forced placement is 99 %, natural 33 %. Roles: `landing` beside the main gate, `witch` the block
+  farthest from it, the rest `pools`. Pools: the witch's laid first (one, the biggest), then per
+  block a big pool sized from the rolled share plus smaller ones; ~35–57 % under water (ellipses
+  pack poorly in a square, so the plan's 70 % isn't reached; marsh ~5 points wetter). Banks are soft
+  mud. No buildings yet. `serializeCityParams` now counts the key in its 100-column rule (the swamp's
+  six roles were the first one-line value to pass it).
+- **M2** (witch house): `SwampWitch.ts` (data), `render/districts/SwampWitch.ts`. New shared pieces:
+  `world/Deck.ts` (a raised drivable deck with ramped ends: one box + two convex-hull wedges as
+  colliders in `CityBuilder`, firm ground in `softGround` (checked before water), NavGrid ground at
+  the off-road cost; `dressing.decks`) and `ShallowWater.island` (a dry round island in the middle:
+  `shoreDistance` takes the nearer shore, the water mesh's rings end at the island instead of a fan).
+  The boardwalk runs from the street side nearest the island, 4 m wide, top 0.6 m, ramps 3.5 / 3 m;
+  it lands on the island 2 m short of the porch steps. The house is solid (one footprint, porch
+  included); jack-o'-lanterns at the steps (lit props), pumpkins, a scarecrow as the stick totem.
+  Windows and the brew are lamp-bulb glow instances (green at night); bubbles are 6 instances moved
+  per frame; wisps are the fireflies (new `look` colour/size, same program). `NavGrid.costAt` added.
+- **M3** (set and streets): `SwampSet.ts` (boardwalks: decks across "through" pool blocks at the
+  wettest offset clear of the shacks, ramps 3.5 m, rail sections either side; the landing's jetty,
+  airboat and rowboat), `SwampStreet.ts` (sidewalks become muddy verges: ground patches + soft; split
+  rail `fence` sections along the kerbs at rw/2 + 0.65; one wood lamp per junction; a new sign
+  variant `bogCrossing`, "MIND THE BOG", inside the first two gates). Lots: the bait shop on the
+  landing's side towards the main gate, 1–2 stilt shacks per pool block (`siding`: `boards` is barn
+  red). No new facade styles, no new prop kinds (rails reuse `fence` `style: 'rail'`). Features
+  `boardwalks` (int) and `airboat`. Night-only features rolled on by themselves no longer warn when
+  a dump reloads by day (`rolledFeatures`; Farm's harvest and Chinatown's festival had the same gap).
+- **M4** (growth, traffic, police): `SwampWoods.ts`. Three new `TreeKind`s (`cypress` with moss
+  strands, `snag`, `willow`; models in `PropSystem.swampTrees`, specs in `TREE_SPECS`) laid as the
+  district's own tree props: cypress also stand in the water, willows keep to the banks. Reed clumps
+  on the rims, a half-sunk log in half the blocks (solid), lily pads as `ParkPiece`s with
+  `district: 'swamp'` (the pond renderer's pads, no rim). Everything goes through `clearOf` against
+  the decks' exact outlines (padded outlines would drop the boardwalk rails). Tussocks and duckweed
+  dropped (the pads and reeds carry it). `SwampTraffic.test.ts`: civilians, runtime rules, and NavGrid
+  crossing a pool block on its boardwalk or round by the streets, never wading.
+- **M5** (looks, climate, perf, docs): a bog ground patch per block (0.07; dark moss in the swamp,
+  yellow-green in the marsh, pale salt in the desert, lush by the beach); the water's rim lift 0.08 →
+  0.09 (2 cm over the bog), the witch island's mud at 0.09 ending at its shore. `RunDressing.trees`
+  swaps tree kinds per climate: desert cypress and willows become snags, beach cypress a new
+  `mangrove` on arching roots. Snow: frozen pools, bare cypress (the moss stays), white verges and
+  boardwalks. Reed clumps thinned to two (the reeds model is 240 tris).
+- **Numbers:** forced 99 %, natural 33 %; odds: any Swamp 29 %. Programs: +1 in a city with no canals
+  (the canal water's program for the first shallow water, accepted for ponds), +1 on wisp nights (the
+  fireflies'). Perf on vs off (seed 11): frame 3.5 vs 3.6 ms, GPU 1.44 vs 1.25 ms, +~20 calls,
+  +70–90 k tris in view, 60 fps. Build: walls+roofs ≤ 2.9 k tris, ≤ +22 ms worst. Glow avg 14 of 60.
+  `check:restart` ok.
+
+### Where branch 3 bent from the plan
+
+- **Pools ~35–60 %, not 40–70 %:** wobbly ellipses don't pack a square block; the marsh is only a few
+  points wetter (its character comes from reeds and willows instead).
+- **The island is dry ground, not solid:** a car can wade to it; the house (porch included) is solid.
+- **Boardwalks are raised decks with ramps** (0.6 m, a new shared `Deck`), so a car really drives them.
+- **No mist** (it would need a new transparent program); **no dark water** (one shallow-water mesh
+  shares the canal shader's colours city-wide); **no tussocks or duckweed** (reeds and lily pads carry
+  it). The "gator crossing" sign is a yellow diamond reading "MIND THE BOG". The stick totem is the
+  Farm's scarecrow. Rails (boardwalk and kerb) reuse the split-rail `fence`.
+- **No new facade styles:** shacks and the bait shop are `siding` (`boards` is barn red).
+
+### After M5 (tooling from the branch-3 retrospective; before the Forest)
+
+Time went to reading for reuse points, rework caught by tests, and tool friction. Done:
+- `npm run t` prints the first items of each failing break list (`T_ITEMS=`), not `[ …(7) ]`.
+- Word `nodistricts`; `check:browser --vs-make "nodistricts …" --make "<kind> …"`: on vs off in one
+  command (with `--table`, the perf Δ%).
+- `widestBody({ offRoad })` in `VehicleSpecs` (the tests' four copies replaced).
+- `npm run stats -- <kind>` prints shallow water's share per block (`Water.waterShare`).
+- `dbg.ground(x, z)`; the custom-eval note points at the `dbg` table (`dbg.drive` existed: read the
+  whole of `BROWSER_CHECKS.md` before writing an eval).
+- `check:restart` runs two cities (`:core`, `:nature`; a new district joins `:nature`).
+- `joinRunDressing` adds a climate's `props` (they were silently dropped; nothing used it yet).
+- `DISTRICTS_DEV.md`: facade styles (`boards` is barn red), the clutter rule measures by radius,
+  programs to expect per climate and with shallow water or fireflies.

@@ -12,7 +12,7 @@
 // read `near` before blaming the district.
 (async () => {
   const params = new URLSearchParams(location.search);
-  const kinds = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums', 'megapark'];
+  const kinds = ['oldtown', 'chinatown', 'harbor', 'farm', 'slums', 'megapark', 'swamp'];
   const kind = kinds.find((k) => params.get(k) === '1');
   const q = dbg.district(kind);
   if (!q) return { error: `no ${kind ?? 'district'} placed on this seed` };

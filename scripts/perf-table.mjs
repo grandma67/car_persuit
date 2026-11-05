@@ -72,7 +72,7 @@ export function perfReport(out, opts) {
   const vs = out.base && out.current;
   const table = vs ? perfTable(out.base.val, out.current.val, opts) : perfTable(out.val, null, opts);
   if (!table) return null;
-  const lines = [vs ? `perf-profile: ${out.vs} (${out.sha}) → working tree` : 'perf-profile', table];
+  const lines = [vs ? (out.sha === 'same tree' ? `perf-profile: ${out.vs} → --make` : `perf-profile: ${out.vs} (${out.sha}) → working tree`) : 'perf-profile', table];
   for (const [side, r] of vs ? [['base', out.base], ['current', out.current]] : [['', out]]) {
     const tag = side ? `${side} ` : '';
     if (r.logs?.length) lines.push(`${tag}logs: ${r.logs.slice(0, 5).join(' | ')}`);

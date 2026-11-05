@@ -396,6 +396,8 @@ export function debugTools(game: Game) {
       await game.loadCity(params);
       return { seed: params.seed, warnings };
     },
+    /** Ground height at (x, z) (the hill; pools, decks and kerbs stand on it). */
+    ground: (x: number, z: number) => g.ground(x, z),
     /** The car's position and speed. */
     car: () => ({ x: Math.round(g.player.position.x), z: Math.round(g.player.position.z), speed: +g.player.speed.toFixed(1) }),
   };

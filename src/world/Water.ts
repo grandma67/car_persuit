@@ -14,6 +14,8 @@ export interface ShallowWater {
   /** Rim wobble: [lobes, amplitude (fraction of the radius), phase]. Keep Σ amplitude < 0.4. */
   wobble: [number, number, number][];
   depth: number; // the surface's height above the ground in the middle, metres
+  /** A round dry island at the centre, this radius (metres): the water is a ring round it (the Swamp's witch house). */
+  island?: number;
 }
 
 /** How far the rim reaches at angle `theta`, as a fraction of the ellipse (1 = the plain ellipse). */
@@ -40,7 +42,8 @@ export function shoreDistance(w: ShallowWater, x: number, z: number): number {
   const u = (dx * c - dz * s) / w.rx;
   const v = (dx * s + dz * c) / w.rz;
   const n = Math.hypot(u, v);
-  return (rimAt(w, Math.atan2(v, u)) - n) * Math.min(w.rx, w.rz);
+  const d = (rimAt(w, Math.atan2(v, u)) - n) * Math.min(w.rx, w.rz);
+  return w.island ? Math.min(d, Math.hypot(dx, dz) - w.island) : d;
 }
 
 /** Inside the water (by `margin` metres or more, when given). */
@@ -65,4 +68,16 @@ export function rimPoints(w: ShallowWater, segments: number, inset = 0): { x: nu
     out.push({ x: w.x + u * c + v * s, z: w.z - u * s + v * c });
   }
   return out;
+}
+
+/** The share of `r` under any of `waters`, sampled on a `step`-metre grid (an island counts as dry). */
+export function waterShare(r: { x: number; z: number; w: number; d: number }, waters: ShallowWater[], step = 1.5): number {
+  let wet = 0, all = 0;
+  for (let x = r.x - r.w / 2 + step / 2; x < r.x + r.w / 2; x += step) {
+    for (let z = r.z - r.d / 2 + step / 2; z < r.z + r.d / 2; z += step) {
+      all++;
+      if (waters.some((w) => inWater(w, x, z))) wet++;
+    }
+  }
+  return all ? wet / all : 0;
 }

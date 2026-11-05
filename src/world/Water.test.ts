@@ -30,6 +30,15 @@ describe('shallow water shape', () => {
     for (const p of rimPoints(w, 64, 1)) expect(shoreDistance(w, p.x, p.z)).toBeCloseTo(1);
   });
 
+  it('an island: dry in the middle, the water a ring round it', () => {
+    const w = pond({ rx: 20, rz: 20, yaw: 0, wobble: [], island: 8 });
+    expect(inWater(w, w.x, w.z)).toBe(false);
+    expect(inWater(w, w.x + 7.9, w.z)).toBe(false);
+    expect(shoreDistance(w, w.x + 10, w.z)).toBeCloseTo(2);
+    expect(shoreDistance(w, w.x, w.z - 17)).toBeCloseTo(3); // nearer the outer rim
+    expect(inWater(w, w.x - 14, w.z)).toBe(true);
+  });
+
   it('the long axis follows the yaw', () => {
     const w = pond({ yaw: Math.PI / 2, wobble: [] }); // local X (8 m) along world −Z
     expect(inWater(w, w.x, w.z - 7.5)).toBe(true);
