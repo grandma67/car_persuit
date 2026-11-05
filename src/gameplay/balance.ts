@@ -465,6 +465,14 @@ export const SWAMP = {
   bigPool: [14, 26] as [number, number], // the first pool's long half-axis, metres (sized from the share, shrunk to fit)
   smallPool: [5, 11] as [number, number], // the others'
   witchPool: [21, 24] as [number, number], // the witch house's pool (shrunk to fit its block)
+  witchIsland: 8.5, // the dry island in its middle, radius
+  /** The witch house: width, depth (without the porch), the porch's depth, stilts' height, wall height; set back from the island's middle. */
+  house: { w: 7.5, d: 6.5, porch: 2, stilts: 1.2, h: 6.4, back: 1.5 },
+  deck: { width: 4, top: 0.6 }, // a boardwalk: ≥ widest body + 1 m; its surface over the ground (the water stands 0.35)
+  deckRamps: [3.5, 3] as [number, number], // street end, island end
+  pumpkins: [6, 10] as [number, number],
+  wispChance: 0.75, // will-o'-the-wisps over the water at night
+  wisps: 18,
 };
 
 /** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */

@@ -20,20 +20,23 @@ export function shallowWaterGeometry(waters: ShallowWater[], terrain: Terrain): 
   for (const w of waters) {
     const rim = rimPoints(w, SEGMENTS);
     const base = pos.length / 3;
-    // Ring r = 0 is the rim, r = RINGS the centre (one vertex).
+    // Ring r = 0 is the rim, r = RINGS the centre (one vertex), or the island's shore (a ring) when it has one.
+    const isle = w.island ?? 0;
     for (let r = 0; r <= RINGS; r++) {
       const f = 1 - r / RINGS;
-      const count = r === RINGS ? 1 : SEGMENTS;
+      const count = r === RINGS && !isle ? 1 : SEGMENTS;
       for (let i = 0; i < count; i++) {
-        const x = w.x + (rim[i].x - w.x) * f;
-        const z = w.z + (rim[i].z - w.z) * f;
-        const shore = r === 0 ? 0 : Math.max(0, shoreDistance(w, x, z));
+        const l = Math.hypot(rim[i].x - w.x, rim[i].z - w.z) || 1;
+        const ix = w.x + ((rim[i].x - w.x) / l) * isle, iz = w.z + ((rim[i].z - w.z) / l) * isle;
+        const x = ix + (rim[i].x - ix) * f;
+        const z = iz + (rim[i].z - iz) * f;
+        const shore = r === 0 || (isle && r === RINGS) ? 0 : Math.max(0, shoreDistance(w, x, z));
         const rise = Math.min(1, shore / WATER.shoreRamp);
         pos.push(x, groundHeight(terrain, x, z) + RIM_LIFT + (w.depth - RIM_LIFT) * rise, z);
         uv.push(shore, 0);
       }
     }
-    for (let r = 0; r < RINGS - 1; r++) {
+    for (let r = 0; r < (isle ? RINGS : RINGS - 1); r++) {
       for (let i = 0; i < SEGMENTS; i++) {
         const a = base + r * SEGMENTS + i;
         const b = base + r * SEGMENTS + ((i + 1) % SEGMENTS);
@@ -42,6 +45,7 @@ export function shallowWaterGeometry(waters: ShallowWater[], terrain: Terrain): 
         index.push(a, c, b, b, c, d); // counter-clockwise seen from above
       }
     }
+    if (isle) continue;
     const centre = base + RINGS * SEGMENTS;
     const last = base + (RINGS - 1) * SEGMENTS;
     for (let i = 0; i < SEGMENTS; i++) index.push(last + i, centre, last + ((i + 1) % SEGMENTS));

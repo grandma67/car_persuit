@@ -8,6 +8,7 @@ import type { LotLook, TrimKind } from './districts/District';
 import { ARCADE_DEPTH, EAVE, GAMBREL_KNEE, JETTY_FROM, STILTS, clockTowerFrame, controlRoom, jettyDepth, roofRise } from './districts/trims';
 import type { Climate, TreeKind } from './Climate';
 import type { StreetProp } from './StreetProps';
+import { deckShapes } from './Deck';
 import { clipRect, groundBase, groundHeight, groundNormal, isFlat, type Terrain } from './Terrain';
 import { SEA_LEVEL } from '../render/Sea';
 import { CanalWater } from '../render/CanalWater';
@@ -518,6 +519,14 @@ export function buildCity(
         .setTranslation(fp.x, y + SOLID_HEIGHT / 2, fp.z)
         .setRotation({ x: 0, y: Math.sin(fp.yaw / 2), z: 0, w: Math.cos(fp.yaw / 2) });
       wallColliders.add(world.createCollider(desc).handle);
+    }
+    // Raised decks (boardwalks): drivable, solid down to the ground.
+    for (const d of q.dressing.decks ?? []) {
+      for (const s of deckShapes(d, terrain)) {
+        const rot = { x: 0, y: Math.sin(s.yaw / 2), z: 0, w: Math.cos(s.yaw / 2) };
+        const desc = 'box' in s ? RAPIER.ColliderDesc.cuboid(...s.box) : RAPIER.ColliderDesc.convexHull(new Float32Array(s.hull));
+        if (desc) world.createCollider(desc.setTranslation(s.at.x, s.at.y, s.at.z).setRotation(rot).setFriction(1));
+      }
     }
   }
 

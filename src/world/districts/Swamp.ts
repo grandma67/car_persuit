@@ -15,6 +15,7 @@ import { emptyDressing, feature, type BlockRole, type District, type DistrictDef
 import { isJunctionControl } from './apply';
 import { gateBlocks, mainGate, roleBlocks } from './Megapark';
 import { layPools, layWitchPool, poolArea } from './SwampPools';
+import { layWitch } from './SwampWitch';
 import { shuffle } from './place';
 
 export type SwampLook = 'swamp' | 'marsh';
@@ -75,7 +76,8 @@ const SWAMP_STYLE = { lots: [1, 1] as [number, number], height: [3, 5] as [numbe
 export const SWAMP_DEF: DistrictDef = {
   kind: 'swamp',
   label: 'Swamp',
-  features: { look: SWAMP_LOOKS_LIST },
+  features: { look: SWAMP_LOOKS_LIST, wisps: 'bool' },
+  nightFeatures: ['wisps'],
   salt: 0x2b7d51,
   chance: SWAMP.chance,
   site: 'edge',
@@ -111,13 +113,22 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   out.soft = [...inners];
   // The witch house's pool first (the biggest), then the others block by block in grid order.
   const witchK = roleBlocks(q, 'witch')[0];
-  const witch = layWitchPool(shrink(city.blocks[witchK].rect, sw), rng);
+  const witchInner = shrink(city.blocks[witchK].rect, sw);
+  const witch = layWitchPool(witchInner, rng);
   city.water.push(witch);
   for (const k of [...q.blocks].sort((a, b) => a - b)) {
     if (k === witchK) continue;
     const [lo, hi] = SWAMP.cover[look];
     city.water.push(...layPools(shrink(city.blocks[k].rect, sw), q.roles.get(k) === 'landing' ? lo : rng.range(lo, hi), poolArea(witch) * 0.95, rng));
   }
-  out.extra = { look };
+  // The witch house on its island, the boardwalk out to it.
+  const house = layWitch(city, witchK, witchInner, witch, rng);
+  out.structures.push(...house.structures);
+  out.solids.push(...house.solids);
+  out.decks = house.decks;
+  out.props.push(...house.props);
+  city.streetProps = city.streetProps.filter((p) => isJunctionControl(p) || !inRect(house.mouth, p, 0.5));
+  const wisps = feature(q, 'wisps', rng.next() < SWAMP.wispChance);
+  out.extra = { look, wisps };
   return out;
 }

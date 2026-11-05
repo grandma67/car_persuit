@@ -7,6 +7,7 @@ import { propFootprint, rectFootprint, type Footprint, type PropKind, type Stree
 import { WATER } from '../gameplay/balance';
 import { onGround } from '../world/Terrain';
 import { inWater, waterReach } from '../world/Water';
+import { inDeck } from '../world/Deck';
 
 type P = { x: number; z: number };
 
@@ -86,6 +87,13 @@ export class NavGrid {
         if (inWater(w, x, z)) wet[k] = 1;
       });
     }
+    // Raised decks over the water (boardwalks): firm ground.
+    for (const d of city.districts.flatMap((q) => q.dressing.decks ?? [])) {
+      const r = Math.hypot(d.hx, d.hz);
+      this.eachCellIn(d.x - r, d.z - r, d.x + r, d.z + r, (k, x, z) => {
+        if (inDeck(d, x, z)) (wet[k] = 0), (base[k] = OFF_ROAD);
+      });
+    }
 
     // Everything solid, and how close to it a route may come.
     const obstacles: Obstacle[] = [
@@ -141,6 +149,11 @@ export class NavGrid {
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) fn(j * this.n + i, this.cx(i), this.cx(j));
     }
+  }
+
+  /** The step cost of the cell at (x, z): 0 blocked, ROAD on a road, more off it, in the water or near something. */
+  costAt(x: number, z: number): number {
+    return this.cost[this.index(z) * this.n + this.index(x)];
   }
 
   /** Can a car drive here at all (not inside a building, statue or the water)? */

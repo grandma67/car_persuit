@@ -9,6 +9,7 @@ import type { LotStyle } from '../lots';
 import type { Footprint, PropKind, StreetProp } from '../StreetProps';
 import type { FacadeStyle } from '../../render/Facades';
 import { pin, type FeatureValue } from '../CityParams';
+import type { Deck } from '../Deck';
 
 export type { LotStyle } from '../lots';
 
@@ -94,6 +95,7 @@ export interface DistrictDressing {
   solids: Footprint[]; // everything solid off the road, for colliders and NavGrid
   drivable: Rect[]; // off-road areas a car may use (yard corridors, fields)
   soft?: Rect[]; // ground with less grip and more rolling drag (fields; wired in FM4)
+  decks?: Deck[]; // raised drivable decks (the Swamp's boardwalks): colliders, firm ground, NavGrid ground
   extra?: Record<string, unknown>; // district-specific data (festival, night market …)
 }
 

@@ -272,3 +272,13 @@ the glow budget", `maxGlow` declared on every def. Still open:
   pack poorly in a square, so the plan's 70 % isn't reached; marsh ~5 points wetter). Banks are soft
   mud. No buildings yet. `serializeCityParams` now counts the key in its 100-column rule (the swamp's
   six roles were the first one-line value to pass it).
+- **M2** (witch house): `SwampWitch.ts` (data), `render/districts/SwampWitch.ts`. New shared pieces:
+  `world/Deck.ts` (a raised drivable deck with ramped ends: one box + two convex-hull wedges as
+  colliders in `CityBuilder`, firm ground in `softGround` (checked before water), NavGrid ground at
+  the off-road cost; `dressing.decks`) and `ShallowWater.island` (a dry round island in the middle:
+  `shoreDistance` takes the nearer shore, the water mesh's rings end at the island instead of a fan).
+  The boardwalk runs from the street side nearest the island, 4 m wide, top 0.6 m, ramps 3.5 / 3 m;
+  it lands on the island 2 m short of the porch steps. The house is solid (one footprint, porch
+  included); jack-o'-lanterns at the steps (lit props), pumpkins, a scarecrow as the stick totem.
+  Windows and the brew are lamp-bulb glow instances (green at night); bubbles are 6 instances moved
+  per frame; wisps are the fireflies (new `look` colour/size, same program). `NavGrid.costAt` added.
