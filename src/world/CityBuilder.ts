@@ -102,12 +102,33 @@ export class GeometryBuilder {
         this.uvs.push(0, 0);
       }
     }
+    // Cells clear of the hill are merged into as few rectangles as fit (greedy, row-major): a piece
+    // that only touches the hill keeps CELL-sized cells over it alone. Where a merged rectangle meets
+    // a cell, the cell's extra vertex lies on flat ground, on the rectangle's straight edge: no crack.
+    const used = new Uint8Array(nx * nz);
+    const flatCell = (a: number, b: number) => flat || isFlat(t, {
+      x: r.x - r.w / 2 + (r.w * (a + 0.5)) / nx, z: r.z - r.d / 2 + (r.d * (b + 0.5)) / nz, w: r.w / nx, d: r.d / nz,
+    });
+    const flats = flat ? null : Array.from({ length: nx * nz }, (_, k) => flatCell(k % nx, Math.floor(k / nx)));
+    const isFlatCell = (a: number, b: number) => (flats ? flats[b * nx + a] : true);
+    const vtx = (a: number, b: number) => base + b * (nx + 1) + a;
     for (let b = 0; b < nz; b++) {
       for (let a = 0; a < nx; a++) {
-        const i0 = base + b * (nx + 1) + a; // low x, low z
-        const i1 = i0 + 1;
-        const i2 = i0 + nx + 1;
-        const i3 = i2 + 1;
+        if (used[b * nx + a]) continue;
+        let a1 = a, b1 = b;
+        if (isFlatCell(a, b)) {
+          while (a1 + 1 < nx && !used[b * nx + a1 + 1] && isFlatCell(a1 + 1, b)) a1++;
+          const rowFree = (row: number) => {
+            for (let k = a; k <= a1; k++) if (used[row * nx + k] || !isFlatCell(k, row)) return false;
+            return true;
+          };
+          while (b1 + 1 < nz && rowFree(b1 + 1)) b1++;
+        }
+        for (let bb = b; bb <= b1; bb++) used.fill(1, bb * nx + a, bb * nx + a1 + 1);
+        const i0 = vtx(a, b); // low x, low z
+        const i1 = vtx(a1 + 1, b);
+        const i2 = vtx(a, b1 + 1);
+        const i3 = vtx(a1 + 1, b1 + 1);
         if (down) this.indices.push(i2, i1, i3, i2, i0, i1);
         else this.indices.push(i2, i3, i1, i2, i1, i0);
       }
