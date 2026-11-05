@@ -114,7 +114,7 @@ function lanternGeometry(body = 0xd62a22): THREE.BufferGeometry {
   return mergeGeometries([
     part(box(0.02, LANTERN_HANG - 0.22, 0.02), WIRE, 0, -(LANTERN_HANG - 0.22) / 2), // cord
     part(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 6, 1, true), GOLD, 0, -LANTERN_HANG + 0.25),
-    part(new THREE.SphereGeometry(0.3, 8, 6).scale(1, 0.82, 1), body, 0, -LANTERN_HANG),
+    part(new THREE.SphereGeometry(0.3, 8, 5).scale(1, 0.82, 1), body, 0, -LANTERN_HANG), // 5 rows: ~240 of them in a street
     part(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 6, 1, true), GOLD, 0, -LANTERN_HANG - 0.25),
     part(box(0.05, 0.28, 0.05), 0xe8b02a, 0, -LANTERN_HANG - 0.42), // tassel
   ]);

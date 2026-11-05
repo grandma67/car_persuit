@@ -9,7 +9,7 @@ export const SEA_LEVEL = -1.6; // below the island top so waves never poke throu
  */
 export const SUNK_BELOW = SEA_LEVEL - 2.5;
 const NEAR_STEP = 4; // grid spacing (m) in the surf zone, fine enough for the shore swell
-const SURF_ZONE = 140; // metres of sea around the island meshed at NEAR_STEP
+const SURF_ZONE = 80; // metres of sea around the island meshed at NEAR_STEP (the breakers end ~75 m out)
 const FAR_GROWTH = 1.18; // beyond that, each grid step is this much wider than the last
 
 // Shared GLSL: distance from the island and the phase of the swell rolling in toward it.
@@ -51,28 +51,86 @@ function axisLines(islandHalf: number): number[] {
   return [...pos.slice(1).map((x) => -x).reverse(), ...pos];
 }
 
-// A flat grid, dense near the shore and coarse out at sea. Cells well inside the island are
-// left out: they are hidden under it anyway.
-function seaGeometry(islandHalf: number): THREE.BufferGeometry {
+// A flat sheet, dense near the shore and coarse out at sea: the surf ring round the island is a
+// NEAR_STEP grid, the far corners a grid of the widening lines. The four strips between them (out
+// past the surf zone, alongside the island) widen along the shore too, row by row, so their cells
+// stay roughly square instead of NEAR_STEP slivers kilometres long. A row that drops vertices is
+// zipped to the finer row with fans, so every edge is shared whole: the displaced waves never crack
+// (no T-junctions). Cells well inside the island are left out: they are hidden under it anyway.
+export function seaGeometry(islandHalf: number): THREE.BufferGeometry {
   const lines = axisLines(islandHalf);
-  const n = lines.length;
-  const positions = new Float32Array(n * n * 3);
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) positions.set([lines[i], 0, lines[j]], (j * n + i) * 3);
-  }
+  const inner = islandHalf + SURF_ZONE;
   const hidden = islandHalf - 2 * NEAR_STEP;
+  const positions: number[] = [];
+  const ids = new Map<string, number>();
+  const vertex = (x: number, z: number) => {
+    const key = `${x},${z}`;
+    let id = ids.get(key);
+    if (id === undefined) {
+      ids.set(key, (id = positions.length / 3));
+      positions.push(x, 0, z);
+    }
+    return id;
+  };
   const indices: number[] = [];
-  for (let j = 0; j < n - 1; j++) {
-    for (let i = 0; i < n - 1; i++) {
-      const inside = Math.max(Math.abs(lines[i]), Math.abs(lines[i + 1])) < hidden
-        && Math.max(Math.abs(lines[j]), Math.abs(lines[j + 1])) < hidden;
-      if (inside) continue;
-      const a = j * n + i, b = a + 1, c = a + n, d = c + 1;
-      indices.push(a, c, b, b, c, d);
+  // Wound to face up whatever order the corners come in.
+  const tri = (a: number, b: number, c: number) => {
+    const [ax, az, bx, bz, cx, cz] = [positions[a * 3], positions[a * 3 + 2], positions[b * 3], positions[b * 3 + 2], positions[c * 3], positions[c * 3 + 2]];
+    if ((bz - az) * (cx - ax) - (bx - ax) * (cz - az) > 0) indices.push(a, b, c);
+    else indices.push(a, c, b);
+  };
+  const quad = (x0: number, x1: number, z0: number, z1: number) => {
+    const a = vertex(x0, z0), b = vertex(x1, z0), c = vertex(x0, z1), d = vertex(x1, z1);
+    tri(a, c, b);
+    tri(b, c, d);
+  };
+
+  // The surf ring and the far corners: plain grid cells.
+  for (let j = 0; j < lines.length - 1; j++) {
+    for (let i = 0; i < lines.length - 1; i++) {
+      const ax = Math.max(Math.abs(lines[i]), Math.abs(lines[i + 1]));
+      const az = Math.max(Math.abs(lines[j]), Math.abs(lines[j + 1]));
+      if (ax < hidden && az < hidden) continue;
+      if ((ax <= inner) !== (az <= inner)) continue; // a strip: below
+      quad(lines[i], lines[i + 1], lines[j], lines[j + 1]);
+    }
+  }
+
+  // The strips, in shore coordinates: u along the shore (the ring's lines, -inner..inner), v out to sea.
+  const along = lines.filter((u) => Math.abs(u) <= inner);
+  const out = lines.filter((v) => v >= inner);
+  const mid = along.indexOf(0);
+  // Row k keeps every stride-th vertex (counted from the middle) and both ends; the stride is the
+  // largest power of two whose span is no wider than the band just inside the row, and never
+  // shrinks going out (the last band, cut off at the edge, can be narrow), so each row's vertices
+  // are a subset of the row inside it.
+  let stride = 1;
+  const rows: number[][] = out.map((_, k) => {
+    if (k > 0) while (stride * 2 * NEAR_STEP <= out[k] - out[k - 1]) stride *= 2;
+    return along.map((_, i) => i).filter((i) => i === 0 || i === along.length - 1 || (i - mid) % stride === 0);
+  });
+  for (const place of [
+    (u: number, v: number) => vertex(u, v), (u: number, v: number) => vertex(u, -v),
+    (u: number, v: number) => vertex(v, u), (u: number, v: number) => vertex(-v, u),
+  ]) {
+    for (let k = 0; k < out.length - 1; k++) {
+      const fine = rows[k], coarse = rows[k + 1], v0 = out[k], v1 = out[k + 1];
+      // Each coarse segment spans a run of fine vertices: fan the first half to its start, the
+      // rest to its end, and close with the triangle between the two coarse vertices.
+      let f = 0;
+      for (let c = 0; c < coarse.length - 1; c++) {
+        const run: number[] = [];
+        while (fine[f] < coarse[c + 1]) run.push(fine[f++]);
+        run.push(coarse[c + 1]);
+        const c0 = place(along[coarse[c]], v1), c1 = place(along[coarse[c + 1]], v1);
+        const half = Math.floor((run.length - 1) / 2);
+        for (let t = 0; t < run.length - 1; t++) tri(place(along[run[t]], v0), place(along[run[t + 1]], v0), t < half ? c0 : c1);
+        tri(place(along[run[half]], v0), c1, c0);
+      }
     }
   }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;

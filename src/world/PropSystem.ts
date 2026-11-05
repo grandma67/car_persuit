@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { part } from '../render/geometry';
+import { keepTriangles, part, visibleTriangles } from '../render/geometry';
 import { SUNK_BELOW } from '../render/Sea';
 import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
 import { CAR_PASSES, type Vehicle } from '../vehicles/Vehicle';
@@ -307,7 +307,22 @@ function fruitTree(look: Greenery, fruit: number): THREE.BufferGeometry {
   return mergeGeometries([trunk, crown, ...dots]);
 }
 
+/** Per look and model, the triangles left once buried faces are dropped (null: all): the models are
+ * the same for a look every time, and finding them costs ~25 ms, so a restart reuses it. */
+const visibleCache = new Map<string, number[] | null>();
+
 export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
+  const models = allModels(look);
+  for (const key of Object.keys(models) as ModelKey[]) {
+    const id = `${look.leaves},${look.trunk},${look.snowy},${key}`;
+    let keep = visibleCache.get(id);
+    if (keep === undefined) visibleCache.set(id, (keep = visibleTriangles(models[key])));
+    if (keep) models[key] = keepTriangles(models[key], keep);
+  }
+  return models;
+}
+
+function allModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
   const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
   const cyl = (r: number, h: number, seg = 8) => new THREE.CylinderGeometry(r, r, h, seg);
   const metal = 0x3a3f47;
@@ -320,14 +335,14 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
 
   const lamp = mergeGeometries([
     part(cyl(0.18, 0.4), metal, 0, 0.2),
-    part(cyl(0.08, 6), metal, 0, 3),
+    part(cyl(0.08, 6, 6), metal, 0, 3), // a thin pole: 6 sides read round
     part(box(0.07, 0.07, 1.4), metal, 0, 5.95, 0.65),
     part(box(0.45, 0.12, 0.32), metal, 0, 5.9, 1.3),
   ]);
   const hydrant = mergeGeometries([
-    part(cyl(0.22, 0.08), 0x8f1820, 0, 0.04),
-    part(cyl(0.16, 0.55), red, 0, 0.32),
-    part(cyl(0.2, 0.07), 0x8f1820, 0, 0.62),
+    part(cyl(0.22, 0.08, 6), 0x8f1820, 0, 0.04),
+    part(cyl(0.16, 0.55, 6), red, 0, 0.32),
+    part(cyl(0.2, 0.07, 6), 0x8f1820, 0, 0.62),
     part(new THREE.SphereGeometry(0.14, 6, 4), red, 0, 0.66),
     part(box(0.5, 0.1, 0.1), 0x9aa0a8, 0, 0.42),
   ]);
@@ -346,7 +361,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
   // Sign post with a plain metal back plate; the printed face is a separate textured attachment.
   const sign = (shape: SignShape) =>
     mergeGeometries([
-      part(cyl(0.045, SIGN_FACE_Y + 0.2), signPost, 0, (SIGN_FACE_Y + 0.2) / 2),
+      part(cyl(0.045, SIGN_FACE_Y + 0.2, 6), signPost, 0, (SIGN_FACE_Y + 0.2) / 2),
       part(plateGeometry(shape, 0.02).rotateY(Math.PI), signBack, 0, SIGN_FACE_Y, 0.05),
     ]);
   // Signal: pole, arm over the lane, housing hanging at the arm's end. `side` -1 reaches to the
@@ -355,7 +370,7 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
     const headX = side * -SIGNAL_HEAD_X;
     return mergeGeometries([
       part(cyl(0.2, 0.3), iron, 0, 0.15),
-      part(cyl(0.1, 5.6), iron, 0, 2.8),
+      part(cyl(0.1, 5.6, 6), iron, 0, 2.8),
       part(box(3.9, 0.12, 0.12), iron, headX / 2, 5.45),
       part(box(0.42, 1.15, 0.3), 0x1d2024, headX, 4.85),
       part(box(0.52, 1.25, 0.04), 0x111316, headX, 4.85, -0.16), // backboard
@@ -365,8 +380,8 @@ export function buildModels(look: Greenery): Record<ModelKey, THREE.BufferGeomet
   // Traffic cone: black base, orange body, reflective white band.
   const cone = mergeGeometries([
     part(box(0.5, 0.05, 0.5), 0x1a1a1a, 0, 0.025),
-    part(new THREE.CylinderGeometry(0.035, 0.2, 0.7, 10), 0xff5a10, 0, 0.4),
-    part(new THREE.CylinderGeometry(0.1, 0.13, 0.14, 10), 0xf4f4f0, 0, 0.42),
+    part(new THREE.CylinderGeometry(0.035, 0.2, 0.7, 8), 0xff5a10, 0, 0.4),
+    part(new THREE.CylinderGeometry(0.1, 0.13, 0.14, 8), 0xf4f4f0, 0, 0.42),
   ]);
   // Beach umbrella: the canopy is tinted per instance (white here, so the tint shows true).
   const umbrella = mergeGeometries([
@@ -509,7 +524,8 @@ function chinatownModels(): Record<ChinatownKind, THREE.BufferGeometry> {
     part(cyl(0.3, 0.34, 0.12), gold, 0, 0.5),
     part(cyl(0, 0.34, 0.35, 8).rotateX(Math.PI), gold, 0, 0.73), // lotus
     part(cyl(0.09, 0.1, 3.0, 8), red, 0, 2.15),
-    ...[1.0, 1.6, 2.2, 2.8].map((y) => part(cyl(0.12, 0.12, 0.06, 8), gold, 0, y)), // bamboo joints
+    // Bamboo joints: open rings (their caps would only be a 2 cm lip round the shaft).
+    ...[1.0, 1.6, 2.2, 2.8].map((y) => part(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 8, 1, true), gold, 0, y)),
     // Banner brackets on the street side.
     ...[BANNER.y + BANNER.h / 2 + 0.04, BANNER.y - BANNER.h / 2 - 0.04].map((y) => part(box(0.04, 0.04, BANNER.z + 0.05), gold, 0, y, BANNER.z / 2)),
     ...dragon(-1), ...dragon(1),

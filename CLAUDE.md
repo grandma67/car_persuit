@@ -16,6 +16,7 @@ destinations, cops, civilian traffic, themed districts.
 | `knowledge/LEAKS.md` | **read before touching `dispose()` or anything Retry rebuilds**: `check:restart`, `gpuTrace`, leak causes | tracked |
 | `knowledge/OPTIMIZATIONS.md` | **read before perf work**: techniques, measured costs, ranked fixes, `perf-profile.js` | tracked |
 | `knowledge/OPTIMIZATION_TASKS.md` | perf tasks step by step: baseline, milestones M1–M4, checks per task | tracked |
+| `knowledge/polygons.md` | **read before adding or changing a model**: triangles per prop, building, car; scene by owner; budgets | tracked |
 | `knowledge/RAPIER.md` | why we stay on Rapier 0.18.2 | tracked |
 | `knowledge/plans/PLAN_DISTRICTS.md` | district decisions, dropped ideas | tracked |
 | `knowledge/plans/PLAN_CITY_PARAMS.md` | city params decisions, what changed from the plan | tracked |
@@ -57,6 +58,8 @@ Each script's header lists its options; the doc named here says when to use it.
 - Cop driving: `npm run cops -- --vs main` (~2 min; `--samples 2` adds the noise band, ±% per cell: a
   Δ inside it is noise; `--diag hits|uturns|recovers`; `COPS_DEV.md`).
   Never write a chase sim for this.
+- Triangles per prop, building kind, car: `npm run polygons -- [seeds=20] [props|buildings|cars]`; the whole
+  scene by owner: `scripts/evals/polygons.js` (`polygons.md`; update its tables and log after a model change).
 - Rapier: `node scripts/rapier-bench.mjs 0.18.2 <new>` (`RAPIER.md`).
 - Browser (`BROWSER_CHECKS.md`; always under a hard limit: `perl -e 'alarm 300; exec @ARGV' npm run …`;
   ~10 s plus the eval with Vite already on 5199, `check:restart` ~1.5 min;
