@@ -970,7 +970,7 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
 }
 
 /** Park pieces' breakables: a pond's reeds; a pitch's goals, corner flags and ball. */
-function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball', THREE.BufferGeometry> {
+function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball' | 'fern', THREE.BufferGeometry> {
   // A clump of reeds: thin blades leaning out from the root, a few bulrush heads on stalks.
   const blades = Array.from({ length: 11 }, (_, k) => {
     const a = k * 2.4;
@@ -1023,7 +1023,14 @@ function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball', THREE.Bu
       return part(new THREE.DodecahedronGeometry(0.032, 0), 0x1c1c1c, Math.cos(a) * r, 0.11 + y, Math.sin(a) * r);
     }),
   ]);
-  return { reeds: mergeGeometries([...blades, ...heads]), goal, cornerFlag, ball };
+  // The Forest's bracken: five fronds arching out from the root, one blade each (60 tris).
+  const fern = mergeGeometries(Array.from({ length: 5 }, (_, k) => {
+    const a = k * 1.26 + 0.3;
+    const len = 0.7 + (k % 2) * 0.15;
+    const frond = new THREE.BoxGeometry(0.2, 0.02, len).rotateX(-0.45).translate(0, len * 0.22, len * 0.45);
+    return part(frond.rotateY(a), k % 2 ? 0x4e7a2e : 0x6a9a3e);
+  }));
+  return { reeds: mergeGeometries([...blades, ...heads]), goal, cornerFlag, ball, fern };
 }
 
 type MegaparkKind = 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard'
@@ -1592,7 +1599,7 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
-  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball',
+  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball', 'fern',
   'tennisNet', 'deckChair', 'cafeTable', 'flowerPlanter', 'iceCreamCart', 'kiosk', 'picnicTable', 'litterBin', 'parkBoard',
   'swings', 'slide', 'climber', 'roundabout', 'seesaw']);
 

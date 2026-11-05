@@ -140,15 +140,15 @@ export function layYard(q: District, city: CityData, k: number, rng: Rng): SetLa
     v += Y.corridor;
   }
   // The open ground: the apron, the corridors between the rows (and on to the sawmill), the aisle.
-  out.drivable.push(f.rect(-half, half, 0, Y.apron));
+  out.drivable.push(f.rect(-half, half, Y.parked, Y.apron)); // behind the parked truck and loader
   for (const e of rowsEnd) out.drivable.push(f.rect(-half, half, e, Math.min(e + Y.corridor, depth - mill)));
   out.drivable.push(f.rect(-Y.aisle / 2, Y.aisle / 2, 0, depth - mill));
   // On the apron: the loader on one side of the aisle, the truck on the other, both along u.
   const side = rng.next() < 0.5 ? 1 : -1;
-  const truck = f.at(side * (Y.aisle / 2 + 8), Y.apron / 2);
+  const truck = f.at(side * (Y.aisle / 2 + 8), Y.parked / 2);
   const truckFp: Footprint = { ...truck, hx: 5.2, hz: 1.3, yaw: yawU };
   out.structures.push({ kind: 'logTruck', ...truck, yaw: yawU + (rng.next() < 0.5 ? Math.PI : 0), footprints: [truckFp] });
-  const loader = f.at(-side * (Y.aisle / 2 + 6), Y.apron / 2);
+  const loader = f.at(-side * (Y.aisle / 2 + 6), Y.parked / 2);
   const loaderFp: Footprint = { ...loader, hx: 2, hz: 1.4, yaw: yawU };
   out.structures.push({ kind: 'logLoader', ...loader, yaw: yawU + (side > 0 ? 0 : Math.PI), footprints: [loaderFp] });
   out.solids.push(truckFp, loaderFp);

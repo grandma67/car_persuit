@@ -163,6 +163,7 @@ words or a district not rolled place it.
 | `sign-square-old` | 88 | 0.0 | 0 |
 | `sign-triangle-old` | 87 | 0.0 | 0 |
 | `tree-pine` | 43 | 0.0 | 0 |
+| `fern` | 60 | 0.0 | 0 |
 | `tree-round` | 35 | 0.0 | 0 |
 | `umbrella` | 31 | 0.0 | 0 |
 | **all street props** | | **5 164** | **506 k** |
@@ -281,3 +282,4 @@ Use these when adding a model (so the total only goes down):
 | 2026-11-05 | `perf/polygons` | buried faces dropped from props, 6-sided thin poles, flat ground cells merged, sea coarse past 80 m and along its far strips, Chinatown lantern/joint cuts | 746 k | 506 k | 38.5 k |
 | 2026-11-05 | `districts/swamp` | the Swamp: cypress 196, willow 266, snag 100, mangrove 263 (roots 3×5 tori; 501 before); reed clumps thinned (2 a clump); a swamp city on seed 11 +70–90 k in view vs no district | — | — | — |
 | 2026-11-05 | `districts/swamp` | snag 87 (limbs rooted in its leaning trunk: their bases now buried, dropped); snowy cypress/willow keep their crowns (148→196, 192→266) so the moss and fronds hang from something; boardwalk planks without their hidden ±Z edges and posts without their buried foot (≈ 42 → 30 tris a metre: the 54 m deck 2 376 → 1 672, `SwampWitch.test`); witch house + island 1 420 | — | — | — |
+| 2026-11-05 | `districts/forest` | the Forest: `fern` 60 (five one-blade fronds; a first try with tips was 120); trees are the city's pine (43) and round (35), ~75 a woods block; a 4×3 forest +49 k tris in view vs no district; set pieces (stacks, truck, loader, lookout, tents, floor logs and stones) merged in one district mesh | — | — | — |

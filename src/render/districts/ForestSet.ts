@@ -214,3 +214,29 @@ export function gatePosts(s: Structure, ground: (x: number, z: number) => number
     place(g, frameOf(f.x, y, f.z, f.yaw), out);
   }
 }
+
+/** A fallen log along local X, half sunk in the leaf litter, a stub of a branch, moss along its top. */
+export function fallenLog(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+  const len = (s.data?.length as number) ?? 5, r = (s.data?.r as number) ?? 0.32;
+  const rng = new Rng((s.data?.seed as number) ?? 1);
+  const g = [...log(len, r, 0, r * 0.75, 0)];
+  g.push(part(box(len * 0.7, 0.05, r * 0.9), snowy ? SNOW : 0x4a6a2a, rng.range(-0.3, 0.3), r * 1.72, 0)); // moss (snow) along the top
+  g.push(part(cyl(0.07, 0.1, 0.9, 5).rotateZ(-0.9), BARK, len * rng.range(-0.25, 0.25), r * 1.4, r * 0.6)); // a branch stub
+  place(g, frameOf(s.x, y, s.z, s.yaw), out);
+}
+
+/** A mossy boulder: a squashed, roughly faceted stone. */
+export function boulder(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+  const r = (s.data?.r as number) ?? 1;
+  const rng = new Rng((s.data?.seed as number) ?? 1);
+  const stone = new THREE.DodecahedronGeometry(1, 0).scale(r, r * rng.range(0.55, 0.75), r * 0.8);
+  const g = [part(stone, 0x8a8680, 0, r * 0.35, 0), part(new THREE.DodecahedronGeometry(1, 0).scale(r * 0.85, 0.12, r * 0.65), snowy ? SNOW : 0x5a7a3a, 0, r * 0.35 + r * 0.6 * 0.9, 0)];
+  place(g, frameOf(s.x, y, s.z, s.yaw), out);
+}
+
+/** A sawn stump: a short trunk with a pale cut top. */
+export function stump(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
+  const r = (s.data?.r as number) ?? 0.35, h = (s.data?.h as number) ?? 0.5;
+  const g = [part(cyl(r, r * 1.2, h, 8), BARK, 0, h / 2, 0), part(cyl(r * 0.92, r * 0.92, 0.03, 8), snowy ? SNOW : CUT, 0, h + 0.005, 0)];
+  place(g, frameOf(s.x, y, s.z, s.yaw), out);
+}

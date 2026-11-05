@@ -519,11 +519,13 @@ export const FOREST = {
   lotInset: 1, // lots stand this far in from the sidewalk line
   sawmill: { size: [24, 12] as [number, number], h: 7 }, // long side along the yard's back
   ranger: { size: [10, 7] as [number, number], h: 4.5 }, // the ranger station by the main gate
-  /** The lumber yard, out from its street (the main gate's): an open apron, rows of log stacks with corridors between, an aisle up the middle. */
-  yard: { apron: 9, row: 2.8, corridor: 5, aisle: 6, stack: 7, stackGap: 0.5, rows: 3, stackH: [1.8, 2.6] as [number, number], lamps: 4 },
+  /** The lumber yard, out from its street (the main gate's): an open apron (the truck and loader parked along its first `parked` m), rows of log stacks with corridors between, an aisle up the middle. */
+  yard: { apron: 9, parked: 3.2, row: 2.8, corridor: 5, aisle: 6, stack: 7, stackGap: 0.5, rows: 3, stackH: [1.8, 2.6] as [number, number], lamps: 4 },
   lookout: { cabin: 14, legs: 2.2, leg: 0.3 }, // cabin floor height; legs ± this from the middle at the foot
   camp: { tents: [3, 5] as [number, number], pit: 0.9, pitOut: 3.4, ring: 3.6, tables: 2 },
   post: 0.3, // a timber gate post's footprint, half side
+  /** The forest floor per woods block: fern clumps, fallen logs, boulders, stumps. */
+  floor: { ferns: [10, 18] as [number, number], logs: [1, 2] as [number, number], boulders: [0, 2] as [number, number], stumps: [2, 4] as [number, number] },
 };
 
 /** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */

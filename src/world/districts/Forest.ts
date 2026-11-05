@@ -12,7 +12,7 @@ import { emptyDressing, feature, type BlockRole, type District, type DistrictDef
 import { isJunctionControl } from './apply';
 import { gateBlocks, mainGate, roleBlocks, streetSidesOf } from './Megapark';
 import { shuffle } from './place';
-import { layClearing, layTrack, layTrees, trackClearOf, trackMouths, type Clearing, type Track } from './ForestWoods';
+import { layClearing, layFloor, layTrack, layTrees, trackClearOf, trackMouths, type Clearing, type Track } from './ForestWoods';
 import { layCampsite, layGates, layLookout, layYard, rangerRect, sawmillRect, yardFrame, type SetLayout } from './ForestSet';
 import { clearOf } from './HarborYard';
 import { frontMask } from './Megapark';
@@ -163,9 +163,13 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const mouths: Rect[] = tracks.flatMap((t) => trackMouths(t, city));
   city.streetProps = city.streetProps.filter((p) => isJunctionControl(p) || !mouths.some((m) => inRect(m, p, 0.5)));
   const trees = layTrees(q, city, tracks, clearings, open, [...keepOff, ...out.solids], rng);
+  // The floor between them: ferns, fallen logs, boulders, stumps.
+  const floor = layFloor(q, city, tracks, clearings, open, trees, [...keepOff, ...out.solids], rng);
+  out.structures.push(...floor.structures);
+  out.solids.push(...floor.solids);
   // Props clear of the solids, the buildings, the junction controls and each other (set props first).
   const controls = city.streetProps.filter((p) => inRect(q.bounds, p, 2) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
-  out.props = clearOf([...props, ...trees], [...out.solids, ...controls, ...buildings.map(rectFootprint)],
+  out.props = clearOf([...props, ...trees, ...floor.props], [...out.solids, ...controls, ...buildings.map(rectFootprint)],
     city.streetProps.filter((p) => inRect(q.bounds, p, 2)).map((p) => propFootprint(p, 0.1)));
   // Cops route through the woods only along the tracks and across the clearings.
   const woods = q.blocks.filter((k) => !open.has(k)).map((k) => shrink(city.blocks[k].rect, sw));

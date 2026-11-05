@@ -9,7 +9,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { FOREST_NAMES } from '../../world/districts/ForestSet';
 import { ranchGate } from './Farm';
 import { farmSignMaterial } from './farmSigns';
-import { firePit, gatePosts, logLoader, logStack, logTruck, lookout, tent } from './ForestSet';
+import { boulder, fallenLog, firePit, gatePosts, stump, logLoader, logStack, logTruck, lookout, tent } from './ForestSet';
 import type { CityData } from '../../world/CityGenerator';
 import type { District } from '../../world/districts/District';
 import { forestClearings, forestTracks } from '../../world/districts/Forest';
@@ -68,6 +68,9 @@ export function renderForest(q: District, city: CityData, scene: THREE.Scene, ct
     else if (s.kind === 'firePit') fires.push(firePit(s, y, snowy, solid));
     else if (s.kind === 'gatePosts') gatePosts(s, ctx.ground, snowy, solid);
     else if (s.kind === 'logArch') ranchGate(s, snowy, solid, signs, false);
+    else if (s.kind === 'fallenLog') fallenLog(s, y, snowy, solid);
+    else if (s.kind === 'boulder') boulder(s, y, snowy, solid);
+    else if (s.kind === 'stump') stump(s, y, snowy, solid);
   }
   if (solid.length) {
     const mesh = new THREE.Mesh(mergeGeometries(solid), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 }));

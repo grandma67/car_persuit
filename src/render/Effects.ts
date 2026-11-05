@@ -186,6 +186,7 @@ export class Effects {
       // Farm
       case 'pumpkin': return burst(this.fruit, 22);
       case 'reeds': return burst(this.straw, 16);
+      case 'fern': return burst(this.straw, 10);
       case 'goal': return burst(this.cloth, 12); // the net tears loose
       case 'cornerFlag': return burst(this.cloth, 3);
       case 'ball': return;

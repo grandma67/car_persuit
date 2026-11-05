@@ -9,7 +9,7 @@ import { FOREST } from '../../gameplay/balance';
 import type { CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
 import { FootprintIndex, propSpec, type Footprint, type StreetProp } from '../StreetProps';
-import type { District } from './District';
+import type { District, Structure } from './District';
 import { SIDES, streetSidesOf, type Side } from './Megapark';
 
 type P = { x: number; z: number };
@@ -167,3 +167,64 @@ export function layTrees(q: District, city: CityData, tracks: Track[], clearings
 
 /** The trees a dressed forest planted. */
 export const forestTrees = (q: District) => q.dressing.props.filter((p) => p.kind === 'tree');
+
+export interface FloorLayout {
+  props: StreetProp[]; // ferns
+  structures: Structure[]; // fallen logs, boulders, stumps
+  solids: Footprint[];
+}
+
+/**
+ * The forest floor between the trees: fern clumps (breakable), fallen logs, boulders and stumps
+ * (solid), off the tracks and out of the clearings, clear of the trees' trunks and of `avoid`.
+ */
+export function layFloor(q: District, city: CityData, tracks: Track[], clearings: Clearing[], open: Set<number>, trees: StreetProp[], avoid: Footprint[], rng: Rng): FloorLayout {
+  const out: FloorLayout = { props: [], structures: [], solids: [] };
+  const F = FOREST.floor;
+  const taken = new FootprintIndex([...avoid, ...trees.map((t) => ({ x: t.x, z: t.z, hx: propSpec(t).hx + 0.3, hz: propSpec(t).hx + 0.3, yaw: 0 }))]);
+  for (const k of [...q.blocks].sort((a, b) => a - b)) {
+    if (open.has(k)) continue;
+    const room = shrink(city.blocks[k].rect, city.config.sidewalk + FOREST.edge);
+    const mine = tracks.filter((t) => t.block === k);
+    const glades = clearings.filter((c) => c.block === k);
+    /** A free spot for a footprint of these half sizes (at a random yaw), or null. */
+    const spot = (hx: number, hz: number, margin: number): Footprint | null => {
+      for (let t = 0; t < 14; t++) {
+        const fp: Footprint = { x: room.x + rng.range(-room.w / 2, room.w / 2), z: room.z + rng.range(-room.d / 2, room.d / 2), hx, hz, yaw: rng.range(0, Math.PI) };
+        const reach = Math.hypot(hx, hz);
+        if (!inRect(shrink(room, reach), fp)) continue;
+        if (mine.some((tr) => trackDistance(tr, fp) < tr.width / 2 + margin + reach)) continue;
+        if (glades.some((c) => Math.hypot(c.x - fp.x, c.z - fp.z) < c.r + reach)) continue;
+        if (taken.hits(fp)) continue;
+        return fp;
+      }
+      return null;
+    };
+    const solid = (kind: string, fp: Footprint | null, data: Record<string, unknown>) => {
+      if (!fp) return;
+      out.structures.push({ kind, x: fp.x, z: fp.z, yaw: fp.yaw, footprints: [fp], data });
+      out.solids.push(fp);
+      taken.add({ ...fp, hx: fp.hx + 0.4, hz: fp.hz + 0.4 });
+    };
+    for (let i = rng.int(F.logs[0], F.logs[1]); i > 0; i--) {
+      const len = rng.range(4, 7);
+      solid('fallenLog', spot(len / 2, 0.35, FOREST.trackClear), { length: len, r: rng.range(0.28, 0.38), seed: rng.int(1, 1e6) });
+    }
+    for (let i = rng.int(F.boulders[0], F.boulders[1]); i > 0; i--) {
+      const r = rng.range(0.7, 1.3);
+      solid('boulder', spot(r, r * 0.8, FOREST.trackClear), { r, seed: rng.int(1, 1e6) });
+    }
+    for (let i = rng.int(F.stumps[0], F.stumps[1]); i > 0; i--) {
+      const r = rng.range(0.3, 0.45);
+      solid('stump', spot(r, r, FOREST.trackClear), { r, h: rng.range(0.35, 0.7) });
+    }
+    // Ferns may grow to the track's edge (they snap under a wheel).
+    for (let i = rng.int(F.ferns[0], F.ferns[1]); i > 0; i--) {
+      const fp = spot(0.5, 0.5, 0.3);
+      if (!fp) continue;
+      out.props.push({ kind: 'fern', x: fp.x, z: fp.z, yaw: rng.range(0, Math.PI * 2), scale: rng.range(0.8, 1.4) });
+      taken.add(fp);
+    }
+  }
+  return out;
+}

@@ -150,6 +150,28 @@ describe('Forest tracks and trees', () => {
   });
 });
 
+describe('Forest floor', () => {
+  it.each(placed)('seed %i: ferns, fallen logs, boulders and stumps in the woods, off the tracks and out of the clearings', (_seed, c, q) => {
+    const breaks: string[] = [];
+    const tracks = forestTracks(q);
+    const clearings = forestClearings(q);
+    const pieces = q.dressing.structures.filter((s) => ['fallenLog', 'boulder', 'stump'].includes(s.kind));
+    for (const s of pieces) {
+      const f = s.footprints[0];
+      const k = q.blocks.find((b) => inRect(c.blocks[b].rect, f));
+      if (k === undefined || q.roles.get(k) === 'lumberyard') breaks.push(`${s.kind} at ${at(f)} outside the woods`);
+      for (const t of tracks) if (trackDistance(t, f) < t.width / 2 + FOREST.trackClear) breaks.push(`${s.kind} at ${at(f)} on a track`);
+      for (const g of clearings) if (Math.hypot(g.x - f.x, g.z - f.z) < g.r) breaks.push(`${s.kind} at ${at(f)} in a clearing`);
+    }
+    const ferns = q.dressing.props.filter((p) => p.kind === 'fern');
+    for (const p of ferns) for (const t of tracks) if (trackDistance(t, p) < t.width / 2) breaks.push(`fern at ${at(p)} on a track`);
+    expect(breaks).toEqual([]);
+    const woods = roleBlocks(q, 'woods').length;
+    expect(ferns.length).toBeGreaterThanOrEqual(woods * 5);
+    expect(pieces.filter((s) => s.kind === 'fallenLog').length).toBeGreaterThanOrEqual(woods * 0.5);
+  });
+});
+
 describe('Forest police routing', () => {
   it.each(placed.slice(0, 10))('seed %i: NavGrid crosses the woods only along a track or a clearing', (_seed, c, q) => {
     const nav = new NavGrid(c);
@@ -224,7 +246,7 @@ describe('Forest set pieces', () => {
     expect(breaks).toEqual([]);
   });
 
-  it.each(placed.filter(([, , q]) => q.features.lumberyard))('seed %i: the lumber yard: stacks in rows, corridors wide enough and clear, reaching its street; a truck and a loader on the apron', (_seed, c, q) => {
+  it.each(placed.filter(([, , q]) => q.features.lumberyard))('seed %i: the lumber yard: stacks in rows, corridors, apron and aisle wide enough and clear; a truck and a loader parked by the street', (_seed, c, q) => {
     const [yard] = roleBlocks(q, 'lumberyard');
     const room = inner(c, yard);
     const stacks = q.dressing.structures.filter((s) => s.kind === 'logStack');
@@ -241,16 +263,10 @@ describe('Forest set pieces', () => {
     for (const r of q.dressing.drivable) {
       if (Math.min(r.w, r.d) < lane - 1e-6) breaks.push(`corridor at ${at(r)} ${Math.min(r.w, r.d).toFixed(1)} m wide`);
       if (!inRect(room, r, 0.01)) breaks.push(`corridor at ${at(r)} leaves the yard`);
-      for (const f of solids) if (footprintsOverlap(rectFootprint(shrink(r, 0.05)), f)) {
-        const kind = q.dressing.structures.find((s) => s.footprints.includes(f))?.kind;
-        if (kind !== 'logTruck' && kind !== 'logLoader') breaks.push(`corridor at ${at(r)} blocked by a ${kind}`);
-      }
+      for (const f of solids) if (footprintsOverlap(rectFootprint(shrink(r, 0.05)), f)) breaks.push(`corridor at ${at(r)} blocked by a ${q.dressing.structures.find((s) => s.footprints.includes(f))?.kind}`);
       if (footprintsOverlap(rectFootprint(shrink(r, 0.05)), rectFootprint(sawmill))) breaks.push(`corridor at ${at(r)} runs into the sawmill`);
     }
     for (const kind of ['logTruck', 'logLoader']) expect(q.dressing.structures.filter((s) => s.kind === kind)).toHaveLength(1);
-    // The truck and loader leave the aisle clear, from the street to the sawmill.
-    const aisle = q.dressing.drivable.reduce((a, b) => (Math.min(b.w, b.d) < Math.min(a.w, a.d) ? b : a));
-    for (const f of solids) if (footprintsOverlap(rectFootprint(shrink(aisle, 0.05)), f)) breaks.push(`aisle blocked at ${at(f)}`);
     expect(breaks).toEqual([]);
   });
 
