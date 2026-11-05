@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const PHASES = ['idle', 'cruise', 'chase5'];
+const PHASES = ['idle', 'cruise', 'chase5', 'blast'];
 const fmt = (v) => (v === undefined || v === null ? '–' : typeof v === 'number' ? String(+v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 3)) : String(v));
 const pad = (s, n) => (s.length >= n ? s : s + ' '.repeat(n - s.length));
 const lpad = (s, n) => (s.length >= n ? s : ' '.repeat(n - s.length) + s);
@@ -17,6 +17,9 @@ function rowsOf(phase) {
   const out = {
     'FPS': phase.fps,
     'frame gap p99 ms': phase.frameGapP99,
+    'worst frame ms': phase.frameGapMax,
+    'programs': phase.programs,
+    'new shaders': phase.newShaders?.length,
     'garbage MB/s': phase.allocMBperSec,
     'GC/s': phase.gcPerSec,
     'GPU ms': phase.gpuMsPerFrame,
@@ -39,7 +42,7 @@ export function perfTable(base, current = null, { rows = 14 } = {}) {
     .map(([k]) => k)
     .filter((k) => k !== 'FRAME')
     .slice(0, rows);
-  const names = ['FRAME', ...systems, 'garbage MB/s', 'GC/s', 'GPU ms', 'calls', 'triangles k', 'FPS', 'frame gap p99 ms'].filter((k) => k in ref || sides.some((v) => phases.some((p) => k in rowsOf(v[p]))));
+  const names = ['FRAME', ...systems, 'garbage MB/s', 'GC/s', 'GPU ms', 'calls', 'triangles k', 'FPS', 'frame gap p99 ms', 'worst frame ms', 'programs', 'new shaders'].filter((k) => k in ref || sides.some((v) => phases.some((p) => k in rowsOf(v[p]))));
   const cell = (k, p) => {
     const a = rowsOf(base[p])[k];
     if (!current) return fmt(a);
@@ -60,6 +63,11 @@ export function perfTable(base, current = null, { rows = 14 } = {}) {
     lines.push(`${name}: ${JSON.stringify(a)}${current ? ` → ${JSON.stringify(b)}` : ''}`);
   };
   fact('stats', (v) => v.stats);
+  fact('wreckedInChase', (v) => v.wreckedInChase || undefined);
+  fact('newShaders', (v) => {
+    const named = Object.fromEntries(PHASES.filter((p) => v[p]?.newShaders?.length).map((p) => [p, v[p].newShaders]));
+    return Object.keys(named).length ? named : undefined;
+  });
   fact('budget', (v) => v.budget);
   fact('mixedMaterials', (v) => (v.mixedMaterials?.length ? v.mixedMaterials : undefined));
   fact('staleMatrices', (v) => (v.staleMatrices?.length ? v.staleMatrices : undefined));
