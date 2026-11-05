@@ -7,7 +7,11 @@ import { inRect, shrink } from '../lots';
 import { softGroundOf } from '../softGround';
 import { at } from './rules';
 import { gateBlocks, mainGate, roleBlocks, streetSidesOf } from './Megapark';
-import { forestClearings, forestTracks, FOREST_DEF } from './Forest';
+import { forestClearings, forestTracks, FOREST_DEF, rangerBlock } from './Forest';
+import { yardFrame } from './ForestSet';
+import { DISTRICTS } from '../../gameplay/balance';
+import { footprintsOverlap, rectFootprint } from '../StreetProps';
+import { isJunctionControl } from './apply';
 import { forestTrees, trackDistance } from './ForestWoods';
 import { DISTRICT_DEFS } from './index';
 import { propSpec } from '../StreetProps';
@@ -38,7 +42,9 @@ describe('Forest placement and roles', () => {
     expect(q.blocks.every((k) => c.blocks[k].park)).toBe(true);
     expect(q.roles.size).toBe(q.blocks.length);
     expect(q.gates.length).toBeGreaterThanOrEqual(2);
-    expect(c.buildings.filter((b) => inRect(q.bounds, b))).toEqual([]);
+    // Buildings: the ranger station, and the sawmill when there's a lumber yard.
+    const lots = c.buildings.filter((b) => inRect(q.bounds, b)).map((b) => b.lot).sort();
+    expect(lots).toEqual(q.features.lumberyard ? ['ranger', 'sawmill'] : ['ranger']);
   });
 
   it.each(placed)('seed %i: the lumber yard beside the main gate, the lookout deepest in (of the blocks a track can cross), one of each at most', (_seed, c, q) => {
@@ -179,5 +185,111 @@ describe('Forest police routing', () => {
       }
     }
     expect([...new Set(breaks)].slice(0, 8)).toEqual([]);
+  });
+});
+
+describe('Forest set pieces', () => {
+  it.each(placed)('seed %i: the sawmill at the yard\'s back, the ranger station by the main gate; tracks and trees clear of both', (_seed, c, q) => {
+    const breaks: string[] = [];
+    const sawmill = c.buildings.find((b) => b.lot === 'sawmill' && inRect(q.bounds, b));
+    const [yard] = roleBlocks(q, 'lumberyard');
+    if (sawmill) {
+      if (!inRect(inner(c, yard), sawmill, 0.01)) breaks.push('sawmill outside its yard');
+      // At the back: farther from the main gate's street than the yard's middle.
+      const f = yardFrame(q, c, yard);
+      const front = f.at(0, 0);
+      if (Math.hypot(sawmill.x - front.x, sawmill.z - front.z) < 30) breaks.push('sawmill not at the back of the yard');
+    }
+    const ranger = c.buildings.find((b) => b.lot === 'ranger' && inRect(q.bounds, b))!;
+    const k = rangerBlock(q, c)!;
+    if (!inRect(inner(c, k), ranger, 0.01)) breaks.push('ranger station outside its block');
+    expect(gateBlocks(q, c, mainGate(q))).toContain(k);
+    for (const b of [sawmill, ranger]) {
+      if (!b) continue;
+      for (const t of forestTracks(q)) for (const p of t.points) if (footprintsOverlap({ x: p.x, z: p.z, hx: t.width / 2, hz: t.width / 2, yaw: 0 }, rectFootprint(b))) breaks.push(`track on the ${b.lot} at ${at(p)}`);
+      for (const t of forestTrees(q)) if (footprintsOverlap({ x: t.x, z: t.z, hx: 0.5, hz: 0.5, yaw: 0 }, rectFootprint(b))) breaks.push(`tree in the ${b.lot} at ${at(t)}`);
+    }
+    expect(breaks).toEqual([]);
+  });
+
+  it.each(placed)('seed %i: a log arch over the main street (its board clear overhead), timber posts at the other gates', (_seed, c, q) => {
+    const arches = q.dressing.structures.filter((s) => s.kind === 'logArch');
+    expect(arches.length).toBeLessThanOrEqual(1);
+    const posts = q.dressing.structures.filter((s) => s.kind === 'gatePosts');
+    expect(posts.length + arches.length).toBe(q.gates.length);
+    const board = q.dressing.overhead.find((o) => o.kind === 'archSign');
+    if (arches.length) expect(board!.bottom).toBeGreaterThanOrEqual(DISTRICTS.overheadClearance);
+    const paving = [...c.roads.map((r) => rectFootprint(r.rect)), ...c.intersections.map(rectFootprint)];
+    const breaks = posts.flatMap((s) => s.footprints).filter((f) => paving.some((r) => footprintsOverlap(f, r))).map(at);
+    expect(breaks).toEqual([]);
+  });
+
+  it.each(placed.filter(([, , q]) => q.features.lumberyard))('seed %i: the lumber yard: stacks in rows, corridors wide enough and clear, reaching its street; a truck and a loader on the apron', (_seed, c, q) => {
+    const [yard] = roleBlocks(q, 'lumberyard');
+    const room = inner(c, yard);
+    const stacks = q.dressing.structures.filter((s) => s.kind === 'logStack');
+    expect(stacks.length).toBeGreaterThanOrEqual(8);
+    const breaks: string[] = [];
+    const sawmill = c.buildings.find((b) => b.lot === 'sawmill' && inRect(q.bounds, b))!;
+    const solids = q.dressing.solids;
+    for (const s of stacks) {
+      const f = s.footprints[0];
+      if (!inRect(room, { x: f.x, z: f.z }, -Math.min(f.hx, f.hz))) breaks.push(`stack at ${at(s)} outside the yard`);
+      if (footprintsOverlap(f, rectFootprint(sawmill))) breaks.push(`stack at ${at(s)} in the sawmill`);
+    }
+    const lane = widestBody({ offRoad: true }) + 1;
+    for (const r of q.dressing.drivable) {
+      if (Math.min(r.w, r.d) < lane - 1e-6) breaks.push(`corridor at ${at(r)} ${Math.min(r.w, r.d).toFixed(1)} m wide`);
+      if (!inRect(room, r, 0.01)) breaks.push(`corridor at ${at(r)} leaves the yard`);
+      for (const f of solids) if (footprintsOverlap(rectFootprint(shrink(r, 0.05)), f)) {
+        const kind = q.dressing.structures.find((s) => s.footprints.includes(f))?.kind;
+        if (kind !== 'logTruck' && kind !== 'logLoader') breaks.push(`corridor at ${at(r)} blocked by a ${kind}`);
+      }
+      if (footprintsOverlap(rectFootprint(shrink(r, 0.05)), rectFootprint(sawmill))) breaks.push(`corridor at ${at(r)} runs into the sawmill`);
+    }
+    for (const kind of ['logTruck', 'logLoader']) expect(q.dressing.structures.filter((s) => s.kind === kind)).toHaveLength(1);
+    // The truck and loader leave the aisle clear, from the street to the sawmill.
+    const aisle = q.dressing.drivable.reduce((a, b) => (Math.min(b.w, b.d) < Math.min(a.w, a.d) ? b : a));
+    for (const f of solids) if (footprintsOverlap(rectFootprint(shrink(aisle, 0.05)), f)) breaks.push(`aisle blocked at ${at(f)}`);
+    expect(breaks).toEqual([]);
+  });
+
+  it.each(placed.filter(([, , q]) => q.features.lookout))('seed %i: the lookout stands on four legs in its clearing, off the track', (_seed, _c, q) => {
+    const towers = q.dressing.structures.filter((s) => s.kind === 'lookout');
+    expect(towers).toHaveLength(1);
+    const [k] = roleBlocks(q, 'lookout');
+    const glade = forestClearings(q).find((g) => g.block === k)!;
+    const track = forestTracks(q).find((t) => t.block === k)!;
+    const legs = towers[0].footprints;
+    expect(legs).toHaveLength(4);
+    for (const f of legs) {
+      expect(Math.hypot(f.x - glade.x, f.z - glade.z)).toBeLessThan(glade.r);
+      expect(trackDistance(track, f)).toBeGreaterThan(track.width / 2 + 1);
+    }
+  });
+
+  it.each(placed.filter(([, , q]) => q.features.campsite))('seed %i: the campsite: a fire pit and two tents or more in the clearing, off the track', (_seed, _c, q) => {
+    const [k] = roleBlocks(q, 'campsite');
+    const glade = forestClearings(q).find((g) => g.block === k)!;
+    const track = forestTracks(q).find((t) => t.block === k)!;
+    const pits = q.dressing.structures.filter((s) => s.kind === 'firePit');
+    const tents = q.dressing.structures.filter((s) => s.kind === 'tent');
+    expect(pits).toHaveLength(1);
+    expect(tents.length).toBeGreaterThanOrEqual(2);
+    for (const s of [...pits, ...tents]) {
+      const f = s.footprints[0];
+      expect(Math.hypot(f.x - glade.x, f.z - glade.z) + Math.hypot(f.hx, f.hz)).toBeLessThanOrEqual(glade.r);
+      expect(trackDistance(track, f)).toBeGreaterThan(track.width / 2);
+    }
+  });
+
+  it('pinned lumber yard, lookout and campsite all fit together', () => {
+    for (const [seed, c, q] of districtCities('forest', ['lumberyard', 'lookout', 'campsite'])) {
+      const built = FOREST_DEF.built!(q, c);
+      expect(built, `seed ${seed}`).toEqual({ lumberyard: true, lookout: true, campsite: true });
+      expect(q.dressing.structures.some((s) => s.kind === 'lookout'), `seed ${seed}`).toBe(true);
+      expect(q.dressing.structures.some((s) => s.kind === 'firePit'), `seed ${seed}`).toBe(true);
+      expect(c.streetProps.filter((p) => inRect(q.bounds, p) && isJunctionControl(p)).length).toBeGreaterThan(0);
+    }
   });
 });

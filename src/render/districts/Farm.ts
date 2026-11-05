@@ -127,8 +127,8 @@ function wagonWheel(r: number): THREE.BufferGeometry[] {
   return out;
 }
 
-/** The ranch gate in its frame: posts, crossbeam, braces, the name board on chains, wagon wheels. */
-function ranchGate(s: Structure, snowy: boolean, solid: THREE.BufferGeometry[], signs: THREE.BufferGeometry[]): void {
+/** The ranch gate in its frame: posts, crossbeam, braces, the name board on chains, wagon wheels (the Forest's log arch: none). */
+export function ranchGate(s: Structure, snowy: boolean, solid: THREE.BufferGeometry[], signs: THREE.BufferGeometry[], wheels = true): void {
   const d = s.data as unknown as RanchGateData;
   const m = frameOf(s.x, d.base, s.z, s.yaw);
   const g: THREE.BufferGeometry[] = [];
@@ -141,6 +141,7 @@ function ranchGate(s: Structure, snowy: boolean, solid: THREE.BufferGeometry[], 
     const brace = box(0.14, 1.7, 0.14).rotateZ(sx * 0.62);
     g.push(part(brace, LOG_DARK, x - sx * 0.5, top - 0.85, 0));
     // A wagon wheel leaning on the post's outer side.
+    if (!wheels) continue;
     const wheel = mergeGeometries(wagonWheel(0.62)).rotateY(Math.PI / 2).rotateX(-0.18);
     g.push(part(wheel, LOG, x + sx * 0.2, 0.05, -0.75));
   }

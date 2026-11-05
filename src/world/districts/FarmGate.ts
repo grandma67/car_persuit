@@ -42,12 +42,12 @@ function topAcross(city: CityData, g: Gate, c: { x: number; z: number }, half: n
  * far as it must be to keep them off the junction's controls. Its sign and crossbeam stay at least
  * DISTRICTS.overheadClearance above the highest road under them.
  */
-export function ranchGateAt(q: District, city: CityData, g: Gate, rng: Rng): { s: Structure; solids: Footprint[]; overhead: Overhead; props: StreetProp[] } | null {
+export function ranchGateAt(q: District, city: CityData, g: Gate, rng: Rng, names: readonly string[] = FARM_NAMES): { s: Structure; solids: Footprint[]; overhead: Overhead; props: StreetProp[] } | null {
   const { roadWidth: rw, sidewalk: sw } = city.config;
   const controls = city.streetProps.filter((p) => inDistrict(q, p) && isJunctionControl(p)).map((p) => propFootprint(p, 0.3));
   const f = frame(g);
   const half = rw / 2 + sw / 2;
-  const name = rng.int(0, FARM_NAMES.length - 1);
+  const name = rng.int(0, names.length - 1);
   for (const setIn of FG.setIn) {
     const c = { x: g.x + f.dx * setIn, z: g.z + f.dz * setIn };
     const posts: Footprint[] = [-1, 1].map((sx) => ({ ...f.at(c, sx * half, 0), hx: FG.post, hz: FG.post, yaw: 0 }));

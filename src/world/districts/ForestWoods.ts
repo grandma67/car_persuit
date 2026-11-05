@@ -4,11 +4,11 @@
 // stream; the trees are ordinary breakable tree props with their own kind (pine and round here,
 // swapped per climate at run time by `RunDressing.trees`).
 import type { Rng } from '../../core/Rng';
-import { pathDistance } from '../../ai/NavGrid';
+import { footprintDistance, pathDistance } from '../../ai/NavGrid';
 import { FOREST } from '../../gameplay/balance';
 import type { CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import { propSpec, type StreetProp } from '../StreetProps';
+import { FootprintIndex, propSpec, type Footprint, type StreetProp } from '../StreetProps';
 import type { District } from './District';
 import { SIDES, streetSidesOf, type Side } from './Megapark';
 
@@ -75,6 +75,19 @@ export function layTrack(k: number, city: CityData, rng: Rng): Track | null {
   return { block: k, points, width: w };
 }
 
+/** Does the track keep `m` metres past its edge clear of every footprint in `fps`? */
+export function trackClearOf(t: Track, fps: Footprint[], m: number): boolean {
+  for (let i = 1; i < t.points.length; i++) {
+    const a = t.points[i - 1], b = t.points[i];
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z)));
+    for (let s = 0; s <= n; s++) {
+      const x = a.x + ((b.x - a.x) * s) / n, z = a.z + ((b.z - a.z) * s) / n;
+      if (fps.some((f) => footprintDistance(f, x, z) < t.width / 2 + m)) return false;
+    }
+  }
+  return true;
+}
+
 /** A clearing on a track's middle (moved in to fit the block). */
 export function layClearing(t: Track, city: CityData, rng: Rng): Clearing {
   const r = rng.range(FOREST.clearing[0], FOREST.clearing[1]);
@@ -121,10 +134,12 @@ class Discs {
 /**
  * The trees of the woods blocks (and round the clearings): dart throwing, each tree claiming a disc
  * of FOREST.spacing, kept inside the sidewalk line, off the tracks and out of the clearings.
- * `open`: blocks left without trees (the lumber yard's).
+ * `open`: blocks left without trees (the lumber yard's); `avoid`: what they keep a metre off
+ * (buildings, gate posts, set pieces).
  */
-export function layTrees(q: District, city: CityData, tracks: Track[], clearings: Clearing[], open: Set<number>, rng: Rng): StreetProp[] {
+export function layTrees(q: District, city: CityData, tracks: Track[], clearings: Clearing[], open: Set<number>, avoid: Footprint[], rng: Rng): StreetProp[] {
   const out: StreetProp[] = [];
+  const solid = new FootprintIndex(avoid.map((f) => ({ ...f, hx: f.hx + 1, hz: f.hz + 1 })));
   const discs = new Discs(FOREST.spacing[1] * 2);
   const [lo, hi] = FOREST.spacing;
   for (const k of [...q.blocks].sort((a, b) => a - b)) {
@@ -142,7 +157,7 @@ export function layTrees(q: District, city: CityData, tracks: Track[], clearings
       const trunk = propSpec(prop).hx;
       if (mine.some((tr) => trackDistance(tr, prop) < tr.width / 2 + FOREST.trackClear + trunk)) continue;
       if (glades.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + trunk)) continue;
-      if (!inRect(room, prop) || !discs.fits(x, z, r)) continue;
+      if (!inRect(room, prop) || !discs.fits(x, z, r) || solid.hits({ x, z, hx: trunk, hz: trunk, yaw: 0 })) continue;
       discs.add(x, z, r);
       out.push(prop);
     }
