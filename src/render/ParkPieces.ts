@@ -21,8 +21,8 @@ const PITCH: Record<ClimateName, { stripes: [number, number]; line: number }> = 
   desert: { stripes: [0xb89a62, 0xac8e58], line: 0xf2f2ec }, // a dirt pitch
   snow: { stripes: [0xe6ecf0, 0xdbe3e8], line: 0xc8382e },
 };
-const STRIPE_LIFT = 0.07; // over the park grass (0.05)
-const LINE_LIFT = 0.09;
+export const STRIPE_LIFT = 0.07; // over the park grass (0.05)
+export const LINE_LIFT = 0.09;
 const LINE = 0.12; // line width, metres
 const CELL = 2; // draped quads at most this long
 

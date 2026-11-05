@@ -18,9 +18,9 @@ import { GeometryBuilder } from '../../world/CityBuilder';
 import { drapePolyline } from '../geometry';
 import type { DistrictRenderContext, DistrictView } from './index';
 
-const FLOOR_LIFT = 0.07; // a patch's
-const GLADE_LIFT = 0.09; // 2 cm over the floor
-const TRACK_LIFT = 0.11; // and over a clearing
+export const FLOOR_LIFT = 0.07; // a patch's
+export const GLADE_LIFT = 0.09; // 2 cm over the floor
+export const TRACK_LIFT = 0.11; // and over a clearing
 
 /** The floor and track colours per climate: needles and leaf litter, dirt; snow over both in the snow. */
 export function forestColours(climate: string): { floor: number; track: number; clearing: number; yard: number } {
