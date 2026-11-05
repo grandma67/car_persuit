@@ -6,6 +6,7 @@ import { generateCity, type CityData } from './CityGenerator';
 import { ALL_THEMES, TIME_NAMES } from './CityTheme';
 import { CLIMATES, WEATHER_NAMES } from './Climate';
 import { DISTRICT_DEFS } from './districts/index';
+import { rolledFeatures } from './districts/District';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -157,17 +158,25 @@ export function validateCityParams(params: CityParams): { errors: string[]; warn
     warnings.push(`theme: "${params.theme}" is not a style the ${p.climate} climate rolls (it has ${climate.styles.join(', ')})`);
   }
   if (params.weather !== undefined && p.weather !== params.weather) warnings.push(`weather: ${params.weather} becomes ${p.weather} in the ${p.climate} climate`);
-  for (const [k, d] of (params.districts ?? []).entries()) {
-    const night = DISTRICT_DEFS.find((def) => def.kind === d.kind)?.nightFeatures ?? [];
-    for (const f of night) {
-      if (d.features?.[f] === true && p.time !== 'night') warnings.push(`districts[${k}] (${d.kind}).features.${f}: only shows on a night run (time is ${p.time})`);
+  // A night-only feature pinned on for a day run (one that rolled on by itself is only the dump's record of it).
+  const nightOnly = (city: CityData | null) => {
+    for (const [k, d] of (params.districts ?? []).entries()) {
+      const night = DISTRICT_DEFS.find((def) => def.kind === d.kind)?.nightFeatures ?? [];
+      const q = city?.districts.find((x) => x.kind === d.kind);
+      for (const f of night) {
+        if (d.features?.[f] === true && p.time !== 'night' && !(q && rolledFeatures(q)[f] === true)) warnings.push(`districts[${k}] (${d.kind}).features.${f}: only shows on a night run (time is ${p.time})`);
+      }
     }
-  }
+  };
   try {
     const city = generateCity(params);
+    nightOnly(city);
     return { errors: [], warnings: [...warnings, ...city.warnings], city };
   } catch (e) {
-    if (e instanceof CityParamsError) return { errors: e.reasons, warnings, city: null };
+    if (e instanceof CityParamsError) {
+      nightOnly(null);
+      return { errors: e.reasons, warnings, city: null };
+    }
     throw e;
   }
 }

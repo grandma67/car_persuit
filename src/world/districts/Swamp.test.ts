@@ -13,7 +13,7 @@ import { coverage, poolArea } from './SwampPools';
 import { DISTRICT_DEFS } from './index';
 import { isJunctionControl } from './apply';
 import { deckPoint, inDeck, type Deck } from '../Deck';
-import { footprintsOverlap, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
+import { FootprintIndex, footprintsOverlap, LIT_PROPS, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
 import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
 
 const deckFootprint = (d: Deck): Footprint => ({ x: d.x, z: d.z, hx: d.hx, hz: d.hz, yaw: d.yaw });
@@ -54,7 +54,7 @@ describe('Swamp placement', () => {
 });
 
 describe('Swamp roles and pools', () => {
-  it.each(placed)('seed %i: a landing by the main gate, the witch house farthest from it, the rest pools; no buildings yet', (_seed, c, q) => {
+  it.each(placed)('seed %i: a landing by the main gate, the witch house farthest from it, the rest pools', (_seed, c, q) => {
     expect(q.roles.size).toBe(q.blocks.length);
     const [landing] = roleBlocks(q, 'landing');
     const [witch] = roleBlocks(q, 'witch');
@@ -66,7 +66,6 @@ describe('Swamp roles and pools', () => {
     const g = mainGate(q);
     const far = (k: number) => Math.hypot(c.blocks[k].rect.x - g.x, c.blocks[k].rect.z - g.z);
     for (const k of q.blocks) if (k !== landing) expect(far(k)).toBeLessThanOrEqual(far(witch) + 1e-6);
-    expect(c.buildings.filter((b) => inRect(q.bounds, b))).toEqual([]);
   });
 
   it.each(placed)('seed %i: pools inside each block with a dry bank, apart, 35–60 % under water; the witch pool the biggest', (_seed, c, q) => {
@@ -125,7 +124,7 @@ describe('Swamp witch house', () => {
       if (Math.hypot(p.x - w.x, p.z - w.z) > I - 0.3) breaks.push(`house corner off the island at ${at(p)}`);
     }
     const decks = q.dressing.decks ?? [];
-    expect(decks).toHaveLength(1);
+    expect(decks.length).toBe(1 + (q.dressing.extra!.boardwalks as number)); // the witch's first
     const d = decks[0];
     if (d.hx * 2 < Math.max(...ALL_SPECS.filter((s) => s.body !== 'ramptruck').map((s) => s.halfExtents.x)) * 2 + 1) breaks.push(`boardwalk ${d.hx * 2} m wide`);
     const k = roleBlocks(q, 'witch')[0];
@@ -183,11 +182,107 @@ describe('Swamp looks and street', () => {
   });
 
   it.each(placed.slice(0, 8))('seed %i: no fences, umbrellas or bus stops; wooden lamps; nothing of the city\'s left inside the blocks', (_seed, c, q) => {
-    const inside = c.streetProps.filter((p) => inRect(q.bounds, p));
-    expect(inside.filter((p) => SWAMP_DEF.drop(p)).map(at)).toEqual([]);
-    expect(inside.filter((p) => p.kind === 'lamp').map(at)).toEqual([]);
     const own = new Set(q.dressing.props);
+    const inside = c.streetProps.filter((p) => inRect(q.bounds, p));
+    expect(inside.filter((p) => !own.has(p) && SWAMP_DEF.drop(p)).map(at)).toEqual([]);
+    expect(inside.filter((p) => p.kind === 'lamp').map(at)).toEqual([]);
     const loose = inside.filter((p) => !own.has(p) && q.blocks.some((k) => inRect(inner(c, k), p)) && !['signal', 'sign'].includes(p.kind));
     expect(loose.map((p) => `${p.kind} ${at(p)}`)).toEqual([]);
+  });
+});
+
+const shrinkBy = (r: { x: number; z: number; w: number; d: number }, m: number) => ({ ...r, w: r.w - 2 * m, d: r.d - 2 * m });
+
+describe('Swamp buildings, boardwalks and landing', () => {
+  it.each(placed)('seed %i: the bait shop on the landing, shacks on the pool blocks\' street sides; inside the sidewalk line, apart, fronting a street', (_seed, c, q) => {
+    const built = c.buildings.filter((b) => b.district === 'swamp');
+    const blockOf = (b: (typeof built)[number]) => q.blocks.find((k) => inRect(c.blocks[k].rect, b))!;
+    expect(built.filter((b) => b.lot === 'baitShop').map((b) => q.roles.get(blockOf(b)))).toEqual(['landing']);
+    const breaks: string[] = [];
+    const index = new FootprintIndex();
+    for (const b of built) {
+      const k = blockOf(b);
+      if (b.lot === 'shack' && q.roles.get(k) !== 'pools') breaks.push(`shack in the ${q.roles.get(k)} block at ${at(b)}`);
+      if (!inRect(shrinkBy(inner(c, k), -1e-6), { x: b.x + b.w / 2, z: b.z + b.d / 2 }) || !inRect(shrinkBy(inner(c, k), -1e-6), { x: b.x - b.w / 2, z: b.z - b.d / 2 })) breaks.push(`${b.lot} past the sidewalk line at ${at(b)}`);
+      if (index.hits(rectFootprint(b))) breaks.push(`${b.lot} on another at ${at(b)}`);
+      index.add(rectFootprint(b));
+      if (!b.street) breaks.push(`${b.lot} fronts no street at ${at(b)}`);
+    }
+    expect(breaks).toEqual([]);
+    expect(built.filter((b) => b.lot === 'shack').length).toBeGreaterThanOrEqual(roleBlocks(q, 'pools').length);
+  });
+
+  it.each(placed)('seed %i: boardwalks run straight across pool blocks, sidewalk line to sidewalk line, clear of the buildings, railed, their mouths clear', (_seed, c, q) => {
+    const walks = (q.dressing.decks ?? []).slice(1);
+    const buildings = c.buildings.filter((b) => b.district === 'swamp');
+    const own = new Set(q.dressing.props);
+    const breaks: string[] = [];
+    for (const d of walks) {
+      const k = q.blocks.find((b) => inRect(c.blocks[b].rect, d))!;
+      if (q.roles.get(k) !== 'pools') breaks.push(`boardwalk in the ${q.roles.get(k)} block at ${at(d)}`);
+      const room = inner(c, k);
+      for (const v of [-d.hz, d.hz]) {
+        const e = deckPoint(d, 0, v);
+        const onLine = Math.abs(Math.abs(e.x - room.x) - room.w / 2) < 0.01 || Math.abs(Math.abs(e.z - room.z) - room.d / 2) < 0.01;
+        if (!onLine) breaks.push(`boardwalk end at ${at(e)} off the sidewalk line`);
+        const loose = c.streetProps.filter((p) => !own.has(p) && !isJunctionControl(p) && Math.hypot(p.x - e.x, p.z - e.z) < d.hx + 0.5 + c.config.sidewalk);
+        breaks.push(...loose.map((p) => `${p.kind} at a boardwalk mouth ${at(p)}`));
+      }
+      for (const b of buildings) if (footprintsOverlap(deckFootprint(d), rectFootprint(b))) breaks.push(`boardwalk through the ${b.lot} at ${at(b)}`);
+      const rails = q.dressing.props.filter((p) => p.kind === 'fence' && inDeck({ ...d, hx: d.hx + 0.5 }, p.x, p.z));
+      if (rails.length < 6) breaks.push(`boardwalk at ${at(d)} has ${rails.length} rails`);
+    }
+    expect(breaks).toEqual([]);
+  });
+
+  it('pinned boardwalks: none, or as many as fit (up to the pin)', () => {
+    for (const [seed, , q] of districtCities('swamp', ['boardwalks=0'])) expect(q.dressing.decks!.length, `seed ${seed}`).toBe(1);
+    for (const [seed, c, q] of districtCities('swamp', ['boardwalks=2'])) {
+      const through = roleBlocks(q, 'pools').filter((k) => c.blocks[k]).length;
+      expect(q.dressing.extra!.boardwalks, `seed ${seed}`).toBeLessThanOrEqual(2);
+      if (through >= 2) expect(q.dressing.extra!.boardwalks, `seed ${seed}`).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it.each(placed)('seed %i: the jetty runs from the bait shop\'s back into the water, the boats float beside it', (_seed, c, q) => {
+    const pools = swampPools(c, q);
+    const jetty = q.dressing.structures.find((s) => s.kind === 'swampJetty')!;
+    expect(jetty).toBeDefined();
+    const f = jetty.footprints[0];
+    const tip = { x: f.x + Math.sin(f.yaw) * f.hz, z: f.z + Math.cos(f.yaw) * f.hz }, foot = { x: f.x - Math.sin(f.yaw) * f.hz, z: f.z - Math.cos(f.yaw) * f.hz };
+    const shop = c.buildings.find((b) => b.lot === 'baitShop' && inRect(q.bounds, b))!;
+    const [far, near] = Math.hypot(tip.x - shop.x, tip.z - shop.z) > Math.hypot(foot.x - shop.x, foot.z - shop.z) ? [tip, foot] : [foot, tip];
+    expect(inRect(shrinkBy(shop, -0.05), near)).toBe(true);
+    expect(pools.some((w) => inWater(w, far.x, far.z))).toBe(true);
+    for (const s of q.dressing.structures.filter((x) => x.kind === 'airboat' || x.kind === 'moored')) expect(pools.some((w) => inWater(w, s.x, s.z, 0.8))).toBe(true);
+  });
+
+  it('pinned airboat comes true where there is water for it, and off when pinned off', () => {
+    for (const [seed, , q] of districtCities('swamp', ['!airboat'])) expect(q.dressing.structures.some((s) => s.kind === 'airboat'), `seed ${seed}`).toBe(false);
+    const on = districtCities('swamp', ['airboat']);
+    expect(on.filter(([, , q]) => q.dressing.structures.some((s) => s.kind === 'airboat')).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Swamp causeways', () => {
+  it.each(placed.slice(0, 10))('seed %i: muddy verges, guard rails along the kerbs, one lamp a junction, the bog signs facing in', (_seed, c, q) => {
+    const ground = softGroundOf(c, DISTRICT_DEFS, false)!;
+    const k = q.blocks[0];
+    const b = c.blocks[k].rect;
+    const verge = { x: b.x, z: b.z + b.d / 2 - c.config.sidewalk / 2 };
+    expect(ground.at(verge.x, verge.z)).toEqual({ grip: SWAMP.mudGrip, drag: SWAMP.mudDrag });
+    expect(q.dressing.ground.filter((g) => g.kind === 'verge')).toHaveLength(q.blocks.length * 4);
+    const lamps = c.streetProps.filter((p) => p.kind === 'woodLamp' && inRect(q.bounds, p, 1));
+    const nodes = c.graph.nodes.filter((n) => inRect(q.bounds, n, c.config.roadWidth / 2 + 1));
+    expect(lamps.length).toBeLessThanOrEqual(nodes.length);
+    const rails = q.dressing.props.filter((p) => p.kind === 'fence' && !q.blocks.some((bk) => inRect(inner(c, bk), p)));
+    expect(rails.length).toBeGreaterThan(q.streets.size); // a few per street side
+    const signs = q.dressing.props.filter((p) => p.kind === 'sign' && p.variant === 'bogCrossing');
+    expect(signs.length).toBeLessThanOrEqual(SWAMP.signs);
+  });
+
+  it.each(placed)('seed %i: night glow stays within the cap (lamps, lanterns, the windows and the brew)', (_seed, c, q) => {
+    const lit = c.streetProps.filter((p) => LIT_PROPS.has(p.kind) && inRect(q.bounds, p, 1)).length;
+    expect(lit + 5 + 1).toBeLessThanOrEqual(SWAMP.maxGlow);
   });
 });

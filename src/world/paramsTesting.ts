@@ -46,7 +46,7 @@ export const everyDistrict = (): Partial<Record<DistrictKind, boolean>> => Objec
 
 /** Values for the words that take a number. */
 const NUMBERS: Record<string, string[]> = {
-  roadworks: ['0', '2'], blocks: ['6'], canalramps: ['1'], ramps: ['0', '2'], canalwidth: ['30'], startminute: ['7'], yards: ['1'], sports: ['1', '2'], ponds: ['0', '2'], pitches: ['0', '2'],
+  roadworks: ['0', '2'], blocks: ['6'], canalramps: ['1'], ramps: ['0', '2'], canalwidth: ['30'], startminute: ['7'], yards: ['1'], sports: ['1', '2'], ponds: ['0', '2'], pitches: ['0', '2'], boardwalks: ['0', '2'],
 };
 
 /** Each word as it is used: bare, !name for an on/off feature, each named value, a sample count. */

@@ -282,3 +282,12 @@ the glow budget", `maxGlow` declared on every def. Still open:
   included); jack-o'-lanterns at the steps (lit props), pumpkins, a scarecrow as the stick totem.
   Windows and the brew are lamp-bulb glow instances (green at night); bubbles are 6 instances moved
   per frame; wisps are the fireflies (new `look` colour/size, same program). `NavGrid.costAt` added.
+- **M3** (set and streets): `SwampSet.ts` (boardwalks: decks across "through" pool blocks at the
+  wettest offset clear of the shacks, ramps 3.5 m, rail sections either side; the landing's jetty,
+  airboat and rowboat), `SwampStreet.ts` (sidewalks become muddy verges: ground patches + soft; split
+  rail `fence` sections along the kerbs at rw/2 + 0.65; one wood lamp per junction; a new sign
+  variant `bogCrossing`, "MIND THE BOG", inside the first two gates). Lots: the bait shop on the
+  landing's side towards the main gate, 1–2 stilt shacks per pool block (`siding`: `boards` is barn
+  red). No new facade styles, no new prop kinds (rails reuse `fence` `style: 'rail'`). Features
+  `boardwalks` (int) and `airboat`. Night-only features rolled on by themselves no longer warn when
+  a dump reloads by day (`rolledFeatures`; Farm's harvest and Chinatown's festival had the same gap).

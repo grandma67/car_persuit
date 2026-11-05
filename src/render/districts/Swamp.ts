@@ -13,7 +13,9 @@ import { inRect } from '../../world/lots';
 import { LIT_PROPS } from '../../world/StreetProps';
 import { fireflies } from './fireflies';
 import type { DistrictRenderContext, DistrictView } from './index';
-import { boardwalk, witchHouse, witchIsland, type Pane } from './SwampWitch';
+import { airboat, boardwalk, swampJetty, witchHouse, witchIsland, type Pane } from './SwampWitch';
+import { rowboat } from '../Landmarks';
+import { GeometryBuilder } from '../../world/CityBuilder';
 
 const BUBBLES = 6;
 
@@ -46,6 +48,23 @@ export function renderSwamp(q: District, city: CityData, scene: THREE.Scene, ctx
     cauldron = house.cauldron;
   }
   for (const d of q.dressing.decks ?? []) solid.push(...boardwalk(d, city.terrain, snowy, city.seed));
+  // The landing: the jetty, the airboat and the rowboat afloat (on the ice in the snow).
+  const frozen = ctx.climate.name === 'snow';
+  const surface = (x: number, z: number) => ctx.ground(x, z) + SWAMP.poolDepth;
+  for (const s of q.dressing.structures) {
+    if (s.kind === 'swampJetty') solid.push(...swampJetty(s, ctx.ground(s.x, s.z), snowy));
+    else if (s.kind === 'airboat') solid.push(...airboat(s, surface(s.x, s.z), frozen));
+    else if (s.kind === 'moored') solid.push(rowboat().applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(s.x, surface(s.x, s.z) - (frozen ? 0.1 : 0.22), s.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.yaw), new THREE.Vector3(1, 1, 1))));
+  }
+  // The verges: mud over the sidewalks (patch lift), frozen white-grey in the snow.
+  const flat = new GeometryBuilder();
+  const mud = new THREE.Color(snowy ? 0xdfe4e8 : 0x5a4c38);
+  for (const p of q.dressing.ground) if (p.kind === 'verge') flat.drape(p, 0.07, mud, city.terrain);
+  if (flat.positions.length) {
+    const mesh = new THREE.Mesh(flat.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  }
   if (solid.length) {
     const mesh = new THREE.Mesh(mergeGeometries(solid), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8, metalness: 0.15 }));
     mesh.castShadow = mesh.receiveShadow = true;

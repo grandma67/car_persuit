@@ -138,7 +138,7 @@ function lots(q: District, buildings: Building[], city: CityData, rng: Rng): voi
 }
 
 /** The sides of a park building on the sidewalk line of its block (Building.street bits). */
-function frontMask(b: Building, city: CityData): number {
+export function frontMask(b: Building, city: CityData): number {
   const block = city.blocks.find((bl) => inRect(bl.rect, b))!.rect;
   const s = city.config.sidewalk, near = MEGAPARK.lotInset + 0.5;
   return (Math.abs(b.z + b.d / 2 - (block.z + block.d / 2 - s)) <= near ? 1 : 0) | (Math.abs(b.z - b.d / 2 - (block.z - block.d / 2 + s)) <= near ? 2 : 0) |

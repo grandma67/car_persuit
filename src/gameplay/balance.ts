@@ -473,6 +473,18 @@ export const SWAMP = {
   pumpkins: [6, 10] as [number, number],
   wispChance: 0.75, // will-o'-the-wisps over the water at night
   wisps: 18,
+  boardwalks: [1, 2] as [number, number], // boardwalks across pool blocks, street to street (as many as fit)
+  boardwalkRamps: [3.5, 3.5] as [number, number],
+  railGaps: 0.15, // share of a boardwalk's rail sections missing
+  shacks: [1, 2] as [number, number], // stilt shacks per pool block
+  shack: { long: [6.5, 8.5] as [number, number], short: [5, 6] as [number, number], h: [4, 5] as [number, number] },
+  baitShop: { size: [10, 7] as [number, number], h: 5 },
+  lotInset: 1, // in from the sidewalk line
+  jetty: [2.4, 8] as [number, number], // width, length out from the bait shop's back
+  jettyHeight: 0.65,
+  airboatChance: 0.7,
+  guardRailStep: [3.2, 6] as [number, number], // kerb guard rail sections, this far apart
+  signs: 2, // "Mind the bog" signs inside the gates, at most
 };
 
 /** Shallow water on land (park ponds, lakes, swamp pools): wading, never drowning. */

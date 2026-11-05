@@ -56,10 +56,11 @@ const SIGN_SHAPE: Record<SignVariant, SignShape> = {
   pedestrian: 'square',
   busStop: 'square',
   noFishing: 'round',
+  bogCrossing: 'diamond',
 };
 const SIGN_VARIANTS = Object.keys(SIGN_SHAPE) as SignVariant[];
 /** Sign faces built only in a city that has such a sign (newer ones: no cost elsewhere). */
-const LAZY_FACES = new Set<SignVariant>(['noFishing']);
+const LAZY_FACES = new Set<SignVariant>(['noFishing', 'bogCrossing']);
 /** Plate geometry per shape. Circle-based so UVs map the square texture straight on. */
 const plateGeometry = (shape: SignShape, grow = 0): THREE.BufferGeometry => {
   switch (shape) {
@@ -1392,6 +1393,20 @@ function signTexture(variant: SignVariant): THREE.Texture {
         ringSign(g, s, BLUE);
         text(g, 'P', c, c + 6, s * 0.46, '#ffffff');
         prohibit(g, s);
+        break;
+      case 'bogCrossing':
+        // A made-up warning: a yellow diamond in a white border, black rim, two lines of text.
+        g.fillStyle = '#ffffff';
+        regular(g, c, c, 4, Math.PI / 2);
+        g.fill();
+        g.fillStyle = '#111111';
+        regular(g, c, c * 0.9, 4, Math.PI / 2);
+        g.fill();
+        g.fillStyle = '#f5c400';
+        regular(g, c, c * 0.84, 4, Math.PI / 2);
+        g.fill();
+        text(g, 'MIND', c, c - s * 0.08, s * 0.13, '#111111');
+        text(g, 'THE BOG', c, c + s * 0.1, s * 0.11, '#111111');
         break;
       case 'noFishing': {
         ringSign(g, s);

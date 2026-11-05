@@ -61,14 +61,14 @@ export function coverage(inner: Rect, pools: ShallowWater[]): number {
   return all ? wet / all : 0;
 }
 
-/** An ordinary block's pools, `cover` of it under water at most (about; the last pool may overshoot a little); the big one under `maxArea`. */
-export function layPools(inner: Rect, cover: number, maxArea: number, rng: Rng): ShallowWater[] {
+/** An ordinary block's pools (`centred`: the big one in the middle), `cover` of it under water at most (about; the last pool may overshoot a little); the big one under `maxArea`. */
+export function layPools(inner: Rect, cover: number, maxArea: number, rng: Rng, centred = false): ShallowWater[] {
   const room = shrink(inner, SWAMP.bank);
   const out: ShallowWater[] = [];
   // The big pool takes most of the share (sized from it), off the middle where there is room; smaller ones fill in.
   const squash = rng.range(0.7, 0.95);
   const rx = Math.min(SWAMP.bigPool[1], Math.max(SWAMP.bigPool[0], Math.sqrt((Math.min(maxArea, cover * inner.w * inner.d * rng.range(0.75, 0.9))) / (Math.PI * squash))));
-  const slack = Math.max(0, room.w / 2 - rx * 1.08);
+  const slack = centred ? 0 : Math.max(0, room.w / 2 - rx * 1.08); // the landing's in the middle: the jetty reaches it
   const first = pool(room.x + rng.range(-slack, slack), room.z + rng.range(-slack, slack), rx, [squash, squash], rng);
   const big = fit(first, room, out, SWAMP.poolGap, SWAMP.smallPool[0]);
   if (big) out.push(big);

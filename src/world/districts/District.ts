@@ -127,9 +127,16 @@ export interface District {
 /** A feature's type: on/off, a count, or one of some names. */
 export type FeatureKind = 'bool' | 'int' | readonly string[];
 
+/** Each district's features as they rolled, before any pin (kept off the district: city hashes stay put). */
+const ROLLED = new WeakMap<District, Record<string, FeatureValue>>();
+/** What a district's features rolled, pins aside (a dump records every feature as a pin). */
+export const rolledFeatures = (q: District): Record<string, FeatureValue> => ROLLED.get(q) ?? {};
+
 /** A district's named roll, pinned or as rolled (the roll is drawn either way), and recorded on it. */
 export function feature<T extends FeatureValue>(q: District | undefined, name: string, rolled: T): T {
   if (!q) return rolled;
+  if (!ROLLED.has(q)) ROLLED.set(q, {});
+  ROLLED.get(q)![name] = rolled;
   const value = pin(q.pins?.[name] as T | undefined, rolled);
   q.features[name] = value;
   return value;

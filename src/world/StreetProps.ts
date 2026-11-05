@@ -26,7 +26,7 @@ export type PropKind =
   | 'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw';
 /** A wrecked car's state: burnt out, up on bricks, stripped (doors open), on its roof, or crushed flat. */
 export type WreckKind = 'burnt' | 'bricks' | 'stripped' | 'flipped' | 'crushed';
-export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop' | 'noFishing';
+export type SignVariant = 'stop' | 'priority' | 'speed30' | 'speed50' | 'speed90' | 'noParking' | 'noSmoking' | 'children' | 'pedestrian' | 'busStop' | 'noFishing' | 'bogCrossing';
 
 export interface StreetProp {
   kind: PropKind;

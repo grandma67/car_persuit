@@ -212,3 +212,51 @@ export function boardwalk(d: Deck, terrain: Terrain, snowy: boolean, seed: numbe
   }
   return g;
 }
+
+const frameOf = (x: number, y: number, z: number, yaw: number) =>
+  new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
+
+/** The landing's rotting jetty: loose planks (a few gone, some sagging) on crooked posts. Local Z along it. */
+export function swampJetty(s: Structure, y: number, snowy: boolean): THREE.BufferGeometry[] {
+  const L = s.data!.length as number, W = s.data!.width as number, H = s.data!.height as number;
+  const rnd = stream((s.data!.seed as number) ?? 1);
+  const g: THREE.BufferGeometry[] = [];
+  for (let z = -L / 2 + 0.17; z < L / 2; z += 0.34) {
+    if (z > -L / 2 + 1 && rnd() < 0.08) continue;
+    const sag = -Math.pow((z + L / 2) / L, 2) * 0.12; // droops towards the far end
+    g.push(part(box(W - rnd() * 0.25, 0.07, 0.28).rotateZ((rnd() - 0.5) * 0.06), snowy ? SNOW : [PLANK, PLANK_DARK, ROTTEN][Math.floor(rnd() * 3)], (rnd() - 0.5) * 0.1, H - 0.035 + sag, z));
+  }
+  for (const x of [-1, 1]) g.push(part(box(0.14, 0.18, L), WOOD_GREY, x * (W / 2 - 0.15), H - 0.16, 0));
+  for (let z = -L / 2 + 0.4; z <= L / 2; z += 2.3) {
+    for (const x of [-1, 1]) g.push(part(cyl(0.11, 0.13, H + 0.9, 6).rotateZ((rnd() - 0.5) * 0.12), WOOD_GREY, x * (W / 2 - 0.1), (H + 0.9) / 2 - 0.5, z));
+  }
+  const m = frameOf(s.x, y, s.z, s.yaw);
+  return g.map((p) => p.applyMatrix4(m));
+}
+
+const ALU = 0xa8aeb2;
+const CAGE = 0x3a3e42;
+
+/** An airboat: a flat aluminium hull, a raised seat, an engine and a big caged propeller at the stern. Local +Z the bow. */
+export function airboat(s: Structure, y: number, frozen: boolean): THREE.BufferGeometry[] {
+  const g: THREE.BufferGeometry[] = [];
+  const hull = box(2.3, 0.45, 4.6);
+  const pos = hull.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) if (pos.getZ(i) > 0 && pos.getY(i) < 0) pos.setY(i, pos.getY(i) + Math.max(0, pos.getZ(i) - 1.4) * 0.25); // the bow rises
+  g.push(part(hull, ALU, 0, 0.22, 0));
+  g.push(part(box(2.35, 0.08, 4.65), 0x2a5a7a, 0, 0.42, 0)); // a painted gunwale stripe
+  g.push(part(box(0.9, 0.12, 0.8), 0x3a3a3a, 0, 1.25, -0.9)); // the seat up on its frame
+  for (const x of [-0.35, 0.35]) for (const z of [-1.2, -0.6]) g.push(part(box(0.06, 0.8, 0.06), CAGE, x, 0.85, z));
+  g.push(part(box(0.7, 0.6, 0.8), 0x5a2a22, 0, 0.75, -1.65)); // the engine
+  // The propeller cage: a ring of struts round a two-blade prop.
+  const cz = -2.15, cy = 1.35;
+  g.push(part(new THREE.TorusGeometry(0.95, 0.04, 4, 16), CAGE, 0, cy, cz));
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI;
+    g.push(part(box(1.9, 0.03, 0.03).rotateZ(a), CAGE, 0, cy, cz - 0.05));
+  }
+  g.push(part(box(1.7, 0.16, 0.05).rotateZ(0.6), 0x8a6a4a, 0, cy, cz + 0.08));
+  for (const x of [-0.6, 0.6]) g.push(part(box(0.05, 1.0, 0.05), CAGE, x, 0.95, cz + 0.2));
+  const m = frameOf(s.x, y + (frozen ? 0.05 : -0.12), s.z, s.yaw);
+  return g.map((p) => p.applyMatrix4(m));
+}
