@@ -143,6 +143,13 @@ there if it holds for all districts; don't repeat it in a district's test.
 
 ## Adding a district
 
+**Before designing a milestone, read its budgets** (they cost rework when found by a failing test):
+the minimap colour must stand out from the park green (`Minimap.test`, contrast > 2.2: a dark
+green or olive fails); a prop placed in hundreds ≤ 64 tris, a district's tree ≤ ~250
+(`polygons.md` "Budgets for new things"); `maxGlow` sized from `npm run stats`; corridors ≥
+`widestBody({ offRoad: true })` + 1 m; ≤ 3 new facade styles, no new programs. Run `stats`,
+`zfight` and `polygons` before the first browser tour, not after.
+
 One branch per district; each step is a `TASKS.md` milestone (placement + lots, signature structures,
 buildings/dressing/props, traffic + police, look/night/climate/perf/docs; steps 1–2 make it playable).
 
@@ -241,9 +248,17 @@ features to `check:restart:nature`'s `--make` in `package.json` (`DISTRICTS.max`
 
 ## Pitfalls
 
+- **Edge blocks may have fewer than two street sides** (a corner on the island's edge, a removed
+  plaza): `streetSidesOf(k, city)`. Anything that runs street to street (a track, a boardwalk)
+  picks its block among those with two or more.
+- **Dense props don't stop cops.** NavGrid blocks ~0.5 m round a footprint and penalises ~1.6 m:
+  trees 4–7 m apart are a slalom a route takes. Ground cops must not cross goes in `dressing.thicket`.
 - **Seed guard per milestone:** `npm run hash -- --vs HEAD --expect <kind>` fails if anything moved
   outside cities that hold the district, and says how many of those moved (all of them when it first
-  lands, a few for a tweak). Several kinds: `--expect farm,slums`.
+  lands, a few for a tweak). Several kinds: `--expect farm,slums`. An every-district city that moved
+  without holding it is rebuilt with the kind forced off: if it then hashes as before, only the
+  placement order moved (the kind rolled on, joined the shuffle, found no room) and it is listed
+  as "placement order only", accepted; anything else fails.
 - **Measure placement rate** (`npm run stats -- <kind>`; it also prints shallow water's share per block) after any rule, alone and with all districts
   forced; check rejection reasons if low. A district's position depends on those placed before it.
 - `perimeterWall` opens at *every* street crossing the wall, not just gates (`'mainStreet'` districts

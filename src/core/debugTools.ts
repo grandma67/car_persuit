@@ -281,6 +281,75 @@ export function debugTools(game: Game) {
       }
       return { start, samples: samples.map((s) => `${s.x},${s.z} ${s.speed}m/s${s.tilt > 15 ? ` tilt${s.tilt}` : ''}`).join(' | '), hit };
     },
+    /**
+     * Drive along a polyline off the road (a district's track, a corridor): the car starts on its
+     * first point facing the second, holds about `speed` and steers (A/D) for a point `ahead` m
+     * further along. Reports whether it reached the end, how far it ever strayed from the line, and
+     * what stopped it if something did (a hit: speed halves in one sample). Police off unless `police`.
+     */
+    async follow(points: P[], { speed = 9, ms = 25000, every = 60, ahead = 6, police = false }: { speed?: number; ms?: number; every?: number; ahead?: number; police?: boolean } = {}) {
+      await api.police(police);
+      const [a, b] = points;
+      api.place(a.x, a.z, Math.atan2(b.x - a.x, b.z - a.z), speed * 0.6);
+      const off = (p: P) => {
+        let d = Infinity;
+        for (let i = 1; i < points.length; i++) {
+          const s = points[i - 1], e = points[i], dx = e.x - s.x, dz = e.z - s.z, l2 = dx * dx + dz * dz || 1;
+          const t = Math.max(0, Math.min(1, ((p.x - s.x) * dx + (p.z - s.z) * dz) / l2));
+          d = Math.min(d, Math.hypot(p.x - s.x - t * dx, p.z - s.z - t * dz));
+        }
+        return d;
+      };
+      const down = (code: string, on: boolean) => window.dispatchEvent(new KeyboardEvent(on ? 'keydown' : 'keyup', { code, bubbles: true }));
+      const last = points[points.length - 1];
+      let next = 1, strayed = 0, prevSpeed = 0, hit: { at: P; speedBefore: number; near: ReturnType<typeof api.near> } | null = null;
+      const trail: string[] = [];
+      try {
+        for (let t = 0; t < ms; t += every) {
+          const p = g.player.position;
+          if (Math.hypot(last.x - p.x, last.z - p.z) < 3) break;
+          // The aim point: the first point at least `ahead` m off, past the ones already passed.
+          while (next < points.length - 1 && Math.hypot(points[next].x - p.x, points[next].z - p.z) < ahead) next++;
+          const aim = points[next];
+          const r = g.player.body.rotation();
+          const yaw = Math.atan2(2 * (r.w * r.y + r.x * r.z), 1 - 2 * (r.x * r.x + r.y * r.y));
+          let err = Math.atan2(aim.x - p.x, aim.z - p.z) - yaw;
+          err = Math.atan2(Math.sin(err), Math.cos(err));
+          // A turns towards a larger yaw (left of +Z is +X).
+          down('KeyA', err > 0.06);
+          down('KeyD', err < -0.06);
+          down('KeyW', g.player.speed < speed);
+          await sleep(every);
+          strayed = Math.max(strayed, off(g.player.position));
+          const s = g.player.speed;
+          if (t % 500 < every) trail.push(`${Math.round(g.player.position.x)},${Math.round(g.player.position.z)} ${s.toFixed(1)}m/s`);
+          if (prevSpeed > 4 && s < prevSpeed / 2) {
+            hit = { at: { x: Math.round(g.player.position.x), z: Math.round(g.player.position.z) }, speedBefore: +prevSpeed.toFixed(1), near: api.near(g.player.position.x, g.player.position.z, 5) };
+            break;
+          }
+          prevSpeed = s;
+        }
+      } finally {
+        for (const k of ['KeyA', 'KeyD', 'KeyW']) down(k, false);
+      }
+      const end = g.player.position;
+      return { reached: Math.hypot(last.x - end.x, last.z - end.z) < 4, strayed: +strayed.toFixed(1), trail: trail.join(' | '), hit };
+    },
+    /**
+     * Where a check should look: the URL's `focus=x,z,w,d` if given (`--vs-make` passes the "on"
+     * city's district bounds to both sides, so a city without the district is looked at in the same
+     * place), else the district's bounds (the first, or of this kind).
+     */
+    focus(kind?: DistrictKind): Rect | undefined {
+      const f = new URLSearchParams(location.search).get('focus')?.split(',').map(Number);
+      if (f && f.length === 4 && f.every(Number.isFinite)) return { x: f[0], z: f[1], w: f[2], d: f[3] };
+      return api.district(kind)?.bounds;
+    },
+    /** The props' instanced meshes whose model key starts with `prefix` (`tree-`, `fern`): to hide in a GPU A/B. */
+    propMeshes(prefix: string): { key: string; mesh: { visible: boolean } }[] {
+      const meshes = (g as unknown as { props: { meshes: Record<string, { visible: boolean }> } }).props.meshes;
+      return Object.entries(meshes).filter(([k]) => k.startsWith(prefix)).map(([key, mesh]) => ({ key, mesh }));
+    },
     /** Line up `back` m outside a district gate, facing in (optionally moving). */
     async gate(i = 0, { back = 30, speed = 0, lateral = 0, kind = undefined as DistrictKind | undefined, wait = 1200 } = {}) {
       const g0 = api.district(kind)?.gates[i];

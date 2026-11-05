@@ -41,7 +41,7 @@ Each script's header lists its options; the doc named here says when to use it.
 - City from words: `npm run city -- make <words…> seed=N` (e.g. `flat night chinatown festival`; may
   move to a later seed and says which; without `seed=` it starts from a random one, so checks and tests
   always pass it), `dump <seed> [URL words]`, `check <file…>`, `show <file | seed | words…>` (ASCII map),
-  `words`. `CITY_PARAMS.md`.
+  `focus <file | seed | words…>` (each district's bounds), `words`. `CITY_PARAMS.md`.
 - Seeds to look at: `npm run find -- harbor straddle:2 flatcar ship=container gallery=0 [seeds=60] [flat]`
   (`name:N` at least, `name=N` exactly; counts structures, landmarks, props, ground patches, lots,
   roles; `flat` = no hill/canals). Never write a search script for this.
@@ -51,7 +51,8 @@ Each script's header lists its options; the doc named here says when to use it.
 - Seed guard: `npm run hash -- --vs HEAD` (or any ref on/after city params: hashes 120 cities on a temp
   worktree, names those that moved; `--out f` / `--vs f` for a file; `--reload` also proves every dump
   reloads as its city). Older refs need a file baseline. District work: `--expect <kind>` fails on any
-  city moved without that district (never diff the list by hand).
+  city moved without that district (never diff the list by hand); every-district cities whose
+  placement order alone moved are proven so and listed apart.
 - District numbers: `npm run stats -- <kind> [seeds=100]` (placement rate, shapes, gates, counts, lit
   props vs `maxGlow`, gen ms on vs off); `npm run stats -- odds` (the `DISTRICTS.md` odds line). Building
   budget: `npm run budget -- <kind> [seeds=20]`. A prop that went missing: `CLEAROF=<kind>` on any
@@ -69,7 +70,9 @@ Each script's header lists its options; the doc named here says when to use it.
   `npm run check:restart` after anything that adds to the scene, page or listeners (`LEAKS.md`);
   `npm run check:reload` after a change to `Game`'s setup, `dbg.loadCity`/`dumpCity` or `city.params`.
 - District on vs off in the browser: `npm run check:browser -- --vs-make "nodistricts <words>" --make "<kind> <words>" …`
-  (same tree and port, one after the other; `--table` for perf).
+  (same tree and port, one after the other; `--table` for perf; both sides look at the district's
+  spot, `focus=` / `dbg.focus()`). A GPU question about one prop model there: `gpu-ab.js` with
+  `&at=focus&ab=props:tree-`. Driving a district's off-road tracks: `dbg.follow(points)` (`district-drive.js` does).
 - Before/after in the browser: `npm run check:browser -- --vs <ref> …` (that ref in its own worktree and
   server, then here; never a baseline from the server you're editing against). Shots:
   `node scripts/png-diff.mjs a.png b.png`. Perf: `--table` (perf-profile as a Δ% table), `--throttle 4`

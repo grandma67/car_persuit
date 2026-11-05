@@ -27,7 +27,9 @@
 //                the JSON, which goes to --json (default <out-dir>/result.json); other evals print JSON
 //   --json f     also save the full output JSON to f
 //   --vs-make "w…"  the same run on a city from these words first (the district off: `nodistricts`),
-//                then on --make's, on this tree and port; printed as --vs prints (--table: Δ%)
+//                then on --make's, on this tree and port; printed as --vs prints (--table: Δ%). Both
+//                sides get `focus=x,z,w,d` in the query (the --make city's first district, or
+//                --focus-kind's): `dbg.focus()`, which district-tour, perf-profile and gpu-ab look at
 //   --wait-lock s  another run holds this port: wait up to s seconds for it (default 900), then give up
 //   --vs ref     the same run on that ref first (worktree in the temp dir, kept for next time; its own
 //                Vite on port + 100), then here, one after the other; prints { vs, sha, base, current },
@@ -100,13 +102,25 @@ if (args['vs-make']) {
     process.exit(1);
   }
   const outDir = args['out-dir'] ?? dirname(args.out ?? 'browser-check.png');
+  // Both sides look at the same place: the "on" city's district bounds (the first, or --focus-kind's)
+  // go into the query as `focus=x,z,w,d` (`dbg.focus()`), so a city without the district is framed
+  // where the district would be. A query that names its own focus keeps it.
+  let query = args.query ?? 'debug';
+  if (!/(^|&)focus=/.test(query)) {
+    const file = join(mkdtempSync(join(tmpdir(), 'cp-focus-')), 'city.json');
+    execFileSync('node', ['scripts/run-ts.mjs', 'scripts/city.ts', 'make', ...args.make.split(/\s+/), '--out', file], { stdio: 'ignore' });
+    const lines = execFileSync('node', ['scripts/run-ts.mjs', 'scripts/city.ts', 'focus', file], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+    const line = lines.find((l) => !args['focus-kind'] || l.startsWith(`${args['focus-kind']} `)) ?? lines[0];
+    if (line) query += `&focus=${line.split(' ')[1]}`;
+    process.stderr.write(line ? `--vs-make: both sides focus on ${line}\n` : '--vs-make: the --make city has no district: no focus\n');
+  }
   const pass = Object.entries(args).flatMap(([k, v]) =>
-    ['vs-make', 'make', 'city', 'out', 'out-dir', 'profile', 'table', 'json'].includes(k) ? [] : [`--${k}`, ...(v === 'true' ? [] : [k === 'eval-file' ? resolve(v) : v])],
+    ['vs-make', 'make', 'city', 'out', 'out-dir', 'profile', 'table', 'json', 'query', 'focus-kind'].includes(k) ? [] : [`--${k}`, ...(v === 'true' ? [] : [k === 'eval-file' ? resolve(v) : v])],
   );
   const run = (side, words) => {
     const dir = join(outDir, side);
     const profile = args.profile ? ['--profile', resolve(args.profile).replace(/(\.json)?$/, `.${side}.json`)] : [];
-    const text = execFileSync('node', [process.argv[1], ...pass, ...profile, '--make', words, '--out-dir', dir, '--out', join(dir, 'final.png')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 28 });
+    const text = execFileSync('node', [process.argv[1], ...pass, '--query', query, ...profile, '--make', words, '--out-dir', dir, '--out', join(dir, 'final.png')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 28 });
     return JSON.parse(text);
   };
   const base = run('base', args['vs-make']);
@@ -292,10 +306,18 @@ if (args.profile) {
 }
 let val;
 if (expression) {
-  const r = (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true })).result;
+  const t0 = Date.now();
+  const reply = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true });
+  const r = reply.result;
   val = r?.result?.value;
   const ex = r?.exceptionDetails;
   if (ex) logs.push(`eval threw: ${ex.exception?.description ?? ex.text}`);
+  // Nothing back and no exception: say so (a lost page context, a promise the page dropped, an eval
+  // with no return), never print an empty result that reads like a pass.
+  else if (val === undefined) {
+    const why = reply.error ? `protocol error: ${reply.error.message}` : `result type ${r?.result?.type ?? 'none'}${r?.result?.subtype ? `/${r.result.subtype}` : ''}`;
+    logs.push(`EVAL RETURNED NOTHING after ${((Date.now() - t0) / 1000).toFixed(0)} s (${why}): treat the run as failed and rerun it`);
+  }
 }
 let profile;
 if (args.profile) {

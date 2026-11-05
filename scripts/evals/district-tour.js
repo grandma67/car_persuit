@@ -14,9 +14,20 @@
   const kind = kinds.find((k) => params.get(k) === '1');
   const q = dbg.district(kind);
   const pick = params.get('tourKinds')?.split(',');
-  if (!q && (kind || !pick)) return { error: `no ${kind ?? 'district'} placed on this seed` };
+  // `focus=…` in the URL (--vs-make passes the "on" city's district bounds to both sides): stats and
+  // FPS are taken there, and a city without the district gets that and an overview of the spot.
+  const focus = params.has('focus') ? dbg.focus() : null;
+  if (!q && !focus && (kind || !pick)) return { error: `no ${kind ?? 'district'} placed on this seed` };
   await dbg.police(false);
+  if (focus) await dbg.view(focus, { dist: 25 });
   const out = { kind: q?.kind, grid: q?.grid, stats: dbg.stats(), fps: await dbg.fps(2000), views: {} };
+  if (!q && focus) {
+    const size = Math.max(focus.w, focus.d);
+    await dbg.aerial(focus, { dist: size * 0.9, height: size * 0.8 });
+    await shot('overview');
+    await dbg.aerial(false);
+    return out;
+  }
   const firsts = new Map();
   for (const s of q?.dressing.structures ?? []) if (!firsts.has(s.kind)) firsts.set(s.kind, s);
   for (const l of q?.dressing.landmarks ?? []) if (!firsts.has(l.kind)) firsts.set(l.kind, l);

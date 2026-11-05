@@ -3,6 +3,7 @@
 //   npm run city -- dump <seed> [URL words…] [--out f.json]          exactly what ?seed=N&… builds
 //   npm run city -- check <file…>                                     errors (exit 1) and warnings
 //   npm run city -- show <file | seed [URL words…] | words…>          an ASCII map and a summary
+//   npm run city -- focus <file | seed [URL words…] | words…>         each district's bounds: kind x,z,w,d
 //   npm run city -- words                                             the vocabulary
 // `make` writes the words' params (a few lines, the rest rolls from its seed); --full writes the
 // complete params instead, as a dump does. Without --out the JSON goes to stdout.
@@ -16,6 +17,7 @@ const USAGE = `usage: npm run city -- make <words…> [seed=N] [--full] [--out f
        npm run city -- dump <seed> [URL words…] [--out f.json]
        npm run city -- check <file…>
        npm run city -- show <file | seed [URL words…] | words…>
+       npm run city -- focus <file | seed [URL words…] | words…>
        npm run city -- words`;
 
 /** The run's look and layout in one line. */
@@ -191,6 +193,11 @@ export default function (argv: string[]): void {
       console.log(LEGEND);
       console.log(summary(city));
       city.warnings.forEach((w) => console.log(`warning: ${w}`));
+    } else if (cmd === 'focus') {
+      // Each placed district's bounds as `kind x,z,w,d` (browser-check --vs-make aims both sides there).
+      if (!args.length) throw new Error('focus: a file, a seed or words');
+      const city = cityOf(args);
+      for (const q of city.districts) console.log(`${q.kind} ${[q.bounds.x, q.bounds.z, q.bounds.w, q.bounds.d].map((v) => Math.round(v)).join(',')}`);
     } else if (cmd === 'words') {
       for (const w of WORDS) {
         const name = `${w.name}${w.value ? `=${w.value}` : ''}`;

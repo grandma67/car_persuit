@@ -376,3 +376,22 @@ Time went to reading for reuse points, rework caught by tests, and tool friction
 - **No pond:** a Forest pond (a `pond` count) wasn't built; the clearings carry the open spaces.
 - **Undergrowth is ferns only** (no bushes): ferns and floor logs carry it; the trees are dense enough.
 - **The arch reuses the Farm's ranch gate** (no new structure), without the wagon wheels and mailbox.
+
+### After M5 (tooling from the branch-4 retrospective)
+
+Time went to browser runs one after another (~15, some redone), reading for reuse points, rework from
+two documented budgets applied late (the minimap colour, the 64-tri prop budget), and tool gaps. Done:
+- `--vs-make` passes the "on" city's district bounds to both sides (`focus=`, `dbg.focus()`,
+  `npm run city -- focus`); `district-tour`, `perf-profile` and `gpu-ab` start there, so the side
+  without the district is measured in the same place (it once had to be rerun with hand-passed x/z).
+- `gpu-ab.js`: `ab=props:<prefix>` (hide one prop model, `dbg.propMeshes`) and `at=x,z | at=focus`.
+- `hash --expect` proves every-district cities moved by the placement order alone (rebuilt with the
+  kind off, they hash as before) and lists them apart, instead of 24 "moved outside" to sort by hand.
+- `district-drive.js`: an edge gate with no road behind it is skipped, not a false hit; tracks
+  (`extra.tracks`) are steered end to end with the new `dbg.follow(points)`.
+- `browser-check.mjs` logs `EVAL RETURNED NOTHING` instead of printing an empty result that reads
+  like a pass.
+- `DISTRICTS_DEV.md`: read the budgets before designing (colour contrast, prop tris, glow,
+  corridors); edge blocks with fewer than two street sides; dense props don't stop cops (`thicket`).
+- **Planning:** this branch ran in one session against the 3–4-session note above; hand off at
+  milestone boundaries, `TASKS.md` and this status section carrying the state.

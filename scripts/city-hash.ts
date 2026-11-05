@@ -7,7 +7,10 @@
 // --out wrote, and names the cities that moved.
 // --expect <kind[,kind…]> (with --vs): the change may move only cities that hold one of those districts
 // (on this tree). Lists any other moved city and fails; also says how many expected cities did move
-// (all of them for a new district's first milestone, a few for a later tweak).
+// (all of them for a new district's first milestone, a few for a later tweak). An every-district city
+// that moved without holding one is rebuilt with those kinds forced off: if it then hashes as before,
+// only the placement order moved (the kind was rolled on, joined the shuffled list, found no room),
+// which is listed apart and accepted; any other stray fails.
 // --reload also writes each city's dump, reads it back and builds it: same hash, same dump (the
 // suite does this for 20 of the seeds; run it with the hash at each milestone).
 import { execFileSync } from 'node:child_process';
@@ -118,10 +121,19 @@ export default function (args: string[]): void {
     const moved = lines.filter((l) => ref.get(l.split(' ').slice(0, 2).join(' ')) !== l);
     const key = (l: string) => l.split(' ').slice(0, 2).join(' ');
     if (expectKinds) {
-      const stray = moved.filter((l) => !expected.has(key(l)));
-      const inside = moved.length - stray.length;
+      const outside = moved.filter((l) => !expected.has(key(l)));
+      const inside = moved.length - outside.length;
+      // An every-district city: does it hash as before with the expected kinds forced off?
+      const without = { ...all, ...Object.fromEntries(expectKinds.map((k) => [k, false])) };
+      const orderOnly = (l: string) => {
+        const [seed, mode] = l.split(' ');
+        return mode === 'all' && `${key(l)} ${runHash(generateCity(Number(seed), undefined, { force: without }))}` === ref.get(key(l));
+      };
+      const order = outside.filter(orderOnly);
+      const stray = outside.filter((l) => !order.includes(l));
       console.log(`expected (${expectKinds.join(', ')}): ${expected.size} cities hold it, ${inside} of them moved`);
-      console.log(stray.length ? `MOVED OUTSIDE (${stray.length}):\n${stray.join('\n')}` : `nothing else moved (${lines.length - expected.size} cities)`);
+      if (order.length) console.log(`placement order only (${order.length}): every-district cities where ${expectKinds.join('/')} rolled on and found no room; with it off they hash as before (accepted)`);
+      console.log(stray.length ? `MOVED OUTSIDE (${stray.length}):\n${stray.join('\n')}` : `nothing else moved (${lines.length - expected.size - order.length} cities)`);
       if (stray.length) process.exitCode = 1;
     } else {
       console.log(moved.length ? `MOVED (${moved.length} of ${lines.length}):\n${moved.join('\n')}` : `identical: ${lines.length} cities`);
