@@ -104,6 +104,10 @@ a shot pair through `--vs` if what's drawn changed.
 - Static shadows in a rarely updated map: only if the shadow pass becomes a top item again (usually
   small gains on phones).
 - Audit district and landmark meshes for `releaseAfterUpload`.
+- One-off stalls at the mission's edges, none while driving (11-06; desktop, and `--throttle 4` at phone size):
+  the end screen, 36 / 65 ms, 2 s after a wreck, `showEndScreen` 26 / 48 ms of it; Enter on a throttled
+  phone, ~120 ms in the handler then a ~200 ms gap with the game's frame only ~25 ms of it (cause not
+  found). Neither broken down yet.
 - Not tried, from how other games do it: KTX2/Basis textures (largest today: 1024×2048 facade atlas
   11 MB, a 1024² canvas 5.6 MB, PMREM 3 MB; ~60 MB in all), impostors or LOD for far props
   (`BatchedMesh` culls per instance), Rapier in a worker.

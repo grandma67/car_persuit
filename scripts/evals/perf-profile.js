@@ -1,6 +1,9 @@
 // Frame profile: per-subsystem CPU ms per frame (wraps Game members with timers, no source change),
 // GPU ms (EXT_disjoint_timer_query_webgl2), JS heap churn MB/s and GCs/s, draw calls, triangles, and a
-// GPU/heap memory estimate, over idle, a police-off cruise and a 5★ chase. See knowledge/OPTIMIZATIONS.md.
+// GPU/heap memory estimate, over idle, a police-off cruise and a 5★ chase, then a blast (a cop wrecked,
+// the player destroyed), which ends the run. See knowledge/OPTIMIZATIONS.md. Each phase lists the shaders
+// that first appeared in it (`newShaders`, from the eval's start: a stall the averages hide); by
+// identity, as three can free one program and compile another at the same count.
 //   npm run check:browser -- --query "seed=9&debug&oldtown=1&chinatown=1&harbor=1" --start 2000 --no-final \
 //     --eval-file scripts/evals/perf-profile.js        (phone: --size 390x844)
 // Wraps private members by name: a renamed member just drops out of `per`. With `focus=` in the query
@@ -77,6 +80,14 @@
     }
   };
 
+  const seenPrograms = new Set(g.renderer.info.programs);
+  /** A phase's result with the shaders that appeared since the last phase, in or before its sample. */
+  const withShaders = (phase) => {
+    const fresh = g.renderer.info.programs.filter((p) => !seenPrograms.has(p));
+    for (const p of fresh) seenPrograms.add(p);
+    return { ...phase, programs: g.renderer.info.programs.length, newShaders: fresh.map((p) => p.name) };
+  };
+
   // Heap churn: sum of positive heap deltas per rAF; drops = GCs.
   let heapStats;
   const sample = async (ms) => {
@@ -103,7 +114,7 @@
     gaps.sort((a, b) => a - b);
     return {
       fps: +(frames / secs).toFixed(1),
-      frameGapP50: +gaps[Math.floor(gaps.length * 0.5)].toFixed(1), frameGapP99: +gaps[Math.floor(gaps.length * 0.99)].toFixed(1),
+      frameGapP50: +gaps[Math.floor(gaps.length * 0.5)].toFixed(1), frameGapP99: +gaps[Math.floor(gaps.length * 0.99)].toFixed(1), frameGapMax: +gaps[gaps.length - 1].toFixed(1),
       allocMBperSec: +(alloc / 1e6 / secs).toFixed(2), gcPerSec: +(gcs / secs).toFixed(2),
       gpuMsPerFrame: gpuN ? +(gpuMs / gpuN).toFixed(2) : 'n/a',
       cars: g.traffic.cars.length, cops: g.director.cops.length,
@@ -122,22 +133,25 @@
   }
   out.stats = dbg.stats();
   out.mixedMaterials = dbg.mixedMaterials?.(); // expected empty (OPTIMIZATIONS.md)
-  out.idle = await sample(3000);
+  out.idle = withShaders(await sample(3000));
   dbg.police(false);
   const drive = dbg.hold('KeyW', 7000);
   await sleep(1500);
   out.cruise = await sample(5000);
+  await drive;
+  out.cruise = withShaders(out.cruise);
   // Garbage budget while cruising (OPTIMIZATIONS.md M1: 30 → 16 MB/s on seed 9, + ~30%). Most of
   // what's left is three's WebGL uniform calls (per draw) and Rapier's getters (per car per step).
   out.staleMatrices = window.dbg.staleMatrices?.() ?? []; // frozen objects moved without updateMatrix (expected empty)
   out.budget = { allocMBperSec: out.cruise.allocMBperSec <= 21, mixedMaterials: !out.mixedMaterials?.length, staleMatrices: !out.staleMatrices.length };
-  await drive;
   dbg.police(true);
   await dbg.stars(5);
   const chase = dbg.hold('KeyW', 12000);
   await sleep(4000);
   out.chase5 = await sample(7000);
   await chase;
+  out.chase5 = withShaders(out.chase5);
+  out.wreckedInChase = g.health.destroyed; // the player died mid-chase: chase5 may hold a dead car's frames, blast only the cop's
 
   // Memory: JS heap after GC, GPU buffers/textures estimate.
   gc(); gc(); await sleep(200);
@@ -184,5 +198,13 @@
     pixelRatio: g.renderer.getPixelRatio(),
     rapierBodies: g.world.bodies.len(), rapierColliders: g.world.colliders.len(),
   };
+
+  // Last, as it ends the mission (and after the memory numbers, which it would move).
+  dbg.police(true);
+  const blast = sample(5000);
+  out.copWrecked = dbg.wreckCop?.(0) ?? false;
+  await sleep(1500);
+  if (!g.health.destroyed) g.applyDamage(0, 1e6);
+  out.blast = withShaders(await blast);
   return out;
 })()
