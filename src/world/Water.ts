@@ -69,3 +69,15 @@ export function rimPoints(w: ShallowWater, segments: number, inset = 0): { x: nu
   }
   return out;
 }
+
+/** The share of `r` under any of `waters`, sampled on a `step`-metre grid (an island counts as dry). */
+export function waterShare(r: { x: number; z: number; w: number; d: number }, waters: ShallowWater[], step = 1.5): number {
+  let wet = 0, all = 0;
+  for (let x = r.x - r.w / 2 + step / 2; x < r.x + r.w / 2; x += step) {
+    for (let z = r.z - r.d / 2 + step / 2; z < r.z + r.d / 2; z += step) {
+      all++;
+      if (waters.some((w) => inWater(w, x, z))) wet++;
+    }
+  }
+  return all ? wet / all : 0;
+}

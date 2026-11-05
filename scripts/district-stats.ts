@@ -4,7 +4,8 @@
 // <kind>: placement rate forced on and natural, shapes, gates, the first seeds that place it, what a
 // placed district holds on average, lit props (lamps, lanterns) against its `maxGlow` (average and
 // worst, the worst seed and shape; the renderer's own glows, such as bulbs, torches and fireflies,
-// come on top), and generation ms with it forced on vs off.
+// come on top), shallow water's share of each block (min, median, max), and generation ms with it
+// forced on vs off.
 // odds: how many districts a city gets with nothing forced, and each one's share: the odds line of
 // knowledge/DISTRICTS.md, printed ready to paste.
 // Seeds i * 7919 + 11 (the fixed 12-block grid). One line per key.
@@ -13,6 +14,7 @@ import type { DistrictKind } from '../src/world/districts/District';
 import { inDistrict } from '../src/world/districts/apply';
 import { DISTRICT_DEFS } from '../src/world/districts/index';
 import { LIT_PROPS } from '../src/world/StreetProps';
+import { waterShare } from '../src/world/Water';
 
 const count = <T>(items: T[], key: (t: T) => string) =>
   items.reduce<Record<string, number>>((out, t) => ((out[key(t)] = (out[key(t)] ?? 0) + 1), out), {});
@@ -94,6 +96,17 @@ export default function ([kind = DISTRICT_DEFS[0]?.kind, arg]: string[]): void {
         worstAt: worst.q ? `seed ${qs[lit.indexOf(worst)].city.seed} ${worst.q.grid.w}x${worst.q.grid.h}` : '-',
         maxGlow: max ?? 'not declared',
       };
+    })(),
+    // Shallow water inside each block's sidewalk line (pools, a lake, ponds): its share per block.
+    water: (() => {
+      const shares = qs.flatMap(({ city, q }) => q.blocks.map((b) => {
+        const r = city.blocks[b].rect, s = city.config.sidewalk;
+        const inner = { x: r.x, z: r.z, w: r.w - 2 * s, d: r.d - 2 * s };
+        return waterShare(inner, city.water.filter((w) => Math.abs(w.x - r.x) <= r.w / 2 && Math.abs(w.z - r.z) <= r.d / 2));
+      })).sort((a, b) => a - b);
+      if (!shares.some((x) => x > 0)) return 'none';
+      const pc = (x: number) => `${Math.round(x * 100)}%`;
+      return { perBlock: `min ${pc(shares[0])}, median ${pc(shares[shares.length >> 1])}, max ${pc(shares[shares.length - 1])}`, dryBlocks: shares.filter((x) => x === 0).length };
     })(),
     generateMs: { on: +(tOn / seeds.length).toFixed(1), off: +(tOff / seeds.length).toFixed(1) },
   };

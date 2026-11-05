@@ -80,13 +80,16 @@ there if it holds for all districts; don't repeat it in a district's test.
   `vehicleTop` + 1.5 m), never hard-coded; nothing above the kerb collides.
 - **Kerb clutter:** on the sidewalk; may poke out but never within `clutterMinOffset` (5 m) of the
   centre line; ~8 m gaps at junction mouths and gates; 3 m into the road clear in front of corridor
-  mouths and fence holes.
+  mouths and fence holes. The rule (`clutterOnCentreLine`) measures a prop by its **radius**
+  (`hypot(hx, hz)`) whichever way it faces: a 2.9 m rail section along the kerb counts 1.45 m of reach,
+  so it stands ≥ 6.5 m off the centre line (the Swamp's rails at `rw/2 + 0.65`).
 - **Solid vs breakable:** structures (walls, columns, legs, stacks, lions, bollards) solid, unbreakable,
   off the roadway; smaller things are breakable props that add heat. Long or wide breakables get a small
   collider (a 7 m boom arm thrown ahead jammed a straddle carrier's gap like a wall).
 - **Glow:** cap emissive instances (`<DISTRICT>.maxGlow`); flicker/blink via shader uniforms, never per-light JS.
 - **Corridors and gaps** (yards, junkyard, orchard aisles, carrier legs): ≥ widest body + 1 m and
-  connected to ≥ 2 streets.
+  connected to ≥ 2 streets. Test widths against
+  `widestBody({ offRoad: true })` (2.5 m: the ramp truck, 4 m, never leaves the road) or `widestBody()`.
 - **No z-fighting:** never overlap coplanar faces. Butt-join exactly or stand one part 2–3 cm proud;
   ground layers ≥ 2 cm apart or `polygonOffset` on the lower (asphalt 1/1, street cobbles 0.5/0.5,
   markings none).
@@ -109,6 +112,21 @@ there if it holds for all districts; don't repeat it in a district's test.
   facade style (`render/Facades.ts`, 8×8 window cells, 512² canvases, `CAPS`, per-window `cell` hook), one
   shared roof mesh (`addRoof` by `RoofShape`, `addTrims` by `TrimKind`); the collider stays the lot box.
   Never give a lot its own mesh or material.
+- **Facade styles** (`render/Facades.ts`; reuse before adding one). Upper floors: `curtain` (full
+  glazing), `office` (stone grid), `brick` (arched windows), `stucco` (smooth render, light surrounds),
+  `shutters` (louvred, balcony rail), `siding` (horizontal boards, white frames: takes any palette tint),
+  `adobe` (earthen, deep windows), `industrial` (corrugated, strip glazing), `halfTimber` (plaster and
+  oak), `ashlar` (coursed stone, leaded windows), `shophouse` (Chinatown pastel, fanlights), `tenement`
+  (grimy brick walk-ups), `charred` (burnt-out shells), `panel` (windowless cold store). **`boards` has
+  barn red painted into its texture** (palettes are near-white shades over it): it is always a red
+  barn. Ground floors: `storefront` (signboard, wide glazing), `rollerDoors` (shed doors), `barnDoors`
+  (X-braced, white trim), `boarded` (shut shops). Look at one alone: `studio.js` with `?studio=lot:…`.
+- **Programs to expect** (`dbg.stats().programs`; compare on vs off with `check:browser --vs-make
+  "nodistricts …" --make "<kind> …"`): a city with no canals compiles the canal water's program for
+  its first shallow water (a pond, a lake, the Swamp's pools: +1, accepted); fireflies and wisps add
+  their own on the nights they show (+1, shared by every district); the snow's ice is a plain material.
+  Compare the same climate on both sides: no-district baselines differ by climate (seed 11: desert 31,
+  beach 32).
 - **Budget per district:** ≤ 3 new facade styles, no new shader programs (`renderer.info.programs`),
   merged walls + roofs < ~60k triangles, build time within ~50 ms of district off (`npm run budget`),
   phone FPS on vs off within noise.
@@ -146,8 +164,9 @@ the `DistrictKind` union (`District.ts`); `world/districts/index.ts`; `render/di
 `scripts/city.ts` (`DISTRICT_CHAR`); the kind lists in `scripts/evals/district-tour.js`
 and `district-drive.js`; `NUMBERS` in `paramsTesting.ts` for an `'int'` feature; `CityTheme` climate
 looks (optional); new props in `StreetProps.ts` + `PropSystem.ts`. Other districts' tests use
-`alone(kind…)` / `everyDistrict()` (`paramsTesting.ts`), so they need no edit. `check:restart`'s
-`--make` names five districts and `DISTRICTS.max` is 5: a sixth and later kind gets its own run.
+`alone(kind…)` / `everyDistrict()` (`paramsTesting.ts`), so they need no edit. `check:restart` runs
+two cities (`:core`, five districts; `:nature`, Mega-park and Swamp): add a new kind and its
+features to `check:restart:nature`'s `--make` in `package.json` (`DISTRICTS.max` is 5 a city).
 
 ## Conventions
 
@@ -214,7 +233,7 @@ looks (optional); new props in `StreetProps.ts` + `PropSystem.ts`. Other distric
 - **Seed guard per milestone:** `npm run hash -- --vs HEAD --expect <kind>` fails if anything moved
   outside cities that hold the district, and says how many of those moved (all of them when it first
   lands, a few for a tweak). Several kinds: `--expect farm,slums`.
-- **Measure placement rate** (`npm run stats -- <kind>`) after any rule, alone and with all districts
+- **Measure placement rate** (`npm run stats -- <kind>`; it also prints shallow water's share per block) after any rule, alone and with all districts
   forced; check rejection reasons if low. A district's position depends on those placed before it.
 - `perimeterWall` opens at *every* street crossing the wall, not just gates (`'mainStreet'` districts
   have gateless crossings).

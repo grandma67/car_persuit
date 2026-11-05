@@ -3,6 +3,7 @@
 //   npm run t                          all tests
 //   npm run t -- src/world/districts   one area (any vitest arguments pass through)
 //   T_LIMIT=600 npm run t              time limit in seconds (default 300)
+//   T_ITEMS=20 npm run t               items shown from each failure's break list (default 6)
 //   npm run t -- --times [save]        also the slowest files and the CPU seconds, against the saved
 //                                      run; `save` makes this run the one to compare with
 // A run that hangs is killed and reported, instead of stalling the session. Wall time swings by a
@@ -32,10 +33,21 @@ const timer = setTimeout(() => {
 child.on('close', (code) => {
   clearTimeout(timer);
   const lines = out.replace(/\x1b\[[0-9;]*m/g, '').split('\n');
-  // Failed test names, each failure's first assertion line and its location, then the summary.
-  const keep = lines.filter((l) =>
-    /^\s*×|FAIL |AssertionError|Error:|expected|❯ .*\.test\.ts:\d+|Snapshot|Test Files|Tests |Duration/.test(l),
-  );
+  // Failed test names, each failure's first assertion line and its location, then the summary. A
+  // `toEqual([])` break list prints as `[ …(7) ]`: its first items come from the diff below it
+  // (`+   "…"` lines), up to ITEMS per failure (`T_ITEMS=` to change).
+  const ITEMS = Number(process.env.T_ITEMS ?? 6);
+  const keep = [];
+  let items = 0;
+  for (const l of lines) {
+    if (/^\s*×|FAIL |AssertionError|Error:|expected|❯ .*\.test\.ts:\d+|Snapshot|Test Files|Tests |Duration/.test(l)) {
+      if (/AssertionError|Error:/.test(l)) items = 0;
+      keep.push(l);
+    } else if (/^\s*\+\s{2,}\S/.test(l) && items < ITEMS) {
+      items++;
+      keep.push(`    ${l.trim()}`);
+    }
+  }
   // Each.it tests repeat the same failure per seed: collapse identical lines (seed numbers aside).
   const seen = new Map();
   for (const l of keep) {

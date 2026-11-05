@@ -26,6 +26,8 @@
 //   --table      a perf-profile.js result as a compact table (with --vs: both sides, Δ%) instead of
 //                the JSON, which goes to --json (default <out-dir>/result.json); other evals print JSON
 //   --json f     also save the full output JSON to f
+//   --vs-make "w…"  the same run on a city from these words first (the district off: `nodistricts`),
+//                then on --make's, on this tree and port; printed as --vs prints (--table: Δ%)
 //   --wait-lock s  another run holds this port: wait up to s seconds for it (default 900), then give up
 //   --vs ref     the same run on that ref first (worktree in the temp dir, kept for next time; its own
 //                Vite on port + 100), then here, one after the other; prints { vs, sha, base, current },
@@ -60,7 +62,7 @@ const alive = (pid) => {
     return false;
   }
 };
-for (let waited = 0, said = false; !args.vs; waited += 2) {
+for (let waited = 0, said = false; !args.vs && !args['vs-make']; waited += 2) {
   try {
     writeFileSync(lock, String(process.pid), { flag: 'wx' });
     break;
@@ -90,6 +92,29 @@ const print = (v, depth, pad = '') =>
   depth && v && typeof v === 'object' && !Array.isArray(v)
     ? `{\n${Object.entries(v).map(([k, x]) => `${pad}  ${JSON.stringify(k)}: ${print(x, depth - 1, `${pad}  `)}`).join(',\n')}\n${pad}}`
     : JSON.stringify(v);
+// --vs-make: the same check on a city from other words (the district off: `nodistricts`), then on
+// --make's, one after the other on this tree and port; printed as --vs prints (base, current).
+if (args['vs-make']) {
+  if (!args.make || args.vs) {
+    console.error('--vs-make needs --make (the current side) and no --vs');
+    process.exit(1);
+  }
+  const outDir = args['out-dir'] ?? dirname(args.out ?? 'browser-check.png');
+  const pass = Object.entries(args).flatMap(([k, v]) =>
+    ['vs-make', 'make', 'city', 'out', 'out-dir', 'profile', 'table', 'json'].includes(k) ? [] : [`--${k}`, ...(v === 'true' ? [] : [k === 'eval-file' ? resolve(v) : v])],
+  );
+  const run = (side, words) => {
+    const dir = join(outDir, side);
+    const profile = args.profile ? ['--profile', resolve(args.profile).replace(/(\.json)?$/, `.${side}.json`)] : [];
+    const text = execFileSync('node', [process.argv[1], ...pass, ...profile, '--make', words, '--out-dir', dir, '--out', join(dir, 'final.png')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 1 << 28 });
+    return JSON.parse(text);
+  };
+  const base = run('base', args['vs-make']);
+  const current = run('current', args.make);
+  finish({ vs: `make "${args['vs-make']}"`, sha: 'same tree', base, current }, 3, outDir);
+  process.exit(0);
+}
+
 if (args.make) {
   args.city = join(mkdtempSync(join(tmpdir(), 'cp-city-')), 'city.json');
   const made = execFileSync('node', ['scripts/run-ts.mjs', 'scripts/city.ts', 'make', ...args.make.split(/\s+/), '--out', args.city], { encoding: 'utf8' });

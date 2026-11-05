@@ -3,7 +3,12 @@
 Retry / New city build the next Game in the page: everything a run adds to the scene, the page or a
 listener must be freed by `Game.dispose()` ([PLAN_GAME.md](plans/PLAN_GAME.md) Tech).
 
-## `npm run check:restart` (`scripts/evals/restart.js`, ~1.5 min)
+## `npm run check:restart` (`scripts/evals/restart.js`, ~3 min)
+
+Two cities, one after the other (`DISTRICTS.max` is 5, so one city can't hold every district):
+`check:restart:core` (Old City, Chinatown, Harbor, Farm, Slums with their features, rainy night) and
+`check:restart:nature` (Mega-park and Swamp with theirs, night). Run the half that holds what you
+changed; a new district goes into `:nature` (or a third city once that one is full).
 
 Run it after anything that adds to the scene, the page or a listener. `ok` + `failures` first; the
 eval's header lists every check and threshold. In short:

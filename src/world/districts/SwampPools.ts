@@ -6,10 +6,9 @@ import type { Rng } from '../../core/Rng';
 import { SWAMP } from '../../gameplay/balance';
 import type { Rect } from '../CityGenerator';
 import { shrink } from '../lots';
-import { inWater, rimPoints, shoreDistance, type ShallowWater } from '../Water';
+import { inWater, rimPoints, shoreDistance, waterShare, type ShallowWater } from '../Water';
 
 const RIM = 48; // rim points checked against the bank and the other pools
-const STEP = 1.5; // the coverage grid, metres
 const SAFE = 0.25; // metres to spare between the rim points
 
 /** A random wobbly pool (before it is fitted). */
@@ -49,17 +48,8 @@ function fit(w: ShallowWater, room: Rect, others: ShallowWater[], gap: number, l
 /** A pool's area, square metres (the wobble's cosines average out). */
 export const poolArea = (w: ShallowWater) => Math.PI * w.rx * w.rz * (1 + w.wobble.reduce((s, [, a]) => s + (a * a) / 2, 0));
 
-/** The share of `inner` under water, on a grid. */
-export function coverage(inner: Rect, pools: ShallowWater[]): number {
-  let wet = 0, all = 0;
-  for (let x = inner.x - inner.w / 2 + STEP / 2; x < inner.x + inner.w / 2; x += STEP) {
-    for (let z = inner.z - inner.d / 2 + STEP / 2; z < inner.z + inner.d / 2; z += STEP) {
-      all++;
-      if (pools.some((w) => inWater(w, x, z))) wet++;
-    }
-  }
-  return all ? wet / all : 0;
-}
+/** The share of a block under water (`Water.waterShare`). */
+export const coverage = waterShare;
 
 /** An ordinary block's pools (`centred`: the big one in the middle), `cover` of it under water at most (about; the last pool may overshoot a little); the big one under `maxArea`. */
 export function layPools(inner: Rect, cover: number, maxArea: number, rng: Rng, centred = false): ShallowWater[] {

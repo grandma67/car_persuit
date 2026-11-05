@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DISTRICTS, SLUMS } from '../../gameplay/balance';
-import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
+import { widestBody } from '../../vehicles/VehicleSpecs';
 import { generateCity, type Rect } from '../CityGenerator';
 import { alone, districtCities, everyDistrict } from '../paramsTesting';
 import { inRect } from '../lots';
@@ -108,7 +108,7 @@ describe('Slums with every district forced on', () => {
 });
 
 describe('Slums set pieces', () => {
-  const widest = Math.max(...ALL_SPECS.map((s) => s.halfExtents.x)) * 2;
+  const widest = widestBody();
   const touches = (a: Rect, b: Rect) => Math.abs(a.x - b.x) <= (a.w + b.w) / 2 && Math.abs(a.z - b.z) <= (a.d + b.d) / 2;
 
   it.each(placed)('seed %i: one ruin structure per ruin, one overpass', (_seed, _c, q) => {

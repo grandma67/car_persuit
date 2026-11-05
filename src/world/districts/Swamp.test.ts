@@ -14,7 +14,7 @@ import { DISTRICT_DEFS } from './index';
 import { isJunctionControl } from './apply';
 import { deckPoint, inDeck, type Deck } from '../Deck';
 import { FootprintIndex, footprintsOverlap, LIT_PROPS, propFootprint, rectFootprint, type Footprint } from '../StreetProps';
-import { ALL_SPECS } from '../../vehicles/VehicleSpecs';
+import { widestBody } from '../../vehicles/VehicleSpecs';
 
 const deckFootprint = (d: Deck): Footprint => ({ x: d.x, z: d.z, hx: d.hx, hz: d.hz, yaw: d.yaw });
 
@@ -126,7 +126,7 @@ describe('Swamp witch house', () => {
     const decks = q.dressing.decks ?? [];
     expect(decks.length).toBe(1 + (q.dressing.extra!.boardwalks as number)); // the witch's first
     const d = decks[0];
-    if (d.hx * 2 < Math.max(...ALL_SPECS.filter((s) => s.body !== 'ramptruck').map((s) => s.halfExtents.x)) * 2 + 1) breaks.push(`boardwalk ${d.hx * 2} m wide`);
+    if (d.hx * 2 < widestBody({ offRoad: true }) + 1) breaks.push(`boardwalk ${d.hx * 2} m wide`);
     const k = roleBlocks(q, 'witch')[0];
     const room = inner(c, k);
     const foot = deckPoint(d, 0, -d.hz), end = deckPoint(d, 0, d.hz);

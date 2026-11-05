@@ -322,3 +322,18 @@ the glow budget", `maxGlow` declared on every def. Still open:
   it). The "gator crossing" sign is a yellow diamond reading "MIND THE BOG". The stick totem is the
   Farm's scarecrow. Rails (boardwalk and kerb) reuse the split-rail `fence`.
 - **No new facade styles:** shacks and the bait shop are `siding` (`boards` is barn red).
+
+### After M5 (tooling from the branch-3 retrospective; before the Forest)
+
+Time went to reading for reuse points, rework caught by tests, and tool friction. Done:
+- `npm run t` prints the first items of each failing break list (`T_ITEMS=`), not `[ …(7) ]`.
+- Word `nodistricts`; `check:browser --vs-make "nodistricts …" --make "<kind> …"`: on vs off in one
+  command (with `--table`, the perf Δ%).
+- `widestBody({ offRoad })` in `VehicleSpecs` (the tests' four copies replaced).
+- `npm run stats -- <kind>` prints shallow water's share per block (`Water.waterShare`).
+- `dbg.ground(x, z)`; the custom-eval note points at the `dbg` table (`dbg.drive` existed: read the
+  whole of `BROWSER_CHECKS.md` before writing an eval).
+- `check:restart` runs two cities (`:core`, `:nature`; a new district joins `:nature`).
+- `joinRunDressing` adds a climate's `props` (they were silently dropped; nothing used it yet).
+- `DISTRICTS_DEV.md`: facade styles (`boards` is barn red), the clutter rule measures by radius,
+  programs to expect per climate and with shallow water or fireflies.

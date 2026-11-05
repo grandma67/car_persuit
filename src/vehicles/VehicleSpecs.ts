@@ -333,3 +333,12 @@ export const ALL_SPECS: VehicleSpec[] = [
   PLAYER_SPEC, COP_PATROL_SPEC, COP_INTERCEPTOR_SPEC, COP_SUV_SPEC, COP_ARMORED_SPEC,
   VAN_SPEC, PICKUP_SPEC, BUS_SPEC, BOX_TRUCK_SPEC, RAMP_TRUCK_SPEC, TRACTOR_SPEC,
 ];
+
+/**
+ * The widest body's full width, metres: every spec (the ramp truck, 4 m, for road gaps), or with
+ * `offRoad` only those that leave the road (the ramp truck is road traffic only: the armoured truck
+ * and the bus, 2.5 m). Corridors, boardwalks and carrier gaps are ≥ this + 1 m.
+ */
+export function widestBody({ offRoad = false } = {}): number {
+  return Math.max(...ALL_SPECS.filter((s) => !offRoad || s.body !== 'ramptruck').map((s) => s.halfExtents.x)) * 2;
+}

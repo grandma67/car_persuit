@@ -74,6 +74,7 @@ function promise(word: string, city: CityData): void {
   const p = city.params;
   const def = DISTRICT_DEFS.find((d) => d.kind === name);
   if (name === 'flat') expect([city.terrain.hill, city.terrain.canals.length]).toEqual([null, 0]);
+  else if (name === 'nodistricts') expect(city.districts).toEqual([]);
   else if (def && v === undefined) expect(city.districts.map((q) => q.kind)).toEqual([name]);
   else if (def) expect(city.districts.some((q) => q.kind === name)).toBe(v === '1');
   else if (name === 'startminute') expect(p.startMinute).toBe(Number(v));
