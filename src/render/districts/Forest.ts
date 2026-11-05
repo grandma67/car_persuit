@@ -9,7 +9,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { FOREST_NAMES } from '../../world/districts/ForestSet';
 import { ranchGate } from './Farm';
 import { farmSignMaterial } from './farmSigns';
-import { boulder, fallenLog, firePit, gatePosts, stump, logLoader, logStack, logTruck, lookout, tent } from './ForestSet';
+import { boulder, fallenLog, firePit, gatePosts, stump, logLoader, logStack, logTruck, lookout } from './ForestSet';
 import type { CityData } from '../../world/CityGenerator';
 import type { District } from '../../world/districts/District';
 import { forestClearings, forestTracks } from '../../world/districts/Forest';
@@ -64,7 +64,6 @@ export function renderForest(q: District, city: CityData, scene: THREE.Scene, ct
     else if (s.kind === 'logTruck') logTruck(s, y, snowy, solid);
     else if (s.kind === 'logLoader') logLoader(s, y, snowy, solid);
     else if (s.kind === 'lookout') windows.push(...lookout(s, y, snowy, solid));
-    else if (s.kind === 'tent') tent(s, y, snowy, solid);
     else if (s.kind === 'firePit') fires.push(firePit(s, y, snowy, solid));
     else if (s.kind === 'gatePosts') gatePosts(s, ctx.ground, snowy, solid);
     else if (s.kind === 'logArch') ranchGate(s, snowy, solid, signs, false);

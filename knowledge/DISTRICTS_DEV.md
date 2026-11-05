@@ -28,7 +28,7 @@ block keeps its zone).
 | Slums | `Slums`, `SlumsSet` (ruins, overpass, junkyard, camp), `SlumsStreet` (street dressing, last on the stream; `climateDressing`) | `Slums`, `slumsGraffiti`, `slumsSigns` |
 | Mega-park | `Megapark`, `MegaparkLake`, `MegaparkGrounds`, `MegaparkLawns` | `Megapark`, `megaparkSigns` |
 | Swamp | `Swamp` (roles, lots, `fits`: low ground), `SwampPools`, `SwampWitch`, `SwampSet` (boardwalks, landing), `SwampStreet` (verges, rails, lamps, signs), `SwampWoods` (trees, reeds, logs, pads) | `Swamp`, `SwampWitch` (house, boardwalk, jetty, airboat, log) |
-| Forest | `Forest` (roles, lots, dress, climate swaps), `ForestWoods` (tracks, clearings, trees, the floor), `ForestSet` (log arch, posts, lumber yard, lookout, campsite; `sideFrame`) | `Forest` (floor, tracks, glows), `ForestSet` (stacks, truck, loader, tower, tents, fire pit, floor pieces) |
+| Forest | `Forest` (roles, lots, dress, climate swaps), `ForestWoods` (tracks, clearings, trees, the floor), `ForestSet` (log arch, posts, lumber yard, lookout, campsite; `sideFrame`) | `Forest` (floor, tracks, glows), `ForestSet` (stacks, truck, loader, tower, fire pit, floor pieces; `ForestSet.test`: no z-fighting, tri budgets); the tents are a prop (`tent`) |
 
 **Placement:** roll a shape, try every rectangle of it (both orientations) in `rings` meeting
 `minShare`/`minCore`, shuffled; else other shapes largest first; else drop (a district only shrinks).
@@ -95,7 +95,9 @@ there if it holds for all districts; don't repeat it in a district's test.
   ground layers ≥ 2 cm apart or `polygonOffset` on the lower (asphalt 1/1, street cobbles 0.5/0.5,
   markings none).
   Tests catch it: `PropModels.test` (every prop model) and `BuildingZFight.test` (40 rolled cities,
-  every building and its neighbours; `render/coplanar.ts`, `world/zfight.ts`). To fix one, list them
+  every building and its neighbours; `render/coplanar.ts`, `world/zfight.ts`). Neither sees a
+  district's own merged set pieces: test those per piece, built at the origin (at world coordinates
+  float32 normals fake overlaps), as `render/districts/ForestSet.test.ts` does. To fix one, list them
   all with where to look: `npm run zfight` (`props`, `only=chinatown`, or city words for a district's
   own cities). Neighbours in a terrace stand 0.3–0.5 m apart and often share a height, so anything one
   builds past its walls lands in the other's planes. Building geometry in the roof mesh is

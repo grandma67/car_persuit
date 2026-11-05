@@ -1,6 +1,6 @@
 // The Forest's set pieces as vertex-coloured parts for one merged mesh (the district structures'
 // settings): log stacks, the log truck and loader (merged bodies, never buildCarMesh), the fire
-// lookout tower, tents, the fire pit and timber gate posts. Each is laid in its structure's frame
+// lookout tower, the fire pit and timber gate posts. Each is laid in its structure's frame
 // (local +Z its front) on the ground at its middle.
 import * as THREE from 'three';
 import { FOREST } from '../../gameplay/balance';
@@ -18,7 +18,6 @@ const RUBBER = 0x1e1e20;
 const GLASS = 0x2a3a44;
 const SNOW = 0xeef2f6;
 const CAB = [0xb83a2a, 0x2a5a8a, 0xd8a028]; // truck and loader paint
-const TENTS = [0xd86a2a, 0x3a7a4a, 0x2a5a9a, 0xc8b04a];
 
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 const cyl = (r0: number, r1: number, h: number, n = 8) => new THREE.CylinderGeometry(r0, r1, h, n);
@@ -26,13 +25,17 @@ export const frameOf = (x: number, y: number, z: number, yaw: number) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
 const place = (parts: THREE.BufferGeometry[], m: THREE.Matrix4, out: THREE.BufferGeometry[]) => out.push(...parts.map((p) => p.applyMatrix4(m)));
 
-/** A log lying along local X, `len` long, radius r, centred at (x, y, z): bark and two sawn ends. */
+/**
+ * A log lying along local X, `len` long, radius r, centred at (x, y, z): one capped 7-sided
+ * cylinder, bark round the side and sawn ends (28 tris; separate end discs were 84).
+ */
 function log(len: number, r: number, x: number, y: number, z: number, bark = BARK): THREE.BufferGeometry[] {
-  return [
-    part(cyl(r, r, len - 0.04, 7).rotateZ(Math.PI / 2), bark, x, y, z),
-    part(cyl(r * 0.92, r * 0.92, 0.04, 7).rotateZ(Math.PI / 2), CUT, x + len / 2 - 0.02, y, z),
-    part(cyl(r * 0.92, r * 0.92, 0.04, 7).rotateZ(Math.PI / 2), CUT, x - len / 2 + 0.02, y, z),
-  ];
+  const geo = part(cyl(r, r, len, 7), bark);
+  const side = geo.groups[0].count; // the side's vertices come first, the caps' after
+  const cut = new THREE.Color(CUT);
+  const colors = geo.attributes.color.array as Float32Array;
+  for (let i = side; i < geo.attributes.position.count; i++) colors.set([cut.r, cut.g, cut.b], i * 3);
+  return [geo.rotateZ(Math.PI / 2).translate(x, y, z)];
 }
 
 /** A stack of logs along local X filling its footprint, layer on layer to its height, a little ragged. */
@@ -52,13 +55,19 @@ export function logStack(s: Structure, y: number, snowy: boolean, out: THREE.Buf
       g.push(...log(len, r * rng.range(0.85, 1), rng.range(-0.15, 0.15), r + l * r * 1.75, z));
     }
   }
-  if (snowy) g.push(part(box(f.hx * 2 - 0.2, 0.08, f.hz * 2 - 0.3), SNOW, 0, r + (layers - 1) * r * 1.75 + r * 0.95, 0));
+  // Snow on the top layer: short of the shortest log's ends and from the first log's axis to the
+  // last's, so none of its sides lands in a log's end or flank (z-fighting).
+  if (snowy) {
+    const top = layers - 1, n = across - (top % 2);
+    const z0 = -f.hz + r + (top % 2) * r, z1 = z0 + (n - 1) * r * 2;
+    g.push(part(box(f.hx * 2 - 1.0, 0.08, Math.max(0.2, z1 - z0)), SNOW, 0, r + top * r * 1.75 + r * 0.95, (z0 + z1) / 2));
+  }
   place(g, frameOf(s.x, y, s.z, s.yaw), out);
 }
 
 /** Four wheels for a body `len` long along local X, `half` wide. */
 function wheels(xs: number[], half: number, r: number): THREE.BufferGeometry[] {
-  return xs.flatMap((x) => [-1, 1].map((e) => part(cyl(r, r, 0.4, 10).rotateX(Math.PI / 2), RUBBER, x, r, e * half)));
+  return xs.flatMap((x) => [-1, 1].map((e) => part(cyl(r, r, 0.4, 8).rotateX(Math.PI / 2), RUBBER, x, r, e * half)));
 }
 
 /** A log truck along local X: the cab at +X, a flatbed with stakes and a load of long logs. */
@@ -93,7 +102,7 @@ export function logLoader(s: Structure, y: number, snowy: boolean, out: THREE.Bu
     part(box(2.6, 1.2, 2.2), paint, -0.4, 1.9, 0), // body
     part(box(1.2, 1.4, 1.1), paint, 0.6, 2.9, 0.5), // cab
     part(box(1.22, 0.7, 1.12), GLASS, 0.6, 3.15, 0.5),
-    part(box(0.8, 1.0, 2.2), STEEL, -1.75, 1.9, 0), // counterweight
+    part(box(0.8, 1.0, 2.24), STEEL, -1.75, 1.9, 0), // counterweight, 2 cm proud of the body's sides
   ];
   // The boom up and out over +X, the stick down to the grapple, a log in its claws.
   g.push(part(box(4.2, 0.4, 0.4).rotateZ(0.55), paint, 1.6, 3.6, -0.4));
@@ -158,33 +167,6 @@ export function lookout(s: Structure, y: number, snowy: boolean, out: THREE.Buff
   return [[0, 1], [0, -1], [1, 0], [-1, 0]].map(([u, v]) => new THREE.Vector3((u * (C / 2 + 0.03)), H + 1.1 + (ch - 1.15) / 2, (v * (C / 2 + 0.03))).applyMatrix4(m));
 }
 
-/** A triangle w wide at its foot and h tall in the XY plane, facing both ways. */
-function gable(w: number, h: number): THREE.BufferGeometry {
-  const a = [-w / 2, 0, 0], b = [w / 2, 0, 0], c = [0, h, 0];
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...a, ...b, ...c, ...b, ...a, ...c]), 3));
-  geo.computeVertexNormals();
-  return geo;
-}
-
-/** A ridge tent along local Z, its door at -Z (towards the fire): two sloping sheets, the ends, a pole. */
-export function tent(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
-  const f = s.footprints[0];
-  const colour = TENTS[((s.data?.colour as number) ?? 0) % TENTS.length];
-  const w = f.hx * 2 - 0.2, len = f.hz * 2 - 0.2, h = 1.4;
-  const slope = Math.hypot(w / 2, h);
-  const tilt = Math.atan2(h, w / 2);
-  const g: THREE.BufferGeometry[] = [];
-  for (const e of [-1, 1]) g.push(part(box(slope, 0.05, len).rotateZ(e * tilt), snowy ? 0xd8dce0 : colour, (e * w) / 4, h / 2, 0));
-  // The back end: a triangle, both faces; the door end a dark flap, half open.
-  g.push(part(gable(w, h), colour, 0, 0, len / 2 - 0.03));
-  g.push(part(box(0.6, h * 0.8, 0.04), 0x2a2420, 0, h * 0.4, -len / 2 + 0.05));
-  g.push(part(box(0.05, 0.05, len + 0.4), STEEL, 0, h + 0.02, 0)); // the ridge pole
-  // Guy lines' pegs at the corners.
-  for (const [u, v] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) g.push(part(box(0.06, 0.2, 0.06), STEEL, u * (w / 2 + 0.3), 0.1, v * (len / 2 - 0.2)));
-  place(g, frameOf(s.x, y, s.z, s.yaw), out);
-}
-
 /** The fire pit: a ring of stones, a cone of logs inside (the flame is a glow), seat logs round it. Returns the flame's spot. */
 export function firePit(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): THREE.Vector3 {
   const R = FOREST.camp.pit;
@@ -192,7 +174,7 @@ export function firePit(s: Structure, y: number, snowy: boolean, out: THREE.Buff
   const rng = new Rng(Math.abs(Math.round(s.x * 31 + s.z * 17)) + 1);
   for (let k = 0; k < 10; k++) {
     const a = (k / 10) * Math.PI * 2;
-    g.push(part(new THREE.DodecahedronGeometry(rng.range(0.16, 0.22), 0), 0x8a8580, Math.sin(a) * (R - 0.15), 0.12, Math.cos(a) * (R - 0.15)));
+    g.push(part(new THREE.IcosahedronGeometry(rng.range(0.16, 0.22), 0), 0x8a8580, Math.sin(a) * (R - 0.15), 0.12, Math.cos(a) * (R - 0.15)));
   }
   g.push(part(cyl(R - 0.3, R - 0.3, 0.04, 10), snowy ? 0x3a3430 : 0x2a2420, 0, 0.03, 0)); // ash
   for (let k = 0; k < 5; k++) {

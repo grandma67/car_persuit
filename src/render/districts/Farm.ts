@@ -149,7 +149,7 @@ export function ranchGate(s: Structure, snowy: boolean, solid: THREE.BufferGeome
   const span = d.half * 2 + 1.4;
   g.push(part(cyl(0.3, 0.3, span, 9).rotateZ(Math.PI / 2), LOG, 0, top, 0));
   g.push(part(cyl(0.18, 0.18, span - 0.6, 8).rotateZ(Math.PI / 2), LOG_DARK, 0, top + 0.55, 0));
-  if (snowy) g.push(part(box(span, 0.08, 0.4), SNOW, 0, top + 0.32, 0));
+  if (snowy) g.push(part(box(span - 0.04, 0.08, 0.4), SNOW, 0, top + 0.32, 0)); // short of the log's ends
   // The name board: a timber frame on two chains, the name on both faces 2 cm proud.
   const sb = d.sign;
   const cy = sb.bottom + sb.h / 2;

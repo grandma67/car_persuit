@@ -22,7 +22,7 @@ export type PropKind =
   // Park pieces
   | 'reeds' | 'goal' | 'cornerFlag' | 'ball'
   // Forest
-  | 'fern'
+  | 'fern' | 'tent'
   // Mega-park
   | 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard'
   | 'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw';
@@ -122,6 +122,8 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   reeds: { hx: 0.45, hz: 0.45, height: 1.6, mass: 4, breakSpeed: 0.6, slowdown: 0.01 },
   // A clump of bracken on the forest floor: flattened at a walk.
   fern: { hx: 0.5, hz: 0.5, height: 0.8, mass: 3, breakSpeed: 0.5, slowdown: 0.01 },
+  // A campsite's ridge tent (its door at local +Z): canvas and poles, knocked flying at a crawl.
+  tent: { hx: 1.1, hz: 1.4, height: 1.4, mass: 20, breakSpeed: 1, slowdown: 0.02 },
   // A 7-a-side goal: a 5 m frame and its net (local +Z is the mouth). Light, but wide.
   goal: { hx: 2.6, hz: 0.5, height: 2.1, mass: 60, breakSpeed: 3, slowdown: 0.05 },
   cornerFlag: { hx: 0.05, hz: 0.05, height: 1.5, mass: 2, breakSpeed: 0.5, slowdown: 0 },

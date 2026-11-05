@@ -153,7 +153,8 @@ town, a green ranger station beside it; timber posts mark the other gates. Speci
 feature: a **lumber yard** by the main gate (rows of log stacks with corridors and an aisle to drive,
 a log loader and a parked log truck on the apron, a sawmill shed at the back, four yard lamps), a fire
 **lookout** tower deepest in the woods in a clearing on its track (lit windows at night), and a
-**campsite** in a clearing (tents round a fire pit that glows day and night, picnic tables). Climate:
+**campsite** in a clearing (tents round a fire pit that glows day and night, picnic tables; the tents
+and tables are breakable). Climate:
 all pine in the snow, palms by the beach, a dry woodland of dead snags and cacti in the desert (no ferns
 in the snow or the desert). No animals, no people.
 

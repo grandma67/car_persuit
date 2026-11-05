@@ -14,7 +14,7 @@ import { footprintsOverlap, rectFootprint } from '../StreetProps';
 import { isJunctionControl } from './apply';
 import { forestTrees, trackDistance } from './ForestWoods';
 import { DISTRICT_DEFS } from './index';
-import { LIT_PROPS, propSpec } from '../StreetProps';
+import { LIT_PROPS, propFootprint, propSpec } from '../StreetProps';
 import { joinRunDressing } from './runtime';
 import { widestBody } from '../../vehicles/VehicleSpecs';
 
@@ -290,11 +290,10 @@ describe('Forest set pieces', () => {
     const glade = forestClearings(q).find((g) => g.block === k)!;
     const track = forestTracks(q).find((t) => t.block === k)!;
     const pits = q.dressing.structures.filter((s) => s.kind === 'firePit');
-    const tents = q.dressing.structures.filter((s) => s.kind === 'tent');
+    const tents = q.dressing.props.filter((p) => p.kind === 'tent');
     expect(pits).toHaveLength(1);
     expect(tents.length).toBeGreaterThanOrEqual(2);
-    for (const s of [...pits, ...tents]) {
-      const f = s.footprints[0];
+    for (const f of [...pits.map((s) => s.footprints[0]), ...tents.map((p) => propFootprint(p))]) {
       expect(Math.hypot(f.x - glade.x, f.z - glade.z) + Math.hypot(f.hx, f.hz)).toBeLessThanOrEqual(glade.r);
       expect(trackDistance(track, f)).toBeGreaterThan(track.width / 2);
     }

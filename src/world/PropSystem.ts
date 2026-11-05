@@ -91,7 +91,7 @@ export const modelKey = (p: StreetProp): ModelKey => {
   return p.style === 'old' && (p.kind === 'sign' || p.kind === 'signal') ? (`${key}-old` as ModelKey) : key;
 };
 /** Props tinted per instance (umbrella canopies, tree shades, stall awnings, van paint). */
-const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale', 'dumpster', 'couch', 'wreck', 'deckChair', 'cafeTable']);
+const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', 'parkedVan', 'drums', 'forklift', 'parkedTractor', 'roundBale', 'dumpster', 'couch', 'wreck', 'deckChair', 'cafeTable', 'tent']);
 /**
  * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
  * standing on its rim or a round bale on its side (the axle along local X).
@@ -970,7 +970,7 @@ function farmModels(): Record<FarmKind | 'fence-rail', THREE.BufferGeometry> {
 }
 
 /** Park pieces' breakables: a pond's reeds; a pitch's goals, corner flags and ball. */
-function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball' | 'fern', THREE.BufferGeometry> {
+function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball' | 'fern' | 'tent', THREE.BufferGeometry> {
   // A clump of reeds: thin blades leaning out from the root, a few bulrush heads on stalks.
   const blades = Array.from({ length: 11 }, (_, k) => {
     const a = k * 2.4;
@@ -1030,7 +1030,36 @@ function parkModels(): Record<'reeds' | 'goal' | 'cornerFlag' | 'ball' | 'fern',
     const frond = new THREE.BoxGeometry(0.2, 0.02, len).rotateX(-0.45).translate(0, len * 0.22, len * 0.45);
     return part(frond.rotateY(a), k % 2 ? 0x4e7a2e : 0x6a9a3e);
   }));
-  return { reeds: mergeGeometries([...blades, ...heads]), goal, cornerFlag, ball, fern };
+  return { reeds: mergeGeometries([...blades, ...heads]), goal, cornerFlag, ball, fern, tent: tentModel() };
+}
+
+/**
+ * The Forest's ridge tent along local Z, its door at +Z: a closed canvas prism (white, tinted per
+ * tent), a dark door flap 1 cm proud of the front, the ridge pole poking out both ends (22 tris).
+ */
+function tentModel(): THREE.BufferGeometry {
+  const hw = 1.0, hl = 1.3, h = 1.4;
+  const tris = (pts: number[][]) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts.flat()), 3));
+    geo.computeVertexNormals();
+    return geo;
+  };
+  const L = (z: number) => [-hw, 0, z], R = (z: number) => [hw, 0, z], T = (z: number) => [0, h, z];
+  const canvas = tris([
+    L(hl), T(hl), T(-hl), L(hl), T(-hl), L(-hl), // left slope, facing out and up
+    R(hl), R(-hl), T(-hl), R(hl), T(-hl), T(hl), // right slope
+    L(hl), R(hl), T(hl), // front gable
+    L(-hl), T(-hl), R(-hl), // back gable
+    L(hl), L(-hl), R(-hl), L(hl), R(-hl), R(hl), // the groundsheet, facing down (seen when it tumbles)
+  ]);
+  const d = hl + 0.01, dw = 0.4, dh = 1.1;
+  const door = tris([[-dw, 0, d], [dw, 0, d], [0, dh, d]]);
+  return mergeGeometries([
+    part(canvas, 0xffffff),
+    part(door, 0x2a2420),
+    part(new THREE.BoxGeometry(0.05, 0.05, hl * 2 + 0.3), 0x3a3e42, 0, h, 0),
+  ]);
 }
 
 type MegaparkKind = 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard'
@@ -1599,7 +1628,7 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
-  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball', 'fern',
+  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball', 'fern', 'tent',
   'tennisNet', 'deckChair', 'cafeTable', 'flowerPlanter', 'iceCreamCart', 'kiosk', 'picnicTable', 'litterBin', 'parkBoard',
   'swings', 'slide', 'climber', 'roundabout', 'seesaw']);
 

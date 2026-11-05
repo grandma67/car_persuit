@@ -8,11 +8,14 @@ import { Rng } from '../../core/Rng';
 import { FOREST } from '../../gameplay/balance';
 import type { Building, CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import { footprintsOverlap, type Footprint, type StreetProp } from '../StreetProps';
+import { footprintsOverlap, propFootprint, type Footprint, type StreetProp } from '../StreetProps';
 import type { District, Gate, Overhead, Structure } from './District';
 import { ranchGateAt } from './FarmGate';
 import { SIDES, mainGate, type Side } from './Megapark';
 import type { Clearing, Track } from './ForestWoods';
+
+/** The tents' canvas: orange, green, blue, mustard. */
+const TENTS = [0xd86a2a, 0x3a7a4a, 0x2a5a9a, 0xc8b04a];
 
 /** Made-up forest names for the log arch's board (never a real park). */
 export const FOREST_NAMES = ['Pinecrest Woods', 'Bramble Hollow', 'Fernvale Forest', 'Old Hemlock Woods', 'Larkspur Forest', 'Greystone Woods', 'Thornbury Forest', 'Mossy Ridge Woods'];
@@ -203,7 +206,7 @@ export function layLookout(t: Track, g: Clearing, rng: Rng): SetLayout {
 export function layCampsite(t: Track, g: Clearing, rng: Rng): SetLayout {
   const first = rng.next() < 0.5 ? 1 : -1;
   const sides = [first, -first].map((e) => campsiteOn(t, g, e, new Rng(rng.int(1, 1e9))));
-  const tents = (l: SetLayout) => l.structures.filter((s) => s.kind === 'tent').length;
+  const tents = (l: SetLayout) => l.props.filter((p) => p.kind === 'tent').length;
   return tents(sides[1]) > tents(sides[0]) ? sides[1] : sides[0];
 }
 
@@ -223,13 +226,14 @@ function campsiteOn(t: Track, g: Clearing, e: number, rng: Rng): SetLayout {
   // Tents round the pit, away from the track first, then round towards it on either hand.
   const away = Math.atan2(n.nx * e, n.nz * e);
   const want = rng.int(C.tents[0], C.tents[1]);
-  for (let i = 0; i < 9 && out.structures.length - 1 < want; i++) {
+  // A tent is a breakable prop (a car sends it flying), its door (local +Z) towards the pit.
+  for (let i = 0; i < 9 && out.props.length < want; i++) {
     const a = away + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.62 + rng.range(-0.06, 0.06);
     const p = { x: pit.x + Math.sin(a) * C.ring, z: pit.z + Math.cos(a) * C.ring };
-    const fp: Footprint = { ...p, hx: 1.1, hz: 1.4, yaw: a }; // its door (local -Z) towards the pit
+    const tent: StreetProp = { kind: 'tent', ...p, yaw: a + Math.PI };
+    const fp = propFootprint(tent);
     if (!fitsGlade(fp, g, t, taken)) continue;
-    out.structures.push({ kind: 'tent', ...p, yaw: a + Math.PI, footprints: [fp], data: { colour: rng.int(0, 3) } });
-    out.solids.push(fp);
+    out.props.push({ ...tent, color: TENTS[rng.int(0, 3)] });
     taken.push({ ...fp, hx: fp.hx + 0.4, hz: fp.hz + 0.4 });
   }
   // Picnic tables on the track's other side of the clearing.
