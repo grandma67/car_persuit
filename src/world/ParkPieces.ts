@@ -6,7 +6,6 @@ import { Rng } from '../core/Rng';
 import { PARKS } from '../gameplay/balance';
 import type { Block, CityConfig } from './CityGenerator';
 import type { DistrictKind } from './districts/District';
-import type { Landmark } from './Landmarks';
 import { footprintsOverlap, propFootprint, type StreetProp } from './StreetProps';
 import { onGround, type Terrain } from './Terrain';
 import { rimPoints, shoreDistance, waterReach, type ShallowWater } from './Water';
@@ -43,7 +42,6 @@ export interface ParkPieceLayout {
   pieces: ParkPiece[];
   water: ShallowWater[];
   props: StreetProp[];
-  landmarks: Landmark[];
   /** Trees and loose park benches inside these go (true = clear). */
   clears: (x: number, z: number, r: number) => boolean;
 }
@@ -113,7 +111,6 @@ export function layPond(block: Block, k: number, n: number, config: CityConfig, 
   if (room < 0 || !onGround(terrain, water.x, water.z, waterReach(water) + PARKS.bankRoom)) return null;
 
   const props: StreetProp[] = [];
-  const landmarks: Landmark[] = [];
   const stoneRim = rng.next() < PARKS.stoneRimChance;
   const rim = rimPoints(water, 48);
   const at = (t: number, out: number) => {
@@ -159,11 +156,11 @@ export function layPond(block: Block, k: number, n: number, config: CityConfig, 
     props.push({ kind: 'bench', x: p.x, z: p.z, yaw: p.facing });
   }
   const boat = at(take(), PARKS.boatOut);
-  const rowboat: Landmark = { kind: 'rowboat', x: boat.x, z: boat.z, yaw: boat.facing + Math.PI / 2 + rng.range(-0.3, 0.3), radius: PARKS.boatRadius };
-  landmarks.push(rowboat);
+  const rowboat: StreetProp = { kind: 'rowboat', x: boat.x, z: boat.z, yaw: boat.facing + Math.PI / 2 + rng.range(-0.3, 0.3) };
   // Reeds crushed under the boat go.
-  const hull = { x: rowboat.x, z: rowboat.z, hx: rowboat.radius, hz: rowboat.radius, yaw: rowboat.yaw };
+  const hull = propFootprint(rowboat);
   for (let r = props.length - 1; r >= 0; r--) if (props[r].kind === 'reeds' && footprintsOverlap(hull, propFootprint(props[r]))) props.splice(r, 1);
+  props.push(rowboat);
   const sign = at(take(), PARKS.signOut);
   props.push({ kind: 'sign', variant: 'noFishing', x: sign.x, z: sign.z, yaw: sign.facing + Math.PI }); // faces the path
 
@@ -179,7 +176,7 @@ export function layPond(block: Block, k: number, n: number, config: CityConfig, 
   }
   const [i, j] = [k % n, Math.floor(k / n)];
   const piece: ParkPiece = { kind: 'pond', block: [i, j], x: water.x, z: water.z, yaw: water.yaw, water, pads, stoneRim };
-  return { piece, pieces: [piece], water: [water], props, landmarks };
+  return { piece, pieces: [piece], water: [water], props };
 }
 
 /** A soccer pitch in the park `block`, from its own stream. Null if it can't fit dry. */
@@ -249,7 +246,7 @@ export function onPitch(p: ParkPiece, x: number, z: number, margin = 0): boolean
 
 /** Lay every rolled piece. */
 export function layParkPieces(blocks: Block[], rolled: Map<number, ParkPieceKind>, n: number, config: CityConfig, terrain: Terrain, seed: number): ParkPieceLayout {
-  const out: ParkPieceLayout = { pieces: [], water: [], props: [], landmarks: [], clears: () => false };
+  const out: ParkPieceLayout = { pieces: [], water: [], props: [], clears: () => false };
   for (const [k, kind] of rolled) {
     if (kind === 'pitch') {
       const pitch = layPitch(blocks[k], k, n, config, terrain, seed);
@@ -263,7 +260,6 @@ export function layParkPieces(blocks: Block[], rolled: Map<number, ParkPieceKind
     out.pieces.push(pond.piece);
     out.water.push(...pond.water);
     out.props.push(...pond.props);
-    out.landmarks.push(...pond.landmarks);
   }
   const ponds = out.water;
   const pitches = out.pieces.filter((p) => p.kind === 'pitch');

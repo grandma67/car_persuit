@@ -6,7 +6,7 @@ import type { Structure } from '../../world/districts/District';
 import { districtCities } from '../../world/paramsTesting';
 import { colourTag, coplanarOverlaps, trianglesOf } from '../coplanar';
 import { ranchGate } from './Farm';
-import { boulder, firePit, gatePosts, logLoader, logStack, logTruck, lookout, stump } from './ForestSet';
+import { boulder, firePit, gatePosts, logLoader, logStack, logTruck, lookout } from './ForestSet';
 
 // The Forest's set pieces (the district mesh: neither PropModels.test nor the building sweep sees
 // them): no coplanar faces of different colours (z-fighting), in and out of the snow, and each
@@ -14,7 +14,7 @@ import { boulder, firePit, gatePosts, logLoader, logStack, logTruck, lookout, st
 // coordinates float32 error in the normals fakes overlaps.
 
 const BUDGET: Record<string, number> = {
-  logStack: 500, logTruck: 900, logLoader: 260, lookout: 900, firePit: 400, gatePosts: 160, logArch: 320, boulder: 80, stump: 80,
+  logStack: 500, logTruck: 900, logLoader: 260, lookout: 900, firePit: 400, gatePosts: 160, logArch: 320, boulder: 80,
 };
 
 function build(s: Structure, snowy: boolean): THREE.BufferGeometry {
@@ -28,7 +28,6 @@ function build(s: Structure, snowy: boolean): THREE.BufferGeometry {
   else if (s.kind === 'gatePosts') gatePosts(at, () => 0, snowy, out);
   else if (s.kind === 'logArch') ranchGate(at, snowy, out, [], false);
   else if (s.kind === 'boulder') boulder(at, 0, snowy, out);
-  else if (s.kind === 'stump') stump(at, 0, snowy, out);
   else throw new Error(`no builder for ${s.kind}`);
   return mergeGeometries(out);
 }

@@ -220,9 +220,8 @@ export function boulder(s: Structure, y: number, snowy: boolean, out: THREE.Buff
   place(g, frameOf(s.x, y, s.z, s.yaw), out);
 }
 
-/** A sawn stump: a short trunk with a pale cut top. */
-export function stump(s: Structure, y: number, snowy: boolean, out: THREE.BufferGeometry[]): void {
-  const r = (s.data?.r as number) ?? 0.35, h = (s.data?.h as number) ?? 0.5;
-  const g = [part(cyl(r, r * 1.2, h, 8), BARK, 0, h / 2, 0), part(cyl(r * 0.92, r * 0.92, 0.03, 8), snowy ? SNOW : CUT, 0, h + 0.005, 0)];
-  place(g, frameOf(s.x, y, s.z, s.yaw), out);
+/** A sawn stump, a prop (PROP_SPECS.stump): a short trunk with a pale cut top. */
+export function stumpModel(snowy: boolean): THREE.BufferGeometry {
+  const r = 0.32, h = 0.5;
+  return mergeGeometries([part(cyl(r, r * 1.19, h, 8), BARK, 0, h / 2, 0), part(cyl(r * 0.92, r * 0.92, 0.03, 8), snowy ? SNOW : CUT, 0, h + 0.005, 0)]);
 }

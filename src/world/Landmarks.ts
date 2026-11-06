@@ -8,15 +8,13 @@ import { groundHeight, type Terrain } from './Terrain';
 export type LandmarkKind =
   | 'fountain' | 'statue' | 'obelisk' | 'sculpture' | 'ramp'
   // Old City set pieces: placed by the district, never rolled as a town square's centrepiece.
-  | 'cannon' | 'column' | 'ruinArch' | 'well' | 'marketCross'
+  | 'column' | 'ruinArch' | 'well' | 'marketCross'
   // Chinatown
   | 'lion' | 'pagoda' | 'incense'
   // Harbor
   | 'bollard'
   // Farm
-  | 'silo' | 'grainBin' | 'windmill' | 'waterTower'
-  // Park pieces: a pond's rowboat pulled up on the bank
-  | 'rowboat';
+  | 'silo' | 'grainBin' | 'windmill' | 'waterTower';
 
 export interface Landmark {
   kind: LandmarkKind;
@@ -50,7 +48,6 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   obelisk: 1.8,
   sculpture: 2.2,
   ramp: 4,
-  cannon: 1.4,
   column: 0.9,
   ruinArch: 2.6,
   well: 1.5,
@@ -63,7 +60,6 @@ export const LANDMARK_RADIUS: Record<LandmarkKind, number> = {
   grainBin: 3.6,
   windmill: 3.2, // the tower and its stock tank
   waterTower: 3,
-  rowboat: 1.4,
 };
 /** What a town square may roll (fixed: adding a kind above must not move any seed's squares). */
 const LANDMARK_KINDS: LandmarkKind[] = ['fountain', 'statue', 'obelisk', 'sculpture', 'ramp'];

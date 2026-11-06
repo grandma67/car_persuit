@@ -1,7 +1,7 @@
 // Park pieces' static dressing as one merged, vertex-coloured mesh (the quay's material settings, so
 // no new program): a pond's stone rim and lily pads, a pitch's mown stripes and painted lines. The
 // water itself is ShallowWaterView; reeds, benches, signs, goals, flags and the ball are props; the
-// rowboat is a landmark.
+// rowboat is a prop.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ClimateName } from '../world/Climate';

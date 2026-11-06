@@ -76,12 +76,12 @@ describe('park pieces: the pond', () => {
           if (q.kind === 'reeds' && Math.abs(shoreDistance(w, q.x, q.z)) > 1) breaks.push(`${c.seed} ${p.block}: reeds off the edge`);
           if (q.kind !== 'reeds' && inWater(w, q.x, q.z, -0.5)) breaks.push(`${c.seed} ${p.block}: ${q.kind} in the water`);
         }
-        const boats = c.landmarks.filter((l) => l.kind === 'rowboat' && Math.hypot(l.x - w.x, l.z - w.z) < waterReach(w) + 4);
+        const boats = near.filter((q) => q.kind === 'rowboat');
         if (boats.length !== 1) breaks.push(`${c.seed} ${p.block}: ${boats.length} boats`);
         for (const boat of boats) {
           if (shoreDistance(w, boat.x, boat.z) > -1) breaks.push(`${c.seed} ${p.block}: boat in the water`);
-          const fp = { x: boat.x, z: boat.z, hx: boat.radius, hz: boat.radius, yaw: boat.yaw };
-          for (const q of near) if (footprintsOverlap(fp, propFootprint(q))) breaks.push(`${c.seed} ${p.block}: ${q.kind} on the boat`);
+          const fp = propFootprint(boat);
+          for (const q of near) if (q !== boat && footprintsOverlap(fp, propFootprint(q))) breaks.push(`${c.seed} ${p.block}: ${q.kind} on the boat`);
         }
       }
     }

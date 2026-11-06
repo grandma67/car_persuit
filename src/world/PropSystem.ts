@@ -4,7 +4,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { keepTriangles, part, visibleTriangles } from '../render/geometry';
 import { SUNK_BELOW } from '../render/Sea';
 import { glyphMaterial, glyphPlate } from '../render/districts/glyphs';
-import { fallenLogModel } from '../render/districts/ForestSet';
+import { fallenLogModel, stumpModel } from '../render/districts/ForestSet';
+import { cannon, rowboat } from '../render/Landmarks';
 import { CAR_PASSES, type Vehicle } from '../vehicles/Vehicle';
 import type { CityData } from './CityGenerator';
 import { footprintsOverlap, LIT_PROPS, PROP_SPECS, propFootprint, propSpec, type Footprint, type PropKind, type SignVariant, type StreetProp, type WreckKind } from './StreetProps';
@@ -97,7 +98,7 @@ const TINTED = new Set<PropKind>(['tree', 'umbrella', 'stall', 'produceStall', '
  * Props with a round collider, so they roll once knocked loose: an upright drum, and a cable reel
  * standing on its rim or a round bale on its side (the axle along local X).
  */
-const ROUND: Partial<Record<PropKind, 'upright' | 'axleX' | 'ball'>> = { drums: 'upright', cableReel: 'axleX', roundBale: 'axleX', log: 'axleX', tyres: 'upright', burnBarrel: 'upright', ball: 'ball' };
+const ROUND: Partial<Record<PropKind, 'upright' | 'axleX' | 'ball'>> = { drums: 'upright', cableReel: 'axleX', roundBale: 'axleX', log: 'axleX', sunkLog: 'axleX', stump: 'upright', tyres: 'upright', burnBarrel: 'upright', ball: 'ball' };
 
 /** Colours for the greenery: the city style's leaves and bark, and whether it's snowed. */
 export interface Greenery {
@@ -490,6 +491,10 @@ function allModels(look: Greenery): Record<ModelKey, THREE.BufferGeometry> {
     ...megaparkModels(),
     'tree-fruit-pear': fruitTree(look, 0xc8c43a),
     log: fallenLogModel(look.snowy),
+    sunkLog: fallenLogModel(look.snowy),
+    stump: stumpModel(look.snowy),
+    cannon: cannon(look.snowy),
+    rowboat: rowboat(),
   };
 }
 
@@ -1630,7 +1635,7 @@ const DISTRICT_KEYS = new Set<string>(['amphora', 'pot', 'cart', 'stall', 'barre
   'mailbox', 'fence-rail', 'woodLamp', 'milkChurn', 'feedSacks', 'wheelbarrow', 'waterTrough', 'fruitBin', 'pumpkin', 'farmStand', 'scarecrow',
   'toolRack', 'parkedTractor', 'hayRake', 'plough', 'seedDrill', 'baler', 'hayWagon', 'roundBale', 'tree-fruit', 'tree-fruit-pear', 'jackOLantern',
   'rubble', 'dumpster', 'trashBags', 'shoppingCart', 'mattress', 'couch', 'tyres', 'burnBarrel', 'payphone', 'brokenLamp', 'fence-torn',
-  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball', 'fern', 'tent', 'log',
+  'utilityPole', 'utilityPole-transformer', 'wreck-burnt', 'wreck-bricks', 'wreck-stripped', 'wreck-flipped', 'wreck-crushed', 'reeds', 'goal', 'cornerFlag', 'ball', 'fern', 'tent', 'log', 'stump', 'sunkLog', 'cannon', 'rowboat',
   'tennisNet', 'deckChair', 'cafeTable', 'flowerPlanter', 'iceCreamCart', 'kiosk', 'picnicTable', 'litterBin', 'parkBoard',
   'swings', 'slide', 'climber', 'roundabout', 'seesaw']);
 

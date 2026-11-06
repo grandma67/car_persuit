@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { addDebrisColliders, buildModels, debrisParts, modelKey, packNear } from './PropSystem';
 import { CAR_GROUPS } from '../vehicles/Vehicle';
+import { SWAMP } from '../gameplay/balance';
 import { propSpec, type SignVariant, type StreetProp } from './StreetProps';
 
 const VARIANTS: SignVariant[] = ['stop', 'priority', 'speed30', 'children', 'pedestrian'];
@@ -171,6 +172,26 @@ describe("the Mega-park's set props", () => {
 
   it('the tennis net reads at the cars’ scale', () => {
     expect(Math.max(...at('tennisNet').map((v) => v.y))).toBeGreaterThan(1.3);
+  });
+});
+
+describe('props that used to be solids', () => {
+  it.each(['cannon', 'rowboat', 'stump'] as const)('%s stands inside the box it breaks on', (kind) => {
+    const p: StreetProp = { kind, x: 0, z: 0, yaw: 0 };
+    const s = propSpec(p);
+    const out = vertices(p).filter((v) => Math.abs(v.x) > s.hx + 0.02 || Math.abs(v.z) > s.hz + 0.02 || v.y < -0.02 || v.y > s.height + 0.02);
+    expect(out.length).toBe(0);
+  });
+
+  it("a sunk log's top stands clear of the pool (half under, as it lies on the bed)", () => {
+    const s = propSpec({ kind: 'sunkLog', x: 0, z: 0, yaw: 0 });
+    expect(s.height).toBeGreaterThan(SWAMP.poolDepth);
+    expect(s.height / 2).toBeLessThan(SWAMP.poolDepth + 0.05);
+  });
+
+  it('the cannon carries snow only in a snowy city', () => {
+    const tris = (snowy: boolean) => buildModels({ leaves: 0x3d7a3f, trunk: 0x4a3426, snowy }).cannon.getAttribute('position').count;
+    expect(tris(true)).toBeGreaterThan(tris(false));
   });
 });
 

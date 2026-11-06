@@ -8,7 +8,7 @@ import { footprintDistance, pathDistance } from '../../ai/NavGrid';
 import { FOREST } from '../../gameplay/balance';
 import type { CityData, Rect } from '../CityGenerator';
 import { inRect, shrink } from '../lots';
-import { FootprintIndex, propSpec, type Footprint, type StreetProp } from '../StreetProps';
+import { FootprintIndex, PROP_SPECS, propSpec, type Footprint, type StreetProp } from '../StreetProps';
 import type { District, Structure } from './District';
 import { SIDES, streetSidesOf, type Side } from './Megapark';
 
@@ -221,7 +221,12 @@ export function layFloor(q: District, city: CityData, tracks: Track[], clearings
     }
     for (let i = rng.int(F.stumps[0], F.stumps[1]); i > 0; i--) {
       const r = rng.range(0.3, 0.45);
-      solid('stump', spot(r, r, FOREST.trackClear), { r, h: rng.range(0.35, 0.7) });
+      const fp = spot(r, r, FOREST.trackClear);
+      rng.range(0.35, 0.7); // the old height: kept so the floor after it stays put
+      if (!fp) continue;
+      // A prop: rotten through, the lightest hit knocks it out (PROP_SPECS.stump).
+      out.props.push({ kind: 'stump', x: fp.x, z: fp.z, yaw: fp.yaw, scale: r / PROP_SPECS.stump.hx });
+      taken.add({ ...fp, hx: fp.hx + 0.4, hz: fp.hz + 0.4 });
     }
     // Ferns may grow to the track's edge (they snap under a wheel).
     for (let i = rng.int(F.ferns[0], F.ferns[1]); i > 0; i--) {

@@ -11,6 +11,9 @@ import { inDistrict, isJunctionControl, kerbClutter } from './apply';
 import { emptyDressing, type BlockRole, type District, type DistrictDef, type DistrictDressing, type LotLook, type Structure } from './District';
 import { clearOfWalls, wallDressing, wallPlan } from './OldCityWalls';
 
+/** A cannon's own square of ground (half a side): furniture and clutter stay off it. */
+const CANNON_CLEAR = 1.4;
+
 export type OldCityLot = 'halfTimbered' | 'stoneHouse' | 'townHall' | 'arcade' | 'ruin';
 
 /** The four sides of a block, as the step from it to its neighbour in grid coordinates. */
@@ -132,6 +135,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   const plan = wallPlan(q, city);
   const out = { ...emptyDressing(), ...wallDressing(q, city, plan, rng), solids: [...plan.solids] };
   const landmarks: Landmark[] = [];
+  const cannons: StreetProp[] = []; // they keep a square of ground to themselves: furniture and clutter stay off it
   const props: StreetProp[] = [];
   const mark = (kind: LandmarkKind, x: number, z: number, yaw: number) => landmarks.push({ kind, x, z, yaw, radius: LANDMARK_RADIUS[kind] });
 
@@ -172,10 +176,10 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
     props.push({ kind: 'pillory', x: cross.x + dir[1] * 6, z: cross.z - dir[0] * 6, yaw: Math.atan2(dir[0], dir[1]) });
     // Cannons in the square's corners, pointing out.
     // Where the square is in the district's corner, its corner cannon steps in from the tower.
-    const r = LANDMARK_RADIUS.cannon;
+    const r = CANNON_CLEAR;
     for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
       const k = [inner - 5, inner - 10].find((d) => !plan.solids.some((f) => footprintsOverlap(f, { x: c.x + sx * d, z: c.z + sz * d, hx: r, hz: r, yaw: 0 })));
-      if (k !== undefined) mark('cannon', c.x + sx * k, c.z + sz * k, Math.atan2(sx, sz));
+      if (k !== undefined) cannons.push({ kind: 'cannon', x: c.x + sx * k, z: c.z + sz * k, yaw: Math.atan2(sx, sz) });
     }
     // Stalls round the well, facing in, clear of the cross and the pillory.
     const n = OLD_CITY.stalls;
@@ -201,7 +205,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
     const lateral = city.config.roadWidth / 2 + city.config.sidewalk / 2;
     for (const side of [-1, 1]) {
       const at = W.thick + 3.5;
-      mark('cannon', g.x + ix * at + iz * lateral * side, g.z + iz * at - ix * lateral * side, g.yaw + Math.PI);
+      cannons.push({ kind: 'cannon', x: g.x + ix * at + iz * lateral * side, z: g.z + iz * at - ix * lateral * side, yaw: g.yaw + Math.PI });
     }
     // A pile of shot beside each pair.
     props.push({ kind: 'cannonballs', x: g.x + ix * (W.thick + 6.5) + iz * lateral, z: g.z + iz * (W.thick + 6.5) - ix * lateral, yaw: 0 });
@@ -217,7 +221,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
   }
 
   // Everything solid so far: keep props and clutter off it.
-  const solid: Footprint[] = [...out.solids, ...landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 }))];
+  const solid: Footprint[] = [...out.solids, ...landmarks.map((l) => ({ x: l.x, z: l.z, hx: l.radius, hz: l.radius, yaw: 0 })), ...cannons.map((p) => ({ x: p.x, z: p.z, hx: CANNON_CLEAR, hz: CANNON_CLEAR, yaw: 0 }))];
   const blocked = (p: StreetProp) => solid.some((f) => footprintsOverlap(propFootprint(p, 0.2), f));
   // Street furniture under a tower or a landmark goes (junction controls never do); junction
   // controls inside take the old iron posts.
@@ -240,7 +244,7 @@ function dress(q: District, city: CityData, rng: Rng): DistrictDressing {
     kept.push(p);
   }
   const clutter = kerbClutter(q, { ...city, streetProps: [...city.streetProps, ...kept] }, CLUTTER, rng).filter((p) => !blocked(p));
-  return { ...out, landmarks, props: [...kept, ...clutter] };
+  return { ...out, landmarks, props: [...cannons, ...kept, ...clutter] };
 }
 
 export type { Structure };

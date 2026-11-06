@@ -225,6 +225,10 @@ export class SoundEffects {
       return;
     }
     // Harbor breakables (drums, the forklift, boom gates and crossing posts clang as metal, below).
+    if (kind === 'stump' || kind === 'sunkLog' || kind === 'rowboat') {
+      this.woodBreak(kind === 'rowboat' ? 0.6 : 0.8, gain);
+      return;
+    }
     if (kind === 'pallet' || kind === 'crates' || kind === 'cableReel') {
       this.woodBreak(kind === 'crates' ? 0.7 : 0.5, gain);
       return;
@@ -283,7 +287,7 @@ export class SoundEffects {
       return;
     }
     // Slums junk: heavy metal for the dumpster and wrecks, soft thumps for bags and furniture.
-    if (kind === 'dumpster' || kind === 'wreck') {
+    if (kind === 'dumpster' || kind === 'wreck' || kind === 'cannon') {
       this.impact(Math.min(1, strength + 0.3));
       return;
     }
