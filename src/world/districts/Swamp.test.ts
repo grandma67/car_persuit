@@ -308,9 +308,10 @@ describe('Swamp growth', () => {
   it.each(placed)('seed %i: logs lie well out in the water, clear of the decks; lily pads on open water', (_seed, c, q) => {
     const pools = swampPools(c, q);
     const breaks: string[] = [];
-    for (const s of q.dressing.structures.filter((x) => x.kind === 'log')) {
+    expect(q.dressing.structures.filter((x) => x.kind === 'log')).toEqual([]); // props now, a car shoves them
+    for (const s of q.dressing.props.filter((x) => x.kind === 'sunkLog')) {
       if (!pools.some((w) => inWater(w, s.x, s.z, 1))) breaks.push(`log on the bank at ${at(s)}`);
-      if ((q.dressing.decks ?? []).some((d) => footprintsOverlap(deckFootprint(d), s.footprints[0]))) breaks.push(`log under a deck at ${at(s)}`);
+      if ((q.dressing.decks ?? []).some((d) => footprintsOverlap(deckFootprint(d), propFootprint(s)))) breaks.push(`log under a deck at ${at(s)}`);
     }
     for (const piece of c.parkPieces.filter((p) => p.district === 'swamp')) {
       for (const pad of piece.pads ?? []) if (!inWater(piece.water!, pad.x, pad.z, pad.r)) breaks.push(`pad off the water at ${at(pad)}`);

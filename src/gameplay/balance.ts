@@ -554,7 +554,6 @@ export const PARKS = {
   stoneRimChance: 0.5, // else a grass bank with more reeds
   benchOut: 2.4, // benches this far up the bank from the edge
   boatOut: 1.6, // the rowboat pulled up on the bank
-  boatRadius: 1.4, // its solid footprint
   signOut: 3.2,
   pads: 10, // lily pads, at most
   treeClear: 4.5, // trees and loose benches this close to the water go (clear of the sign and the boat)

@@ -157,8 +157,8 @@ describe('Forest floor', () => {
     const tracks = forestTracks(q);
     const clearings = forestClearings(q);
     const pieces = [
-      ...q.dressing.structures.filter((s) => ['boulder', 'stump'].includes(s.kind)).map((s) => ({ kind: s.kind, f: s.footprints[0] })),
-      ...q.dressing.props.filter((p) => p.kind === 'log').map((p) => ({ kind: p.kind, f: propFootprint(p) })),
+      ...q.dressing.structures.filter((s) => s.kind === 'boulder').map((s) => ({ kind: s.kind, f: s.footprints[0] })),
+      ...q.dressing.props.filter((p) => p.kind === 'log' || p.kind === 'stump').map((p) => ({ kind: p.kind, f: propFootprint(p) })),
     ];
     for (const { kind, f } of pieces) {
       const s = { kind };
@@ -176,6 +176,9 @@ describe('Forest floor', () => {
     expect(logs.length).toBeGreaterThanOrEqual(woods * 0.5);
     // A log is a prop a car can roll aside (heavy: it takes a real hit), not a solid structure.
     for (const p of logs) expect(propSpec(p).breakSpeed).toBeLessThan(Infinity);
+    // So is a stump, not a solid: nothing left of them to drive into for good.
+    expect(q.dressing.props.filter((p) => p.kind === 'stump').length).toBeGreaterThan(0);
+    expect(q.dressing.structures.filter((s) => s.kind === 'stump')).toEqual([]);
   });
 });
 

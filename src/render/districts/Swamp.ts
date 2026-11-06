@@ -13,7 +13,7 @@ import { inRect, shrink } from '../../world/lots';
 import { LIT_PROPS } from '../../world/StreetProps';
 import { fireflies } from './fireflies';
 import type { DistrictRenderContext, DistrictView } from './index';
-import { airboat, boardwalk, sunkLog, swampJetty, witchHouse, witchIsland, type Pane } from './SwampWitch';
+import { airboat, boardwalk, swampJetty, witchHouse, witchIsland, type Pane } from './SwampWitch';
 import { rowboat } from '../Landmarks';
 import { GeometryBuilder } from '../../world/CityBuilder';
 
@@ -54,7 +54,6 @@ export function renderSwamp(q: District, city: CityData, scene: THREE.Scene, ctx
   for (const s of q.dressing.structures) {
     if (s.kind === 'swampJetty') solid.push(...swampJetty(s, ctx.ground(s.x, s.z), snowy));
     else if (s.kind === 'airboat') solid.push(...airboat(s, surface(s.x, s.z), frozen));
-    else if (s.kind === 'log') solid.push(...sunkLog(s, ctx.ground(s.x, s.z)));
     else if (s.kind === 'moored') solid.push(rowboat().applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(s.x, surface(s.x, s.z) - (frozen ? 0.1 : 0.22), s.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.yaw), new THREE.Vector3(1, 1, 1))));
   }
   // The verges: mud over the sidewalks (patch lift), frozen white-grey in the snow.

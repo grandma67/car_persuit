@@ -73,8 +73,10 @@ export function layWoods(q: District, city: CityData, look: SwampLook, pools: Sh
         const x = w.x + rng.range(-w.rx, w.rx) * 0.7, z = w.z + rng.range(-w.rz, w.rz) * 0.7;
         const fp: Footprint = { x, z, hx: 0.35, hz: rng.range(1.8, 2.6), yaw: rng.range(0, Math.PI) };
         if (shoreDistance(w, x, z) < fp.hz + 0.5 || onIsland(x, z) || avoid.some((a) => footprintsOverlap(fp, { ...a, hx: a.hx + 1.5, hz: a.hz + 1.5 }))) continue;
-        out.structures.push({ kind: 'log', x, z, yaw: fp.yaw, footprints: [fp], data: { length: fp.hz * 2, sink: rng.range(0.15, 0.3), seed: rng.int(1, 1e6) } });
-        out.solids.push(fp);
+        rng.range(0.15, 0.3), rng.int(1, 1e6); // the old sink and model seed: kept so the growth after them stays put
+        // A prop along its local X (PROP_SPECS.sunkLog): half under the water as it lies on the bed.
+        // First in the list: where a prop overlaps it, clearOf keeps the log and drops the other.
+        out.props.unshift({ kind: 'sunkLog', x, z, yaw: fp.yaw + Math.PI / 2, scale: (fp.hz * 2) / 5 });
         avoid = [...avoid, fp];
         break;
       }

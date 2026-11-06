@@ -155,7 +155,10 @@ export class Effects {
       case 'haybale': case 'roundBale': return burst(this.straw, 45);
       case 'cart': burst(this.straw, 18); return burst(this.chips, 18);
       case 'stall': burst(this.cloth, 10); return burst(this.chips, 22);
-      case 'barrels': case 'pillory': case 'signpost': return burst(this.chips, 18);
+      case 'barrels': case 'pillory': case 'signpost': case 'stump': return burst(this.chips, 18);
+      case 'cannon': burst(this.sparks, 24); return burst(this.chips, 22);
+      case 'rowboat': return burst(this.chips, 24);
+      case 'sunkLog': burst(this.water, 30); return burst(this.chips, 12);
       case 'pot': case 'amphora': return burst(this.shards, 16);
       case 'rubble': burst(this.steam, 8); return burst(this.chips, 16); // brick dust
       case 'dumpster': burst(this.paper, 40); burst(this.chips, 12); return burst(this.sparks, 10); // the lid flies, trash bursts

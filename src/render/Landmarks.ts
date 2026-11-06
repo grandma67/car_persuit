@@ -83,8 +83,8 @@ const IRON = 0x2e2f33;
 const OAK = 0x6b4a2c;
 const SLATE = 0x4f5560;
 
-/** A cannon on a timber carriage, barrel along +Z. */
-function cannon(): THREE.BufferGeometry {
+/** A cannon on a timber carriage, barrel along +Z (a prop: PROP_SPECS.cannon). */
+export function cannon(snowy = false): THREE.BufferGeometry {
   return mergeGeometries([
     ...[-0.45, 0.45].map((x) => part(box(0.14, 0.55, 2.0), OAK, x, 0.55)), // cheeks
     part(box(1.05, 0.18, 1.7), OAK, 0, 0.35, -0.1),
@@ -92,6 +92,7 @@ function cannon(): THREE.BufferGeometry {
     part(cyl(0.2, 0.27, 2.5, 10).rotateX(Math.PI / 2), IRON, 0, 0.95, 0.35),
     part(new THREE.SphereGeometry(0.28, 8, 6), IRON, 0, 0.95, -0.95), // cascabel
     part(cyl(0.29, 0.29, 0.12, 10).rotateX(Math.PI / 2), IRON, 0, 0.95, 1.55), // muzzle ring
+    ...(snowy ? [part(box(0.36, 0.08, 2.2), SNOW, 0, 1.2, 0.35), part(box(1.0, 0.06, 1.6), SNOW, 0, 0.47, -0.1)] : []),
   ]);
 }
 
@@ -139,7 +140,7 @@ function well(): THREE.BufferGeometry {
 }
 
 /**
- * A wooden rowboat pulled up on a pond's bank, upright, along local Z: a hull tapering to the bow,
+ * A wooden rowboat (a prop on a pond's bank, PROP_SPECS.rowboat; moored at a jetty, a solid), upright, along local Z: a hull tapering to the bow,
  * a painted strake, two thwarts and the oars shipped inside.
  */
 export function rowboat(): THREE.BufferGeometry {
@@ -149,7 +150,7 @@ export function rowboat(): THREE.BufferGeometry {
   const side = (x: number) => [
     part(box(0.08, 0.5, 2.6), hull, x * 0.6, 0.35, -0.2),
     part(box(0.08, 0.5, 1.0).rotateY(-x * 0.5), hull, x * 0.38, 0.35, 1.48),
-    part(box(0.09, 0.1, 2.6), paint, x * 0.6, 0.55, -0.2),
+    part(box(0.09, 0.08, 2.58), paint, x * 0.6, 0.54, -0.2),
   ];
   return mergeGeometries([
     part(box(1.1, 0.08, 2.6), hull, 0, 0.12, -0.2), // the bottom
@@ -355,7 +356,6 @@ function waterTower(): THREE.BufferGeometry {
 const SNOW = 0xeef2f6;
 /** Snow lying on the Old City pieces in a snowy city. */
 const SNOW_CAPS = {
-  cannon: () => mergeGeometries([part(box(0.36, 0.08, 2.2), SNOW, 0, 1.2, 0.35), part(box(1.0, 0.06, 1.6), SNOW, 0, 0.47, -0.1)]),
   well: () => part(cyl(0, 1.85, 0.95, 4).rotateY(Math.PI / 4), SNOW, 0, 3.55),
   marketCross: () => part(cyl(0, 3.4, 2.25, 8), SNOW, 0, 5.6),
   column: () => part(cyl(0.44, 0.44, 0.1, 12), SNOW, 0, 3.9),
@@ -369,7 +369,7 @@ const SNOW_CAPS = {
 };
 
 /** District pieces (Old City, the lions, bollards) stand straight on the ground, without a paved pad. */
-const NO_PAD = new Set(['rowboat', 'cannon', 'column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense', 'bollard', 'silo', 'grainBin', 'windmill', 'waterTower']);
+const NO_PAD = new Set(['column', 'ruinArch', 'well', 'marketCross', 'lion', 'incense', 'bollard', 'silo', 'grainBin', 'windmill', 'waterTower']);
 
 /**
  * "The Leap": a curved granite kicker with racing-kerb gold edges, solid stone cheeks, and a
@@ -464,11 +464,11 @@ export class Landmarks {
     const paving = new THREE.MeshStandardMaterial({ color: STONE_DARK, roughness: 0.95 });
     const models = {
       fountain: fountain(), statue: statue(), obelisk: obelisk(), sculpture: sculpture(),
-      cannon: cannon(), column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
+      column: column(), ruinArch: ruinArch(), well: well(), marketCross: marketCross(),
       lion: lion(), incense: incense(), bollard: bollard(),
     };
-    // Farm pieces and a pond's rowboat: built only in a city that has them.
-    const farm: Record<string, () => THREE.BufferGeometry> = { silo: () => silo(false), siloSteel: () => silo(true), grainBin, windmill, waterTower, rowboat };
+    // Farm pieces: built only in a city that has them.
+    const farm: Record<string, () => THREE.BufferGeometry> = { silo: () => silo(false), siloSteel: () => silo(true), grainBin, windmill, waterTower };
     const modelOf = (key: string): THREE.BufferGeometry => (models as Record<string, THREE.BufferGeometry>)[key] ?? ((models as Record<string, THREE.BufferGeometry>)[key] = farm[key]());
 
     const plain = new Map<string, THREE.Matrix4[]>(); // district pieces by kind, drawn instanced

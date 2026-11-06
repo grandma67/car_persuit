@@ -112,4 +112,22 @@ describe('breakable greenery', () => {
     expect(tree('cactus').breakSpeed).toBeLessThan(tree('round').breakSpeed);
     expect(propSpec({ kind: 'umbrella', x: 0, z: 0, yaw: 0 }).breakSpeed).toBeLessThan(2);
   });
+
+  it('swamp logs and stumps give lightly, a rowboat takes more and a cannon a real hit', () => {
+    const speed = (kind: PropKind) => propSpec({ kind, x: 0, z: 0, yaw: 0 }).breakSpeed;
+    expect(speed('sunkLog')).toBeLessThanOrEqual(2);
+    expect(speed('stump')).toBeLessThanOrEqual(2);
+    expect(speed('rowboat')).toBeGreaterThan(speed('stump'));
+    expect(speed('cannon')).toBeGreaterThan(speed('rowboat'));
+    expect(speed('cannon')).toBeLessThan(Infinity);
+  });
+
+  it('a stump and a sunk log scale with their size, in reach and weight', () => {
+    for (const kind of ['stump', 'sunkLog'] as const) {
+      const small = propSpec({ kind, x: 0, z: 0, yaw: 0, scale: 0.8 });
+      const big = propSpec({ kind, x: 0, z: 0, yaw: 0, scale: 1.2 });
+      expect(big.hx).toBeCloseTo(PROP_SPECS[kind].hx * 1.2);
+      expect(big.mass).toBeGreaterThan(small.mass * 3);
+    }
+  });
 });

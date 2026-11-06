@@ -35,7 +35,7 @@ Crenellated walls with corner towers; a gatehouse at every street in (arch, rais
 drawbridge deck, torches, banners). Cobbled streets with a gutter, half-timbered and stone houses with
 jetties and steep roofs. A market square (well, market cross, pillory, stalls, cannons) faced by a town
 hall whose clock keeps the game time and strikes the hour; ruins; breakable pots, barrels, carts and
-haybales on the kerbs. Climate: sandstone in the desert, limewashed by the sea, snow on the walls.
+haybales on the kerbs; the cannons take a real hit to shove. Climate: sandstone in the desert, limewashed by the sea, snow on the walls.
 
 ## Chinatown
 
@@ -136,7 +136,7 @@ The other blocks hold stilt shacks on their street sides, and one or two are cro
 boardwalk on stilts from street to street (cops use it, or go round: they never wade). Two looks, rolled:
 the wooded swamp (bald cypress with hanging moss, some standing in the water, dead snags, dark moss
 ground) or the open marsh (weeping willows on the banks, far more reeds, rank yellow-green grass).
-Reeds round the rims, lily pads, half-sunk logs (solid). Night: will-o'-the-wisps over the water on
+Reeds round the rims, lily pads, half-sunk logs (breakable, they give at a light hit). Night: will-o'-the-wisps over the water on
 some nights. Climate: frozen pools, bare trees and white verges in the snow (the cauldron still glows);
 a dried salt marsh in the desert (pale cracked ground, every tree a dead snag); mangroves on arching
 roots by the beach. Fairy-tale only: no figure, no animals, no real occult symbols.
@@ -146,7 +146,7 @@ roots by the beach. Fairy-tale only: no figure, no animals, no real occult symbo
 Dense woods on the island's edge (2×2 to 3×4), the one district cops can't cut through. Its streets
 stay streets, with no street lamps inside (the darkest district: headlights matter); every block is
 woods, pine and broadleaf trees 3.4–6 m apart on a soft forest floor with ferns (breakable), fallen
-logs (heavy: a hard hit rolls them aside), boulders and stumps (solid). A winding dirt track crosses most blocks street to street (≥ the
+logs (heavy: a hard hit rolls them aside), stumps (breakable, they give at a light hit), boulders (solid). A winding dirt track crosses most blocks street to street (≥ the
 widest car + 1 m): the player's way through, and the only one cops route along (NavGrid treats the
 woods as a thicket). A log arch with a made-up forest name spans the main street where it comes in from
 town, a green ranger station beside it; timber posts mark the other gates. Special blocks, each a

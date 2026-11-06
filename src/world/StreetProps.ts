@@ -8,7 +8,7 @@ import type { TreeKind } from './Climate';
 export type PropKind =
   | 'lamp' | 'hydrant' | 'bench' | 'fence' | 'sign' | 'signal' | 'cone' | 'tree' | 'umbrella'
   // Old City
-  | 'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp'
+  | 'amphora' | 'pot' | 'cart' | 'stall' | 'barrels' | 'cannon' | 'cannonballs' | 'pillory' | 'haybale' | 'signpost' | 'oilLamp'
   // Chinatown
   | 'dragonLamp' | 'produceStall' | 'lanternStand' | 'dimSumCart' | 'fishCrate' | 'mahjongTable' | 'menuBoard' | 'firecrackerCrate' | 'parkedVan'
   | 'lionDance' | 'dragonFloat'
@@ -22,7 +22,11 @@ export type PropKind =
   // Park pieces
   | 'reeds' | 'goal' | 'cornerFlag' | 'ball'
   // Forest
-  | 'fern' | 'tent' | 'log'
+  | 'fern' | 'tent' | 'log' | 'stump'
+  // Swamp
+  | 'sunkLog'
+  // A pond's rowboat, pulled up on the bank
+  | 'rowboat'
   // Mega-park
   | 'tennisNet' | 'deckChair' | 'cafeTable' | 'flowerPlanter' | 'iceCreamCart' | 'kiosk' | 'picnicTable' | 'litterBin' | 'parkBoard'
   | 'swings' | 'slide' | 'climber' | 'roundabout' | 'seesaw';
@@ -41,7 +45,7 @@ export interface StreetProp {
   phase?: number; // signals: junction cycle offset, seconds
   armRight?: boolean; // signals: arm reaches to the driver's right (pole on the left kerb, left-hand traffic)
   tree?: TreeKind; // trees
-  scale?: number; // trees, reeds, logs: size multiplier
+  scale?: number; // trees, reeds, logs, stumps: size multiplier
   color?: number; // umbrellas: canopy colour; trees: tint; stalls: awning colour
   style?: 'old' | 'chainlink' | 'rail' | 'pear' | 'torn' | 'transformer'; // restyled by a district (old iron posts, chain-link or split-rail fencing): same kind and variant, so the same rules
   banner?: 'fu' | 'chun'; // dragon lamps: a lucky-character banner (福 fortune, 春 spring)
@@ -80,6 +84,8 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   cart: { hx: 0.8, hz: 1.3, height: 1.2, mass: 120, breakSpeed: 3, slowdown: 0.08 },
   stall: { hx: 1.3, hz: 0.9, height: 2.6, mass: 60, breakSpeed: 2, slowdown: 0.06 },
   barrels: { hx: 0.6, hz: 0.6, height: 1.0, mass: 90, breakSpeed: 2.5, slowdown: 0.06 },
+  // A field gun on its carriage (barrel along local +Z): iron and oak, it takes a real hit to shove.
+  cannon: { hx: 0.7, hz: 1.62, height: 1.25, mass: 1200, breakSpeed: 8, slowdown: 0.3 },
   cannonballs: { hx: 0.45, hz: 0.45, height: 0.6, mass: 300, breakSpeed: 3, slowdown: 0.1 },
   pillory: { hx: 0.9, hz: 0.35, height: 2.2, mass: 50, breakSpeed: 2, slowdown: 0.05 },
   haybale: { hx: 0.6, hz: 0.6, height: 1.2, mass: 60, breakSpeed: 1.5, slowdown: 0.06 },
@@ -127,6 +133,13 @@ export const PROP_SPECS: Record<PropKind, PropSpec> = {
   // A fallen log along local X (5 m at scale 1, scaled by its length): heavy, solid to a crawl,
   // rolled aside by a real hit at a good cost in speed.
   log: { hx: 2.5, hz: 0.32, height: 0.64, mass: 250, breakSpeed: 3.5, slowdown: 0.2 },
+  // A sawn stump (0.38 m round at scale 1): rotten through, it gives at the lightest hit that breaks anything.
+  stump: { hx: 0.38, hz: 0.38, height: 0.52, mass: 50, breakSpeed: 2, slowdown: 0.04 },
+  // A waterlogged log half-sunk in a pool (the water stands 0.35 m over the bed): the same 5 m log along
+  // local X, but soft with rot, so it gives as lightly as a stump.
+  sunkLog: { hx: 2.5, hz: 0.32, height: 0.64, mass: 60, breakSpeed: 2, slowdown: 0.03 },
+  // A wooden rowboat on the bank (bow at local +Z): a fair knock sends it skidding.
+  rowboat: { hx: 0.7, hz: 2.0, height: 0.75, mass: 150, breakSpeed: 4, slowdown: 0.08 },
   // A 7-a-side goal: a 5 m frame and its net (local +Z is the mouth). Light, but wide.
   goal: { hx: 2.6, hz: 0.5, height: 2.1, mass: 60, breakSpeed: 3, slowdown: 0.05 },
   cornerFlag: { hx: 0.05, hz: 0.05, height: 1.5, mass: 2, breakSpeed: 0.5, slowdown: 0 },
@@ -204,7 +217,7 @@ export function propSpec(p: StreetProp): PropSpec {
     if (SOLID_WRECKS.has(p.wreck ?? 'burnt')) return { ...base, breakSpeed: Infinity };
     return p.wreck === 'crushed' ? { ...base, height: 0.8 } : base;
   }
-  if (p.kind === 'log') {
+  if (p.kind === 'log' || p.kind === 'sunkLog' || p.kind === 'stump') {
     const s = p.scale ?? 1;
     return { ...base, hx: base.hx * s, hz: base.hz * s, height: base.height * s, mass: base.mass * s ** 3 };
   }

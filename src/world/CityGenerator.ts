@@ -626,7 +626,6 @@ export function generateCity(input: number | CityParams, config: CityConfig = DE
     city.streetProps = city.streetProps.filter((q) => !(q.kind === 'bench' && laid.clears(q.x, q.z, 1)));
     faceThePieces(city.streetProps, laid.pieces, blocksOut, n); // the loose benches left, before the piece's own
     city.streetProps.push(...laid.props);
-    city.landmarks.push(...laid.landmarks);
     city.water.push(...laid.water);
     city.parkPieces.push(...laid.pieces); // after a district's (the Mega-park's lake and pitches)
   }
